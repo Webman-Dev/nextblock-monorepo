@@ -45,16 +45,16 @@ The project uses an Nx monorepo to enforce separation of concerns, manage depend
     *   **Registry:** `apps/nextblock/lib/blocks/blockRegistry.ts` is the single source of truth for all block types.
     *   **Editor/Renderer Split:** Strict separation between editor forms (`.../editors/*.tsx`) and public-facing renderers (`.../renderers/*.tsx`).
     *   **Optimistic UI:** Instant UI updates with debounced saves for a smooth editing experience.
-    *   (Source: [`/apps/nextblock/docs/cms-architecture-overview.md`](apps/nextblock/docs/cms-architecture-overview.md))
+    *   (Source: [`/apps/nextblock/docs/cms-architecture-overview.md`](/apps/nextblock/docs/cms-architecture-overview.md))
 *   **CMS Application Structure (`apps/nextblock`)**:
     *   **Modular Design:** The CMS is organized by feature modules (Pages, Posts, etc.) with a consistent file structure (`page.tsx`, `[id]/edit/page.tsx`, `actions.ts`).
     *   **Layout & Auth:** The root CMS layout (`/app/cms/layout.tsx`) handles authentication and UI structure.
-    *   (Source: [`/apps/nextblock/docs/cms-application-overview.md`](apps/nextblock/docs/cms-application-overview.md))
+    *   (Source: [`/apps/nextblock/docs/cms-application-overview.md`](/apps/nextblock/docs/cms-application-overview.md))
 *   **Performance Optimizations**:
-    *   **TipTap Dynamic Loading:** The TipTap editor is chunked and loaded dynamically only for `ADMIN` or `WRITER` roles to reduce initial bundle size for other users. (Source: [`/apps/nextblock/docs/tiptap-bundle-optimization-summary.md`](apps/nextblock/docs/tiptap-bundle-optimization-summary.md))
+    *   **TipTap Dynamic Loading:** The TipTap editor is chunked and loaded dynamically only for `ADMIN` or `WRITER` roles to reduce initial bundle size for other users. (Source: [`/apps/nextblock/docs/tiptap-bundle-optimization-summary.md`](/apps/nextblock/docs/tiptap-bundle-optimization-summary.md))
 
 ## 6. Development & Operations
 *   **Setup:** `git clone`, `npm install`, configure `.env.local`, and run `supabase db push`.
 *   **Admin User:** The first user must be manually promoted to `ADMIN` in the Supabase `profiles` table.
 *   **Common Commands:** Use Nx from the root (e.g., `nx serve nextblock`, `nx build nextblock`).
-*   (Sources: [`/README.md`](README.md), [`/apps/nextblock/README.md`](apps/nextblock/README.md))
+*   (Sources: [`/README.md`](/README.md), [`/apps/nextblock/README.md`](/apps/nextblock/README.md))
