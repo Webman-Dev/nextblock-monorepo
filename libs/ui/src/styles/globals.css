@@ -1,0 +1,376 @@
+/*─────────────────────────────────────────────────────────────────────────────
+  globals.css — complete rewrite
+─────────────────────────────────────────────────────────────────────────────*/
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*─────────────────────────────────────────────────────────────────────────────
+  1. Critical CSS Resets (formerly in <style id="critical-css">)
+─────────────────────────────────────────────────────────────────────────────*/
+@layer base {
+  *, ::before, ::after {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+    border-color: hsl(var(--border));
+  }
+  ::before, ::after {
+    --tw-content: "";
+  }
+
+  html, :host {
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    -moz-tab-size: 4;
+    tab-size: 4;
+    font-family:
+      ui-sans-serif,
+      system-ui,
+      sans-serif,
+      "Apple Color Emoji",
+      "Segoe UI Emoji",
+      "Segoe UI Symbol",
+      "Noto Color Emoji";
+    font-feature-settings: normal;
+    font-variation-settings: normal;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    margin: 0;
+    line-height: inherit;
+  }
+
+  hr {
+    height: 0;
+    color: inherit;
+    border-top-width: 1px;
+  }
+
+  abbr:where([title]) {
+    -webkit-text-decoration: underline dotted;
+    text-decoration: underline dotted;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-size: inherit;
+    font-weight: inherit;
+    margin: 0;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: inherit;
+  }
+
+  b, strong {
+    font-weight: bolder;
+  }
+
+  code, kbd, pre, samp {
+    font-family:
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Monaco,
+      Consolas,
+      "Liberation Mono",
+      "Courier New",
+      monospace;
+    font-feature-settings: normal;
+    font-variation-settings: normal;
+    font-size: 1em;
+  }
+
+  small {
+    font-size: 80%;
+  }
+
+  sub, sup {
+    font-size: 75%;
+    line-height: 0;
+    position: relative;
+    vertical-align: baseline;
+  }
+  sub { bottom: -0.25em; }
+  sup { top: -0.5em; }
+
+  table {
+    text-indent: 0;
+    border-color: inherit;
+    border-collapse: collapse;
+  }
+
+  button,
+  input,
+  optgroup,
+  select,
+  textarea {
+    font-family: inherit;
+    font-feature-settings: inherit;
+    font-variation-settings: inherit;
+    font-size: 100%;
+    font-weight: inherit;
+    line-height: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    margin: 0;
+    padding: 0;
+  }
+  button, select {
+    text-transform: none;
+  }
+  button,
+  input[type="button"],
+  input[type="reset"],
+  input[type="submit"] {
+    -webkit-appearance: button;
+    background-color: transparent;
+    background-image: none;
+  }
+
+  :-moz-focusring { outline: auto; }
+  :-moz-ui-invalid { box-shadow: none; }
+  progress { vertical-align: baseline; }
+  ::-webkit-inner-spin-button,
+  ::-webkit-outer-spin-button {
+    height: auto;
+  }
+  [type="search"] {
+    -webkit-appearance: textfield;
+    outline-offset: -2px;
+  }
+  ::-webkit-search-decoration {
+    -webkit-appearance: none;
+  }
+  ::-webkit-file-upload-button {
+    -webkit-appearance: button;
+    font: inherit;
+  }
+
+  summary { display: list-item; }
+  blockquote, dd, dl, figure, p, pre { margin: 0; }
+  fieldset { margin: 0; padding: 0; }
+  legend { padding: 0; }
+  menu, ol, ul { list-style: none; margin: 0; padding: 0; }
+  dialog { padding: 0; }
+  textarea { resize: vertical; }
+
+  input::-moz-placeholder,
+  textarea::-moz-placeholder {
+    opacity: 1;
+    color: hsl(var(--muted-foreground));
+  }
+  input::placeholder,
+  textarea::placeholder {
+    opacity: 1;
+    color: hsl(var(--muted-foreground));
+  }
+
+  [role="button"], button { cursor: pointer; }
+  :disabled { cursor: default; }
+
+  audio,
+  canvas,
+  embed,
+  iframe,
+  img,
+  object,
+  svg,
+  video {
+    display: block;
+    vertical-align: middle;
+  }
+  img, video {
+    max-width: 100%;
+    height: auto;
+  }
+  [hidden] { display: none; }
+
+  /*───────────────────────────────────────────────────────────────────────────
+    2. Project-specific base styles (Tailwind-powered)
+  ───────────────────────────────────────────────────────────────────────────*/
+  /* Apply your border color everywhere */
+  * {
+    @apply border-border;
+  }
+
+  /* Body background & text */
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Semantic headings */
+  ul, ol {
+    @apply pl-6 mb-4;
+  }
+  li {
+    @apply mb-1;
+  }
+  blockquote {
+    @apply p-4 italic border-l-4 border-border bg-muted text-muted-foreground mb-4;
+  }
+  code {
+    @apply bg-muted text-muted-foreground px-1 py-0.5 rounded-sm font-mono text-sm;
+  }
+  pre {
+    @apply bg-muted p-4 rounded-md overflow-x-auto mb-4;
+  }
+
+  table {
+    @apply w-full border-collapse mb-4;
+  }
+  thead {
+    @apply bg-muted;
+  }
+  th, td {
+    @apply border border-border p-2 text-left;
+  }
+  th {
+    @apply font-semibold;
+  }
+  hr {
+    @apply border-t border-border my-8;
+  }
+}
+
+/*─────────────────────────────────────────────────────────────────────────────
+  3. Theme color variables
+─────────────────────────────────────────────────────────────────────────────*/
+:root {
+  --background: 220 20% 98%;
+  --foreground: 215 30% 15%;
+  --card: 0 0% 100%;
+  --card-foreground: 215 30% 15%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 215 30% 15%;
+
+  --primary: 215 45% 30%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 215 45% 45%;
+  --secondary-foreground: 0 0% 100%;
+
+  --muted: 220 30% 94%;
+  --muted-foreground: 215 25% 45%;
+
+  --accent: 190 70% 50%;
+  --accent-foreground: 210 40% 98%;
+
+  --destructive: 0 70% 42%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 220 20% 88%;
+  --input: 220 20% 88%;
+  --ring: 200 80% 60%;
+
+  --radius: 0.5rem;
+
+  --chart-1: 217 70% 50%;
+  --chart-2: 190 60% 45%;
+  --chart-3: 215 35% 40%;
+  --chart-4: 220 15% 70%;
+  --chart-5: 200 50% 65%;
+}
+
+.dark {
+  --background: 220 25% 10%;
+  --foreground: 220 15% 90%;
+  --card: 220 20% 14%;
+  --card-foreground: 220 15% 90%;
+  --popover: 220 20% 14%;
+  --popover-foreground: 220 15% 90%;
+
+  --primary: 210 90% 65%;
+  --primary-foreground: 220 20% 10%;
+
+  --secondary: 215 50% 45%;
+  --secondary-foreground: 220 15% 90%;
+
+  --muted: 220 15% 18%;
+  --muted-foreground: 220 10% 65%;
+
+  --accent: 195 80% 55%;
+  --accent-foreground: 220 25% 10%;
+
+  --destructive: 0 65% 42%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 220 15% 25%;
+  --input: 220 15% 25%;
+  --ring: 195 90% 60%;
+
+  --chart-1: 210 80% 60%;
+  --chart-2: 195 70% 50%;
+  --chart-3: 215 40% 50%;
+  --chart-4: 220 10% 55%;
+  --chart-5: 200 60% 70%;
+}
+
+/*─────────────────────────────────────────────────────────────────────────────
+  4. Explicit heading sizes & spacing
+─────────────────────────────────────────────────────────────────────────────*/
+h1 {
+  font-size: 3.5rem;
+  line-height: 1;
+  font-weight: 700;
+  margin: 1.5rem 0 1rem;
+}
+h2 {
+  font-size: 2.5rem;
+  line-height: 1;
+  font-weight: 700;
+  margin: 1.25rem 0 0.75rem;
+}
+h3 {
+  font-size: 2.25rem;
+  line-height: 2.5rem;
+  font-weight: 700;
+  margin: 1rem 0 0.75rem;
+}
+h4 {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 700;
+  margin: 0.75rem 0 0.5rem;
+}
+h5 {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0.5rem;
+}
+h6 {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0.5rem;
+}
+
+/*─────────────────────────────────────────────────────────────────────────────
+  5. Shimmer loading animation
+─────────────────────────────────────────────────────────────────────────────*/
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.shimmer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0)   0,
+    rgba(255, 255, 255, 0.2) 20%,
+    rgba(255, 255, 255, 0.5) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  animation: shimmer 2s infinite;
+}
