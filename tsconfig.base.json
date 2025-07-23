@@ -1,0 +1,29 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "composite": true,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "es2015",
+    "module": "esnext",
+    "lib": ["es2020", "dom"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["apps/nextblock/*"],
+      "@nextblock-monorepo/db": ["libs/db/src/index.ts"],
+      "@nextblock-monorepo/db/server": ["libs/db/src/server.ts"],
+      "@nextblock-monorepo/ui": ["libs/ui/src/index.ts"],
+      "@nextblock-monorepo/utils": ["libs/utils/src/index.ts"],
+      "@nextblock-monorepo/utils/server": ["libs/utils/src/server.ts"],
+      "@nextblock/sdk": ["libs/sdk/src/index.ts"]
+    }
+  },
+  "include": ["libs/environment.d.ts"],
+  "exclude": ["node_modules", "tmp"]
+}

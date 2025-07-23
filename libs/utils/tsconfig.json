@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "allowJs": false,
+    "esModuleInterop": false,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "composite": true,
+    "declaration": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "../../libs/environment.d.ts"],
+  "files": ["src/lib/translations-context.tsx"]
+}
