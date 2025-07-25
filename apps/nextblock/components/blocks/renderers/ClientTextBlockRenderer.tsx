@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import parse, { domToReact, HTMLReactParserOptions, Element } from 'html-react-parser';
+import parse, { HTMLReactParserOptions, Element } from 'html-react-parser';
 import AlertWidgetRenderer from "./inline/AlertWidgetRenderer";
 import CtaWidgetRenderer from "./inline/CtaWidgetRenderer";
 import type { TextBlockContent } from "./TextBlockRenderer";
