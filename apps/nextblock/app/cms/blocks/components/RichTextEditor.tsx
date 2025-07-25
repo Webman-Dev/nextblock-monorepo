@@ -13,6 +13,8 @@ import { FontSizeMark } from './tiptap-extensions/FontSizeMark';
 import { StyleTagNode } from './tiptap-extensions/StyleTagNode';
 import { DivNode } from './tiptap-extensions/DivNode';
 import { PreserveAllAttributesExtension } from './tiptap-extensions/PreserveAllAttributesExtension';
+import AlertWidgetNode from './tiptap-extensions/AlertWidgetNode';
+import CtaWidgetNode from './tiptap-extensions/CtaWidgetNode';
 
 // UI Components are now imported
 import { MenuBar } from './MenuBar';
@@ -57,6 +59,8 @@ export default function RichTextEditor({ initialContent, onChange, editable = tr
       TextStyle.configure(), // Explicitly adding TextStyle before Color
       Color.configure({ types: ['textStyle'] }), // Color depends on TextStyle
       FontSizeMark.configure({}), // Add our custom FontSizeMark
+      AlertWidgetNode.configure(),
+      CtaWidgetNode.configure(),
       DivNode.configure({}), // Add the new DivNode
       PreserveAllAttributesExtension.configure(), // Ensure this is configured
       StyleTagNode.configure(), // Ensure this is configured

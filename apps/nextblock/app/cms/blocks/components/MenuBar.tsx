@@ -4,7 +4,7 @@ import React from 'react';
 import dynamic from 'next/dynamic'; // Import dynamic
 import { Editor } from '@tiptap/react';
 import {
-  Bold, Italic, Strikethrough, Code, List, ListOrdered, Quote, Undo, Redo, Pilcrow, Palette, Baseline, FileCode, X as XIcon
+  Bold, Italic, Strikethrough, Code, List, ListOrdered, Quote, Undo, Redo, Pilcrow, Palette, Baseline, FileCode, X as XIcon, AlertTriangle, Link
 } from 'lucide-react';
 import { Button } from '@nextblock-monorepo/ui';
 import {
@@ -167,6 +167,28 @@ export const MenuBar = ({ editor, toggleSourceView, isSourceView }: MenuBarProps
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={() => editor.chain().focus().setAlertWidget({ type: 'info', title: 'Info', message: 'New Alert', align: 'left', size: 'fit-content', textAlign: 'left' }).run()}
+        disabled={!editor.can().setAlertWidget({ type: 'info', title: 'Info', message: 'New Alert', align: 'left', size: 'fit-content', textAlign: 'left' }) || !editor.isEditable || isSourceView}
+        title="Insert Alert"
+      >
+        <AlertTriangle className={iconSize} />
+      </Button>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={() => editor.chain().focus().setCtaWidget({ text: 'Click Here', url: '#', style: 'primary', align: 'left', size: 'fit-content', textAlign: 'left' }).run()}
+        disabled={!editor.can().setCtaWidget({ text: 'Click Here', url: '#', style: 'primary', align: 'left', size: 'fit-content', textAlign: 'left' }) || !editor.isEditable || isSourceView}
+        title="Insert CTA"
+      >
+        <Link className={iconSize} />
+      </Button>
 
       <MediaLibraryModal editor={editor} />
 
