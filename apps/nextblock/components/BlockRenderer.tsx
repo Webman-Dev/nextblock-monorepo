@@ -7,6 +7,7 @@ import { Skeleton } from "@nextblock-monorepo/ui"; // Import the new Skeleton co
 
 type Block = Database['public']['Tables']['blocks']['Row'];
 import HeroBlockRenderer from "./blocks/renderers/HeroBlockRenderer"; // Static import for LCP
+import ClientTextBlockRenderer from "./blocks/renderers/ClientTextBlockRenderer"; // Static import for client component
 
 interface BlockRendererProps {
   blocks: Block[];
@@ -41,7 +42,12 @@ const DynamicBlockRenderer: React.FC<DynamicBlockRendererProps> = ({
     );
   }
 
-  // Create dynamic component with proper SSR handling
+  // Handle the text block type by rendering the client component wrapper
+  if (block.block_type === 'text') {
+    return <ClientTextBlockRenderer content={block.content as any} languageId={languageId} />;
+  }
+
+  // Create dynamic component with proper SSR handling for other blocks
   const RendererComponent = dynamic(
     () => import(`./blocks/renderers/${blockDefinition.rendererComponentFilename}`),
     {

@@ -17,9 +17,5 @@
     "src/**/*.stories.tsx",
     "vite.config.ts"
   ],
-  "references": [
-    {
-      "path": "./tsconfig.spec.json"
-    }
-  ]
+  "references": []
 }

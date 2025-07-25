@@ -1,4 +1,5 @@
 import React from "react";
+import ClientTextBlockRenderer from "./ClientTextBlockRenderer";
 
 export type TextBlockContent = {
     html_content?: string;
@@ -14,12 +15,7 @@ const TextBlockRenderer: React.FC<TextBlockRendererProps> = ({
   languageId,
 }) => {
   return (
-    <div
-      className="my-4 prose dark:prose-invert container mx-auto"
-      dangerouslySetInnerHTML={{
-        __html: content.html_content || "",
-      }}
-    />
+    <ClientTextBlockRenderer content={content} languageId={languageId} />
   );
 };
 

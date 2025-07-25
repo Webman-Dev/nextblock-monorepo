@@ -51,6 +51,7 @@ export const DivNode = Node.create({
         priority: 51, // Ensure this rule runs before default paragraph (priority 50) for divs
         getAttrs: domNode => {
           const element = domNode as HTMLElement;
+
           const MappedAttributes: Record<string, string> = {};
           for (let i = 0; i < element.attributes.length; i++) {
             const attribute = element.attributes[i];
