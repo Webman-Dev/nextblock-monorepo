@@ -73,10 +73,7 @@ export async function generateMetadata(
 }
 
 export default async function RootPage() {
-  const startTime = Date.now();
-  console.log('[PERF] RootPage render started at:', startTime);
   
-  const headerStart = Date.now();
   const head = await headers();
   let currentLocale = head.get('x-user-locale') || DEFAULT_LOCALE;
 
@@ -89,15 +86,10 @@ export default async function RootPage() {
     }
     // Skip database query for default language - use fallback
   }
-  console.log('[PERF] Headers/cookies processing completed in:', Date.now() - headerStart, 'ms');
 
-  const slugStart = Date.now();
   const homepageSlug = await getHomepageSlugForLocale(currentLocale);
-  console.log('[PERF] Homepage slug resolution completed in:', Date.now() - slugStart, 'ms');
   
-  const pageDataStart = Date.now();
   const pageData = await getPageDataBySlug(homepageSlug);
-  console.log('[PERF] Page data query completed in:', Date.now() - pageDataStart, 'ms');
 
   if (!pageData) {
     // This scenario means that for the detected locale, the corresponding homepage slug ('home' or 'accueil')
@@ -109,9 +101,6 @@ export default async function RootPage() {
   }
 
   const pageBlocks = pageData ? <BlockRenderer blocks={pageData.blocks} languageId={pageData.language_id} /> : null;
-
-  const totalTime = Date.now() - startTime;
-  console.log('[PERF] RootPage render completed in:', totalTime, 'ms');
 
   // Pass currentSlug as homepageSlug to PageClientContent, so it knows what content it's rendering.
   // PageClientContent's logic for language switching will still work if the user changes language via the switcher.

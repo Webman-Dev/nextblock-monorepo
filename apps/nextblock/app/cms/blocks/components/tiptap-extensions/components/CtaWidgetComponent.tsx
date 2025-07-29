@@ -17,7 +17,6 @@ const CtaWidgetComponent = ({ node, updateAttributes, editor }: NodeViewProps) =
     'full-width': 'w-full',
   };
 
-
   const textAlignClasses: { [key: string]: string } = {
     left: 'text-left',
     center: 'text-center',
@@ -27,12 +26,25 @@ const CtaWidgetComponent = ({ node, updateAttributes, editor }: NodeViewProps) =
   return (
     <NodeViewWrapper>
       <div
-        className={`p-2 ${textAlignClasses[textAlign] || textAlignClasses.left}`}
+        className={`p-2 ${textAlignClasses[textAlign] || textAlignClasses.left} cursor-grab`}
+        data-drag-handle
         onClick={() => setIsEditing(true)}
       >
-        <button type="button" className={`px-4 py-2 rounded-md ${buttonClasses[style]} ${sizeClasses[size] || sizeClasses['fit-content']}`}>
+        <div
+          role="button"
+          tabIndex={0}
+          className={`inline-block px-4 py-2 rounded-md ${buttonClasses[style]} ${
+            sizeClasses[size] || sizeClasses['fit-content']
+          }`}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setIsEditing(true);
+            }
+          }}
+        >
           {text}
-        </button>
+        </div>
       </div>
 
       {isEditing && (

@@ -33,7 +33,11 @@ const AlertWidgetComponent = ({ node, updateAttributes, editor }: NodeViewProps)
 
   return (
     <NodeViewWrapper>
-      <div className={`${alignClasses[align] || 'text-left'}`} onClick={() => setIsEditing(true)}>
+      <div
+        className={`${alignClasses[align] || 'text-left'} cursor-grab`}
+        onClick={() => setIsEditing(true)}
+        data-drag-handle
+      >
         <div
           className={`inline-block rounded-lg border p-2 m-1 ${alertClasses[type] || alertClasses.info} ${
             sizeClasses[size] || sizeClasses['fit-content']

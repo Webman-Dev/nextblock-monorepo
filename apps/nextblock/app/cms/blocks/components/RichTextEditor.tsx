@@ -67,6 +67,7 @@ export default function RichTextEditor({ initialContent, onChange, editable = tr
     ],
     content: initialContent, // Use initialContent directly, will be synced by useEffect
     editable: editable && !isSourceView, // Editor not editable in source view
+    immediatelyRender: false,
     onUpdate: ({ editor }) => {
       // This fires when changes are made *within* the Tiptap rich text view.
       const currentTiptapHtml = editor.getHTML();
