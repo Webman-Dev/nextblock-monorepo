@@ -40,17 +40,13 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const startTime = Date.now();
-  console.log('[PERF] Layout render started at:', startTime);
 
   const supabase = createSupabaseServerClient();
   
   // Get headers and cookies first (synchronous operations)
-  const headerStart = Date.now();
   const headerList = await headers();
   const cookieStore = await cookies();
   const nonce = headerList.get('x-nonce') || '';
-  console.log('[PERF] Headers/cookies completed in:', Date.now() - headerStart, 'ms');
 
   const xUserLocaleHeader = headerList.get('x-user-locale');
   const nextUserLocaleCookie = cookieStore.get('NEXT_USER_LOCALE')?.value;
@@ -67,7 +63,6 @@ export default async function RootLayout({
   }
 
   // Parallel execution of all database queries for better performance
-  const queryStart = Date.now();
   const [
     { data: { user } },
     availableLanguagesResult,
@@ -79,15 +74,9 @@ export default async function RootLayout({
     getCopyrightSettings().catch(() => ({ en: '© {year} My Ultra-Fast CMS. All rights reserved.' })),
     getTranslations().catch(() => [])
   ]);
-  console.log('[PERF] Parallel database queries completed in:', Date.now() - queryStart, 'ms');
 
   // Get profile only if user exists (conditional parallel execution)
-  const profileStart = Date.now();
   const profile = user ? await getProfileWithRoleServerSide(user.id) : null;
-  if (user) {
-    console.log('[PERF] Profile query completed in:', Date.now() - profileStart, 'ms');
-  }
-
   const availableLanguages: Language[] = availableLanguagesResult;
   const defaultLanguage: Language | null = availableLanguages.find(lang => lang.is_default) || availableLanguages[0] || null;
   
@@ -104,9 +93,6 @@ export default async function RootLayout({
   const copyrightText = copyrightTemplate.replace('{year}', new Date().getFullYear().toString());
 
   const translations = Array.isArray(translationsResult) ? translationsResult : [];
-  
-  const totalTime = Date.now() - startTime;
-  console.log('[PERF] Layout render completed in:', totalTime, 'ms');
   
   return (
     <html lang={serverDeterminedLocale} suppressHydrationWarning>

@@ -5,8 +5,9 @@ import AlertWidgetComponent from './components/AlertWidgetComponent';
 export default Node.create({
   name: 'alertWidget',
   group: 'block',
-  atom: true, // self-closing
+  draggable: true,
   defining: true,
+  atom: true,
 
   addAttributes() {
     return {

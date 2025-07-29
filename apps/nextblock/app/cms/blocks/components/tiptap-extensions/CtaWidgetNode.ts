@@ -5,7 +5,8 @@ import CtaWidgetComponent from './components/CtaWidgetComponent';
 export default Node.create({
   name: 'ctaWidget',
   group: 'block',
-  atom: true, // self-closing
+  draggable: true,
+  atom: true,
   defining: true,
 
   addAttributes() {
