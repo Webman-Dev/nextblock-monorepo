@@ -18,8 +18,9 @@
       "@/*": ["apps/nextblock/*"],
       "@nextblock-monorepo/db": ["libs/db/src/index.ts"],
       "@nextblock-monorepo/db/server": ["libs/db/src/server.ts"],
-      "@nextblock-monorepo/ui": ["libs/ui/src/index.ts"],
-      "@nextblock-monorepo/utils": ["libs/utils/src/index.ts"],
+      "@nextblock-monorepo/editor": ["libs/editor/src/index.ts"],
+      "@nextblock-monorepo/ui": ["dist/libs/ui"],
+      "@nextblock-monorepo/utils": ["dist/libs/utils"],
       "@nextblock-monorepo/utils/server": ["libs/utils/src/server.ts"],
       "@nextblock/sdk": ["libs/sdk/src/index.ts"]
     }
