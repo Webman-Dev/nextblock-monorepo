@@ -1,3 +1,4 @@
+"use client";
 import { cn } from "@nextblock-monorepo/utils";
 
 function Skeleton({

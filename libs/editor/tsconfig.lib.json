@@ -20,13 +20,22 @@
     "**/*.spec.jsx",
     "**/*.test.jsx"
   ],
-  "include": ["src/**/*.js", "src/**/*.jsx", "src/**/*.ts", "src/**/*.tsx"],
+  "include": [
+    "src/**/*.js",
+    "src/**/*.jsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "../ui/src/**/*.ts",
+    "../ui/src/**/*.tsx",
+    "../utils/src/**/*.ts",
+    "../utils/src/**/*.tsx"
+  ],
   "references": [
     {
-      "path": "../ui/tsconfig.json"
+      "path": "../ui/tsconfig.lib.json"
     },
     {
-      "path": "../utils/tsconfig.json"
+      "path": "../utils/tsconfig.lib.json"
     }
   ]
 }

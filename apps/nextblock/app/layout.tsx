@@ -2,21 +2,17 @@ import 'libs/ui/src/styles/globals.css';
 // app/layout.tsx
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { ThemeSwitcher } from '@/components/theme-switcher';
-import { hasEnvVars } from "@nextblock-monorepo/utils";
-import { ThemeProvider } from "next-themes";
-import { AuthProvider } from "@/context/AuthContext";
-import { LanguageProvider } from "@/context/LanguageContext";
+import { hasEnvVars } from "@nextblock-monorepo/utils/server";
 import { createClient as createSupabaseServerClient, getProfileWithRoleServerSide } from '@nextblock-monorepo/db/server';
-import { CurrentContentProvider } from "@/context/CurrentContentContext"; // Import CurrentContentProvider
 import { getActiveLanguagesServerSide } from "@nextblock-monorepo/db/server"; // Import server-side language fetcher
 import { getCopyrightSettings } from '@/app/cms/settings/copyright/actions';
 import { getTranslations } from '@/app/cms/settings/extra-translations/actions';
-import { TranslationsProvider } from '@nextblock-monorepo/utils';
 import type { Database } from "@nextblock-monorepo/db"; // Import Language type
 import type { Metadata } from 'next';
 import Header from "@/components/Header";
 import FooterNavigation from "@/components/FooterNavigation";
 import { headers, cookies } from 'next/headers';
+import { Providers } from './providers';
 
 type Language = Database['public']['Tables']['languages']['Row'];
 
@@ -110,45 +106,35 @@ export default async function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="bg-background text-foreground min-h-screen flex flex-col">
-        <AuthProvider serverUser={user} serverProfile={profile}>
-          <LanguageProvider
-            serverLocale={serverDeterminedLocale}
-            initialAvailableLanguages={availableLanguages}
-            initialDefaultLanguage={defaultLanguage}
-          >
-            <CurrentContentProvider>
-              <TranslationsProvider translations={translations} lang={serverDeterminedLocale}>
-                <ThemeProvider
-                  attribute="class"
-                  defaultTheme="system"
-                enableSystem
-                disableTransitionOnChange
-                nonce={nonce}
-              >
-                <div className="flex-1 w-full flex flex-col items-center">
-                  <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
-                    <div className="w-full max-w-7xl flex justify-between items-center p-3 px-5 text-sm">
-                      {!hasEnvVars ? <EnvVarWarning /> : <Header currentLocale={serverDeterminedLocale} />}
-                    </div>
-                  </nav>
-                  <main className="flex-grow w-full">
-                    {children}
-                  </main>
-                  <footer className="w-full border-t py-8">
-                    <div className="mx-auto flex flex-col items-center justify-center gap-6 text-center text-xs">
-                      <FooterNavigation />
-                      <div className="flex flex-row items-center gap-2">
-                        <p className="text-muted-foreground">{copyrightText}</p>
-                        <ThemeSwitcher />
-                      </div>
-                    </div>
-                  </footer>
+        <Providers
+          serverUser={user}
+          serverProfile={profile}
+          serverLocale={serverDeterminedLocale}
+          initialAvailableLanguages={availableLanguages}
+          initialDefaultLanguage={defaultLanguage}
+          translations={translations}
+          nonce={nonce}
+        >
+          <div className="flex-1 w-full flex flex-col items-center">
+            <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
+              <div className="w-full max-w-7xl flex justify-between items-center p-3 px-5 text-sm">
+                {!await hasEnvVars() ? <EnvVarWarning /> : <Header currentLocale={serverDeterminedLocale} />}
+              </div>
+            </nav>
+            <main className="flex-grow w-full">
+              {children}
+            </main>
+            <footer className="w-full border-t py-8">
+              <div className="mx-auto flex flex-col items-center justify-center gap-6 text-center text-xs">
+                <FooterNavigation />
+                <div className="flex flex-row items-center gap-2">
+                  <p className="text-muted-foreground">{copyrightText}</p>
+                  <ThemeSwitcher />
                 </div>
-                </ThemeProvider>
-              </TranslationsProvider>
-            </CurrentContentProvider>
-          </LanguageProvider>
-        </AuthProvider>
+              </div>
+            </footer>
+          </div>
+        </Providers>
       </body>
     </html>
   );

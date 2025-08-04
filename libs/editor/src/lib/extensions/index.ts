@@ -7,6 +7,9 @@ import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import HorizontalRule from '@tiptap/extension-horizontal-rule';
 import Blockquote from '@tiptap/extension-blockquote';
+import { Color } from '@tiptap/extension-color';
+import AlertWidgetNode from './AlertWidgetNode';
+import CtaWidgetNode from './CtaWidgetNode';
 
 // Load syntax highlighting languages
 import { createLowlight, common } from 'lowlight';
@@ -40,4 +43,7 @@ export const editorExtensions: Array<Extension<any,any> | Node<any,any> | Mark<a
     openOnClick: false,
   }),
   HorizontalRule,
+  Color,
+  AlertWidgetNode,
+  CtaWidgetNode,
 ];

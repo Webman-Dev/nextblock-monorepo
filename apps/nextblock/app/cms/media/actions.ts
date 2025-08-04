@@ -4,7 +4,7 @@
 import { createClient } from "@nextblock-monorepo/db/server";
 import { revalidatePath } from "next/cache";
 import type { Database } from "@nextblock-monorepo/db";
-import { encodedRedirect } from "@nextblock-monorepo/utils"; // Ensure this is correctly imported
+import { encodedRedirect } from "@nextblock-monorepo/utils/server";
 
 type Media = Database['public']['Tables']['media']['Row'];
 

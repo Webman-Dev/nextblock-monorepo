@@ -1,6 +1,6 @@
 "use server";
 
-import { getEmailServerConfig } from '@nextblock-monorepo/utils';
+import { getEmailServerConfig } from '@nextblock-monorepo/utils/server';
 import nodemailer from 'nodemailer';
 
 interface EmailParams {
@@ -11,7 +11,7 @@ interface EmailParams {
 }
 
 export async function sendEmail({ to, subject, text, html }: EmailParams) {
-  const emailConfig = getEmailServerConfig();
+  const emailConfig = await getEmailServerConfig();
 
   if (!emailConfig) {
     throw new Error("Email server is not configured. Please check environment variables.");
