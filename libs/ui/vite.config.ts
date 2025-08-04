@@ -8,10 +8,12 @@ export default defineConfig({
   plugins: [
     dts({
       entryRoot: 'src',
-      tsconfigPath: './tsconfig.lib.json',
+      tsconfigPath: './tsconfig.json',
     }),
     react(),
-    tsconfigPaths(),
+    tsconfigPaths({
+      projects: ['./tsconfig.json'],
+    }),
   ],
   build: {
     lib: {

@@ -8,16 +8,21 @@ export default defineConfig({
   plugins: [
     dts({
       entryRoot: 'src',
-      tsconfigPath: './tsconfig.lib.json',
+      tsconfigPath: './tsconfig.json',
     }),
     react(),
-    tsconfigPaths(),
+    tsconfigPaths({
+      projects: ['./tsconfig.json'],
+    }),
   ],
   build: {
     lib: {
-      entry: './src/index.ts',
+      entry: {
+        index: './src/index.ts',
+        server: './src/server.ts',
+      },
       name: 'utils',
-      fileName: 'index',
+      fileName: (format, entryName) => `${entryName}.${format}.js`,
       formats: ['es', 'cjs'],
     },
     rollupOptions: {

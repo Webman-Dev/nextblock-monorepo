@@ -8,7 +8,7 @@ import type { Database } from "@nextblock-monorepo/db";
 import { v4 as uuidv4 } from 'uuid';
 
 type PageStatus = Database['public']['Enums']['page_status'];
-import { encodedRedirect } from "@nextblock-monorepo/utils"; // Ensure this is correctly imported
+import { encodedRedirect } from "@nextblock-monorepo/utils/server";
 
 // --- createPage and updatePage functions remain unchanged ---
 

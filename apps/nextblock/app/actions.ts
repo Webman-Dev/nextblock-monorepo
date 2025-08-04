@@ -1,6 +1,6 @@
 "use server";
 
-import { encodedRedirect } from "@nextblock-monorepo/utils";
+import { encodedRedirect } from "@nextblock-monorepo/utils/server";
 import { createClient } from "@nextblock-monorepo/db/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
