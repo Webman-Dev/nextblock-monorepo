@@ -7,7 +7,7 @@ import { Skeleton } from '@nextblock-monorepo/ui';
 
 // Define the props interface for type safety
 interface RichTextEditorProps {
-  initialContent: string;
+  initialContent: string | undefined | null;
   onChange: (htmlContent: string) => void;
   editable?: boolean;
 }
@@ -48,7 +48,7 @@ const BasicTextEditor = ({ initialContent, onChange, editable = true }: RichText
       </span>
     </div>
     <textarea
-      value={initialContent.replace(/<[^>]*>/g, '')} // Strip HTML tags for fallback
+      value={(initialContent ?? '').replace(/<[^>]*>/g, '')} // Strip HTML tags for fallback
       onChange={(e) => onChange(`<p>${e.target.value}</p>`)} // Wrap in paragraph tags
       className="flex-1 p-4 resize-none border-0 focus:outline-none bg-background"
       disabled={!editable}
@@ -85,7 +85,7 @@ export default function RoleAwareRichTextEditor(props: RichTextEditorProps) {
   // For authorized users, load the full TipTap editor
   return (
     <Suspense fallback={<RichTextEditorSkeleton />}>
-      <DynamicRichTextEditor {...props} />
+      <DynamicRichTextEditor {...props} initialContent={props.initialContent ?? ''} />
     </Suspense>
   );
 }

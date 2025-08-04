@@ -273,7 +273,7 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
     type: "text",
     label: "Rich Text Block",
     icon: "FileText",
-    initialContent: { html_content: "<p>New text block...</p>" } as TextBlockContent,
+    initialContent: { html_content: "" } as TextBlockContent,
     editorComponentFilename: "TextBlockEditor.tsx",
     rendererComponentFilename: "TextBlockRenderer.tsx",
     contentSchema: {
@@ -281,7 +281,7 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
         type: 'string',
         required: true,
         description: 'Rich text content for the text block',
-        default: '<p>New text block...</p>',
+        default: '',
       },
     },
     documentation: {
