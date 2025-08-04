@@ -21,6 +21,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({ content, onChange })
         class: 'prose dark:prose-invert prose-sm sm:prose-base lg:prose-lg xl:prose-2xl m-5 focus:outline-none min-h-[300px]',
       },
     },
+    immediatelyRender: false,
   });
 
   return <EditorContent editor={editor} />;
