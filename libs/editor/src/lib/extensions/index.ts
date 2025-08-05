@@ -24,22 +24,14 @@ import AlertWidgetNode from './AlertWidgetNode';
 import CtaWidgetNode from './CtaWidgetNode';
 
 // Load syntax highlighting languages
-import { createLowlight, common } from 'lowlight';
 import css from 'highlight.js/lib/languages/css';
 import js from 'highlight.js/lib/languages/javascript';
 import ts from 'highlight.js/lib/languages/typescript';
 import xml from 'highlight.js/lib/languages/xml';
 
-const lowlight = createLowlight(common);
-
-lowlight.register('html', xml);
-lowlight.register('css', css);
-lowlight.register('js', js);
-lowlight.register('ts', ts);
-
 export const editorExtensions: Array<Extension<any,any> | Node<any,any> | Mark<any,any>> = [
   StarterKit.configure({
-    codeBlock: false,
+    codeBlock: false, // We'll add this with lowlight dynamically
     link: {
       openOnClick: false,
     },
@@ -57,9 +49,6 @@ export const editorExtensions: Array<Extension<any,any> | Node<any,any> | Mark<a
         class: 'list-decimal pl-4',
       },
     },
-  }),
-  CodeBlockLowlight.configure({
-    lowlight,
   }),
   Image.configure({
     inline: true,
@@ -83,7 +72,6 @@ export const editorExtensions: Array<Extension<any,any> | Node<any,any> | Mark<a
     className: 'has-focus',
   }),
   Placeholder.configure({
-    emptyNodeClass: 'is-empty',
     placeholder: ({ node }) => {
       if (node.type.name === 'heading' && node.attrs.level === 1) {
         return 'What’s the title?';
@@ -93,6 +81,7 @@ export const editorExtensions: Array<Extension<any,any> | Node<any,any> | Mark<a
       }
       return '';
     },
+    emptyEditorClass: 'is-editor-empty',
   }),
   Typography,
   TaskList.configure({
@@ -126,3 +115,19 @@ export const editorExtensions: Array<Extension<any,any> | Node<any,any> | Mark<a
   AlertWidgetNode,
   CtaWidgetNode,
 ];
+
+export const getAsyncExtensions = async () => {
+  const { createLowlight, common } = await import('lowlight');
+  const lowlight = createLowlight(common);
+
+  lowlight.register('html', xml);
+  lowlight.register('css', css);
+  lowlight.register('js', js);
+  lowlight.register('ts', ts);
+
+  return [
+    CodeBlockLowlight.configure({
+      lowlight,
+    }),
+  ];
+};

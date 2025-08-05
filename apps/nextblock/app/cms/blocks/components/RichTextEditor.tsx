@@ -13,7 +13,7 @@ export default function RichTextEditor({ initialContent, onChange, editable = tr
   return (
     <div className="h-full flex flex-col border rounded-md">
       <NotionEditor
-        content={initialContent}
+        content={initialContent || ''}
         onChange={onChange}
       />
     </div>

@@ -1,23 +1,33 @@
+ // libs/editor/src/lib/NotionEditor.tsx
 'use client';
 
+import '../../src/styles/placeholder.css';
+
 import { useEditor, EditorContent } from '@tiptap/react';
-import React, { useEffect, useRef } from 'react';
-import { editorExtensions } from './extensions';
-import '../styles/placeholder.css';
+import React, { useState, useEffect } from 'react';
+import { editorExtensions, getAsyncExtensions } from './extensions';
+import { EditorBubbleMenu } from './components/menus/BubbleMenu';
 
 interface NotionEditorProps {
-  content: string | undefined | null;
+  content: string;
   onChange: (content: string) => void;
 }
 
-export const NotionEditor: React.FC<NotionEditorProps> = ({
-  content,
-  onChange,
-}) => {
+export const NotionEditor: React.FC<NotionEditorProps> = ({ content, onChange }) => {
+  const [currentExtensions, setCurrentExtensions] = useState(editorExtensions);
+
+  useEffect(() => {
+    const loadExtensions = async () => {
+      const asyncExtensions = await getAsyncExtensions();
+      setCurrentExtensions([...editorExtensions, ...asyncExtensions]);
+    };
+    loadExtensions();
+  }, []);
+
   const editor = useEditor({
-    extensions: editorExtensions,
+    extensions: currentExtensions,
+    content: content,
     immediatelyRender: false,
-    content: content || '', // Ensure content is always a string for initialization
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML());
     },
@@ -28,38 +38,12 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
     },
   });
 
-  const isInitialRender = useRef(true);
-
-  useEffect(() => {
-    if (!editor || editor.isDestroyed) {
-      return;
-    }
-
-    // Let useEditor handle the initial content, and only sync on subsequent changes.
-    if (isInitialRender.current) {
-      isInitialRender.current = false;
-      return;
-    }
-
-    const editorContent = editor.getHTML();
-    const newContent = content || '';
-
-    // More robust check for empty content
-    const isNewContentEmpty = newContent === '' || newContent === '<p></p>';
-    const isEditorEmpty = editorContent === '' || editorContent === '<p></p>';
-
-    // Prevent unnecessary updates if both are empty
-    if (isNewContentEmpty && isEditorEmpty) {
-      return;
-    }
-
-    // Update content if it differs
-    if (editorContent !== newContent) {
-      editor.commands.setContent(newContent, { emitUpdate: false });
-    }
-  }, [content, editor]);
-
-  return <EditorContent editor={editor} />;
+  return (
+    <div className="relative">
+      {editor && <EditorBubbleMenu editor={editor} />}
+      <EditorContent editor={editor} />
+    </div>
+  );
 };
 
 export default NotionEditor;
