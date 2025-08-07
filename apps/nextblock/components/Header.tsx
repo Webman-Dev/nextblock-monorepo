@@ -50,7 +50,6 @@ export default async function Header({ currentLocale, currentPageData }: HeaderP
       navItems={headerNavItems}
       canAccessCms={canAccessCms}
       cmsDashboardLinkHref="/cms/dashboard"
-      cmsDashboardLinkLabel={t('cms_dashboard')}
       headerAuthComponent={<HeaderAuth />}
       languageSwitcherComponent={
         <LanguageSwitcher currentPageData={currentPageData} />
