@@ -65,7 +65,6 @@ interface ResponsiveNavProps {
   navItems: NavigationItem[]
   canAccessCms: boolean;
   cmsDashboardLinkHref: string;
-  cmsDashboardLinkLabel: string;
   headerAuthComponent: React.ReactNode;
   languageSwitcherComponent: React.ReactNode;
 }
@@ -75,7 +74,6 @@ export default function ResponsiveNav({
   navItems,
   canAccessCms,
   cmsDashboardLinkHref,
-  cmsDashboardLinkLabel,
   headerAuthComponent,
   languageSwitcherComponent,
   logo,
@@ -290,7 +288,7 @@ export default function ResponsiveNav({
           )}
           {canAccessCms && (
             <Link href={cmsDashboardLinkHref} className="hover:underline font-semibold text-sm text-foreground">
-              {cmsDashboardLinkLabel}
+              {t('cms_dashboard')}
             </Link>
           )}
           {headerAuthComponent}
@@ -358,7 +356,7 @@ export default function ResponsiveNav({
                 className="block px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-gray-100 dark:hover:bg-gray-700"
                 onClick={toggleMobileMenu}
               >
-                {cmsDashboardLinkLabel}
+                {t('cms_dashboard')}
               </Link>
             )}
           </nav>
