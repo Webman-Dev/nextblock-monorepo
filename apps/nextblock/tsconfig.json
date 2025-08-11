@@ -16,7 +16,17 @@
         "name": "next"
       }
     ],
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
+    "target": "ES2017",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "module": "nodenext",
+    "moduleResolution": "nodenext"
   },
   "include": [
     "**/*.ts",
@@ -27,7 +37,12 @@
     ".next/types/**/*.ts",
     "../../dist/apps/nextblock/.next/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "jest.config.ts", "**/*.spec.ts", "**/*.test.ts"],
+  "exclude": [
+    "node_modules",
+    "jest.config.ts",
+    "**/*.spec.ts",
+    "**/*.test.ts"
+  ],
   "references": [
     {
       "path": "../../libs/db/tsconfig.lib.json"

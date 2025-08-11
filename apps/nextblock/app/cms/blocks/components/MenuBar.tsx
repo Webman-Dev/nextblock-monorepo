@@ -17,7 +17,7 @@ import {
 
 // Dynamically import MediaLibraryModal
 const MediaLibraryModal = dynamic(() =>
-  import('./MediaLibraryModal').then((mod) => mod.MediaLibraryModal),
+  import('./MediaLibraryModal.js').then((mod) => mod.MediaLibraryModal),
   {
     ssr: false, // Usually good for modals that are client-side interactive
     // You can add a loading component if needed:

@@ -85,9 +85,7 @@ const TipTapFallback = ({ initialContent, onChange, editable = true }: RichTextE
 
 // Dynamic import of the RichTextEditor with proper chunk naming
 const RichTextEditor = dynamic(
-  () => import('./RichTextEditor').then((mod) => ({
-    default: mod.default
-  })),
+  () => import('./RichTextEditor.js').then((mod) => mod.default),
   {
     ssr: false, // TipTap is client-side only
     loading: () => <RichTextEditorSkeleton />,

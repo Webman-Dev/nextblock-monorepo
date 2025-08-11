@@ -53,7 +53,7 @@ export const MediaLibraryModal = ({ editor }: MediaLibraryModalProps) => {
   const handleSelectMedia = (mediaItem: Media) => {
     if (editor && mediaItem.file_type?.startsWith("image/")) {
       const imageUrl = `${R2_BASE_URL}/${mediaItem.object_key}`;
-      editor.chain().focus().setImage({ src: imageUrl, alt: mediaItem.description || mediaItem.file_name }).run();
+      editor.chain().focus().insertContent(`<img src="${imageUrl}" alt="${mediaItem.description || mediaItem.file_name}" />`).run();
     }
     setIsModalOpen(false);
   };

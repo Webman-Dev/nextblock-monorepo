@@ -2,6 +2,7 @@
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
+import * as fs from 'fs';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
 
@@ -9,12 +10,24 @@ export default defineConfig(() => ({
   root: __dirname,
   cacheDir: '../../node_modules/.vite/libs/sdk',
   plugins: [
-    nxViteTsPaths(),
     nxCopyAssetsPlugin(['*.md']),
     dts({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),
       pathsToAliases: false,
+      afterBuild: () => {
+        const packageJson = {
+          name: 'sdk',
+          version: '0.0.1',
+          main: 'index.js',
+          module: 'index.js',
+          types: 'index.d.ts',
+        };
+        fs.writeFileSync(
+          path.resolve(__dirname, '../../dist/libs/sdk', 'package.json'),
+          JSON.stringify(packageJson, null, 2)
+        );
+      },
     }),
   ],
   // Uncomment this if you are using workers.
