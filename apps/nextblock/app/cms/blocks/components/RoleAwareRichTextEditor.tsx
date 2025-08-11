@@ -59,9 +59,7 @@ const BasicTextEditor = ({ initialContent, onChange, editable = true }: RichText
 
 // Dynamic import of the RichTextEditor - only loaded when needed
 const DynamicRichTextEditor = dynamic(
-  () => import('./DynamicRichTextEditor').then((mod) => ({
-    default: mod.default
-  })),
+  () => import('./DynamicRichTextEditor.js').then((mod) => mod.default),
   {
     ssr: false, // TipTap is client-side only
     loading: () => <RichTextEditorSkeleton />,

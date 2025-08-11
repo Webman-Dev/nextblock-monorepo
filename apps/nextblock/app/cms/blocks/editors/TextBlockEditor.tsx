@@ -6,7 +6,7 @@ import { Label } from "@nextblock-monorepo/ui";
 import { BlockEditorProps } from '../components/BlockEditorModal';
 import dynamic from 'next/dynamic';
 
-const RoleAwareRichTextEditor = dynamic(() => import('../components/RoleAwareRichTextEditor'), {
+const RoleAwareRichTextEditor = dynamic(() => import('../components/RoleAwareRichTextEditor.js').then(mod => mod.default), {
   ssr: false,
   loading: () => <p>Loading editor...</p>,
 });

@@ -19,7 +19,6 @@ interface HeaderProps {
 }
 
 export default async function Header({ currentLocale, currentPageData }: HeaderProps) {
-  const t = (key: string) => key;
   const supabase = createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
 

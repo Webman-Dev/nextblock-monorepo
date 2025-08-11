@@ -9,8 +9,8 @@ import {
   DialogTitle,
   DialogDescription,
   DialogClose,
-} from "libs/ui/src/lib/dialog";
-import { Button } from "libs/ui/src/lib/button";
+} from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-monorepo/ui";
 
 interface ConfirmationDialogProps {
   isOpen: boolean;

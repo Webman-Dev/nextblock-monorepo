@@ -1,16 +1,17 @@
 {
   "compileOnSave": false,
   "compilerOptions": {
+    "jsx": "react-jsx",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "esnext",
+    "lib": ["esnext", "dom"],
     "rootDir": ".",
     "sourceMap": true,
     "composite": true,
-    "moduleResolution": "node16",
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "importHelpers": true,
-    "target": "es2015",
-    "module": "node16",
-    "lib": ["es2020", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
@@ -26,6 +27,5 @@
       "@nextblock/sdk": ["libs/sdk/src/index.ts"]
     }
   },
-  "include": ["libs/environment.d.ts", "libs/utils/src/**/*.ts", "libs/utils/src/**/*.tsx"],
   "exclude": ["node_modules", "tmp"]
 }
