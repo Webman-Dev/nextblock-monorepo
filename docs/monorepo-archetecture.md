@@ -89,3 +89,6 @@ This document provides a comprehensive overview of the NextBlock CMS project, wh
 | `nx lint`      | Runs the linter on a specific project or the entire workspace. | `nx lint ui`                                       |
 | `nx generate`  | Scaffolds new applications, libraries, or components.     | `nx g @nx/react:component MyButton --project=ui` |
 | `nx graph`     | Visualizes the dependency graph of the entire workspace. | `nx graph`                                         |
+### 4.2. TypeScript Development Notes
+
+*   **Module Resolution Ambiguity:** To prevent subtle build errors (like `ts(6307)`), avoid creating files with the same base name but different extensions (e.g., `feature.ts` and `feature.tsx`) within the same directory. This can cause ambiguity in the build system's module resolution process. Always ensure component files (`.tsx`) have a unique name that is distinct from any corresponding logic files (`.ts`).
