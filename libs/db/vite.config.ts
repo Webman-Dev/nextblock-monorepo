@@ -10,6 +10,7 @@ export default defineConfig({
       entryRoot: 'src',
       tsconfigPath: './tsconfig.json',
       outDir: '../../dist/libs/db',
+      exclude: ['vite.config.ts'],
       afterBuild: () => {
         const packageJson = {
           name: 'db',
