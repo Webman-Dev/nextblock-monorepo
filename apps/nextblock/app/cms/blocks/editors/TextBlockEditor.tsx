@@ -6,10 +6,7 @@ import { Label } from "@nextblock-monorepo/ui";
 import { BlockEditorProps } from '../components/BlockEditorModal';
 import dynamic from 'next/dynamic';
 
-const RoleAwareRichTextEditor = dynamic(() => import('../components/RoleAwareRichTextEditor.js').then(mod => mod.default), {
-  ssr: false,
-  loading: () => <p>Loading editor...</p>,
-});
+const NotionEditor = dynamic(() => import('@nextblock-monorepo/editor').then(mod => mod.NotionEditor), { ssr: false });
 
 export type TextBlockContent = {
     html_content?: string;
@@ -22,8 +19,8 @@ export default function TextBlockEditor({ content, onChange }: BlockEditorProps<
   return (
     <div className="h-full flex flex-col">
       <Label htmlFor={`text-block-editor-tiptap-${Math.random()}`} className="sr-only">Text Content</Label>
-      <RoleAwareRichTextEditor
-        initialContent={content.html_content}
+      <NotionEditor
+        content={content.html_content || ''}
         onChange={handleContentChange}
       />
     </div>

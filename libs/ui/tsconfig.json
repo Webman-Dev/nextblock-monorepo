@@ -7,7 +7,7 @@
     "strict": true,
     "composite": true,
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "../../libs/environment.d.ts", "../utils/src/**/*.ts", "../utils/src/**/*.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "../../libs/environment.d.ts"],
   "extends": "../../tsconfig.base.json",
   "references": [
     {
