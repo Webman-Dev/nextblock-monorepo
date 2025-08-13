@@ -1,4 +1,5 @@
 import 'libs/ui/src/styles/globals.css';
+import '@nextblock-monorepo/editor/styles/editor.css';
 // app/layout.tsx
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { ThemeSwitcher } from '@/components/theme-switcher';
