@@ -2,10 +2,13 @@
 'use client';
 
 import { useEditor, EditorContent } from '@tiptap/react';
-import React from 'react';
-import { editorExtensions } from './extensions';
+import { FloatingMenu } from '@tiptap/react/menus';
+import React, { useState, useEffect } from 'react';
+import { editorExtensions, getAsyncExtensions } from './extensions';
 import { EditorBubbleMenu } from './components/menus/BubbleMenu';
+import { EditorFloatingMenu } from './components/menus/FloatingMenu';
 import CharacterCount from '@tiptap/extension-character-count';
+import { type Extension } from '@tiptap/core';
 
 interface NotionEditorProps {
   content: string;
@@ -13,8 +16,18 @@ interface NotionEditorProps {
 }
 
 export const NotionEditor: React.FC<NotionEditorProps> = ({ content, onChange }) => {
+  const [extensions, setExtensions] = useState<any[]>(editorExtensions);
+
+  useEffect(() => {
+    const loadAsyncExtensions = async () => {
+      const asyncExtensions = await getAsyncExtensions();
+      setExtensions([...editorExtensions, ...asyncExtensions]);
+    };
+    loadAsyncExtensions();
+  }, []);
+
   const editor = useEditor({
-    extensions: [...editorExtensions, CharacterCount], // Add CharacterCount here if not already global
+    extensions: extensions,
     content: content,
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML());
@@ -34,6 +47,19 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({ content, onChange })
   return (
     <div className="relative w-full rounded-lg border bg-background shadow-sm">
       <EditorBubbleMenu editor={editor} />
+      
+      <FloatingMenu
+        editor={editor}
+        shouldShow={({ state }) => {
+          const { $from } = state.selection;
+          const isRootNode = $from.depth === 1;
+          const isEmpty = $from.parent.nodeSize <= 2;
+          return isRootNode && isEmpty && editor.isEditable;
+        }}
+      >
+        <EditorFloatingMenu editor={editor} />
+      </FloatingMenu>
+      
       <EditorContent editor={editor} />
       <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">
         {editor.storage.characterCount.characters()} characters / {editor.storage.characterCount.words()} words

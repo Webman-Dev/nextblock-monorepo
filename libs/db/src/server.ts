@@ -28,24 +28,10 @@ export const createClient = () => {
           return cookieStore.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
-          try {
-            (async () => {
-              const cookieStore = await cookieStorePromise;
-              cookieStore.set({ name, value, ...options });
-            })();
-          } catch {
-            // The `set` method was called from a Server Component.
-          }
+          cookieStorePromise.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
-          try {
-            (async () => {
-              const cookieStore = await cookieStorePromise;
-              cookieStore.set({ name, value: '', ...options });
-            })();
-          } catch {
-            // The `delete` method was called from a Server Component.
-          }
+          cookieStorePromise.set({ name, value: '', ...options });
         },
       },
     }

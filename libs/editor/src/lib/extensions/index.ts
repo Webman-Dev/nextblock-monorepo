@@ -22,8 +22,8 @@ import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
 import AlertWidgetNode from './AlertWidgetNode';
 import CtaWidgetNode from './CtaWidgetNode';
-import { SlashCommand } from './SlashCommandComponent.js';
-import { editorFloatingMenu } from '../components/menus/FloatingMenu';
+import { SlashCommand } from './SlashCommandComponent';
+import { FloatingMenu } from '@tiptap/extension-floating-menu';
 
 // Load syntax highlighting languages
 import css from 'highlight.js/lib/languages/css';
@@ -83,7 +83,6 @@ export const editorExtensions: Array<Extension<any,any> | Node<any,any> | Mark<a
       }
       return '';
     },
-    emptyEditorClass: 'is-editor-empty',
   }),
   Typography,
   TaskList.configure({
@@ -117,7 +116,7 @@ export const editorExtensions: Array<Extension<any,any> | Node<any,any> | Mark<a
   AlertWidgetNode,
   CtaWidgetNode,
   SlashCommand,
-  editorFloatingMenu,
+  FloatingMenu,
 ];
 
 export const getAsyncExtensions = async () => {
