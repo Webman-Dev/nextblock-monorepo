@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { editorExtensions } from './kit';
 import { EditorBubbleMenu } from './components/menus/BubbleMenu';
@@ -12,6 +12,7 @@ interface NotionEditorProps {
 }
 
 export const NotionEditor: React.FC<NotionEditorProps> = ({ content, onChange }) => {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const editor = useEditor({
     extensions: editorExtensions, // CharacterCount should already be included in kit
     content,
@@ -47,9 +48,9 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({ content, onChange })
   const words = cc?.words?.() ?? 0;
 
   return (
-    <div className="relative w-full rounded-lg border bg-background shadow-sm">
+    <div ref={wrapperRef} className="relative w-full rounded-lg border bg-background shadow-sm">
       <EditorBubbleMenu editor={editor} />
-      <EditorFloatingMenu editor={editor} />
+      <EditorFloatingMenu editor={editor} wrapperRef={wrapperRef} />
       <EditorContent editor={editor} />
       {cc && (
         <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">
