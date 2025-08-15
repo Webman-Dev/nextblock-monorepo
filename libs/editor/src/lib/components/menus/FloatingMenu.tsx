@@ -12,6 +12,9 @@ import { useFloating, offset, flip, shift, autoUpdate } from '@floating-ui/react
 
 interface FloatingMenuComponentProps {
   editor: Editor;
+  wrapperRef?:
+    | React.RefObject<HTMLDivElement>
+    | React.RefObject<HTMLDivElement | null>;
 }
 
 type MenuItem = {
@@ -39,11 +42,15 @@ const menuItems: MenuItem[] = [
   { title: 'Horizontal Rule', icon: <Minus className="h-4 w-4" />, command: (e) => e.chain().focus().setHorizontalRule().run() },
 ];
 
-export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor }) => {
+export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor, wrapperRef }) => {
   const [open, setOpen] = useState(false);
   const [visible, setVisible] = useState(false);
   const [ready, setReady] = useState(false);
-  const [triggerPos, setTriggerPos] = useState<{ top: number; left: number }>({ top: -9999, left: -9999 });
+  const [triggerStyle, setTriggerStyle] = useState<{ top: number; left: number; width: number }>({
+    top: -9999,
+    left: -9999,
+    width: 0,
+  });
 
   const { x, y, refs, strategy, update } = useFloating({
     placement: 'right-start',
@@ -63,19 +70,21 @@ export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor }) =
 
   // Stable positioning function based on caret coords
   const positionTrigger = useCallback(() => {
-    const { state, view } = editor;
-    const pos = state.selection.from;
-    const rect = view.coordsAtPos(pos); // viewport rect at caret
+    if (!wrapperRef?.current) return;
 
-    const left = rect.left - 28; // nudge left for the “+”
-    const top = rect.top;
+    const wrapperRect = wrapperRef.current.getBoundingClientRect();
+    const editorContentRect = editor.view.dom.getBoundingClientRect();
+    const caretRect = editor.view.coordsAtPos(editor.state.selection.from);
 
-    setTriggerPos({ top, left });
+    const top = caretRect.top - wrapperRect.top;
+    const left = editorContentRect.left - wrapperRect.left;
+    const width = editorContentRect.width;
 
-    // Ensure Floating UI measures before we reveal the trigger
+    setTriggerStyle({ top, left, width });
+
     update();
     requestAnimationFrame(() => setReady(true));
-  }, [editor, update]);
+  }, [editor, update, wrapperRef]);
 
   useEffect(() => {
     if (!editor) return;
@@ -117,7 +126,7 @@ export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor }) =
       editor.off('focus', handle);
       editor.off('blur', handleBlur);
     };
-  }, [editor, shouldShowTrigger, positionTrigger]); // ✅ no ESLint warning now
+  }, [editor, shouldShowTrigger, positionTrigger]);
 
   const runCommand = (command: (editor: Editor) => void) => {
     command(editor);
@@ -130,30 +139,25 @@ export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor }) =
     <>
       {/* Trigger */}
       <div
-        ref={refs.setReference}
         style={{
-          position: 'fixed', // coordsAtPos is viewport-relative
-          top: triggerPos.top,
-          left: triggerPos.left,
+          position: 'absolute',
+          top: triggerStyle.top,
+          left: triggerStyle.left,
+          width: triggerStyle.width,
           visibility: ready ? 'visible' : 'hidden',
           zIndex: 10000,
         }}
+        className="group"
       >
-        <div
-          className="group relative py-4 w-full flex items-center justify-center cursor-pointer"
-          onClick={() => setOpen((v) => !v)}
-          aria-label="Insert block"
-        >
+        <div className="relative py-4 w-[95%] mx-auto flex items-center" aria-label="Insert block">
           {/* Horizontal Line */}
-          <div
-            className="absolute top-1/2 -translate-y-1/2 h-0.5 bg-slate-200 dark:bg-slate-700"
-            style={{
-              left: triggerPos.left - triggerPos.left,
-              width: '100%',
-            }}
-          />
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-0.5 bg-slate-200 dark:bg-slate-700 transform origin-center scale-x-0 opacity-0 group-hover:scale-x-100 group-hover:opacity-100 transition-all duration-300" />
           {/* Plus Icon and Animated Circle */}
-          <div className="relative z-10">
+          <div
+            ref={refs.setReference}
+            className="relative z-10 cursor-pointer mx-auto"
+            onClick={() => setOpen((v) => !v)}
+          >
             {/* Animated Circle */}
             <div className="absolute -inset-2 rounded-full bg-primary/10 dark:bg-primary/30 scale-0 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-300 ease-in-out" />
             {/* Plus Icon Container */}
