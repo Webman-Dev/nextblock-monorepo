@@ -3,9 +3,7 @@ import { Editor, Extension, Range } from '@tiptap/core';
 import { ReactRenderer } from '@tiptap/react';
 import Suggestion, { SuggestionOptions } from '@tiptap/suggestion';
 import {
-  Heading1, Heading2, Heading3, List, ListOrdered, TextQuote, Code, ImageIcon, Table2, Minus, AlertTriangle, Megaphone
-} from 'lucide-react';
-import tippy, { Instance } from 'tippy.js';
+  Heading1, Heading2, Heading3, List, ListOrdered, TextQuote, Code, ImageIcon, Table2, Minus } from 'lucide-react';
 import { SlashCommandList, CommandListRef } from '../components/menus/SlashCommandList';
 import React from 'react';
 
@@ -101,22 +99,22 @@ const commandItems: CommandItemProps[] = [
       editor.chain().focus().deleteRange(range).setHorizontalRule().run();
     },
   },
-  {
-    title: 'Alert',
-    description: 'Add a prominent alert box.',
-    icon: <AlertTriangle className="w-7 h-7" />,
-    command: ({ editor, range }) => {
-      editor.chain().focus().deleteRange(range).setAlertWidget({ type: 'info', title: 'Info', message: 'This is an alert.', align: 'center', size: 'medium', textAlign: 'left' }).run();
-    },
-  },
-  {
-    title: 'Call-to-Action',
-    description: 'Add a CTA button.',
-    icon: <Megaphone className="w-7 h-7" />,
-    command: ({ editor, range }) => {
-      editor.chain().focus().deleteRange(range).setCtaWidget({ text: 'Click me', url: '#', style: 'filled', align: 'center', size: 'medium', textAlign: 'center' }).run();
-    },
-  },
+  // {
+  //   title: 'Alert',
+  //   description: 'Add a prominent alert box.',
+  //   icon: <AlertTriangle className="w-7 h-7" />,
+  //   command: ({ editor, range }) => {
+  //     editor.chain().focus().deleteRange(range).setAlertWidget({ type: 'info', title: 'Info', message: 'This is an alert.', align: 'center', size: 'medium', textAlign: 'left' }).run();
+  //   },
+  // },
+  // {
+  //   title: 'Call-to-Action',
+  //   description: 'Add a CTA button.',
+  //   icon: <Megaphone className="w-7 h-7" />,
+  //   command: ({ editor, range }) => {
+  //     editor.chain().focus().deleteRange(range).setCtaWidget({ text: 'Click me', url: '#', style: 'filled', align: 'center', size: 'medium', textAlign: 'center' }).run();
+  //   },
+  // },
 ];
 
 export const SlashCommand = Extension.create({
@@ -136,7 +134,6 @@ export const SlashCommand = Extension.create({
         },
         render: () => {
           let component: ReactRenderer<CommandListRef>;
-          let popup: Instance[];
 
           return {
             onStart: props => {
@@ -144,32 +141,17 @@ export const SlashCommand = Extension.create({
                 props,
                 editor: props.editor,
               });
-
-              popup = tippy('body', {
-                getReferenceClientRect: props.clientRect as any,
-                appendTo: () => document.body,
-                content: component.element,
-                showOnCreate: true,
-                interactive: true,
-                trigger: 'manual',
-                placement: 'bottom-start',
-              });
             },
             onUpdate(props) {
               component.updateProps(props);
-              popup[0].setProps({
-                getReferenceClientRect: props.clientRect as any,
-              });
             },
             onKeyDown(props) {
               if (props.event.key === 'Escape') {
-                popup[0].hide();
                 return true;
               }
               return component.ref?.onKeyDown({ event: props.event as any }) ?? false;
             },
             onExit() {
-              popup[0].destroy();
               component.destroy();
             },
           };
