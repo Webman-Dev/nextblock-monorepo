@@ -1,10 +1,12 @@
 'use client';
 
 import type { FC } from 'react';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import type { Editor } from '@tiptap/core';
-import { Heading1, Heading2, List, ListOrdered, TextQuote, Code, Image as ImageIcon, Table2, Minus } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '@nextblock-monorepo/ui/popover';
+import {
+  Heading1, Heading2, List, ListOrdered, TextQuote, Code,
+  Image as ImageIcon, Table2, Minus, PlusCircle,
+} from 'lucide-react';
 import { Button } from '@nextblock-monorepo/ui/button';
 import { useFloating, offset, flip, shift, autoUpdate } from '@floating-ui/react';
 
@@ -39,95 +41,153 @@ const menuItems: MenuItem[] = [
 
 export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor }) => {
   const [open, setOpen] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [triggerPos, setTriggerPos] = useState<{ top: number; left: number }>({ top: -9999, left: -9999 });
+
   const { x, y, refs, strategy, update } = useFloating({
+    placement: 'right-start',
     open,
     onOpenChange: setOpen,
     middleware: [offset(10), flip(), shift()],
     whileElementsMounted: autoUpdate,
   });
 
-  const shouldShowAtSelection = useMemo(() => {
-    const { state } = editor;
-    const { $from } = state.selection;
-    const isRootNode = $from.depth === 1;
-    const isEmpty = $from.parent.nodeSize <= 2;
-    return isRootNode && isEmpty && editor.isEditable;
+  // Stable predicate for visibility (empty paragraph && editable)
+  const shouldShowTrigger = useCallback(() => {
+    const { $from } = editor.state.selection;
+    const parent = $from.parent;
+    const isEmptyPara = parent.type.name === 'paragraph' && parent.content.size === 0;
+    return isEmptyPara && editor.isEditable;
   }, [editor]);
 
-  const setVirtualReferenceToSelection = React.useCallback(() => {
+  // Stable positioning function based on caret coords
+  const positionTrigger = useCallback(() => {
     const { state, view } = editor;
-    const from = state.selection.from;
-    const rect = view.coordsAtPos(from);
-    const virtualEl = { getBoundingClientRect: () => new DOMRect(rect.left, rect.top, 0, 0) };
-    refs.setPositionReference(virtualEl as any);
-    void update();
-  }, [editor, refs, update]);
+    const pos = state.selection.from;
+    const rect = view.coordsAtPos(pos); // viewport rect at caret
+
+    const left = rect.left - 28; // nudge left for the “+”
+    const top = rect.top;
+
+    setTriggerPos({ top, left });
+
+    // Ensure Floating UI measures before we reveal the trigger
+    update();
+    requestAnimationFrame(() => setReady(true));
+  }, [editor, update]);
 
   useEffect(() => {
     if (!editor) return;
 
-    const handleSelectionChange = () => {
-      if (shouldShowAtSelection) {
-        setVirtualReferenceToSelection();
-        setOpen(true);
-      } else {
-        setOpen(false);
-      }
+    let raf = 0;
+    const handle = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (shouldShowTrigger()) {
+          setVisible(true);
+          setReady(false);
+          positionTrigger();
+        } else {
+          setVisible(false);
+          setOpen(false);
+          setReady(false);
+        }
+      });
     };
 
-    const handleBlur = () => setOpen(false);               // 🔧 named handler
-    // initial check
-    handleSelectionChange();
+    const handleBlur = () => {
+      setVisible(false);
+      setOpen(false);
+      setReady(false);
+    };
 
-    editor.on('selectionUpdate', handleSelectionChange);
-    editor.on('transaction', handleSelectionChange);
-    editor.on('focus', handleSelectionChange);
-    editor.on('blur', handleBlur);                          // 🔧 same ref for off()
+    // initial run
+    handle();
+
+    editor.on('selectionUpdate', handle);
+    editor.on('transaction', handle);
+    editor.on('focus', handle);
+    editor.on('blur', handleBlur);
 
     return () => {
-      editor.off('selectionUpdate', handleSelectionChange);
-      editor.off('transaction', handleSelectionChange);
-      editor.off('focus', handleSelectionChange);
-      editor.off('blur', handleBlur);                       // 🔧 properly removed
+      cancelAnimationFrame(raf);
+      editor.off('selectionUpdate', handle);
+      editor.off('transaction', handle);
+      editor.off('focus', handle);
+      editor.off('blur', handleBlur);
     };
-  }, [editor, shouldShowAtSelection, setVirtualReferenceToSelection]);
+  }, [editor, shouldShowTrigger, positionTrigger]); // ✅ no ESLint warning now
 
   const runCommand = (command: (editor: Editor) => void) => {
     command(editor);
     setOpen(false);
   };
 
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <div
-          ref={refs.setReference}
-          // 🔧 prevent editor blur which would immediately close the menu
-          onMouseDown={(e) => e.preventDefault()}
-          style={{ position: strategy, top: y ?? 0, left: x ?? 0 }}
-        >
-          <Button variant="ghost" size="icon" className="rounded-full h-8 w-8" aria-label="Insert block">
-            +
-          </Button>
-        </div>
-      </PopoverTrigger>
+  if (!visible) return null;
 
-      <PopoverContent className="w-48 p-1" ref={refs.setFloating}>
-        <div className="flex flex-col">
-          {menuItems.map((item) => (
-            <Button
-              key={item.title}
-              variant="ghost"
-              className="justify-start"
-              onMouseDown={(e) => e.preventDefault()} // keep focus in editor
-              onClick={() => runCommand(item.command)}
-            >
-              {item.icon}
-              <span className="ml-2">{item.title}</span>
-            </Button>
-          ))}
+  return (
+    <>
+      {/* Trigger */}
+      <div
+        ref={refs.setReference}
+        style={{
+          position: 'fixed', // coordsAtPos is viewport-relative
+          top: triggerPos.top,
+          left: triggerPos.left,
+          visibility: ready ? 'visible' : 'hidden',
+          zIndex: 10000,
+        }}
+      >
+        <div
+          className="group relative py-4 w-full flex items-center justify-center cursor-pointer"
+          onClick={() => setOpen((v) => !v)}
+          aria-label="Insert block"
+        >
+          {/* Horizontal Line */}
+          <div
+            className="absolute top-1/2 -translate-y-1/2 h-0.5 bg-slate-200 dark:bg-slate-700"
+            style={{
+              left: triggerPos.left - triggerPos.left,
+              width: '100%',
+            }}
+          />
+          {/* Plus Icon and Animated Circle */}
+          <div className="relative z-10">
+            {/* Animated Circle */}
+            <div className="absolute -inset-2 rounded-full bg-primary/10 dark:bg-primary/30 scale-0 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-300 ease-in-out" />
+            {/* Plus Icon Container */}
+            <div className="relative bg-background p-1 rounded-full">
+              <PlusCircle className="h-5 w-5 text-slate-400 group-hover:text-primary transition-colors" />
+            </div>
+          </div>
         </div>
-      </PopoverContent>
-    </Popover>
+      </div>
+
+      {/* Menu */}
+      {open && (
+        <div
+          ref={refs.setFloating}
+          style={{ position: strategy, top: y ?? 0, left: x ?? 0, zIndex: 10001 }}
+          className="bg-white shadow-lg rounded-md p-1 w-48"
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <div className="flex flex-col">
+            {menuItems.map((item) => (
+              <Button
+                key={item.title}
+                type="button"
+                variant="ghost"
+                className="justify-start"
+                onClick={() => runCommand(item.command)}
+              >
+                {item.icon}
+                <span className="ml-2">{item.title}</span>
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
   );
 };

@@ -207,17 +207,24 @@ export const SlashCommand = Extension.create({
 
           return {
             onStart: (props: SuggestionProps<CommandItemProps>) => {
+              if (!props.clientRect) return; // ✅ don't mount without an anchor
+
               component = new ReactRenderer(SlashCommandList, {
                 props,
                 editor: props.editor,
               });
 
               popupEl = document.createElement('div');
-              popupEl.style.position = 'absolute';
-              popupEl.style.zIndex = '9999';
+              // keep editor focus by default
+              popupEl.style.position = 'fixed'; // fixed avoids parent transforms; use absolute if you prefer
+              popupEl.style.zIndex = '10000';
               popupEl.style.top = '0';
               popupEl.style.left = '0';
+              popupEl.style.pointerEvents = 'none'; // ✅ shell ignores pointer events
               popupEl.appendChild(component.element);
+              // re-enable clicks on the list itself
+              (component.element as HTMLElement).style.pointerEvents = 'auto'; // ✅ list remains clickable
+
               document.body.appendChild(popupEl);
 
               const reference = makeReferenceEl(props.clientRect);
@@ -230,24 +237,18 @@ export const SlashCommand = Extension.create({
               void positionPopup(props.clientRect);
             },
 
-            onKeyDown: (props: { event: KeyboardEvent }) => {
-              if (props.event.key === 'Escape') {
-                // Let onExit clean up; returning true tells Tiptap we handled it.
-                return true;
-              }
-              return component?.ref?.onKeyDown(props as any) ?? false;
+            onKeyDown: ({ event }: { event: KeyboardEvent }) => {
+              if (event.key === 'Escape') return true; // let onExit clean up
+              // Up/Down/Enter handled by list; return false for other keys so typing continues
+              return component?.ref?.onKeyDown({ event }) ?? false;
             },
 
             onExit: () => {
-              if (stopAutoUpdate) {
-                stopAutoUpdate();
-                stopAutoUpdate = null;
-              }
+              stopAutoUpdate?.();
+              stopAutoUpdate = null;
               component?.destroy();
               component = null;
-              if (popupEl?.parentNode) {
-                popupEl.parentNode.removeChild(popupEl);
-              }
+              popupEl?.remove();
               popupEl = null;
             },
           };
