@@ -1,7 +1,20 @@
-# editor
+# Tiptap v3 Editor
 
-This library was generated with [Nx](https://nx.dev).
+This directory contains the Tiptap v3 editor implementation for the Nextblock monorepo.
 
-## Running unit tests
+## V3-Only Imports
 
-Run `nx test editor` to execute the unit tests via [Vitest](https://vitest.dev/).
+All Tiptap extensions are imported using v3-style default imports, for example:
+
+```ts
+import StarterKit from '@tiptap/starter-kit'
+import Link from '@tiptap/extension-link'
+```
+
+## SSR Safety
+
+The editor is implemented with SSR safety in mind for Next.js applications. This is achieved by:
+
+- Placing the editor UI in a `"use client"` component.
+- Creating the `Editor` instance inside the `useEditor` hook to avoid `window` access on the server.
+- Using portals to render the `BubbleMenu` and `FloatingMenu` UI, which are controlled by their respective extensions.
