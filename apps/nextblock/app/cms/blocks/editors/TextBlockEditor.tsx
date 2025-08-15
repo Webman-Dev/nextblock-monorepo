@@ -6,13 +6,13 @@ import dynamic from 'next/dynamic';
 import { Label } from '@nextblock-monorepo/ui';
 import { BlockEditorProps } from '../components/BlockEditorModal';
 
-// Type the props the lazy component expects
+// Props expected by NotionEditor
 type NotionEditorProps = {
   content: string;
   onChange: (html: string) => void;
 };
 
-// Import the actual named export from your editor package
+// Use the alias that resolves in your repo; if you mapped @nextblock-monorepo/editor, swap it here.
 const NotionEditor = dynamic<NotionEditorProps>(
   () => import('@nextblock/editor').then((m) => m.NotionEditor),
   { ssr: false }
@@ -28,10 +28,6 @@ export default function TextBlockEditor({
 }: BlockEditorProps<Partial<TextBlockContent>>) {
   const labelId = useId();
 
-  const handleContentChange = (htmlString: string) => {
-    onChange({ html_content: htmlString });
-  };
-
   return (
     <div className="h-full flex flex-col">
       <Label htmlFor={labelId} className="sr-only">
@@ -41,7 +37,7 @@ export default function TextBlockEditor({
       <div id={labelId} role="group" aria-labelledby={labelId}>
         <NotionEditor
           content={content?.html_content ?? ''}
-          onChange={handleContentChange}
+          onChange={(html) => onChange({ html_content: html })}
         />
       </div>
     </div>
