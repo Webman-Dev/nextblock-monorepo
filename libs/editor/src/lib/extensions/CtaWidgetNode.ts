@@ -58,7 +58,7 @@ export default Node.create({
 
   addCommands() {
     return {
-      setCtaWidget: (options) => ({ commands }) => {
+      setCtaWidget: (options = {}) => ({ commands }) => {
         return commands.insertContent({
           type: this.name,
           attrs: options,
@@ -71,7 +71,7 @@ export default Node.create({
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     ctaWidget: {
-      setCtaWidget: (options: { text: string; url: string; style: string; align: string; size: string; textAlign: string }) => ReturnType;
+      setCtaWidget: (options?: { text?: string; url?: string; style?: string; size?: string; textAlign?: string }) => ReturnType;
     };
   }
 }

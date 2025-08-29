@@ -13,19 +13,24 @@ import Highlight from '@tiptap/extension-highlight'
 import Subscript from '@tiptap/extension-subscript'
 import Superscript from '@tiptap/extension-superscript'
 import TextAlign from '@tiptap/extension-text-align'
-import { TextStyle } from '@tiptap/extension-text-style'
-import Color from '@tiptap/extension-color'
-import FontFamily from '@tiptap/extension-font-family'
+import { TextStyleKit } from '@tiptap/extension-text-style'
 import CharacterCount from '@tiptap/extension-character-count'
 import Focus from '@tiptap/extension-focus'
 import Placeholder from '@tiptap/extension-placeholder'
 import Typography from '@tiptap/extension-typography'
+import Link from '@tiptap/extension-link'
+import Gapcursor from '@tiptap/extension-gapcursor'
+import Underline from '@tiptap/extension-underline'
 
 import { createLowlight } from 'lowlight'
 import css from 'highlight.js/lib/languages/css'
 import js from 'highlight.js/lib/languages/javascript'
 import ts from 'highlight.js/lib/languages/typescript'
 import html from 'highlight.js/lib/languages/xml'
+import python from 'highlight.js/lib/languages/python'
+import json from 'highlight.js/lib/languages/json'
+import bash from 'highlight.js/lib/languages/bash'
+import sql from 'highlight.js/lib/languages/sql'
 
 // custom extensions
 import { TrailingNode } from './extensions/TrailingNode'
@@ -33,67 +38,152 @@ import AlertWidget from './extensions/AlertWidget'
 import CtaWidgetNode from './extensions/CtaWidgetNode'
 import { SlashCommand } from './extensions/slash-command'
 
-// ✅ bring lowlight into scope
-const lowlight = createLowlight({ html, css, js, ts })
+// ✅ bring lowlight into scope with more languages
+const lowlight = createLowlight({ html, css, js, ts, python, json, bash, sql })
 
 export const editorExtensions: Extensions = [
   StarterKit.configure({
     codeBlock: false,               // we'll use CodeBlockLowlight
-    link: { openOnClick: false },   // configure built-in Link here
-    bulletList: { HTMLAttributes: { class: 'list-disc pl-4' } },
-    orderedList: { HTMLAttributes: { class: 'list-decimal pl-4' } },
+    link: false,                    // we'll use enhanced Link extension
+    bulletList: {
+      HTMLAttributes: { class: 'list-disc pl-4' },
+      keepMarks: true,
+      keepAttributes: false,
+    },
+    orderedList: {
+      HTMLAttributes: { class: 'list-decimal pl-4' },
+      keepMarks: true,
+      keepAttributes: false,
+    },
     dropcursor: { color: '#60A5FA', width: 2 },
-    trailingNode: false,            // disable built-in if you keep your custom one
+    gapcursor: false,               // we'll use enhanced Gapcursor
   }),
 
-  CodeBlockLowlight.configure({ lowlight }),
-
-  Image.configure({ inline: true, allowBase64: true }),
-
-  // task list isn’t in StarterKit
-  TaskList.configure({ HTMLAttributes: { class: 'list-none pl-0' } }),
-  TaskItem.configure({ nested: true, HTMLAttributes: { class: 'flex items-start my-1' } }),
-
-  // tables
-  Table.configure({
-    resizable: true,
+  // Enhanced extensions
+  Link.configure({
+    openOnClick: false,
+    autolink: true,
+    defaultProtocol: 'https',
+    protocols: ['http', 'https', 'ftp', 'mailto'],
+    validate: (url) => /^https?:\/\//.test(url),
     HTMLAttributes: {
-      class: 'w-full border-collapse border border-gray-300 dark:border-gray-700',
+      class: 'text-primary underline underline-offset-2 hover:text-primary/80 cursor-pointer',
+      rel: 'noopener noreferrer',
+      target: '_blank',
     },
   }),
-  TableRow,
+
+  Gapcursor,
+  Underline,
+
+  CodeBlockLowlight.configure({
+    lowlight,
+    defaultLanguage: 'plaintext',
+    HTMLAttributes: {
+      class: 'relative rounded-md bg-muted p-4 font-mono text-sm',
+    },
+  }),
+
+  Image.configure({
+    inline: true,
+    allowBase64: true,
+    HTMLAttributes: {
+      class: 'max-w-full h-auto rounded-md',
+    },
+  }),
+
+  // Enhanced task lists
+  TaskList.configure({
+    HTMLAttributes: { class: 'list-none pl-0 space-y-1' },
+  }),
+  TaskItem.configure({
+    nested: true,
+    HTMLAttributes: { class: 'flex items-start gap-2 my-1' },
+  }),
+
+  // Enhanced tables
+  Table.configure({
+    resizable: true,
+    cellMinWidth: 100,
+    HTMLAttributes: {
+      class: 'w-full border-collapse border border-gray-300 dark:border-gray-700 my-4',
+    },
+  }),
+  TableRow.configure({
+    HTMLAttributes: {
+      class: 'border-b border-gray-300 dark:border-gray-700',
+    },
+  }),
   TableHeader.configure({
     HTMLAttributes: {
-      class: 'bg-gray-100 dark:bg-gray-800 font-bold p-2 border border-gray-300 dark:border-gray-700',
+      class: 'bg-gray-100 dark:bg-gray-800 font-bold p-3 text-left border border-gray-300 dark:border-gray-700',
     },
   }),
   TableCell.configure({
-    HTMLAttributes: { class: 'p-2 border border-gray-300 dark:border-gray-700' },
-  }),
-
-  // formatting / UI
-  Highlight.configure({ multicolor: true }),
-  Subscript,
-  Superscript,
-  TextAlign.configure({ types: ['heading', 'paragraph'] }),
-  TextStyle,
-  Color,
-  FontFamily,
-  Typography,
-  CharacterCount.configure({ limit: 20000 }),
-  Focus.configure({ className: 'has-focus' }),
-  Placeholder.configure({
-    placeholder: ({ node }) => {
-      if (node.type.name === 'heading' && node.attrs.level === 1) return 'What’s the title?'
-      if (node.type.name === 'paragraph' && node.content.size === 0) return "Press '/' for commands..."
-      return ''
+    HTMLAttributes: {
+      class: 'p-3 border border-gray-300 dark:border-gray-700 min-w-[100px]',
     },
   }),
 
-  // keep your custom trailing node only if you disabled StarterKit’s above
-  TrailingNode,
+  // Typography and formatting - Using TextStyleKit for comprehensive text styling
+  TextStyleKit.configure({
+    // Configure individual extensions within the kit
+    color: {
+      types: ['textStyle'],
+    },
+    fontFamily: {
+      types: ['textStyle'],
+    },
+    fontSize: {
+      types: ['textStyle'],
+    },
+    // backgroundColor can be disabled if not needed
+    // backgroundColor: false,
+  }),
 
-  // custom bits
+  Highlight.configure({
+    multicolor: true,
+    HTMLAttributes: {
+      class: 'rounded-sm px-1 py-0.5',
+    },
+  }),
+  Subscript,
+  Superscript,
+  TextAlign.configure({
+    types: ['heading', 'paragraph', 'div'],
+    alignments: ['left', 'center', 'right', 'justify'],
+    defaultAlignment: 'left',
+  }),
+  Typography,
+
+  // Collaboration and UX
+  CharacterCount.configure({
+    limit: 50000,
+    mode: 'textSize',
+  }),
+  Focus.configure({
+    className: 'has-focus',
+    mode: 'all',
+  }),
+  Placeholder.configure({
+    placeholder: ({ node }) => {
+      if (node.type.name === 'heading') {
+        const level = node.attrs.level;
+        return level === 1 ? "What's the title?" : `Heading ${level}`;
+      }
+      if (node.type.name === 'paragraph' && node.content.size === 0) {
+        return "Press '/' for commands or start typing...";
+      }
+      if (node.type.name === 'taskItem') {
+        return 'Add a task...';
+      }
+      return '';
+    },
+    includeChildren: true,
+  }),
+
+  // Custom extensions
+  TrailingNode,
   AlertWidget,
   CtaWidgetNode,
   SlashCommand,

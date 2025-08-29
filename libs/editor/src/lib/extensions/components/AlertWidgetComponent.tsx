@@ -8,15 +8,16 @@ const AlertWidgetComponent = ({ node, updateAttributes, editor }: NodeViewProps)
   const { type, title, message, align, size, textAlign } = node.attrs;
 
   const alertClasses: { [key: string]: string } = {
-    info:         'bg-accent/60 text-accent-foreground border-2 border-accent',
-    warning:      'bg-warning/60 text-warning-foreground border-2 border-warning',
-    notification: 'bg-muted/60 text-muted-foreground border-2 border-muted-foreground',
-    danger:       'bg-destructive/60 text-destructive-foreground border-2 border-destructive',
+    info:    'bg-blue-50 text-blue-900 border-2 border-blue-200 dark:bg-blue-900/20 dark:text-blue-100 dark:border-blue-800',
+    warning: 'bg-yellow-50 text-yellow-900 border-2 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-100 dark:border-yellow-800',
+    error:   'bg-red-50 text-red-900 border-2 border-red-200 dark:bg-red-900/20 dark:text-red-100 dark:border-red-800',
+    success: 'bg-green-50 text-green-900 border-2 border-green-200 dark:bg-green-900/20 dark:text-green-100 dark:border-green-800',
   };
 
   const sizeClasses: { [key: string]: string } = {
-    'fit-content': 'w-auto',
-    'full-width': 'w-full',
+    small: 'text-sm p-2',
+    medium: 'text-base p-3',
+    large: 'text-lg p-4',
   };
 
   const alignClasses: { [key: string]: string } = {
@@ -92,8 +93,8 @@ const AlertWidgetComponent = ({ node, updateAttributes, editor }: NodeViewProps)
                 >
                   <option value="info">Info</option>
                   <option value="warning">Warning</option>
-                  <option value="notification">Notification</option>
-                  <option value="danger">Danger</option>
+                  <option value="error">Error</option>
+                  <option value="success">Success</option>
                 </select>
               </div>
               <div>
@@ -121,8 +122,9 @@ const AlertWidgetComponent = ({ node, updateAttributes, editor }: NodeViewProps)
                   onChange={e => updateAttributes({ size: e.target.value })}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
                 >
-                  <option value="fit-content">Fit Content</option>
-                  <option value="full-width">Full Width</option>
+                  <option value="small">Small</option>
+                  <option value="medium">Medium</option>
+                  <option value="large">Large</option>
                 </select>
               </div>
               <div>
