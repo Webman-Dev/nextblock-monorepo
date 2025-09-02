@@ -395,8 +395,13 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
               popupEl.style.pointerEvents = 'none';
               popupEl.appendChild(component.element);
               
-              // Re-enable clicks on the list itself
+              // Re-enable all pointer events on the list itself (including wheel events)
               (component.element as HTMLElement).style.pointerEvents = 'auto';
+              
+              // Ensure wheel events can bubble up to the container
+              (component.element as HTMLElement).addEventListener('wheel', (e) => {
+                e.stopPropagation();
+              }, { passive: true });
 
               // Append to document body for fixed positioning
               document.body.appendChild(popupEl);
