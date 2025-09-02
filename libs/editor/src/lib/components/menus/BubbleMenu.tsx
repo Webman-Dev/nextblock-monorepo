@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import { useFloating, offset, flip, shift, autoUpdate } from '@floating-ui/react';
 import {
-  Bold, Italic, Underline, Strikethrough, Code, Link2, Palette, AlertTriangle, Megaphone,
+  Bold, Italic, Underline, Strikethrough, Code, Link2, Palette,
   Subscript, Superscript, AlignLeft, AlignCenter, AlignRight, AlignJustify, Type,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@nextblock-monorepo/ui/popover';
@@ -355,34 +355,7 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
 
         <div className="w-px bg-border h-5" />
 
-        {/* Custom widgets */}
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => editor.chain().focus().setAlertWidget().run()}
-          className="p-1.5 rounded hover:bg-accent transition-colors duration-100 flex items-center justify-center"
-          aria-label="Insert alert"
-          title="Insert alert"
-        >
-          <AlertTriangle className="h-4 w-4 pointer-events-none" />
-        </button>
-
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() =>
-            editor
-              .chain()
-              .focus()
-              .setCtaWidget({ text: 'Learn more', url: '', style: 'primary', size: 'medium', textAlign: 'center' })
-              .run()
-          }
-          className="p-1.5 rounded hover:bg-accent transition-colors duration-100 flex items-center justify-center"
-          aria-label="Insert CTA"
-          title="Insert CTA"
-        >
-          <Megaphone className="h-4 w-4 pointer-events-none" />
-        </button>
+        {/** Custom widgets moved to Toolbar Insert menu */}
     </div>
   );
 };
