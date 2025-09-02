@@ -48,8 +48,6 @@ import { KeyboardShortcuts } from './extensions/KeyboardShortcuts'
 // ✅ bring lowlight into scope with more languages
 const lowlight = createLowlight({ html, css, js, ts, python, json, bash, sql })
 
-// DEBUG: Log extension configuration
-console.log('kit.ts - Configuring editor extensions');
 
 export const editorExtensions: Extensions = [
   StarterKit.configure({
@@ -180,32 +178,8 @@ export const editorExtensions: Extensions = [
     mode: 'textSize',
   }),
   
-  // Enhanced Focus and Selection Management
-  EnhancedFocus.configure({
-    className: 'has-focus',
-    mode: 'all',
-    showFocusRing: true,
-    highlightSelection: true,
-    dimUnfocused: false,
-    animateTransitions: true,
-  }),
-  
-  // Advanced Placeholder System
-  AdvancedPlaceholder.configure({
-    emptyEditorClass: 'is-editor-empty',
-    emptyNodeClass: 'is-empty',
-    showOnlyWhenEditable: true,
-    showOnlyCurrent: true,
-    includeChildren: true,
-    considerAnyAsEmpty: false,
-  }),
-  
-  // Comprehensive Keyboard Shortcuts
-  KeyboardShortcuts.configure({
-    enableAdvancedShortcuts: true,
-    enableCustomShortcuts: true,
-    showShortcutHints: false,
-  }),
+  // Note: EnhancedFocus, AdvancedPlaceholder, and KeyboardShortcuts extensions
+  // have been disabled as they were causing text cutting bugs during cursor positioning
 
   // Custom extensions
   TrailingNode,
@@ -218,7 +192,6 @@ export const editorExtensions: Extensions = [
   NodeRange,
   DragHandle.configure({
     render: () => {
-      console.log('🔍 DRAG DEBUG - Tiptap DragHandle render() called');
       const element = document.createElement('div')
       element.classList.add('tiptap-drag-handle')
       
@@ -234,7 +207,6 @@ export const editorExtensions: Extensions = [
         </svg>
       `
       
-      console.log('🔍 DRAG DEBUG - Tiptap DragHandle element created:', element);
       return element
     },
   }),

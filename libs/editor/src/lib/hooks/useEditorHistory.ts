@@ -44,16 +44,6 @@ export const useEditorHistory = (editor: Editor | null): EditorHistoryState & Ed
     const canUndo = editor.can().undo();
     const canRedo = editor.can().redo();
     
-    // DEBUG: Log history state
-    console.log('useEditorHistory - History state check:', {
-      canUndo,
-      canRedo,
-      editorExists: !!editor,
-      editorCommands: editor.commands ? Object.keys(editor.commands) : 'no commands',
-      hasUndoCommand: typeof editor.commands?.undo === 'function' ? 'yes' : 'no',
-      hasRedoCommand: typeof editor.commands?.redo === 'function' ? 'yes' : 'no'
-    });
-    
     // For Tiptap v3, we'll use a simpler approach to track history state
     // The exact history depth isn't easily accessible, so we'll use boolean states
     const historyDepth = canUndo ? 1 : 0; // Simplified depth tracking

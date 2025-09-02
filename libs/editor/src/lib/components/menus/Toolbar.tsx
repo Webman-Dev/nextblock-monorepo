@@ -267,16 +267,7 @@ const ExportDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
 };
 
 export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
-  console.log('EditorToolbar - Render check:', {
-    editorExists: !!editor,
-    editorExtensions: editor?.extensionManager?.extensions?.map(ext => ext.name) || 'no extensions',
-    hasHistoryExtension: editor?.extensionManager?.extensions?.some(ext => ext.name === 'history') || false,
-    canUndo: editor?.can?.()?.undo?.() || false,
-    canRedo: editor?.can?.()?.redo?.() || false
-  });
-
   if (!editor) {
-    console.log('EditorToolbar - No editor provided, returning null');
     return null;
   }
 
