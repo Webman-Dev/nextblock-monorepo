@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { Editor } from '../../editor';
 import { Button } from '@nextblock-monorepo/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@nextblock-monorepo/ui/card';
@@ -25,7 +25,6 @@ export const FeatureValidationTest: React.FC = () => {
   const [testSuites, setTestSuites] = useState<TestSuite[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [currentTest, setCurrentTest] = useState<string>('');
-  const editorRef = useRef<any>(null);
 
   const createTestSuite = (name: string): TestSuite => ({
     name,
@@ -118,7 +117,6 @@ export const FeatureValidationTest: React.FC = () => {
       });
 
       // Test 2: Test history functionality (simulated)
-      const initialContent = content;
       setContent('<p>Test content for undo</p>');
       await delay(100);
       
@@ -266,7 +264,6 @@ export const FeatureValidationTest: React.FC = () => {
       });
 
       // Test 3: Check selection highlighting
-      const selectionHighlights = document.querySelectorAll('.selection-highlight');
       addTestResult(suiteName, {
         name: 'Selection Highlighting',
         status: 'pass',

@@ -15,8 +15,6 @@ import Superscript from '@tiptap/extension-superscript'
 import TextAlign from '@tiptap/extension-text-align'
 import { TextStyleKit } from '@tiptap/extension-text-style'
 import CharacterCount from '@tiptap/extension-character-count'
-import Focus from '@tiptap/extension-focus'
-import Placeholder from '@tiptap/extension-placeholder'
 import Typography from '@tiptap/extension-typography'
 import Link from '@tiptap/extension-link'
 import Gapcursor from '@tiptap/extension-gapcursor'
@@ -41,9 +39,6 @@ import AlertWidget from './extensions/AlertWidget'
 import CtaWidgetNode from './extensions/CtaWidgetNode'
 import { SlashCommand } from './extensions/slash-command'
 import { DraggableNodes } from './extensions/DraggableNodes'
-import { AdvancedPlaceholder } from './extensions/AdvancedPlaceholder'
-import { EnhancedFocus } from './extensions/EnhancedFocus'
-import { KeyboardShortcuts } from './extensions/KeyboardShortcuts'
 
 // ✅ bring lowlight into scope with more languages
 const lowlight = createLowlight({ html, css, js, ts, python, json, bash, sql })

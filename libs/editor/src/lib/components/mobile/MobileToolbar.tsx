@@ -6,8 +6,7 @@ import {
   Bold, Italic, Underline, List, ListOrdered, CheckSquare,
   Heading1, Heading2, Heading3, TextQuote, Code, Link2,
   Image, Table2, Palette, Type, AlignLeft, AlignCenter,
-  AlignRight, MoreHorizontal, ChevronLeft, ChevronRight,
-  X, Menu
+  AlignRight, X, Menu
 } from 'lucide-react';
 import { Button } from '@nextblock-monorepo/ui/button';
 import { cn } from '@nextblock-monorepo/utils';

@@ -6,12 +6,10 @@ import type { Editor } from '@tiptap/core';
 import {
   Heading1, Heading2, Heading3, List, ListOrdered, TextQuote, Code,
   Image as ImageIcon, Table2, Minus, PlusCircle, Type, CheckSquare,
-  Video, AlertTriangle, Megaphone, Hash, Calendar, FileText,
-  Columns, Divide, Quote, Terminal, Palette
+  Video, AlertTriangle, Megaphone, Hash, Terminal
 } from 'lucide-react';
 import { Button } from '@nextblock-monorepo/ui/button';
 import { useFloating, offset, flip, shift, autoUpdate, size } from '@floating-ui/react';
-import { cn } from '@nextblock-monorepo/utils';
 
 interface EnhancedFloatingMenuProps {
   editor: Editor;
