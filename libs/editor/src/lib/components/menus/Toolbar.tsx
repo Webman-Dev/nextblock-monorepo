@@ -6,7 +6,7 @@ import {
   Bold, Italic, Underline, Strikethrough, Code, Link2, Palette,
   Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare,
   TextQuote, Code2, Image, Table2, Minus, AlignLeft, AlignCenter,
-  AlignRight, AlignJustify, Subscript, Superscript, Type, Download,
+  AlignRight, AlignJustify, Subscript, Superscript, Type, Download, AlertTriangle, Megaphone,
 } from 'lucide-react';
 import { Button } from '@nextblock-monorepo/ui/button';
 import { Separator } from '@nextblock-monorepo/ui/separator';
@@ -202,6 +202,23 @@ const InsertDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
         <DropdownMenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
           <Minus className="h-4 w-4 mr-2" />
           Horizontal Rule
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => editor.chain().focus().setAlertWidget().run()}>
+          <AlertTriangle className="h-4 w-4 mr-2" />
+          Alert Widget
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() =>
+            editor
+              .chain()
+              .focus()
+              .setCtaWidget({ text: 'Learn more', url: '', style: 'primary', size: 'medium', textAlign: 'center' })
+              .run()
+          }
+        >
+          <Megaphone className="h-4 w-4 mr-2" />
+          CTA Widget
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
