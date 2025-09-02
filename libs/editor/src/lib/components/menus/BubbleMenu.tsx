@@ -162,45 +162,45 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
     >
       <div className="flex gap-1 items-center bg-background border rounded-lg p-1 shadow-lg" onMouseDown={(e) => e.preventDefault() /* 🔧 keep selection */}>
         {/* Basic formatting */}
-        <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} className={`p-1.5 rounded hover:bg-accent ${editor.isActive('bold') ? 'bg-accent' : ''}`} aria-label="Bold" title="Bold">
+        <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} className={`p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center ${editor.isActive('bold') ? 'bg-accent' : ''}`} aria-label="Bold" title="Bold">
           <Bold className="h-4 w-4" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-1.5 rounded hover:bg-accent ${editor.isActive('italic') ? 'bg-accent' : ''}`} aria-label="Italic" title="Italic">
+        <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center ${editor.isActive('italic') ? 'bg-accent' : ''}`} aria-label="Italic" title="Italic">
           <Italic className="h-4 w-4" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleUnderline().run()} className={`p-1.5 rounded hover:bg-accent ${editor.isActive('underline') ? 'bg-accent' : ''}`} aria-label="Underline" title="Underline">
+        <button type="button" onClick={() => editor.chain().focus().toggleUnderline().run()} className={`p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center ${editor.isActive('underline') ? 'bg-accent' : ''}`} aria-label="Underline" title="Underline">
           <Underline className="h-4 w-4" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleStrike().run()} className={`p-1.5 rounded hover:bg-accent ${editor.isActive('strike') ? 'bg-accent' : ''}`} aria-label="Strikethrough" title="Strikethrough">
+        <button type="button" onClick={() => editor.chain().focus().toggleStrike().run()} className={`p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center ${editor.isActive('strike') ? 'bg-accent' : ''}`} aria-label="Strikethrough" title="Strikethrough">
           <Strikethrough className="h-4 w-4" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleCode().run()} className={`p-1.5 rounded hover:bg-accent ${editor.isActive('code') ? 'bg-accent' : ''}`} aria-label="Inline code" title="Inline code">
+        <button type="button" onClick={() => editor.chain().focus().toggleCode().run()} className={`p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center ${editor.isActive('code') ? 'bg-accent' : ''}`} aria-label="Inline code" title="Inline code">
           <Code className="h-4 w-4" />
         </button>
 
         <div className="w-px bg-border h-5" />
 
         {/* Subscript/Superscript */}
-        <button type="button" onClick={() => editor.chain().focus().toggleSubscript().run()} className={`p-1.5 rounded hover:bg-accent ${editor.isActive('subscript') ? 'bg-accent' : ''}`} aria-label="Subscript" title="Subscript">
+        <button type="button" onClick={() => editor.chain().focus().toggleSubscript().run()} className={`p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center ${editor.isActive('subscript') ? 'bg-accent' : ''}`} aria-label="Subscript" title="Subscript">
           <Subscript className="h-4 w-4" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleSuperscript().run()} className={`p-1.5 rounded hover:bg-accent ${editor.isActive('superscript') ? 'bg-accent' : ''}`} aria-label="Superscript" title="Superscript">
+        <button type="button" onClick={() => editor.chain().focus().toggleSuperscript().run()} className={`p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center ${editor.isActive('superscript') ? 'bg-accent' : ''}`} aria-label="Superscript" title="Superscript">
           <Superscript className="h-4 w-4" />
         </button>
 
         <div className="w-px bg-border h-5" />
 
         {/* Text alignment */}
-        <button type="button" onClick={() => editor.chain().focus().setTextAlign('left').run()} className={`p-1.5 rounded hover:bg-accent ${editor.isActive({ textAlign: 'left' }) ? 'bg-accent' : ''}`} aria-label="Align left" title="Align left">
+        <button type="button" onClick={() => editor.chain().focus().setTextAlign('left').run()} className={`p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center ${editor.isActive({ textAlign: 'left' }) ? 'bg-accent' : ''}`} aria-label="Align left" title="Align left">
           <AlignLeft className="h-4 w-4" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().setTextAlign('center').run()} className={`p-1.5 rounded hover:bg-accent ${editor.isActive({ textAlign: 'center' }) ? 'bg-accent' : ''}`} aria-label="Align center" title="Align center">
+        <button type="button" onClick={() => editor.chain().focus().setTextAlign('center').run()} className={`p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center ${editor.isActive({ textAlign: 'center' }) ? 'bg-accent' : ''}`} aria-label="Align center" title="Align center">
           <AlignCenter className="h-4 w-4" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().setTextAlign('right').run()} className={`p-1.5 rounded hover:bg-accent ${editor.isActive({ textAlign: 'right' }) ? 'bg-accent' : ''}`} aria-label="Align right" title="Align right">
+        <button type="button" onClick={() => editor.chain().focus().setTextAlign('right').run()} className={`p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center ${editor.isActive({ textAlign: 'right' }) ? 'bg-accent' : ''}`} aria-label="Align right" title="Align right">
           <AlignRight className="h-4 w-4" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().setTextAlign('justify').run()} className={`p-1.5 rounded hover:bg-accent ${editor.isActive({ textAlign: 'justify' }) ? 'bg-accent' : ''}`} aria-label="Justify" title="Justify">
+        <button type="button" onClick={() => editor.chain().focus().setTextAlign('justify').run()} className={`p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center ${editor.isActive({ textAlign: 'justify' }) ? 'bg-accent' : ''}`} aria-label="Justify" title="Justify">
           <AlignJustify className="h-4 w-4" />
         </button>
 
@@ -211,7 +211,7 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
           <PopoverTrigger asChild>
             <button
               type="button"
-              className="p-1.5 rounded hover:bg-accent"
+              className="p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center"
               aria-label="Font size"
               title="Font size"
               onMouseDown={(e) => e.preventDefault()}
@@ -227,7 +227,7 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
         {/* Link */}
         <Popover>
           <PopoverTrigger asChild>
-            <button type="button" className={`p-1.5 rounded hover:bg-accent ${editor.isActive('link') ? 'bg-accent' : ''}`} aria-label="Link" title="Link" onMouseDown={(e) => e.preventDefault()}>
+            <button type="button" className={`p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center ${editor.isActive('link') ? 'bg-accent' : ''}`} aria-label="Link" title="Link" onMouseDown={(e) => e.preventDefault()}>
               <Link2 className="h-4 w-4" />
             </button>
           </PopoverTrigger>
@@ -241,7 +241,7 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
           <PopoverTrigger asChild>
             <button
               type="button"
-              className={`p-1.5 rounded hover:bg-accent ${editor.isActive('textStyle') || editor.isActive('highlight') ? 'bg-accent' : ''}`}
+              className={`p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center ${editor.isActive('textStyle') || editor.isActive('highlight') ? 'bg-accent' : ''}`}
               aria-label="Color / highlight"
               title="Color / highlight"
               onMouseDown={(e) => e.preventDefault()}
@@ -257,7 +257,7 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
         <div className="w-px bg-border h-5" />
 
         {/* Custom widgets */}
-        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setAlertWidget().run()} className="p-1.5 rounded hover:bg-accent" aria-label="Insert alert" title="Insert alert">
+        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setAlertWidget().run()} className="p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center" aria-label="Insert alert" title="Insert alert">
           <AlertTriangle className="h-4 w-4" />
         </button>
 
@@ -271,7 +271,7 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
               .setCtaWidget({ text: 'Learn more', url: '', style: 'primary', size: 'medium', textAlign: 'center' })
               .run()
           }
-          className="p-1.5 rounded hover:bg-accent"
+          className="p-1.5 rounded hover:bg-accent transition-colors duration-150 flex items-center justify-center"
           aria-label="Insert CTA"
           title="Insert CTA"
         >
