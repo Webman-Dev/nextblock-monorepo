@@ -61,7 +61,7 @@ export function BlockEditorModal({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className={cn("w-[90%] max-w-6xl max-h-[90vh] overflow-y-auto", {
+        className={cn("w-[90%] max-w-7xl max-h-[90vh] overflow-y-auto", {
           "h-[90vh] flex flex-col": block.type === "text",
         })}
       >

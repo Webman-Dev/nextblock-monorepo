@@ -6,20 +6,21 @@ import {
   Bold, Italic, Underline, Strikethrough, Code, Link2, Palette,
   Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare,
   TextQuote, Code2, Image, Table2, Minus, AlignLeft, AlignCenter,
-  AlignRight, AlignJustify, Subscript, Superscript, Type, Undo2,
-  Redo2, Search, Download, Upload, Eye, EyeOff, MoreHorizontal,
+  AlignRight, AlignJustify, Subscript, Superscript, Type,
+  Search, Download, Upload, Eye, EyeOff, MoreHorizontal,
 } from 'lucide-react';
 import { Button } from '@nextblock-monorepo/ui/button';
 import { Separator } from '@nextblock-monorepo/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@nextblock-monorepo/ui/popover';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from '@nextblock-monorepo/ui/dropdown-menu';
+import { UndoRedoButtons } from '../ui/UndoRedoButtons';
 
 interface EditorToolbarProps {
   editor: Editor;
@@ -31,18 +32,29 @@ const ToolbarButton: React.FC<{
   disabled?: boolean;
   children: React.ReactNode;
   title: string;
-}> = ({ onClick, isActive, disabled, children, title }) => (
-  <Button
-    variant={isActive ? 'default' : 'ghost'}
-    size="sm"
-    onClick={onClick}
-    disabled={disabled}
-    title={title}
-    className="h-8 w-8 p-0"
-  >
-    {children}
-  </Button>
-);
+  ariaLabel?: string;
+  shortcut?: string;
+}> = ({ onClick, isActive, disabled, children, title, ariaLabel, shortcut }) => {
+  const tooltipText = shortcut ? `${title} (${shortcut})` : title;
+  
+  return (
+    <Button
+      variant={isActive ? 'default' : 'ghost'}
+      size="sm"
+      onClick={onClick}
+      disabled={disabled}
+      title={tooltipText}
+      aria-label={ariaLabel || title}
+      className={`h-8 w-8 p-0 transition-all duration-200 ${
+        disabled
+          ? 'opacity-40 cursor-not-allowed'
+          : 'hover:bg-accent hover:text-accent-foreground hover:scale-105'
+      }`}
+    >
+      {children}
+    </Button>
+  );
+};
 
 const FontSizeDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
   const sizes = ['12px', '14px', '16px', '18px', '20px', '24px', '28px', '32px', '36px', '48px'];
@@ -255,26 +267,26 @@ const ExportDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
 };
 
 export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
-  if (!editor) return null;
+  console.log('EditorToolbar - Render check:', {
+    editorExists: !!editor,
+    editorExtensions: editor?.extensionManager?.extensions?.map(ext => ext.name) || 'no extensions',
+    hasHistoryExtension: editor?.extensionManager?.extensions?.some(ext => ext.name === 'history') || false,
+    canUndo: editor?.can?.()?.undo?.() || false,
+    canRedo: editor?.can?.()?.redo?.() || false
+  });
+
+  if (!editor) {
+    console.log('EditorToolbar - No editor provided, returning null');
+    return null;
+  }
 
   return (
     <div className="border-b bg-background p-2">
       <div className="flex items-center gap-1 flex-wrap">
-        {/* Undo/Redo */}
-        <ToolbarButton
-          onClick={() => editor.chain().focus().undo().run()}
-          disabled={!editor.can().undo()}
-          title="Undo"
-        >
-          <Undo2 className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().redo().run()}
-          disabled={!editor.can().redo()}
-          title="Redo"
-        >
-          <Redo2 className="h-4 w-4" />
-        </ToolbarButton>
+        {/* Enhanced Undo/Redo Component - More prominent placement */}
+        <div className="flex items-center gap-1 mr-2 p-1 rounded-md bg-muted/30 border border-border/50">
+          <UndoRedoButtons editor={editor} size="sm" showLabels={false} />
+        </div>
 
         <Separator orientation="vertical" className="h-6 mx-1" />
 

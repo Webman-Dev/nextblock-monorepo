@@ -1,5 +1,8 @@
 /* libs/editor/src/styles/editor.css */
 
+/* Import drag handle styles */
+@import './drag-handle.css';
+
 .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;

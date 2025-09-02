@@ -6,24 +6,64 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import { editorExtensions } from './kit'; // ✅ use kit
 import { EditorBubbleMenu } from './components/menus/BubbleMenu'; // ✅ correct name
 import { EditorFloatingMenu } from './components/menus/FloatingMenu'; // ✅ correct name
+import { EditorToolbar } from './components/menus/Toolbar'; // ✅ Enhanced toolbar with undo/redo
+import { cn } from '@nextblock-monorepo/utils';
+import '../styles/drag-handle.css'; // ✅ Import enhanced drag handle styles
 
 interface NotionEditorProps {
   content: string;
   onChange: (content: string) => void;
+  placeholder?: string;
+  editable?: boolean;
+  showToolbar?: boolean;
+  showCharacterCount?: boolean;
+  className?: string;
+  onFocus?: () => void;
+  onBlur?: () => void;
 }
 
-export const NotionEditor: React.FC<NotionEditorProps> = ({ content, onChange }) => {
+export const NotionEditor: React.FC<NotionEditorProps> = ({
+  content,
+  onChange,
+  placeholder,
+  editable = true,
+  showToolbar = true,
+  showCharacterCount = true,
+  className,
+  onFocus,
+  onBlur,
+}) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const editor = useEditor({
     extensions: editorExtensions,
     content,
+    editable,
     immediatelyRender: false, // Next.js hydration safety
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
+    onFocus: () => {
+      onFocus?.();
+    },
+    onBlur: () => {
+      onBlur?.();
+    },
     editorProps: {
       attributes: {
-        class:
-          'prose dark:prose-invert prose-sm sm:prose-base lg:prose-lg xl:prose-2xl ' +
-          'mx-auto focus:outline-none p-4 min-h-[500px] w-full',
+        class: cn(
+          'prose dark:prose-invert prose-sm sm:prose-base lg:prose-lg xl:prose-2xl',
+          'mx-auto focus:outline-none min-h-[500px] w-full',
+          // ✅ Enhanced spacing for drag handles - proper left margin
+          'pl-12 pr-4 py-4', // Left padding for drag handle space
+          'prose-headings:scroll-mt-[80px] prose-headings:font-semibold',
+          'prose-h1:text-4xl prose-h2:text-3xl prose-h3:text-2xl',
+          'prose-p:leading-7 prose-li:leading-7',
+          'prose-pre:bg-muted prose-pre:border prose-pre:rounded-lg',
+          'prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded',
+          'prose-blockquote:border-l-4 prose-blockquote:border-primary prose-blockquote:pl-4',
+          'prose-table:border-collapse prose-table:border prose-table:border-border',
+          'prose-th:border prose-th:border-border prose-th:bg-muted prose-th:p-2',
+          'prose-td:border prose-td:border-border prose-td:p-2',
+          'prose-img:rounded-lg prose-img:shadow-sm'
+        ),
       },
     },
   });
@@ -41,17 +81,32 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({ content, onChange })
 
   if (!editor) return null;
 
-  const cc = (editor.storage?.characterCount as any) || null;
-  const characters = cc?.characters?.() ?? 0;
-  const words = cc?.words?.() ?? 0;
+  const characterCount = editor.storage?.characterCount;
+  const characters = characterCount?.characters?.() ?? 0;
+  const words = characterCount?.words?.() ?? 0;
 
   return (
-    <div ref={wrapperRef} className="relative w-full rounded-lg border bg-background shadow-sm">
+    <div
+      ref={wrapperRef}
+      className={cn(
+        "relative w-full rounded-lg border bg-background shadow-sm",
+        "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+        className
+      )}
+    >
+      {/* ✅ Enhanced Toolbar with Undo/Redo Buttons */}
+      {showToolbar && <EditorToolbar editor={editor} />}
+
+      {/* ✅ Enhanced Editor Menus */}
       <EditorBubbleMenu editor={editor} />
       <EditorFloatingMenu editor={editor} wrapperRef={wrapperRef} />
+      
+      {/* ✅ Editor Content - Tiptap DragHandle extension handles drag functionality automatically */}
       <EditorContent editor={editor} />
-      {cc && (
-        <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">
+
+      {/* ✅ Enhanced Character Count with better styling */}
+      {showCharacterCount && characterCount && (
+        <div className="absolute bottom-2 right-2 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm rounded px-2 py-1 border">
           {characters} characters / {words} words
         </div>
       )}
