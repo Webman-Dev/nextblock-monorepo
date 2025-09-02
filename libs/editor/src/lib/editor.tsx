@@ -5,7 +5,10 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import { editorExtensions } from './kit';
 import { EditorBubbleMenu } from './components/menus/BubbleMenu';
 import { EditorFloatingMenu } from './components/menus/FloatingMenu';
+import { EnhancedFloatingMenu } from './components/menus/EnhancedFloatingMenu';
 import { EditorToolbar } from './components/menus/Toolbar';
+import { DragHandle } from './components/DragHandle';
+import { MobileToolbar } from './components/mobile/MobileToolbar';
 import { Button } from '@nextblock-monorepo/ui/button';
 import { Search, X, Replace } from 'lucide-react';
 import { Input } from '@nextblock-monorepo/ui/input';
@@ -21,6 +24,12 @@ interface EditorProps {
   className?: string;
   onFocus?: () => void;
   onBlur?: () => void;
+  // Advanced features
+  useEnhancedFloatingMenu?: boolean;
+  showMobileToolbar?: boolean;
+  enableAdvancedPlaceholders?: boolean;
+  enableFocusMode?: boolean;
+  showKeyboardShortcuts?: boolean;
 }
 
 interface SearchReplaceState {
@@ -43,6 +52,12 @@ export const Editor: React.FC<EditorProps> = ({
   className,
   onFocus,
   onBlur,
+  // Advanced features
+  useEnhancedFloatingMenu = true,
+  showMobileToolbar = true,
+  enableAdvancedPlaceholders = true,
+  enableFocusMode = false,
+  showKeyboardShortcuts = false,
 }) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [searchReplace, setSearchReplace] = useState<SearchReplaceState>({
@@ -172,6 +187,7 @@ export const Editor: React.FC<EditorProps> = ({
         className
       )}
     >
+      
       {/* Toolbar */}
       {showToolbar && <EditorToolbar editor={editor} />}
 
@@ -229,7 +245,31 @@ export const Editor: React.FC<EditorProps> = ({
 
       {/* Editor Menus */}
       <EditorBubbleMenu editor={editor} />
-      <EditorFloatingMenu editor={editor} wrapperRef={wrapperRef} />
+      {useEnhancedFloatingMenu ? (
+        <EnhancedFloatingMenu editor={editor} wrapperRef={wrapperRef} />
+      ) : (
+        <EditorFloatingMenu editor={editor} wrapperRef={wrapperRef} />
+      )}
+      
+      {/* Drag Handle */}
+      <DragHandle
+        editor={editor}
+        onDragStart={(event) => {
+          console.log('Drag started:', event);
+          // Add visual feedback for drag start
+          document.body.classList.add('dragging');
+        }}
+        onDragEnd={(event) => {
+          console.log('Drag ended:', event);
+          // Remove visual feedback for drag end
+          document.body.classList.remove('dragging');
+        }}
+        onNodeChange={({ node, editor, pos }) => {
+          if (node) {
+            console.log('Hovering over node:', node.type.name, 'at position:', pos);
+          }
+        }}
+      />
 
       {/* Editor Content */}
       <EditorContent editor={editor} />
@@ -242,11 +282,19 @@ export const Editor: React.FC<EditorProps> = ({
       )}
 
       {/* Keyboard Shortcuts Help */}
-      <div className="absolute bottom-2 left-2 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm rounded px-2 py-1 border opacity-0 hover:opacity-100 transition-opacity">
-        <div>Ctrl+F: Search</div>
-        <div>Ctrl+S: Save</div>
-        <div>/: Commands</div>
-      </div>
+      {showKeyboardShortcuts && (
+        <div className="absolute bottom-2 left-2 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm rounded px-2 py-1 border opacity-0 hover:opacity-100 transition-opacity">
+          <div>Ctrl+F: Search</div>
+          <div>Ctrl+S: Save</div>
+          <div>/: Commands</div>
+          <div>Ctrl+K: Insert Link</div>
+          <div>Ctrl+Shift+H: Highlight</div>
+          <div>Ctrl+Alt+1-6: Headings</div>
+        </div>
+      )}
+
+      {/* Mobile Toolbar */}
+      {showMobileToolbar && <MobileToolbar editor={editor} />}
     </div>
   );
 };

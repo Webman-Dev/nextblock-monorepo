@@ -1,0 +1,621 @@
+/* Tiptap Drag Handle Styles - Working with Tiptap's positioning system */
+.tiptap-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(100, 116, 139, 0.1);
+  border: 1px solid rgba(100, 116, 139, 0.2);
+  cursor: grab;
+  color: #64748b;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  /* Position drag handle to align with first line of text (Tiptap.dev pattern) */
+  position: absolute;
+  /* Align with first line of text instead of center of content block */
+  top: 0.125em; /* Align with text baseline/x-height */
+  transform: translateY(50%); /* Remove centering transform */
+  left: -32px;
+  z-index: 10;
+  /* Ensure proper positioning by resetting margins */
+  margin: 0;
+  /* Force hardware acceleration for smoother positioning */
+  will-change: transform;
+}
+
+.tiptap-drag-handle:hover {
+  background: rgba(100, 116, 139, 0.15);
+  border-color: rgba(100, 116, 139, 0.3);
+  color: #475569;
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.tiptap-drag-handle:active {
+  cursor: grabbing;
+  background: rgba(100, 116, 139, 0.2);
+  border-color: rgba(100, 116, 139, 0.4);
+  color: #334155;
+  transform: scale(0.95);
+}
+
+/* Drag handle icon sizing */
+.tiptap-drag-handle svg {
+  width: 12px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* Enhanced hover detection for content blocks - Expand hover area for easier access */
+.ProseMirror p,
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror h4,
+.ProseMirror h5,
+.ProseMirror h6,
+.ProseMirror blockquote,
+.ProseMirror ul,
+.ProseMirror ol,
+.ProseMirror pre,
+.ProseMirror .code-block,
+.ProseMirror [data-type="taskList"] {
+  position: relative;
+  /* Expand hover area to the left for easier drag handle access */
+  padding-left: 50px;
+  margin-left: -50px;
+  /* Ensure minimum height for proper drag handle centering */
+  min-height: 24px;
+  /* Create stacking context for drag handle positioning */
+  z-index: 1;
+  /* Ensure proper box model for accurate height calculation */
+  box-sizing: border-box;
+  /* Add display block to ensure consistent height calculation */
+  display: block;
+}
+
+/* Special handling for code blocks to ensure consistent width */
+.ProseMirror pre,
+.ProseMirror .code-block {
+  /* Override any width constraints that might cause inconsistency */
+  width: auto;
+  max-width: calc(100% - 50px); /* Account for expanded hover area */
+  /* Ensure proper box model */
+  box-sizing: border-box;
+}
+
+/* Content-specific drag handle positioning for optimal first-line alignment */
+/* Headings - adjust for larger font sizes */
+.ProseMirror h1 .tiptap-drag-handle,
+.ProseMirror h1 .drag-handle,
+.ProseMirror h1 .drag-handle-button {
+  top: 0.2em; /* Slightly higher for large headings */
+}
+
+.ProseMirror h2 .tiptap-drag-handle,
+.ProseMirror h2 .drag-handle,
+.ProseMirror h2 .drag-handle-button {
+  top: 0.15em; /* Adjust for h2 size */
+}
+
+.ProseMirror h3 .tiptap-drag-handle,
+.ProseMirror h3 .drag-handle,
+.ProseMirror h3 .drag-handle-button,
+.ProseMirror h4 .tiptap-drag-handle,
+.ProseMirror h4 .drag-handle,
+.ProseMirror h4 .drag-handle-button,
+.ProseMirror h5 .tiptap-drag-handle,
+.ProseMirror h5 .drag-handle,
+.ProseMirror h5 .drag-handle-button,
+.ProseMirror h6 .tiptap-drag-handle,
+.ProseMirror h6 .drag-handle,
+.ProseMirror h6 .drag-handle-button {
+  top: 0.125em; /* Standard alignment for smaller headings */
+}
+
+/* Code blocks - align with first line of code */
+.ProseMirror pre .tiptap-drag-handle,
+.ProseMirror pre .drag-handle,
+.ProseMirror pre .drag-handle-button,
+.ProseMirror .code-block .tiptap-drag-handle,
+.ProseMirror .code-block .drag-handle,
+.ProseMirror .code-block .drag-handle-button {
+  top: 0.75em; /* Account for code block padding and font */
+}
+
+/* Lists - align with first list item text */
+.ProseMirror ul .tiptap-drag-handle,
+.ProseMirror ul .drag-handle,
+.ProseMirror ul .drag-handle-button,
+.ProseMirror ol .tiptap-drag-handle,
+.ProseMirror ol .drag-handle,
+.ProseMirror ol .drag-handle-button {
+  top: 0.25em; /* Account for list item spacing */
+}
+
+/* Blockquotes - align with quoted text */
+.ProseMirror blockquote .tiptap-drag-handle,
+.ProseMirror blockquote .drag-handle,
+.ProseMirror blockquote .drag-handle-button {
+  top: 0.25em; /* Account for blockquote styling */
+}
+
+/* Task lists - align with checkbox and text */
+.ProseMirror [data-type="taskList"] .tiptap-drag-handle,
+.ProseMirror [data-type="taskList"] .drag-handle,
+.ProseMirror [data-type="taskList"] .drag-handle-button {
+  top: 0.125em; /* Align with task item text */
+}
+
+/* Show drag handle on hover - Let Tiptap handle the visibility logic */
+.ProseMirror .has-focus .tiptap-drag-handle,
+.ProseMirror .node-selected .tiptap-drag-handle {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Hide drag handle during text selection */
+.ProseMirror.ProseMirror-selectednode .tiptap-drag-handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .tiptap-drag-handle {
+    color: #94a3b8;
+    background: rgba(148, 163, 184, 0.1);
+    border-color: rgba(148, 163, 184, 0.2);
+  }
+  
+  .tiptap-drag-handle:hover {
+    background: rgba(148, 163, 184, 0.2);
+    border-color: rgba(148, 163, 184, 0.4);
+    color: #cbd5e1;
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+  
+  .tiptap-drag-handle:active {
+    background: rgba(148, 163, 184, 0.3);
+    border-color: rgba(148, 163, 184, 0.5);
+    color: #e2e8f0;
+    transform: scale(0.95);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .tiptap-drag-handle {
+    width: 28px;
+    height: 28px;
+    /* Adjust positioning for mobile - maintain first-line alignment */
+    left: -36px;
+    /* Keep first-line alignment on mobile */
+    top: 0.125em;
+  }
+
+  /* Content-specific mobile adjustments for first-line alignment */
+  .ProseMirror h1 .tiptap-drag-handle {
+    top: 0.2em; /* Maintain heading alignment on mobile */
+  }
+
+  .ProseMirror h2 .tiptap-drag-handle {
+    top: 0.15em;
+  }
+
+  .ProseMirror pre .tiptap-drag-handle,
+  .ProseMirror .code-block .tiptap-drag-handle {
+    top: 0.75em; /* Maintain code block alignment on mobile */
+  }
+
+  .ProseMirror ul .tiptap-drag-handle,
+  .ProseMirror ol .tiptap-drag-handle,
+  .ProseMirror blockquote .tiptap-drag-handle,
+  .ProseMirror [data-type="taskList"] .tiptap-drag-handle {
+    top: 0.25em; /* Maintain list/blockquote alignment on mobile */
+  }
+
+  /* Reduce expanded hover area on mobile */
+  .ProseMirror p,
+  .ProseMirror h1,
+  .ProseMirror h2,
+  .ProseMirror h3,
+  .ProseMirror h4,
+  .ProseMirror h5,
+  .ProseMirror h6,
+  .ProseMirror blockquote,
+  .ProseMirror ul,
+  .ProseMirror ol,
+  .ProseMirror pre,
+  .ProseMirror .code-block,
+  .ProseMirror [data-type="taskList"] {
+    padding-left: 40px;
+    margin-left: -40px;
+  }
+
+  /* Adjust code block width for mobile */
+  .ProseMirror pre,
+  .ProseMirror .code-block {
+    max-width: calc(100% - 40px); /* Account for reduced hover area */
+  }
+}
+
+/* Touch device support */
+@media (hover: none) and (pointer: coarse) {
+  .tiptap-drag-handle {
+    opacity: 0.7;
+    pointer-events: auto;
+  }
+  
+  .ProseMirror .node-selected .tiptap-drag-handle {
+    opacity: 1;
+  }
+}
+
+/* Accessibility improvements */
+.tiptap-drag-handle:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+  opacity: 1;
+}
+
+.tiptap-drag-handle:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Global dragging state */
+body.dragging {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+body.dragging * {
+  cursor: grabbing !important;
+}
+
+/* Enhanced drag feedback */
+.tiptap-drag-handle.dragging {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+}
+
+/* Drag preview styles */
+.ProseMirror-dragging {
+  opacity: 0.5;
+  transform: rotate(5deg);
+  transition: all 0.2s ease;
+}
+
+/* Drop zone indicator */
+.ProseMirror .drop-cursor {
+  position: relative;
+}
+
+.ProseMirror .drop-cursor::after {
+  content: '';
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  height: 2px;
+  background: #3b82f6;
+  border-radius: 1px;
+  pointer-events: none;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Enhanced drop zone styling */
+.ProseMirror .drop-zone {
+  position: relative;
+  border: 2px dashed #3b82f6;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.05);
+  margin: 2px 0;
+  min-height: 20px;
+}
+
+.ProseMirror .drop-zone::before {
+  content: 'Drop here';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: #3b82f6;
+  font-size: 12px;
+  font-weight: 500;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+/* Smooth transitions for drag operations */
+.ProseMirror [data-node-view-wrapper] {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.ProseMirror [data-node-view-wrapper].dragging {
+  opacity: 0.5;
+  transform: rotate(2deg) scale(0.95);
+}
+
+/* 
+ * LEGACY SUPPORT: Keep existing drag handle styles for backward compatibility
+ * These should not interfere with Tiptap's new drag handle system
+ */
+
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(100, 116, 139, 0.1);
+  border: 1px solid rgba(100, 116, 139, 0.2);
+  cursor: grab;
+  color: #64748b;
+  transition: all 0.2s ease;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  /* Position for first-line alignment (legacy support) */
+  position: absolute;
+  top: 0.125em; /* Align with text baseline/x-height */
+  transform: none; /* Remove centering transform */
+  left: -32px;
+  z-index: 10;
+  margin: 0;
+  will-change: transform;
+}
+
+.drag-handle:hover {
+  background: rgba(100, 116, 139, 0.15);
+  border-color: rgba(100, 116, 139, 0.3);
+  color: #475569;
+  opacity: 1;
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+  background: rgba(100, 116, 139, 0.2);
+  border-color: rgba(100, 116, 139, 0.4);
+  color: #334155;
+  transform: scale(0.95);
+}
+
+.drag-handle svg {
+  width: 12px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* React drag handle button styles - for custom React components */
+.drag-handle-button {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(100, 116, 139, 0.08);
+  border: 1px solid rgba(100, 116, 139, 0.15);
+  cursor: grab;
+  color: #64748b;
+  transition: all 0.2s ease;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  /* Position for first-line alignment (React component) */
+  top: 0.125em; /* Align with text baseline/x-height */
+  transform: none; /* Remove centering transform */
+  left: -36px;
+  z-index: 10;
+  margin: 0;
+  will-change: transform;
+}
+
+.drag-handle-button:hover {
+  background: rgba(100, 116, 139, 0.15);
+  border-color: rgba(100, 116, 139, 0.3);
+  color: #475569;
+  opacity: 1;
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.drag-handle-button:active {
+  cursor: grabbing;
+  background: rgba(100, 116, 139, 0.2);
+  border-color: rgba(100, 116, 139, 0.4);
+  color: #334155;
+  transform: scale(0.95);
+}
+
+.drag-handle-button svg {
+  width: 14px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+/* Legacy support for custom drag handles */
+.ProseMirror .has-focus .drag-handle,
+.ProseMirror [data-node-view-wrapper]:hover .drag-handle,
+.ProseMirror .node-selected .drag-handle,
+.ProseMirror [data-node-view-wrapper]:hover .drag-handle-button,
+.ProseMirror .has-focus .drag-handle-button,
+.ProseMirror .node-selected .drag-handle-button {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Fallback hover detection for nodes without data-node-view-wrapper */
+.ProseMirror p:hover .drag-handle,
+.ProseMirror h1:hover .drag-handle,
+.ProseMirror h2:hover .drag-handle,
+.ProseMirror h3:hover .drag-handle,
+.ProseMirror h4:hover .drag-handle,
+.ProseMirror h5:hover .drag-handle,
+.ProseMirror h6:hover .drag-handle,
+.ProseMirror blockquote:hover .drag-handle,
+.ProseMirror ul:hover .drag-handle,
+.ProseMirror ol:hover .drag-handle,
+.ProseMirror pre:hover .drag-handle,
+.ProseMirror .code-block:hover .drag-handle,
+.ProseMirror [data-type="taskList"]:hover .drag-handle,
+.ProseMirror p:hover .drag-handle-button,
+.ProseMirror h1:hover .drag-handle-button,
+.ProseMirror h2:hover .drag-handle-button,
+.ProseMirror h3:hover .drag-handle-button,
+.ProseMirror h4:hover .drag-handle-button,
+.ProseMirror h5:hover .drag-handle-button,
+.ProseMirror h6:hover .drag-handle-button,
+.ProseMirror blockquote:hover .drag-handle-button,
+.ProseMirror ul:hover .drag-handle-button,
+.ProseMirror ol:hover .drag-handle-button,
+.ProseMirror pre:hover .drag-handle-button,
+.ProseMirror .code-block:hover .drag-handle-button,
+.ProseMirror [data-type="taskList"]:hover .drag-handle-button {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Dark mode support for legacy components */
+@media (prefers-color-scheme: dark) {
+  .drag-handle {
+    color: #94a3b8;
+    background: rgba(148, 163, 184, 0.1);
+    border-color: rgba(148, 163, 184, 0.2);
+  }
+  
+  .drag-handle-button {
+    color: #94a3b8;
+    background: rgba(148, 163, 184, 0.08);
+    border-color: rgba(148, 163, 184, 0.15);
+  }
+  
+  .drag-handle:hover {
+    background: rgba(148, 163, 184, 0.2);
+    border-color: rgba(148, 163, 184, 0.4);
+    color: #cbd5e1;
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+  
+  .drag-handle-button:hover {
+    background: rgba(148, 163, 184, 0.2);
+    border-color: rgba(148, 163, 184, 0.4);
+    color: #cbd5e1;
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+  
+  .drag-handle:active {
+    background: rgba(148, 163, 184, 0.3);
+    border-color: rgba(148, 163, 184, 0.5);
+    color: #e2e8f0;
+    transform: scale(0.95);
+  }
+  
+  .drag-handle-button:active {
+    background: rgba(148, 163, 184, 0.3);
+    border-color: rgba(148, 163, 184, 0.5);
+    color: #e2e8f0;
+    transform: scale(0.95);
+  }
+}
+
+/* Mobile adjustments for legacy components */
+@media (max-width: 768px) {
+  .drag-handle-button {
+    width: 32px;
+    height: 32px;
+    /* Maintain first-line alignment on mobile */
+    top: 0.125em;
+  }
+  
+  .drag-handle {
+    width: 28px;
+    height: 28px;
+    /* Maintain first-line alignment on mobile */
+    top: 0.125em;
+  }
+
+  /* Content-specific mobile adjustments for legacy components */
+  .ProseMirror h1 .drag-handle,
+  .ProseMirror h1 .drag-handle-button {
+    top: 0.2em;
+  }
+
+  .ProseMirror h2 .drag-handle,
+  .ProseMirror h2 .drag-handle-button {
+    top: 0.15em;
+  }
+
+  .ProseMirror pre .drag-handle,
+  .ProseMirror pre .drag-handle-button,
+  .ProseMirror .code-block .drag-handle,
+  .ProseMirror .code-block .drag-handle-button {
+    top: 0.75em;
+  }
+
+  .ProseMirror ul .drag-handle,
+  .ProseMirror ul .drag-handle-button,
+  .ProseMirror ol .drag-handle,
+  .ProseMirror ol .drag-handle-button,
+  .ProseMirror blockquote .drag-handle,
+  .ProseMirror blockquote .drag-handle-button,
+  .ProseMirror [data-type="taskList"] .drag-handle,
+  .ProseMirror [data-type="taskList"] .drag-handle-button {
+    top: 0.25em;
+  }
+}
+
+/* Fix code block width consistency - ensure all content has consistent width */
+.ProseMirror pre,
+.ProseMirror .code-block {
+  /* Ensure code blocks don't extend beyond normal content width */
+  max-width: 100%;
+  /* Match the content width constraints of other elements */
+  box-sizing: border-box;
+  /* Prevent horizontal overflow */
+  overflow-x: auto;
+  /* Ensure consistent margin behavior */
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* Ensure code block content respects container width */
+.ProseMirror pre code,
+.ProseMirror .code-block code {
+  /* Prevent code from breaking out of container */
+  max-width: 100%;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  /* Ensure consistent padding */
+  padding: 0;
+  margin: 0;
+}
+
+/* Override any conflicting styles that might cause width issues */
+.ProseMirror pre[class*="language-"],
+.ProseMirror .code-block[class*="language-"] {
+  /* Reset any language-specific width overrides */
+  width: auto !important;
+  max-width: 100% !important;
+  /* Ensure consistent positioning */
+  position: relative;
+}

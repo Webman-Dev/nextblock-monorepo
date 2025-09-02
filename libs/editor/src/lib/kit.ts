@@ -21,6 +21,9 @@ import Typography from '@tiptap/extension-typography'
 import Link from '@tiptap/extension-link'
 import Gapcursor from '@tiptap/extension-gapcursor'
 import Underline from '@tiptap/extension-underline'
+import History from '@tiptap/extension-history'
+import DragHandle from '@tiptap/extension-drag-handle'
+import NodeRange from '@tiptap/extension-node-range'
 
 import { createLowlight } from 'lowlight'
 import css from 'highlight.js/lib/languages/css'
@@ -37,14 +40,23 @@ import { TrailingNode } from './extensions/TrailingNode'
 import AlertWidget from './extensions/AlertWidget'
 import CtaWidgetNode from './extensions/CtaWidgetNode'
 import { SlashCommand } from './extensions/slash-command'
+import { DraggableNodes } from './extensions/DraggableNodes'
+import { AdvancedPlaceholder } from './extensions/AdvancedPlaceholder'
+import { EnhancedFocus } from './extensions/EnhancedFocus'
+import { KeyboardShortcuts } from './extensions/KeyboardShortcuts'
 
 // ✅ bring lowlight into scope with more languages
 const lowlight = createLowlight({ html, css, js, ts, python, json, bash, sql })
+
+// DEBUG: Log extension configuration
+console.log('kit.ts - Configuring editor extensions');
 
 export const editorExtensions: Extensions = [
   StarterKit.configure({
     codeBlock: false,               // we'll use CodeBlockLowlight
     link: false,                    // we'll use enhanced Link extension
+    // CRITICAL FIX: Disable built-in undo/redo - we'll use a separate History extension for better control
+    undoRedo: false,                // Updated for Tiptap v3 (was 'history' in v2)
     bulletList: {
       HTMLAttributes: { class: 'list-disc pl-4' },
       keepMarks: true,
@@ -75,6 +87,12 @@ export const editorExtensions: Extensions = [
 
   Gapcursor,
   Underline,
+
+  // CRITICAL FIX: Add History extension to replace disabled StarterKit history
+  History.configure({
+    depth: 100,
+    newGroupDelay: 500,
+  }),
 
   CodeBlockLowlight.configure({
     lowlight,
@@ -161,25 +179,32 @@ export const editorExtensions: Extensions = [
     limit: 50000,
     mode: 'textSize',
   }),
-  Focus.configure({
+  
+  // Enhanced Focus and Selection Management
+  EnhancedFocus.configure({
     className: 'has-focus',
     mode: 'all',
+    showFocusRing: true,
+    highlightSelection: true,
+    dimUnfocused: false,
+    animateTransitions: true,
   }),
-  Placeholder.configure({
-    placeholder: ({ node }) => {
-      if (node.type.name === 'heading') {
-        const level = node.attrs.level;
-        return level === 1 ? "What's the title?" : `Heading ${level}`;
-      }
-      if (node.type.name === 'paragraph' && node.content.size === 0) {
-        return "Press '/' for commands or start typing...";
-      }
-      if (node.type.name === 'taskItem') {
-        return 'Add a task...';
-      }
-      return '';
-    },
+  
+  // Advanced Placeholder System
+  AdvancedPlaceholder.configure({
+    emptyEditorClass: 'is-editor-empty',
+    emptyNodeClass: 'is-empty',
+    showOnlyWhenEditable: true,
+    showOnlyCurrent: true,
     includeChildren: true,
+    considerAnyAsEmpty: false,
+  }),
+  
+  // Comprehensive Keyboard Shortcuts
+  KeyboardShortcuts.configure({
+    enableAdvancedShortcuts: true,
+    enableCustomShortcuts: true,
+    showShortcutHints: false,
   }),
 
   // Custom extensions
@@ -187,4 +212,30 @@ export const editorExtensions: Extensions = [
   AlertWidget,
   CtaWidgetNode,
   SlashCommand,
+
+  // Drag and Drop extensions
+  DraggableNodes,
+  NodeRange,
+  DragHandle.configure({
+    render: () => {
+      console.log('🔍 DRAG DEBUG - Tiptap DragHandle render() called');
+      const element = document.createElement('div')
+      element.classList.add('tiptap-drag-handle')
+      
+      // Create the drag handle icon
+      element.innerHTML = `
+        <svg width="12" height="18" viewBox="0 0 12 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="3" cy="3" r="1.5" fill="currentColor"/>
+          <circle cx="9" cy="3" r="1.5" fill="currentColor"/>
+          <circle cx="3" cy="9" r="1.5" fill="currentColor"/>
+          <circle cx="9" cy="9" r="1.5" fill="currentColor"/>
+          <circle cx="3" cy="15" r="1.5" fill="currentColor"/>
+          <circle cx="9" cy="15" r="1.5" fill="currentColor"/>
+        </svg>
+      `
+      
+      console.log('🔍 DRAG DEBUG - Tiptap DragHandle element created:', element);
+      return element
+    },
+  }),
 ]
