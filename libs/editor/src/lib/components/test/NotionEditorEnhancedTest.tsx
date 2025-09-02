@@ -42,12 +42,12 @@ export const NotionEditorEnhancedTest: React.FC = () => {
       <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <h3 className="font-semibold text-blue-800 mb-2">Drag Handle UX Test Instructions:</h3>
         <ol className="list-decimal list-inside text-blue-700 space-y-1">
-          <li>🎯 <strong>Expanded Hover Area:</strong> Hover anywhere on a content block (not just the handle area) - drag handle should appear</li>
-          <li>📍 <strong>Proper Centering:</strong> Verify drag handles are vertically centered within each content section</li>
-          <li>🔄 <strong>Content Types:</strong> Test on paragraphs, headings, lists, and blockquotes</li>
-          <li>📱 <strong>Mobile Responsive:</strong> Check that drag handles work properly on smaller screens</li>
-          <li>✨ <strong>Visual Feedback:</strong> Notice smooth transitions and enhanced styling</li>
-          <li>🖱️ <strong>Drag Functionality:</strong> Try dragging blocks to reorder them</li>
+          <li><span role="img" aria-label="target">🎯</span> <strong>Expanded Hover Area:</strong> Hover anywhere on a content block (not just the handle area) - drag handle should appear</li>
+          <li><span role="img" aria-label="pushpin">📍</span> <strong>Proper Centering:</strong> Verify drag handles are vertically centered within each content section</li>
+          <li><span role="img" aria-label="refresh arrows">🔄</span> <strong>Content Types:</strong> Test on paragraphs, headings, lists, and blockquotes</li>
+          <li><span role="img" aria-label="mobile phone">📱</span> <strong>Mobile Responsive:</strong> Check that drag handles work properly on smaller screens</li>
+          <li><span role="img" aria-label="sparkles">✨</span> <strong>Visual Feedback:</strong> Notice smooth transitions and enhanced styling</li>
+          <li><span role="img" aria-label="computer mouse">🖱️</span> <strong>Drag Functionality:</strong> Try dragging blocks to reorder them</li>
         </ol>
       </div>
 

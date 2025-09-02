@@ -6,8 +6,7 @@ import {
   Bold, Italic, Underline, Strikethrough, Code, Link2, Palette,
   Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare,
   TextQuote, Code2, Image, Table2, Minus, AlignLeft, AlignCenter,
-  AlignRight, AlignJustify, Subscript, Superscript, Type,
-  Search, Download, Upload, Eye, EyeOff, MoreHorizontal,
+  AlignRight, AlignJustify, Subscript, Superscript, Type, Download,
 } from 'lucide-react';
 import { Button } from '@nextblock-monorepo/ui/button';
 import { Separator } from '@nextblock-monorepo/ui/separator';

@@ -61,7 +61,7 @@ export const UndoRedoTest: React.FC = () => {
     <p>Try editing any content above and use the undo/redo buttons or keyboard shortcuts!</p>
   `);
 
-  const [editorInstance, setEditorInstance] = useState<any>(null);
+  const [editorInstance] = useState<any>(null);
   const historyState = useEditorHistory(editorInstance);
 
   const testActions = [
