@@ -28,12 +28,10 @@ export const DragHandle: React.FC<DragHandleProps> = ({
     if (!editor || !dragHandleRef.current) return;
 
     const handleDragStart = (event: DragEvent) => {
-      console.log('DragHandle - Drag start event:', event);
       onDragStart?.(event);
     };
 
     const handleDragEnd = (event: DragEvent) => {
-      console.log('DragHandle - Drag end event:', event);
       onDragEnd?.(event);
     };
 
@@ -48,15 +46,8 @@ export const DragHandle: React.FC<DragHandleProps> = ({
   }, [editor, onDragStart, onDragEnd]);
 
   if (!editor) {
-    console.log('DragHandle - No editor provided');
     return null;
   }
-
-  console.log('DragHandle - Rendering with editor:', {
-    editorExists: !!editor,
-    editorExtensions: editor.extensionManager?.extensions?.map(ext => ext.name) || 'no extensions',
-    hasDragHandleExtension: editor.extensionManager?.extensions?.some(ext => ext.name === 'dragHandle') || false
-  });
 
   // Enhanced drag handle with improved visibility and accessibility
   return (

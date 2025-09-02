@@ -16,7 +16,7 @@
   position: absolute;
   /* Align with first line of text instead of center of content block */
   top: 0.125em; /* Align with text baseline/x-height */
-  transform: translateY(50%); /* Remove centering transform */
+  /* transform: translateY(50%); Remove centering transform */
   left: -32px;
   z-index: 10;
   /* Ensure proper positioning by resetting margins */
@@ -29,7 +29,6 @@
   background: rgba(100, 116, 139, 0.15);
   border-color: rgba(100, 116, 139, 0.3);
   color: #475569;
-  transform: scale(1.05);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
@@ -174,7 +173,6 @@
     background: rgba(148, 163, 184, 0.2);
     border-color: rgba(148, 163, 184, 0.4);
     color: #cbd5e1;
-    transform: scale(1.05);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   }
   
