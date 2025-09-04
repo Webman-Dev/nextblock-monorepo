@@ -100,7 +100,7 @@ const menuItems: MenuItem[] = [
       const opener = getOpenImagePicker(e);
       if (opener) {
         const res = await opener();
-        if (res?.src) e.chain().focus().setImage({ src: res.src, alt: res.alt || undefined }).run();
+        if (res?.src) e.chain().focus().setImage({ src: res.src, alt: res.alt || undefined }).updateAttributes('image', { blurDataURL: res.blurDataURL || undefined }).run();
         return;
       }
       const url = window.prompt('Enter image URL:');
@@ -495,3 +495,8 @@ export const EnhancedFloatingMenu: FC<EnhancedFloatingMenuProps> = ({ editor, wr
     </>
   );
 };
+
+
+
+
+

@@ -2,7 +2,7 @@
 import type { Extensions } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
-import Image from '@tiptap/extension-image'
+import ImageExtended from './extensions/ImageExtended'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { Table } from '@tiptap/extension-table'
@@ -40,7 +40,7 @@ import CtaWidgetNode from './extensions/CtaWidgetNode'
 import { SlashCommand } from './extensions/slash-command'
 import { DraggableNodes } from './extensions/DraggableNodes'
 
-// ✅ bring lowlight into scope with more languages
+// âœ… bring lowlight into scope with more languages
 const lowlight = createLowlight({ html, css, js, ts, python, json, bash, sql })
 
 
@@ -95,7 +95,7 @@ export const editorExtensions: Extensions = [
     },
   }),
 
-  Image.configure({
+  ImageExtended.configure({
     inline: true,
     allowBase64: true,
     HTMLAttributes: {
@@ -206,3 +206,4 @@ export const editorExtensions: Extensions = [
     },
   }),
 ]
+

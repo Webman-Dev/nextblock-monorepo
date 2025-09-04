@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import { getOpenImagePicker } from "../../utils/mediaPicker";
 import type { FC } from 'react';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -37,7 +37,7 @@ const menuItems: MenuItem[] = [
       const opener = getOpenImagePicker(e);
       if (opener) {
         const res = await opener();
-        if (res?.src) e.chain().focus().setImage({ src: res.src, alt: res.alt || undefined }).run();
+        if (res?.src) e.chain().focus().setImage({ src: res.src, alt: res.alt || undefined }).updateAttributes('image', { blurDataURL: res.blurDataURL || undefined }).run();
         return;
       }
       const url = window.prompt('URL');
@@ -68,10 +68,13 @@ export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor, wra
 
   // Stable predicate for visibility (empty paragraph && editable)
   const shouldShowTrigger = useCallback(() => {
-    const { $from } = editor.state.selection;
-    const parent = $from.parent;
-    const isEmptyPara = parent.type.name === 'paragraph' && parent.content.size === 0;
-    return isEmptyPara && editor.isEditable;
+    if (!editor || !editor.isEditable) return false;
+    // Do not show when image is selected/active
+    if (editor.isActive('image')) return false;
+    const { $from } = editor.state.selection as any;
+    const parent = $from?.parent;
+    const isEmptyPara = parent?.type?.name === 'paragraph' && parent?.content?.size === 0;
+    return Boolean(isEmptyPara);
   }, [editor]);
 
   // Stable positioning function based on caret coords
@@ -201,6 +204,13 @@ export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor, wra
     </>
   );
 };
+
+
+
+
+
+
+
 
 
 
