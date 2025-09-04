@@ -1,5 +1,6 @@
-﻿import { getOpenImagePicker } from "../utils/mediaPicker";
 'use client';
+
+import { getOpenImagePicker } from "../utils/mediaPicker";
 
 import { Extension, type Editor, type Range } from '@tiptap/core';
 import { ReactRenderer } from '@tiptap/react';
@@ -442,5 +443,9 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
     ];
   },
 });
+
+
+
+
 
 

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import { getOpenImagePicker } from "../../utils/mediaPicker";
 
 import React from 'react';
@@ -168,6 +168,9 @@ const InsertDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
       const res = await opener();
       if (res?.src) {
         editor.chain().focus().setImage({ src: res.src, alt: res.alt || undefined }).run();
+        if (res.blurDataURL) {
+          editor.chain().focus().updateAttributes('image', { blurDataURL: res.blurDataURL }).run();
+        }
       }
       return;
     }
@@ -480,6 +483,15 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
     </div>
   );
 };
+
+
+
+
+
+
+
+
+
 
 
 

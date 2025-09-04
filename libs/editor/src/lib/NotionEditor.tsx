@@ -1,12 +1,13 @@
-﻿// libs/editor/src/lib/NotionEditor.tsx
+// libs/editor/src/lib/NotionEditor.tsx
 'use client';
 
 import React, { useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { editorExtensions } from './kit'; // âœ… use kit
 import { EditorBubbleMenu } from './components/menus/BubbleMenu'; // âœ… correct name
-import { EditorFloatingMenu } from './components/menus/FloatingMenu'; // âœ… correct name
-import { EditorToolbar } from './components/menus/Toolbar'; // âœ… Enhanced toolbar with undo/redo
+import { EditorFloatingMenu } from './components/menus/FloatingMenu';
+import { ImageToolbar } from './components/menus/ImageToolbar';
+import { EditorToolbar } from './components/menus/Toolbar';
 import { cn } from '@nextblock-monorepo/utils';
 import '../styles/drag-handle.css'; // âœ… Import enhanced drag handle styles
 
@@ -109,9 +110,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
       {/* âœ… Enhanced Editor Menus */}
       <EditorBubbleMenu editor={editor} />
       <EditorFloatingMenu editor={editor} wrapperRef={wrapperRef} />
-      
-      {/* âœ… Editor Content - Tiptap DragHandle extension handles drag functionality automatically */}
-      <EditorContent editor={editor} />
+      <ImageToolbar editor={editor} />\n\n      <EditorContent editor={editor} />
 
       {/* âœ… Enhanced Character Count with better styling */}
       {showCharacterCount && characterCount && (
@@ -124,6 +123,16 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
 };
 
 export default NotionEditor;
+
+
+
+
+
+
+
+
+
+
 
 
 

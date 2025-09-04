@@ -3,6 +3,7 @@
 import type { FC } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import type { Editor } from '@tiptap/core';
+import { NodeSelection } from 'prosemirror-state';
 import { useFloating, offset, flip, shift, autoUpdate } from '@floating-ui/react';
 import {
   Bold, Italic, Underline, Strikethrough, Code, Link2, Palette,
@@ -157,15 +158,17 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
 
   // Stable predicate for visibility based on text selection
   const shouldShowBubbleMenu = useCallback(() => {
-    if (!editor) return false;
-    
+    if (!editor || !editor.isEditable) return false;
+
     const { state } = editor;
-    const { from, to } = state.selection;
+    const { from, to } = state.selection as any;
     const isRange = from !== to;
+    const isNodeSel = state.selection instanceof NodeSelection;
     const inCode = editor.isActive('codeBlock');
     const isWidgetSelected = state.selection.empty && (editor.isActive('alert-widget') || editor.isActive('cta-widget'));
-    
-    return isRange && editor.isEditable && !inCode && !isWidgetSelected;
+    const onImage = editor.isActive('image');
+
+    return isRange && !isNodeSel && !inCode && !isWidgetSelected && !onImage;
   }, [editor]);
 
   // Position bubble menu based on text selection

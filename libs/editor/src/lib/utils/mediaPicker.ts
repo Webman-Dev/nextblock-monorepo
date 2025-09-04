@@ -1,4 +1,4 @@
-﻿import type { Editor } from '@tiptap/core';
+import type { Editor } from '@tiptap/core';
 
 export type PickedImage = {
   src: string;
