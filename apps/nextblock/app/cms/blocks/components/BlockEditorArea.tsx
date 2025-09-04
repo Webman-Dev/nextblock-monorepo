@@ -67,6 +67,13 @@ interface EditingNestedBlockInfo {
 }
 
 export default function BlockEditorArea({ parentId, parentType, initialBlocks, languageId }: BlockEditorAreaProps) {
+  // Prevent SSR/hydration mismatches from dnd-kit by rendering on client only
+  // Important: keep hooks order stable across renders; defer early return until after hooks
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const [blocks, setBlocks] = useState<Block[]>(() => initialBlocks.sort((a, b) => a.order - b.order));
   const lastSavedBlocks = useRef(blocks);
   const [isPending, startTransition] = useTransition();
@@ -393,6 +400,10 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
       alert("Error: Could not find the parent section block.");
     }
   };
+
+  if (!isMounted) {
+    return null;
+  }
 
   return (
     <div className="w-full mx-auto px-6">
