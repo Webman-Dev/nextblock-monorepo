@@ -1,7 +1,7 @@
 // app/cms/navigation/components/NavigationMenuDnd.tsx
 "use client";
 
-import React, { useState, useTransition, useCallback, useMemo, JSX } from 'react';
+import React, { useState, useTransition, useCallback, useMemo, JSX, useEffect } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -177,6 +177,10 @@ interface NavigationMenuDndProps {
 }
 
 export default function NavigationMenuDnd({ menuKey, languageCode, initialItems }: NavigationMenuDndProps) {
+  // Prevent SSR/hydration mismatches from dnd-kit by rendering on client only
+  // Keep hooks order stable; move early return after hooks
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => { setIsMounted(true); }, []);
   const [, startTransition] = useTransition();
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
   const [hierarchicalItems, setHierarchicalItems] = useState<HierarchicalNavItem[]>(() => buildTree(initialItems, null, 0, languageCode));
@@ -627,6 +631,8 @@ export default function NavigationMenuDnd({ menuKey, languageCode, initialItems 
       styles: { active: { opacity: '0.4' } },
     }),
   };
+
+  if (!isMounted) return null;
 
   return (
     <DndContext
