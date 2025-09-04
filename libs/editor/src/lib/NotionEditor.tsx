@@ -1,14 +1,14 @@
-// libs/editor/src/lib/NotionEditor.tsx
+﻿// libs/editor/src/lib/NotionEditor.tsx
 'use client';
 
 import React, { useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
-import { editorExtensions } from './kit'; // ✅ use kit
-import { EditorBubbleMenu } from './components/menus/BubbleMenu'; // ✅ correct name
-import { EditorFloatingMenu } from './components/menus/FloatingMenu'; // ✅ correct name
-import { EditorToolbar } from './components/menus/Toolbar'; // ✅ Enhanced toolbar with undo/redo
+import { editorExtensions } from './kit'; // âœ… use kit
+import { EditorBubbleMenu } from './components/menus/BubbleMenu'; // âœ… correct name
+import { EditorFloatingMenu } from './components/menus/FloatingMenu'; // âœ… correct name
+import { EditorToolbar } from './components/menus/Toolbar'; // âœ… Enhanced toolbar with undo/redo
 import { cn } from '@nextblock-monorepo/utils';
-import '../styles/drag-handle.css'; // ✅ Import enhanced drag handle styles
+import '../styles/drag-handle.css'; // âœ… Import enhanced drag handle styles
 
 interface NotionEditorProps {
   content: string;
@@ -20,6 +20,7 @@ interface NotionEditorProps {
   className?: string;
   onFocus?: () => void;
   onBlur?: () => void;
+  openImagePicker?: import("./utils/mediaPicker").OpenImagePicker;
 }
 
 export const NotionEditor: React.FC<NotionEditorProps> = ({
@@ -32,6 +33,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   className,
   onFocus,
   onBlur,
+  openImagePicker,
 }) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const editor = useEditor({
@@ -51,7 +53,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
         class: cn(
           'prose dark:prose-invert prose-sm sm:prose-base lg:prose-lg xl:prose-2xl',
           'mx-auto focus:outline-none min-h-[500px] w-full',
-          // ✅ Enhanced spacing for drag handles - proper left margin
+          // âœ… Enhanced spacing for drag handles - proper left margin
           'pl-12 pr-4 py-4', // Left padding for drag handle space
           'prose-headings:scroll-mt-[80px] prose-headings:font-semibold',
           'prose-h1:text-4xl prose-h2:text-3xl prose-h3:text-2xl',
@@ -66,9 +68,16 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
         ),
       },
     },
-  });
+  }
+  );
 
-  // Optional: keep editor in sync if `content` prop changes (e.g., loading a draft)
+  // Bridge the openImagePicker into editor.storage so menus/extensions can access it
+  useEffect(() => {
+    if (!editor) return;
+    const { setOpenImagePicker } = require('./utils/mediaPicker');
+    setOpenImagePicker(editor, openImagePicker);
+    return () => setOpenImagePicker(editor, undefined);
+  }, [editor, openImagePicker]);  // Optional: keep editor in sync if `content` prop changes (e.g., loading a draft)
   useEffect(() => {
     if (!editor) return;
     const current = editor.getHTML();
@@ -94,17 +103,17 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
         className
       )}
     >
-      {/* ✅ Enhanced Toolbar with Undo/Redo Buttons */}
+      {/* âœ… Enhanced Toolbar with Undo/Redo Buttons */}
       {showToolbar && <EditorToolbar editor={editor} />}
 
-      {/* ✅ Enhanced Editor Menus */}
+      {/* âœ… Enhanced Editor Menus */}
       <EditorBubbleMenu editor={editor} />
       <EditorFloatingMenu editor={editor} wrapperRef={wrapperRef} />
       
-      {/* ✅ Editor Content - Tiptap DragHandle extension handles drag functionality automatically */}
+      {/* âœ… Editor Content - Tiptap DragHandle extension handles drag functionality automatically */}
       <EditorContent editor={editor} />
 
-      {/* ✅ Enhanced Character Count with better styling */}
+      {/* âœ… Enhanced Character Count with better styling */}
       {showCharacterCount && characterCount && (
         <div className="absolute bottom-2 right-2 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm rounded px-2 py-1 border">
           {characters} characters / {words} words
@@ -115,3 +124,6 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
 };
 
 export default NotionEditor;
+
+
+

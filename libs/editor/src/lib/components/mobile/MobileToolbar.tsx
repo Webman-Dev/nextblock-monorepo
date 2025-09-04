@@ -1,4 +1,5 @@
 'use client';
+import { getOpenImagePicker } from "../../utils/mediaPicker";
 
 import React, { useState, useEffect } from 'react';
 import type { Editor } from '@tiptap/core';
@@ -189,7 +190,13 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({ editor, className 
     {
       icon: <Image className="h-4 w-4" />,
       label: 'Image',
-      action: () => {
+      action: async () => {
+        const opener = getOpenImagePicker(editor);
+        if (opener) {
+          const res = await opener();
+          if (res?.src) editor.chain().focus().setImage({ src: res.src, alt: res.alt || undefined }).run();
+          return;
+        }
         const url = window.prompt('Enter image URL:');
         if (url) {
           editor.chain().focus().setImage({ src: url }).run();

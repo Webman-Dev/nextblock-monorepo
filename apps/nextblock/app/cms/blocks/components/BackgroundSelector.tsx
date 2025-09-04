@@ -8,7 +8,6 @@ import { CustomSelectWithInput, ColorPicker } from "@nextblock-monorepo/ui";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { ImageIcon, X as XIcon, Save } from "lucide-react";
 import { cn } from "@nextblock-monorepo/utils";
-import { createClient as createBrowserClient } from "@nextblock-monorepo/db";
 import type { Database } from "@nextblock-monorepo/db";
 import type { SectionBlockContent } from "@/lib/blocks/blockRegistry";
 import MediaPickerDialog from "@/app/cms/media/components/MediaPickerDialog";
@@ -23,7 +22,6 @@ interface BackgroundSelectorProps {
 }
 
 export default function BackgroundSelector({ background, onChange }: BackgroundSelectorProps) {
-  const supabase = createBrowserClient();
 
   const backgroundType = background?.type || "none";
   const selectedImage = background?.type === "image" ? background.image : undefined;

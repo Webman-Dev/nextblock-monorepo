@@ -1,4 +1,5 @@
 'use client';
+import { getOpenImagePicker } from "../../utils/mediaPicker";
 
 import type { FC } from 'react';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -93,9 +94,15 @@ const menuItems: MenuItem[] = [
   // Media
   {
     title: 'Image',
-    description: 'Insert an image from URL',
+    description: 'Insert an image',
     icon: <ImageIcon className="h-4 w-4" />,
-    command: (e) => {
+    command: async (e) => {
+      const opener = getOpenImagePicker(e);
+      if (opener) {
+        const res = await opener();
+        if (res?.src) e.chain().focus().setImage({ src: res.src, alt: res.alt || undefined }).run();
+        return;
+      }
       const url = window.prompt('Enter image URL:');
       if (url) e.chain().focus().setImage({ src: url }).run();
     },

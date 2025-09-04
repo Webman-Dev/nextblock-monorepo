@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { Database } from "@nextblock-monorepo/db";
@@ -29,6 +29,7 @@ interface MediaPickerDialogProps {
   onSelect: (media: Media) => void;
   accept?: (m: Media) => boolean; // filter, e.g. only images
   title?: string;
+  open?: boolean; onOpenChange?: (open: boolean) => void; hideTrigger?: boolean;
 }
 
 export default function MediaPickerDialog({
@@ -37,8 +38,17 @@ export default function MediaPickerDialog({
   onSelect,
   accept,
   title = "Select or Upload Media",
+  open,
+  onOpenChange,
+  hideTrigger,
 }: MediaPickerDialogProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = typeof open === "boolean";
+  const isOpen = isControlled ? (open as boolean) : internalOpen;
+  const setIsOpen = (v: boolean) => {
+    if (!isControlled) setInternalOpen(v);
+    onOpenChange?.(v);
+  };
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [items, setItems] = useState<Media[]>([]);
@@ -82,11 +92,13 @@ export default function MediaPickerDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button type="button" variant={triggerVariant} size="sm">
-          {triggerLabel}
-        </Button>
-      </DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          <Button type="button" variant={triggerVariant} size="sm">
+            {triggerLabel}
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[650px] md:max-w-[800px] lg:max-w-[1000px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -173,4 +185,8 @@ export default function MediaPickerDialog({
     </Dialog>
   );
 }
+
+
+
+
 

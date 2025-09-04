@@ -1,13 +1,12 @@
 ﻿// app/cms/blocks/editors/ImageBlockEditor.tsx
 "use client";
 
-import React, { useState, useEffect } from 'react'; // Removed useTransition as it's not used here
+import React, { useState } from 'react'; // Removed useTransition as it's not used here
 import Image from 'next/image';
 import { Label } from "@nextblock-monorepo/ui";
 import { Input } from "@nextblock-monorepo/ui";
 import { Button } from "@nextblock-monorepo/ui";
 import type { Database } from "@nextblock-monorepo/db";
-import { createClient as createBrowserClient } from '@nextblock-monorepo/db';
 
 type Media = Database['public']['Tables']['media']['Row'];
 export type ImageBlockContent = {
@@ -19,22 +18,16 @@ export type ImageBlockContent = {
     height: number | null;
     blur_data_url: string | null;
 };
-import { ImageIcon, CheckCircle, Search, X as XIcon } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@nextblock-monorepo/ui';
+import { ImageIcon, X as XIcon } from 'lucide-react';
 import MediaPickerDialog from "@/app/cms/media/components/MediaPickerDialog"; // Import the upload form
-import { Separator } from '@nextblock-monorepo/ui'; // For visual separation
 import { BlockEditorProps } from '../components/BlockEditorModal';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 
 export default function ImageBlockEditor({ content, onChange }: BlockEditorProps<Partial<ImageBlockContent>>) {
   const [selectedMediaObjectKey, setSelectedMediaObjectKey] = useState<string | null | undefined>(content.object_key);
-  const [isLoadingMediaDetails, setIsLoadingMediaDetails] = useState(false); // For fetching details if only ID is present
+  const [isLoadingMediaDetails] = useState(false); // For fetching details if only ID is present
 
-  
-  
-  
-  const [supabase] = useState(() => createBrowserClient());
 
   // Effect to fetch media details (like object_key) if only media_id is present in content
   
