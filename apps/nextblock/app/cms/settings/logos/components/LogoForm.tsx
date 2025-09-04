@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -18,11 +18,7 @@ import {
 } from '@nextblock-monorepo/ui'
 import { Search, CheckCircle, ImageIcon, X as XIcon } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
-import MediaUploadForm from '@/app/cms/media/components/MediaUploadForm'
-import { Separator } from '@nextblock-monorepo/ui'
-import { cn } from '@nextblock-monorepo/utils'
-
-type Logo = Database['public']['Tables']['logos']['Row'];
+import MediaPickerDialog from "@/app/cms/media/components/MediaPickerDialog";
 type Media = Database['public']['Tables']['media']['Row'];
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || ''
 
@@ -36,8 +32,7 @@ interface LogoDetails {
   blur_data_url: string | null
 }
 
-interface LogoFormProps {
-  logo?: Logo & { media: Media | null }
+interface LogoFormProps {  logo?: Database["public"]["Tables"]["logos"]["Row"] & { media: Media | null }
   action: (
     payload:
       | { name: string; media_id: string }
@@ -196,115 +191,7 @@ export default function LogoForm({ logo, action }: LogoFormProps) {
             <ImageIcon className="h-16 w-16 text-muted-foreground" />
           )}
 
-          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-            <DialogTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className="mt-3">
-                {logoDetails.object_key ? 'Change Image' : 'Select from Library'}
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[650px] md:max-w-[800px] lg:max-w-[1000px] max-h-[90vh] flex flex-col">
-              <DialogHeader>
-                <DialogTitle>Select or Upload Logo</DialogTitle>
-              </DialogHeader>
-
-              <div className="p-1">
-                <MediaUploadForm
-                  returnJustData={true}
-                  onUploadSuccess={handleMediaSelect}
-                />
-              </div>
-
-              <Separator className="my-4" />
-
-              <div className="flex flex-col flex-grow overflow-hidden">
-                <h3 className="text-lg font-medium mb-3 text-center">
-                  Or Select from Library
-                </h3>
-                <div className="relative mb-2">
-                  <Input
-                    type="search"
-                    placeholder="Search library..."
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                </div>
-                {isLoadingMedia ? (
-                  <div className="flex-grow flex items-center justify-center">
-                    <p>Loading media...</p>
-                  </div>
-                ) : mediaLibrary.length === 0 ? (
-                  <div className="flex-grow flex items-center justify-center">
-                    <p>No media found.</p>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap gap-3 overflow-y-auto min-h-0 pr-2 pb-2">
-                    {mediaLibrary
-                      .filter(m => m.file_type?.startsWith('image/'))
-                      .map(media => {
-                        if (
-                          typeof media.width !== 'number' ||
-                          typeof media.height !== 'number' ||
-                          media.width <= 0 ||
-                          media.height <= 0
-                        ) {
-                          return (
-                            <div
-                              key={media.id}
-                              className="relative aspect-square border rounded-md bg-muted flex items-center justify-center text-xs text-muted-foreground p-1 text-center"
-                            >
-                              Image has invalid dimensions
-                            </div>
-                          )
-                        }
-                        return (
-                          <button
-                            key={media.id}
-                            type="button"
-                            className={cn(
-                              'relative aspect-square border rounded-md overflow-hidden group focus:outline-none focus:ring-2 focus:ring-primary min-w-0',
-                              'w-[calc(33.33%-8px)] sm:w-[calc(25%-9px)] md:w-[calc(20%-10px)] lg:w-[calc(16.66%-10px)]',
-                            )}
-                            onClick={() => handleMediaSelect(media)}
-                          >
-                            <Image
-                              src={`${R2_BASE_URL}/${media.object_key}`}
-                              alt={
-                                media.description ||
-                                media.file_name ||
-                                'Media library image'
-                              }
-                              width={media.width}
-                              height={media.height}
-                              className="absolute inset-0 w-full h-full object-cover"
-                              placeholder={
-                                media.blur_data_url ? 'blur' : 'empty'
-                              }
-                              blurDataURL={media.blur_data_url || undefined}
-                              sizes="(max-width: 639px) 33vw, (max-width: 767px) 25vw, (max-width: 1023px) 20vw, 17vw"
-                            />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity flex items-center justify-center">
-                              <CheckCircle className="h-8 w-8 text-white" />
-                            </div>
-                            <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1 truncate text-center">
-                              {media.file_name}
-                            </p>
-                          </button>
-                        )
-                      })}
-                  </div>
-                )}
-              </div>
-              <DialogFooter className="mt-auto pt-4">
-                <DialogClose asChild>
-                  <Button type="button" variant="outline">
-                    Close
-                  </Button>
-                </DialogClose>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <MediaPickerDialog triggerLabel={logoDetails.object_key ? "Change Image" : "Select from Library"} onSelect={handleMediaSelect} accept={(m)=>!!m.file_type?.startsWith("image/")} title="Select or Upload Logo" />
         </div>
       </div>
 
@@ -322,3 +209,7 @@ export default function LogoForm({ logo, action }: LogoFormProps) {
     </div>
   )
 }
+
+
+
+
