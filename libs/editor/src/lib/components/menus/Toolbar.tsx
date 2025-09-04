@@ -1,4 +1,5 @@
-'use client';
+﻿'use client';
+import { getOpenImagePicker } from "../../utils/mediaPicker";
 
 import React from 'react';
 import type { Editor } from '@tiptap/core';
@@ -161,7 +162,15 @@ const ColorPicker: React.FC<{ editor: Editor }> = ({ editor }) => {
 };
 
 const InsertDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
-  const insertImage = () => {
+  const insertImage = async () => {
+    const opener = getOpenImagePicker(editor);
+    if (opener) {
+      const res = await opener();
+      if (res?.src) {
+        editor.chain().focus().setImage({ src: res.src, alt: res.alt || undefined }).run();
+      }
+      return;
+    }
     const url = window.prompt('Enter image URL:');
     if (url) {
       editor.chain().focus().setImage({ src: url }).run();
@@ -471,3 +480,6 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
     </div>
   );
 };
+
+
+

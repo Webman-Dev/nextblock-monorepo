@@ -1,8 +1,9 @@
-// app/cms/blocks/editors/TextBlockEditor.tsx
+﻿// app/cms/blocks/editors/TextBlockEditor.tsx
 'use client';
 
-import React, { useId } from 'react';
+import React, { useId, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
+import MediaPickerDialog from '@/app/cms/media/components/MediaPickerDialog';
 import { Label } from '@nextblock-monorepo/ui';
 import { BlockEditorProps } from '../components/BlockEditorModal';
 
@@ -10,6 +11,7 @@ import { BlockEditorProps } from '../components/BlockEditorModal';
 type NotionEditorProps = {
   content: string;
   onChange: (html: string) => void;
+  openImagePicker?: () => Promise<{ src: string; alt?: string; width?: number | null; height?: number | null; blurDataURL?: string | null } | null>;
 };
 
 // Use the alias that resolves in your repo; if you mapped @nextblock-monorepo/editor, swap it here.
@@ -27,6 +29,15 @@ export default function TextBlockEditor({
   onChange,
 }: BlockEditorProps<Partial<TextBlockContent>>) {
   const labelId = useId();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const resolverRef = useRef<null | ((v: any) => void)>(null);
+  const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
+  const openImagePicker = useCallback(() => {
+    setPickerOpen(true);
+    return new Promise<{ src: string; alt?: string; width?: number | null; height?: number | null; blurDataURL?: string | null } | null>((resolve) => {
+      resolverRef.current = resolve;
+    });
+  }, []);
 
   return (
     <div className="h-full flex flex-col">
@@ -38,8 +49,33 @@ export default function TextBlockEditor({
         <NotionEditor
           content={content?.html_content ?? ''}
           onChange={(html) => onChange({ html_content: html })}
+          openImagePicker={openImagePicker}
         />
+
+        {/* Hidden controlled MediaPickerDialog for image selection */}
+        <div className="sr-only" aria-hidden>
+          <MediaPickerDialog
+            hideTrigger
+            open={pickerOpen}
+            onOpenChange={setPickerOpen}
+            title="Select or Upload Image"
+            accept={(m) => !!m.file_type?.startsWith('image/')}
+            onSelect={(media) => {
+              const src = `${R2_BASE_URL}/${media.object_key}`;
+              resolverRef.current?.({
+                src,
+                alt: media.description || media.file_name || undefined,
+                width: media.width ?? null,
+                height: media.height ?? null,
+                blurDataURL: media.blur_data_url ?? null,
+              });
+              resolverRef.current = null;
+              setPickerOpen(false);
+            }}
+          />
+        </div>
       </div>
     </div>
   );
 }
+

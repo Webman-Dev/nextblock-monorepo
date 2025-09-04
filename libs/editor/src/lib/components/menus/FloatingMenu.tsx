@@ -1,5 +1,5 @@
-'use client';
-
+﻿'use client';
+import { getOpenImagePicker } from "../../utils/mediaPicker";
 import type { FC } from 'react';
 import React, { useCallback, useEffect, useState } from 'react';
 import type { Editor } from '@tiptap/core';
@@ -33,7 +33,13 @@ const menuItems: MenuItem[] = [
   {
     title: 'Image',
     icon: <ImageIcon className="h-4 w-4" />,
-    command: (e) => {
+    command: async (e) => {
+      const opener = getOpenImagePicker(e);
+      if (opener) {
+        const res = await opener();
+        if (res?.src) e.chain().focus().setImage({ src: res.src, alt: res.alt || undefined }).run();
+        return;
+      }
       const url = window.prompt('URL');
       if (url) e.chain().focus().setImage({ src: url }).run();
     },
@@ -195,3 +201,7 @@ export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor, wra
     </>
   );
 };
+
+
+
+
