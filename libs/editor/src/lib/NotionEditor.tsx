@@ -109,7 +109,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
 
       {/* âœ… Enhanced Editor Menus */}
       <EditorBubbleMenu editor={editor} />
-      <EditorFloatingMenu editor={editor} wrapperRef={wrapperRef} />
+      <EditorFloatingMenu editor={editor} />
       <ImageToolbar editor={editor} />
           
         <EditorContent editor={editor} />

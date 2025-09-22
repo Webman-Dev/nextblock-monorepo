@@ -35,12 +35,13 @@ import sql from 'highlight.js/lib/languages/sql'
 
 // custom extensions
 import { TrailingNode } from './extensions/TrailingNode'
+import { AdvancedPlaceholder } from './extensions/AdvancedPlaceholder'
 import AlertWidget from './extensions/AlertWidget'
 import CtaWidgetNode from './extensions/CtaWidgetNode'
 import { SlashCommand } from './extensions/slash-command'
 import { DraggableNodes } from './extensions/DraggableNodes'
 
-// âœ… bring lowlight into scope with more languages
+// bring lowlight into scope with more languages
 const lowlight = createLowlight({ html, css, js, ts, python, json, bash, sql })
 
 
@@ -167,14 +168,16 @@ export const editorExtensions: Extensions = [
   }),
   Typography,
 
+  AdvancedPlaceholder,
+
   // Collaboration and UX
   CharacterCount.configure({
     limit: 50000,
     mode: 'textSize',
   }),
   
-  // Note: EnhancedFocus, AdvancedPlaceholder, and KeyboardShortcuts extensions
-  // have been disabled as they were causing text cutting bugs during cursor positioning
+  // Note: EnhancedFocus and KeyboardShortcuts extensions remain disabled because they caused cursor positioning glitches.
+  // Revisit once upstream fixes land.
 
   // Custom extensions
   TrailingNode,
@@ -189,9 +192,19 @@ export const editorExtensions: Extensions = [
     render: () => {
       const element = document.createElement('div')
       element.classList.add('tiptap-drag-handle')
-      
-      // Create the drag handle icon
-      element.innerHTML = `
+
+      const plusButton = document.createElement('button')
+      plusButton.type = 'button'
+      plusButton.className = 'tiptap-drag-handle__button tiptap-drag-handle__plus'
+      plusButton.setAttribute('aria-label', 'Insert block')
+      plusButton.setAttribute('aria-expanded', 'false')
+      plusButton.draggable = false
+      plusButton.textContent = '+'
+      plusButton.dataset.tooltip = 'Insert block'
+
+      const grip = document.createElement('span')
+      grip.className = 'tiptap-drag-handle__button tiptap-drag-handle__grip'
+      grip.innerHTML = `
         <svg width="12" height="18" viewBox="0 0 12 18" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="3" cy="3" r="1.5" fill="currentColor"/>
           <circle cx="9" cy="3" r="1.5" fill="currentColor"/>
@@ -201,7 +214,53 @@ export const editorExtensions: Extensions = [
           <circle cx="9" cy="15" r="1.5" fill="currentColor"/>
         </svg>
       `
-      
+
+      grip.setAttribute('aria-hidden', 'true')
+
+      element.dataset.tooltip = 'Click for options\nHold for drag'
+      element.appendChild(plusButton)
+      element.appendChild(grip)
+
+      const showHint = () => element.classList.add('tiptap-drag-handle--hint')
+      const hideHint = () => element.classList.remove('tiptap-drag-handle--hint')
+
+      grip.addEventListener('mouseenter', showHint)
+      grip.addEventListener('mouseleave', hideHint)
+      element.addEventListener('mouseleave', hideHint)
+
+      plusButton.addEventListener('mousedown', event => {
+        event.preventDefault()
+        event.stopPropagation()
+      })
+
+      plusButton.addEventListener('dragstart', event => {
+        event.preventDefault()
+        event.stopPropagation()
+      })
+
+      plusButton.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          plusButton.click()
+        }
+      })
+
+      plusButton.addEventListener('click', event => {
+        event.preventDefault()
+        event.stopPropagation()
+        element.classList.remove('tiptap-drag-handle--hint')
+
+        const toggleEvent = new CustomEvent('tiptap-gutter-toggle', {
+          bubbles: true,
+          detail: {
+            handle: element,
+            button: plusButton,
+          },
+        })
+
+        element.dispatchEvent(toggleEvent)
+      })
+
       return element
     },
   }),
