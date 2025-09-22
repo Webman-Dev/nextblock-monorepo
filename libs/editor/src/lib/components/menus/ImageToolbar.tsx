@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import type { Editor } from '@tiptap/core'
 import { NodeSelection } from 'prosemirror-state'
-import { useFloating, offset, shift, autoUpdate } from '@floating-ui/react'
+import { useFloating, offset, autoUpdate } from '@floating-ui/react'
 import { Button } from '@nextblock-monorepo/ui/button'
-import { AlignLeft, AlignCenter, AlignRight, Download, Trash2, Image as ImageIcon } from 'lucide-react'
+import { AlignLeft, AlignCenter, AlignRight, Download, Trash2 } from 'lucide-react'
 
 interface ImageToolbarProps { editor: Editor }
 
@@ -25,7 +25,7 @@ export const ImageToolbar: React.FC<ImageToolbarProps> = ({ editor }) => {
 
   const isImageActive = useCallback(() => editor.isActive('image'), [editor])
 
-  const attrs = useMemo(() => (editor.getAttributes('image') || {}) as Record<string, any>, [editor, open])
+  const attrs = (editor.getAttributes('image') || {}) as Record<string, any>
 
   const position = useCallback(() => {
     const { state, view } = editor
@@ -50,7 +50,10 @@ export const ImageToolbar: React.FC<ImageToolbarProps> = ({ editor }) => {
           const wrapper = (anySel.closest?.('.tiptap-image-wrapper') as HTMLElement | null) ?? anySel
           return (wrapper.querySelector('img') as HTMLElement | null) ?? wrapper
         }
-      } catch {}
+      } catch {
+        // Ignore DOM probing errors
+        void 0
+      }
       return null
     }
 
@@ -106,9 +109,7 @@ export const ImageToolbar: React.FC<ImageToolbarProps> = ({ editor }) => {
     // Schedule a reposition after layout settles
     requestAnimationFrame(() => position())
   }
-  const setWidthPct = (pct: number) => {
-    editor.chain().focus().updateAttributes('image', { width: `${pct}%`, height: null, lockAspect: true }).run()
-  }
+  // Removed unused setWidthPct to satisfy no-unused-vars
   const handleDelete = () => {
     editor.chain().focus().deleteSelection().run()
   }
@@ -123,7 +124,10 @@ export const ImageToolbar: React.FC<ImageToolbarProps> = ({ editor }) => {
       document.body.appendChild(a)
       a.click()
       a.remove()
-    } catch {}
+    } catch {
+      // Ignore download failures
+      void 0
+    }
   }
 
   return (

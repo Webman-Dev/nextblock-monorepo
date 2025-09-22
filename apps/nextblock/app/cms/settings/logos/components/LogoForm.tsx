@@ -1,24 +1,14 @@
 ﻿'use client'
 
-import { useState, useTransition, useEffect } from 'react'
+import { useState, useTransition, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { Input } from '@nextblock-monorepo/ui'
 import { Label } from '@nextblock-monorepo/ui'
 import { Button } from '@nextblock-monorepo/ui'
 import type { Database } from '@nextblock-monorepo/db'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogClose,
-  DialogTrigger,
-} from '@nextblock-monorepo/ui'
-import { Search, CheckCircle, ImageIcon, X as XIcon } from 'lucide-react'
-import { useAuth } from '@/context/AuthContext'
-import MediaPickerDialog from "@/app/cms/media/components/MediaPickerDialog";
+import { ImageIcon, X as XIcon } from 'lucide-react'
+import MediaPickerDialog from '@/app/cms/media/components/MediaPickerDialog'
 type Media = Database['public']['Tables']['media']['Row'];
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || ''
 
@@ -41,7 +31,6 @@ interface LogoFormProps {  logo?: Database["public"]["Tables"]["logos"]["Row"] &
 }
 
 export default function LogoForm({ logo, action }: LogoFormProps) {
-  const { supabase } = useAuth()
   const router = useRouter()
   const [logoDetails, setLogoDetails] = useState<LogoDetails>({
     id: logo?.id,
@@ -55,40 +44,7 @@ export default function LogoForm({ logo, action }: LogoFormProps) {
   const [formError, setFormError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [mediaLibrary, setMediaLibrary] = useState<Media[]>([])
-  const [isLoadingMedia, setIsLoadingMedia] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
-  useEffect(() => {
-    if (isModalOpen) {
-      const fetchLibrary = async () => {
-        if (!supabase) return
-        setIsLoadingMedia(true)
-        console.log('Executing media library query...')
-        try {
-          let query = supabase
-            .from('media')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(50)
-          if (searchTerm) {
-            query = query.ilike('file_name', `%${searchTerm}%`)
-          }
-          const { data, error } = await query
-          if (data) {
-            setMediaLibrary(data)
-          } else {
-            console.error('Error fetching media library:', error)
-          }
-        } catch (e) {
-          console.error('FATAL: Media library query failed:', e)
-        } finally {
-          setIsLoadingMedia(false)
-        }
-      }
-      fetchLibrary()
-    }
-  }, [isModalOpen, searchTerm, supabase])
+  // Removed unused media library state and effect
 
   const handleMediaSelect = (media: Media) => {
     setLogoDetails(prev => ({
@@ -99,7 +55,7 @@ export default function LogoForm({ logo, action }: LogoFormProps) {
       height: media.height ?? null,
       blur_data_url: media.blur_data_url ?? null,
     }))
-    setIsModalOpen(false)
+    // MediaPickerDialog closes itself after selection
   }
 
   const handleRemoveImage = () => {
@@ -148,7 +104,7 @@ export default function LogoForm({ logo, action }: LogoFormProps) {
           id="name"
           name="name"
           value={logoDetails.name}
-          onChange={e =>
+          onChange={(e: ChangeEvent<HTMLInputElement>) =>
             setLogoDetails(prev => ({ ...prev, name: e.target.value }))
           }
           required
@@ -191,7 +147,12 @@ export default function LogoForm({ logo, action }: LogoFormProps) {
             <ImageIcon className="h-16 w-16 text-muted-foreground" />
           )}
 
-          <MediaPickerDialog triggerLabel={logoDetails.object_key ? "Change Image" : "Select from Library"} onSelect={handleMediaSelect} accept={(m)=>!!m.file_type?.startsWith("image/")} title="Select or Upload Logo" />
+          <MediaPickerDialog
+            triggerLabel={logoDetails.object_key ? 'Change Image' : 'Select from Library'}
+            onSelect={handleMediaSelect}
+            accept={(m: Media) => !!m.file_type?.startsWith('image/')}
+            title="Select or Upload Logo"
+          />
         </div>
       </div>
 
