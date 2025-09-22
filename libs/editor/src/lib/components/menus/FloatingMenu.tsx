@@ -1,20 +1,24 @@
 'use client';
 import { getOpenImagePicker } from "../../utils/mediaPicker";
 import type { FC } from 'react';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import {
-  Heading1, Heading2, List, ListOrdered, TextQuote, Code,
-  Image as ImageIcon, Table2, Minus, PlusCircle,
+  Heading1,
+  Heading2,
+  List,
+  ListOrdered,
+  TextQuote,
+  Code,
+  Image as ImageIcon,
+  Table2,
+  Minus,
 } from 'lucide-react';
 import { Button } from '@nextblock-monorepo/ui/button';
 import { useFloating, offset, flip, shift, autoUpdate } from '@floating-ui/react';
 
 interface FloatingMenuComponentProps {
   editor: Editor;
-  wrapperRef?:
-    | React.RefObject<HTMLDivElement>
-    | React.RefObject<HTMLDivElement | null>;
 }
 
 type MenuItem = {
@@ -37,7 +41,14 @@ const menuItems: MenuItem[] = [
       const opener = getOpenImagePicker(e);
       if (opener) {
         const res = await opener();
-        if (res?.src) e.chain().focus().setImage({ src: res.src, alt: res.alt || undefined }).updateAttributes('image', { blurDataURL: res.blurDataURL || undefined }).run();
+        if (res?.src) {
+          e
+            .chain()
+            .focus()
+            .setImage({ src: res.src, alt: res.alt || undefined })
+            .updateAttributes('image', { blurDataURL: res.blurDataURL || undefined })
+            .run();
+        }
         return;
       }
       const url = window.prompt('URL');
@@ -48,170 +59,195 @@ const menuItems: MenuItem[] = [
   { title: 'Horizontal Rule', icon: <Minus className="h-4 w-4" />, command: (e) => e.chain().focus().setHorizontalRule().run() },
 ];
 
-export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor, wrapperRef }) => {
-  const [open, setOpen] = useState(false);
-  const [visible, setVisible] = useState(false);
-  const [ready, setReady] = useState(false);
-  const [triggerStyle, setTriggerStyle] = useState<{ top: number; left: number; width: number }>({
-    top: -9999,
-    left: -9999,
-    width: 0,
-  });
+interface GutterToggleDetail {
+  handle: HTMLElement;
+  button: HTMLElement;
+}
 
-  const { x, y, refs, strategy, update } = useFloating({
+export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor }) => {
+  const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const buttonRef = useRef<HTMLElement | null>(null);
+  const handleRef = useRef<HTMLElement | null>(null);
+  const openRef = useRef(false);
+
+  const closeMenu = useCallback(() => {
+    if (buttonRef.current) {
+      buttonRef.current.setAttribute('aria-expanded', 'false');
+    }
+    if (handleRef.current) {
+      handleRef.current.removeAttribute('data-menu-open');
+    }
+    buttonRef.current = null;
+    handleRef.current = null;
+    setAnchor(null);
+    setOpen(false);
+  }, []);
+
+  const { x, y, refs, strategy } = useFloating({
     placement: 'right-start',
     open,
-    onOpenChange: setOpen,
-    middleware: [offset(10), flip(), shift()],
+    middleware: [offset(8), flip(), shift()],
     whileElementsMounted: autoUpdate,
   });
 
-  // Stable predicate for visibility (empty paragraph && editable)
-  const shouldShowTrigger = useCallback(() => {
-    if (!editor || !editor.isEditable) return false;
-    // Do not show when image is selected/active
-    if (editor.isActive('image')) return false;
-    const { $from } = editor.state.selection as any;
-    const parent = $from?.parent;
-    const isEmptyPara = parent?.type?.name === 'paragraph' && parent?.content?.size === 0;
-    return Boolean(isEmptyPara);
-  }, [editor]);
-
-  // Stable positioning function based on caret coords
-  const positionTrigger = useCallback(() => {
-    if (!wrapperRef?.current) return;
-
-    const wrapperRect = wrapperRef.current.getBoundingClientRect();
-    const editorContentRect = editor.view.dom.getBoundingClientRect();
-    const caretRect = editor.view.coordsAtPos(editor.state.selection.from);
-
-    const top = caretRect.top - wrapperRect.top;
-    const left = editorContentRect.left - wrapperRect.left;
-    const width = editorContentRect.width;
-
-    setTriggerStyle({ top, left, width });
-
-    update();
-    requestAnimationFrame(() => setReady(true));
-  }, [editor, update, wrapperRef]);
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
 
   useEffect(() => {
-    if (!editor) return;
+    if (anchor) {
+      refs.setReference(anchor);
+    } else {
+      refs.setReference(null);
+    }
+  }, [anchor, refs]);
 
-    let raf = 0;
-    const handle = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        if (shouldShowTrigger()) {
-          setVisible(true);
-          setReady(false);
-          positionTrigger();
-        } else {
-          setVisible(false);
-          setOpen(false);
-          setReady(false);
-        }
-      });
+  const shouldShowTrigger = useCallback(() => {
+    if (!editor || !editor.isEditable) {
+      return false;
+    }
+    if (editor.isActive('image')) {
+      return false;
+    }
+    const { $from } = editor.state.selection as any;
+    const parent = $from?.parent;
+    const isEmptyParagraph = parent?.type?.name === 'paragraph' && parent?.content?.size === 0;
+    return Boolean(isEmptyParagraph);
+  }, [editor]);
+
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+
+    const container = editor.view.dom.parentElement;
+    if (!container) {
+      return;
+    }
+
+    const handleToggle = (event: Event) => {
+      const customEvent = event as CustomEvent<GutterToggleDetail>;
+      const { handle, button } = customEvent.detail;
+
+      if (!shouldShowTrigger()) {
+        closeMenu();
+        return;
+      }
+
+      if (buttonRef.current === button && openRef.current) {
+        closeMenu();
+        return;
+      }
+
+      if (buttonRef.current && buttonRef.current !== button) {
+        buttonRef.current.setAttribute('aria-expanded', 'false');
+      }
+
+      if (handleRef.current && handleRef.current !== handle) {
+        handleRef.current.removeAttribute('data-menu-open');
+      }
+
+      buttonRef.current = button;
+      handleRef.current = handle;
+
+      button.setAttribute('aria-expanded', 'true');
+      handle.setAttribute('data-menu-open', 'true');
+
+      setAnchor(button);
+      setOpen(true);
     };
 
-    const handleBlur = () => {
-      setVisible(false);
-      setOpen(false);
-      setReady(false);
-    };
-
-    // initial run
-    handle();
-
-    editor.on('selectionUpdate', handle);
-    editor.on('transaction', handle);
-    editor.on('focus', handle);
-    editor.on('blur', handleBlur);
+    container.addEventListener('tiptap-gutter-toggle', handleToggle as EventListener);
 
     return () => {
-      cancelAnimationFrame(raf);
-      editor.off('selectionUpdate', handle);
-      editor.off('transaction', handle);
-      editor.off('focus', handle);
-      editor.off('blur', handleBlur);
+      container.removeEventListener('tiptap-gutter-toggle', handleToggle as EventListener);
     };
-  }, [editor, shouldShowTrigger, positionTrigger]);
+  }, [editor, shouldShowTrigger, closeMenu]);
+
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+
+    const ensureVisibility = () => {
+      if (!shouldShowTrigger()) {
+        closeMenu();
+      }
+    };
+
+    editor.on('selectionUpdate', ensureVisibility);
+    editor.on('transaction', ensureVisibility);
+    editor.on('blur', closeMenu);
+
+    return () => {
+      editor.off('selectionUpdate', ensureVisibility);
+      editor.off('transaction', ensureVisibility);
+      editor.off('blur', closeMenu);
+    };
+  }, [editor, shouldShowTrigger, closeMenu]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const floating = refs.floating.current;
+      if (floating && !floating.contains(target)) {
+        const button = buttonRef.current;
+        if (!button || !button.contains(target)) {
+          closeMenu();
+        }
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeMenu();
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open, closeMenu, refs]);
 
   const runCommand = (command: (editor: Editor) => void) => {
     command(editor);
-    setOpen(false);
+    closeMenu();
   };
 
-  if (!visible) return null;
+  if (!anchor || !open) {
+    return null;
+  }
 
   return (
-    <>
-      {/* Trigger */}
-      <div
-        style={{
-          position: 'absolute',
-          top: triggerStyle.top,
-          left: triggerStyle.left,
-          width: triggerStyle.width,
-          visibility: ready ? 'visible' : 'hidden',
-          zIndex: 10000,
-        }}
-        className="group"
-      >
-        <div className="relative py-4 w-[95%] mx-auto flex items-center" aria-label="Insert block">
-          {/* Horizontal Line */}
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-0.5 bg-slate-200 dark:bg-slate-700 transform origin-center scale-x-0 opacity-0 group-hover:scale-x-100 group-hover:opacity-100 transition-all duration-300" />
-          {/* Plus Icon and Animated Circle */}
-          <div
-            ref={refs.setReference}
-            className="relative z-10 cursor-pointer mx-auto"
-            onClick={() => setOpen((v) => !v)}
+    <div
+      ref={refs.setFloating}
+      style={{ position: strategy, top: y ?? 0, left: x ?? 0, zIndex: 10001 }}
+      className="w-48 rounded-md bg-white p-1 shadow-lg"
+      onMouseDown={(event) => event.preventDefault()}
+    >
+      <div className="flex flex-col">
+        {menuItems.map((item) => (
+          <Button
+            key={item.title}
+            type="button"
+            variant="ghost"
+            className="justify-start"
+            onClick={() => runCommand(item.command)}
           >
-            {/* Animated Circle */}
-            <div className="absolute -inset-2 rounded-full bg-primary/10 dark:bg-primary/30 scale-0 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-300 ease-in-out" />
-            {/* Plus Icon Container */}
-            <div className="relative bg-background p-1 rounded-full">
-              <PlusCircle className="h-5 w-5 text-slate-400 group-hover:text-primary transition-colors" />
-            </div>
-          </div>
-        </div>
+            {item.icon}
+            <span className="ml-2">{item.title}</span>
+          </Button>
+        ))}
       </div>
-
-      {/* Menu */}
-      {open && (
-        <div
-          ref={refs.setFloating}
-          style={{ position: strategy, top: y ?? 0, left: x ?? 0, zIndex: 10001 }}
-          className="bg-white shadow-lg rounded-md p-1 w-48"
-          onMouseDown={(e) => e.preventDefault()}
-        >
-          <div className="flex flex-col">
-            {menuItems.map((item) => (
-              <Button
-                key={item.title}
-                type="button"
-                variant="ghost"
-                className="justify-start"
-                onClick={() => runCommand(item.command)}
-              >
-                {item.icon}
-                <span className="ml-2">{item.title}</span>
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
-    </>
+    </div>
   );
 };
-
-
-
-
-
-
-
-
-
-
-

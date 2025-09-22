@@ -3,10 +3,47 @@
 /* Import drag handle styles */
 @import './drag-handle.css';
 
-.ProseMirror p.is-editor-empty:first-child::before {
+.is-editor-empty,
+.is-empty {
+  position: relative;
+}
+
+.ProseMirror .is-editor-empty::before,
+.ProseMirror .is-empty::before {
   content: attr(data-placeholder);
-  float: left;
-  color: #adb5bd;
+  color: #94a3b8;
+  font-style: italic;
   pointer-events: none;
+  opacity: 0.7;
+}
+
+.ProseMirror .is-empty::before {
+  float: left;
   height: 0;
+}
+
+.ProseMirror .is-empty-heading-1::before {
+  font-size: 2.25rem;
+  font-weight: 600;
+}
+
+.ProseMirror .is-empty-heading-2::before {
+  font-size: 1.875rem;
+  font-weight: 600;
+}
+
+.ProseMirror .is-empty-heading-3::before {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.ProseMirror .is-empty-blockquote::before {
+  font-style: italic;
+  opacity: 0.6;
+}
+
+.ProseMirror .is-empty-code-block::before {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, SFMono, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace);
+  font-size: 0.9rem;
+  opacity: 0.5;
 }

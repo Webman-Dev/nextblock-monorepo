@@ -1,50 +1,176 @@
-/* Tiptap Drag Handle Styles - Working with Tiptap's positioning system */
+/* Tiptap Drag Handle Styles - Notion-like gutter */
 .tiptap-drag-handle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: rgba(100, 116, 139, 0.1);
-  border: 1px solid rgba(100, 116, 139, 0.2);
-  cursor: grab;
-  color: #64748b;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  /* Position drag handle to align with first line of text (Tiptap.dev pattern) */
   position: absolute;
-  /* Align with first line of text instead of center of content block */
-  top: 0.125em; /* Align with text baseline/x-height */
-  /* transform: translateY(50%); Remove centering transform */
-  left: -32px;
-  z-index: 10;
-  /* Ensure proper positioning by resetting margins */
-  margin: 0;
-  /* Force hardware acceleration for smoother positioning */
-  will-change: transform;
+  top: -0.12em;
+  left: -18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: #9ca3af;
+  cursor: grab;
+  font-size: 15px;
+  line-height: 1.25;
+  transform: translateY(-3px);
+  transition: color 0.18s ease, opacity 0.18s ease;
+  z-index: 12;
 }
 
+.tiptap-drag-handle[data-menu-open='true'],
 .tiptap-drag-handle:hover {
-  background: rgba(100, 116, 139, 0.15);
-  border-color: rgba(100, 116, 139, 0.3);
-  color: #475569;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  color: #1f2937;
 }
 
 .tiptap-drag-handle:active {
   cursor: grabbing;
-  background: rgba(100, 116, 139, 0.2);
-  border-color: rgba(100, 116, 139, 0.4);
-  color: #334155;
-  transform: scale(0.95);
 }
 
-/* Drag handle icon sizing */
-.tiptap-drag-handle svg {
+.tiptap-drag-handle__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 30px;
+  padding: 2px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  line-height: 1.25;
+  font-weight: 500;
+  pointer-events: auto;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.tiptap-drag-handle__button:hover,
+.tiptap-drag-handle__button:focus-visible {
+  background-color: rgba(15, 23, 42, 0.08);
+  color: #111827;
+}
+
+.tiptap-drag-handle__button:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.4);
+  outline-offset: 1px;
+}
+
+.tiptap-drag-handle__plus {
+  font-size: 18px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.tiptap-drag-handle__grip {
+  cursor: grab;
+}
+
+.tiptap-drag-handle__grip svg {
   width: 12px;
   height: 18px;
-  flex-shrink: 0;
+  opacity: 0.8;
+  transition: opacity 0.18s ease;
+}
+
+.tiptap-drag-handle:active .tiptap-drag-handle__grip svg {
+  opacity: 1;
+}
+
+.tiptap-drag-handle__button[data-tooltip] {
+  position: relative;
+}
+
+.tiptap-drag-handle__button[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: -44px;
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  padding: 4px 8px;
+  border-radius: 9999px;
+  background: rgba(17, 24, 39, 0.92);
+  color: #f9fafb;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 6px 12px rgba(15, 23, 42, 0.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.tiptap-drag-handle__button[data-tooltip]:hover::after,
+.tiptap-drag-handle__button[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.tiptap-drag-handle::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: -52px;
+  left: -10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(17, 24, 39, 0.92);
+  color: #f9fafb;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: pre;
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.25);
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.tiptap-drag-handle::before {
+  content: '';
+  position: absolute;
+  top: -26px;
+  left: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: rgba(17, 24, 39, 0.92);
+  opacity: 0;
+  transform: rotate(45deg) translateY(6px);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.tiptap-drag-handle--hint::after,
+.tiptap-drag-handle--hint::before,
+.tiptap-drag-handle[data-menu-open='true']::after,
+.tiptap-drag-handle[data-menu-open='true']::before {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-color-scheme: dark) {
+  .tiptap-drag-handle {
+    color: #94a3b8;
+  }
+
+  .tiptap-drag-handle__button:hover,
+  .tiptap-drag-handle__button:focus-visible {
+    background-color: rgba(148, 163, 184, 0.18);
+    color: #f9fafb;
+  }
+
+  .tiptap-drag-handle::after {
+    background: rgba(15, 23, 42, 0.95);
+  }
+
+  .tiptap-drag-handle__button[data-tooltip]::after {
+    background: rgba(15, 23, 42, 0.95);
+  }
+
+  .tiptap-drag-handle::before {
+    background: rgba(15, 23, 42, 0.95);
+  }
 }
 
 /* Enhanced hover detection for content blocks - Expand hover area for easier access */
@@ -63,8 +189,8 @@
 .ProseMirror [data-type="taskList"] {
   position: relative;
   /* Expand hover area to the left for easier drag handle access */
-  padding-left: 50px;
-  margin-left: -50px;
+  padding-left: 28px;
+  margin-left: 0;
   /* Ensure minimum height for proper drag handle centering */
   min-height: 24px;
   /* Create stacking context for drag handle positioning */
@@ -80,7 +206,7 @@
 .ProseMirror .code-block {
   /* Override any width constraints that might cause inconsistency */
   width: auto;
-  max-width: calc(100% - 50px); /* Account for expanded hover area */
+  max-width: calc(100% - 28px); /* Account for expanded hover area */
   /* Ensure proper box model */
   box-sizing: border-box;
 }
@@ -90,13 +216,13 @@
 .ProseMirror h1 .tiptap-drag-handle,
 .ProseMirror h1 .drag-handle,
 .ProseMirror h1 .drag-handle-button {
-  top: 0.2em; /* Slightly higher for large headings */
+  top: 0.16em; /* Slightly higher for large headings */
 }
 
 .ProseMirror h2 .tiptap-drag-handle,
 .ProseMirror h2 .drag-handle,
 .ProseMirror h2 .drag-handle-button {
-  top: 0.15em; /* Adjust for h2 size */
+  top: 0.08em; /* Adjust for h2 size */
 }
 
 .ProseMirror h3 .tiptap-drag-handle,
@@ -111,7 +237,7 @@
 .ProseMirror h6 .tiptap-drag-handle,
 .ProseMirror h6 .drag-handle,
 .ProseMirror h6 .drag-handle-button {
-  top: 0.125em; /* Standard alignment for smaller headings */
+  top: 0.16em; /* Standard alignment for smaller headings */
 }
 
 /* Code blocks - align with first line of code */
@@ -131,7 +257,7 @@
 .ProseMirror ol .tiptap-drag-handle,
 .ProseMirror ol .drag-handle,
 .ProseMirror ol .drag-handle-button {
-  top: 0.25em; /* Account for list item spacing */
+  top: 0.21em; /* Account for list item spacing */
 }
 
 /* Blockquotes - align with quoted text */
@@ -145,7 +271,7 @@
 .ProseMirror [data-type="taskList"] .tiptap-drag-handle,
 .ProseMirror [data-type="taskList"] .drag-handle,
 .ProseMirror [data-type="taskList"] .drag-handle-button {
-  top: 0.125em; /* Align with task item text */
+  top: 0.16em; /* Align with task item text */
 }
 
 /* Show drag handle on hover - Let Tiptap handle the visibility logic */
@@ -187,12 +313,12 @@
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .tiptap-drag-handle {
-    width: 28px;
+    width: 20px;
     height: 28px;
     /* Adjust positioning for mobile - maintain first-line alignment */
-    left: -36px;
+    left: -18px;
     /* Keep first-line alignment on mobile */
-    top: 0.125em;
+    top: 0.16em;
   }
 
   /* Content-specific mobile adjustments for first-line alignment */
@@ -201,7 +327,7 @@
   }
 
   .ProseMirror h2 .tiptap-drag-handle {
-    top: 0.15em;
+    top: 0.08em;
   }
 
   .ProseMirror pre .tiptap-drag-handle,
@@ -230,14 +356,14 @@
   .ProseMirror pre,
   .ProseMirror .code-block,
   .ProseMirror [data-type="taskList"] {
-    padding-left: 40px;
-    margin-left: -40px;
+    padding-left: 28px;
+    margin-left: 0;
   }
 
   /* Adjust code block width for mobile */
   .ProseMirror pre,
   .ProseMirror .code-block {
-    max-width: calc(100% - 40px); /* Account for reduced hover area */
+    max-width: calc(100% - 28px); /* Account for reduced hover area */
   }
 }
 
@@ -369,9 +495,9 @@ body.dragging * {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   /* Position for first-line alignment (legacy support) */
   position: absolute;
-  top: 0.125em; /* Align with text baseline/x-height */
+  top: 0.16em; /* Align with text baseline/x-height */
   transform: none; /* Remove centering transform */
-  left: -32px;
+  left: -18px;
   z-index: 10;
   margin: 0;
   will-change: transform;
@@ -406,7 +532,7 @@ body.dragging * {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
+  width: 20px;
   height: 28px;
   border-radius: 6px;
   background: rgba(100, 116, 139, 0.08);
@@ -418,9 +544,9 @@ body.dragging * {
   pointer-events: none;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   /* Position for first-line alignment (React component) */
-  top: 0.125em; /* Align with text baseline/x-height */
+  top: 0.16em; /* Align with text baseline/x-height */
   transform: none; /* Remove centering transform */
-  left: -36px;
+  left: -18px;
   z-index: 10;
   margin: 0;
   will-change: transform;
@@ -540,16 +666,16 @@ body.dragging * {
 @media (max-width: 768px) {
   .drag-handle-button {
     width: 32px;
-    height: 32px;
+    height: 28px;
     /* Maintain first-line alignment on mobile */
-    top: 0.125em;
+    top: 0.16em;
   }
   
   .drag-handle {
-    width: 28px;
+    width: 20px;
     height: 28px;
     /* Maintain first-line alignment on mobile */
-    top: 0.125em;
+    top: 0.16em;
   }
 
   /* Content-specific mobile adjustments for legacy components */
@@ -560,7 +686,7 @@ body.dragging * {
 
   .ProseMirror h2 .drag-handle,
   .ProseMirror h2 .drag-handle-button {
-    top: 0.15em;
+    top: 0.08em;
   }
 
   .ProseMirror pre .drag-handle,
@@ -617,3 +743,37 @@ body.dragging * {
   /* Ensure consistent positioning */
   position: relative;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

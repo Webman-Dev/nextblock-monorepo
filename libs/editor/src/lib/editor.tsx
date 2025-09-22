@@ -248,7 +248,7 @@ export const Editor: React.FC<EditorProps> = ({
       {useEnhancedFloatingMenu ? (
         <EnhancedFloatingMenu editor={editor} wrapperRef={wrapperRef} />
       ) : (
-        <EditorFloatingMenu editor={editor} wrapperRef={wrapperRef} />
+        <EditorFloatingMenu editor={editor} />
       )}
       
       {/* Drag Handle */}
