@@ -7,6 +7,7 @@ import { editorExtensions } from './kit'; // âœ… use kit
 import { EditorBubbleMenu } from './components/menus/BubbleMenu'; // âœ… correct name
 import { EditorFloatingMenu } from './components/menus/FloatingMenu';
 import { ImageToolbar } from './components/menus/ImageToolbar';
+import { TableToolbar } from './components/menus/TableToolbar';
 import { EditorToolbar } from './components/menus/Toolbar';
 import { cn } from '@nextblock-monorepo/utils';
 import '../styles/drag-handle.css'; // âœ… Import enhanced drag handle styles
@@ -111,8 +112,9 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
       <EditorBubbleMenu editor={editor} />
       <EditorFloatingMenu editor={editor} />
       <ImageToolbar editor={editor} />
-          
-        <EditorContent editor={editor} />
+      <TableToolbar editor={editor} />
+
+      <EditorContent editor={editor} />
 
       {/* âœ… Enhanced Character Count with better styling */}
       {showCharacterCount && characterCount && (
