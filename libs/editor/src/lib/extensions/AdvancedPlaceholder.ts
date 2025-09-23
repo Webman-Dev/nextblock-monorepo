@@ -22,6 +22,7 @@ const getParentNode = (context: PlaceholderContext) => {
 };
 
 const getPlaceholderText = (context: PlaceholderContext): string => {
+  const defaultPlaceholder = 'Press "/" to insert or start typing...';
   const { node } = context;
   const nodeName = node.type.name;
   const parent = getParentNode(context);
@@ -62,6 +63,17 @@ const getPlaceholderText = (context: PlaceholderContext): string => {
   if (nodeName === 'codeBlock') {
     const language = node.attrs.language as string | undefined;
     return language ? `Write ${language} code...` : 'Write some code...';
+  }
+
+  if (nodeName === 'paragraph') {
+    const parentName = parent?.type.name;
+    if (!parentName || parentName === 'doc') {
+      return defaultPlaceholder;
+    }
+  }
+
+  if (nodeName === 'doc') {
+    return defaultPlaceholder;
   }
 
   return '';
