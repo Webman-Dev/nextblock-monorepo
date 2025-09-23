@@ -1,6 +1,9 @@
 import Placeholder, { type PlaceholderOptions } from '@tiptap/extension-placeholder';
 import type { Editor } from '@tiptap/core';
+import { isNodeEmpty } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 export type AdvancedPlaceholderOptions = PlaceholderOptions;
 
@@ -19,9 +22,8 @@ const getParentNode = (context: PlaceholderContext) => {
 };
 
 const getPlaceholderText = (context: PlaceholderContext): string => {
-  const { editor, node } = context;
+  const { node } = context;
   const nodeName = node.type.name;
-  const doc = editor.state.doc;
   const parent = getParentNode(context);
 
   if (nodeName === 'heading') {
@@ -37,20 +39,6 @@ const getPlaceholderText = (context: PlaceholderContext): string => {
       default:
         return `Heading ${level}`;
     }
-  }
-
-  if (nodeName === 'paragraph') {
-    const isFirstTopLevelParagraph = doc.firstChild === node;
-
-    if (isFirstTopLevelParagraph) {
-      return "Write, type '/' for commands...";
-    }
-
-    if (parent && parent.type.name === 'blockquote') {
-      return 'Start a quote...';
-    }
-
-    return "Press '/' for commands or just start typing...";
   }
 
   if (nodeName === 'taskItem') {
@@ -71,16 +59,12 @@ const getPlaceholderText = (context: PlaceholderContext): string => {
     return 'Add a list item...';
   }
 
-  if (nodeName === 'blockquote') {
-    return 'Capture a quote...';
-  }
-
   if (nodeName === 'codeBlock') {
     const language = node.attrs.language as string | undefined;
     return language ? `Write ${language} code...` : 'Write some code...';
   }
 
-  return 'Start typing...';
+  return '';
 };
 
 export const AdvancedPlaceholder = Placeholder.extend<AdvancedPlaceholderOptions>({
@@ -96,5 +80,76 @@ export const AdvancedPlaceholder = Placeholder.extend<AdvancedPlaceholderOptions
       showOnlyWhenEditable: true,
       placeholder: (props) => getPlaceholderText(props as PlaceholderContext),
     };
+  },
+
+  addProseMirrorPlugins() {
+    const tableContextNodes = new Set(['table', 'tableCell', 'tableHeader', 'tableRow']);
+    const isWithinTable = (pos: number): boolean => {
+      const resolved = this.editor.state.doc.resolve(pos);
+      for (let depth = resolved.depth; depth >= 0; depth -= 1) {
+        const ancestor = resolved.node(depth);
+        if (tableContextNodes.has(ancestor.type.name)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    return [
+      new Plugin({
+        key: new PluginKey('placeholder'),
+        props: {
+          decorations: ({ doc, selection }) => {
+            const active = this.editor.isEditable || !this.options.showOnlyWhenEditable;
+
+            if (!active) {
+              return null;
+            }
+
+            const { anchor } = selection;
+            const decorations: Decoration[] = [];
+            const isEmptyDoc = this.editor.isEmpty;
+
+            doc.descendants((node, pos) => {
+              if (isWithinTable(pos)) {
+                return this.options.includeChildren;
+              }
+
+              const hasAnchor = anchor >= pos && anchor <= pos + node.nodeSize;
+              const isEmpty = !node.isLeaf && isNodeEmpty(node);
+
+              if ((hasAnchor || !this.options.showOnlyCurrent) && isEmpty) {
+                const classes = [this.options.emptyNodeClass];
+
+                if (isEmptyDoc) {
+                  classes.push(this.options.emptyEditorClass);
+                }
+
+                const placeholderValue =
+                  typeof this.options.placeholder === 'function'
+                    ? this.options.placeholder({
+                        editor: this.editor,
+                        node,
+                        pos,
+                        hasAnchor,
+                      })
+                    : this.options.placeholder;
+
+                const decoration = Decoration.node(pos, pos + node.nodeSize, {
+                  class: classes.join(' '),
+                  'data-placeholder': placeholderValue,
+                });
+
+                decorations.push(decoration);
+              }
+
+              return this.options.includeChildren;
+            });
+
+            return decorations.length ? DecorationSet.create(doc, decorations) : null;
+          },
+        },
+      }),
+    ];
   },
 });

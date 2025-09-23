@@ -1,4 +1,4 @@
-/* libs/editor/src/styles/editor.css */
+﻿/* libs/editor/src/styles/editor.css */
 
 /* Import drag handle styles */
 @import './drag-handle.css';
@@ -47,3 +47,32 @@
   font-size: 0.9rem;
   opacity: 0.5;
 }
+
+/* Suppress placeholder floats inside table cells to keep caret aligned */
+.ProseMirror td .is-empty::before,
+.ProseMirror th .is-empty::before,
+.ProseMirror td.is-empty::before,
+.ProseMirror th.is-empty::before {
+  content: none;
+  display: none;
+  float: none;
+  height: auto;
+}
+
+.ProseMirror td.is-empty,
+.ProseMirror th.is-empty {
+  position: static;
+}
+
+.ProseMirror table .is-empty::before {
+  content: none !important;
+  display: none !important;
+  float: none !important;
+  height: auto !important;
+}
+
+
+.ProseMirror table .is-empty {
+  position: static !important;
+}
+

@@ -1,4 +1,4 @@
-/* Advanced Placeholder Styles */
+﻿/* Advanced Placeholder Styles */
 .is-editor-empty {
   position: relative;
 }
@@ -10,8 +10,10 @@
 .is-empty::before {
   color: var(--muted-foreground);
   content: attr(data-placeholder);
-  float: left;
-  height: 0;
+  position: absolute;
+  left: 0;
+  float: none;
+  height: auto;
   pointer-events: none;
   font-style: italic;
   opacity: 0.6;
@@ -451,3 +453,25 @@
     border-width: 2px;
   }
 }
+
+/* Suppress placeholder rendering within table cells */
+.ProseMirror td .is-empty::before,
+.ProseMirror th .is-empty::before,
+.ProseMirror td.is-empty::before,
+.ProseMirror th.is-empty::before {
+  content: none;
+  display: none;
+}
+
+.ProseMirror table .is-empty::before {
+  content: none !important;
+  display: none !important;
+  float: none !important;
+  height: auto !important;
+}
+
+
+.ProseMirror table .is-empty {
+  position: static !important;
+}
+
