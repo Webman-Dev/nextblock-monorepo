@@ -1,5 +1,5 @@
 // libs/editor/src/lib/kit.ts
-import type { Extensions } from '@tiptap/core'
+import type { Editor, Extensions } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import ImageExtended from './extensions/ImageExtended'
@@ -22,6 +22,10 @@ import Underline from '@tiptap/extension-underline'
 import History from '@tiptap/extension-history'
 import DragHandle from '@tiptap/extension-drag-handle'
 import NodeRange from '@tiptap/extension-node-range'
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
+
+let dragHandleElement: HTMLDivElement | null = null
+let dragHandlePlusButton: HTMLButtonElement | null = null
 
 import { createLowlight } from 'lowlight'
 import css from 'highlight.js/lib/languages/css'
@@ -191,9 +195,14 @@ export const editorExtensions: Extensions = [
   DragHandle.configure({
     render: () => {
       const element = document.createElement('div')
+      dragHandleElement = element
       element.classList.add('tiptap-drag-handle')
+      element.dataset.active = 'false'
+      element.style.visibility = 'hidden'
+      element.style.pointerEvents = 'none'
 
       const plusButton = document.createElement('button')
+      dragHandlePlusButton = plusButton
       plusButton.type = 'button'
       plusButton.className = 'tiptap-drag-handle__button tiptap-drag-handle__plus'
       plusButton.setAttribute('aria-label', 'Insert block')
@@ -262,6 +271,28 @@ export const editorExtensions: Extensions = [
       })
 
       return element
+    },
+    onNodeChange: ({ editor, node }: { editor: Editor; node: ProseMirrorNode | null; pos: number }) => {
+      if (!dragHandleElement) {
+        return
+      }
+
+      const isDocNode = node?.type.name === 'doc'
+      const shouldShow = Boolean(node) && !isDocNode && editor.isFocused && editor.isEditable
+
+      if (shouldShow) {
+        dragHandleElement.dataset.active = 'true'
+        dragHandleElement.style.visibility = ''
+        dragHandleElement.style.pointerEvents = 'auto'
+      } else {
+        dragHandleElement.dataset.active = 'false'
+        dragHandleElement.classList.remove('tiptap-drag-handle--hint')
+        dragHandleElement.removeAttribute('data-menu-open')
+        dragHandleElement.style.visibility = 'hidden'
+        dragHandleElement.style.pointerEvents = 'none'
+
+        dragHandlePlusButton?.setAttribute('aria-expanded', 'false')
+      }
     },
   }),
 ]

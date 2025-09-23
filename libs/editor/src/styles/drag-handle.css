@@ -15,8 +15,22 @@
   font-size: 15px;
   line-height: 1.25;
   transform: translateY(-3px);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
   transition: color 0.18s ease, opacity 0.18s ease;
   z-index: 12;
+}
+
+.tiptap-drag-handle[data-active='true'] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.tiptap-drag-handle[data-active='false'] {
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 .tiptap-drag-handle[data-menu-open='true'],
