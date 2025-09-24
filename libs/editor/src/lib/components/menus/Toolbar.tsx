@@ -104,7 +104,7 @@ const ColorPicker: React.FC<{ editor: Editor }> = ({ editor }) => {
           <Palette className="h-4 w-4" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="p-0" side="bottom" align="start">
+      <PopoverContent className="w-[380px] p-0" side="bottom" align="start">
         <AdvancedColorMenu editor={editor} className="p-4" />
       </PopoverContent>
     </Popover>

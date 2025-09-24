@@ -62,7 +62,7 @@ const LinkEditor: FC<{ editor: Editor }> = ({ editor }) => {
 
 /** Rich color menu shared with the main toolbar */
 const ColorSelector: FC<{ editor: Editor }> = ({ editor }) => (
-  <div className="w-[400px]">
+  <div className="w-[380px]">
     <AdvancedColorMenu
       editor={editor}
       className="p-4"

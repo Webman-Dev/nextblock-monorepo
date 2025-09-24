@@ -368,7 +368,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
   return (
     <div
       className={cn(
-        "flex w-full max-w-[400px] flex-col gap-3 sm:gap-4",
+        "flex w-full sm:w-auto flex-col gap-3 sm:gap-4",
         className
       )}
     >
@@ -402,7 +402,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
         <div className={styles.pickerRoot}>
           <HexColorPicker color={activeColor.hex} onChange={handleWheelChange} className={styles.picker} />
         </div>
-        <div className="flex w-full flex-col gap-2 text-[11px] sm:w-auto sm:min-w-[140px] sm:max-w-[200px]">
+        <div className="flex w-full flex-col gap-2 text-[11px] sm:w-[150px]">
           <div className="space-y-1">
             <p className="font-medium text-muted-foreground">HEX</p>
             <Input
