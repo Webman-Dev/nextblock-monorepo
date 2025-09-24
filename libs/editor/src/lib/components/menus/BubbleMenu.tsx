@@ -178,7 +178,10 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
       });
     };
 
-    const handleBlur = () => {
+    const handleBlur = ({ event }: { event: FocusEvent }) => {
+      if (refs.floating.current && event.relatedTarget && refs.floating.current.contains(event.relatedTarget as Node)) {
+        return;
+      }
       setVisible(false);
       setReady(false);
     };
@@ -304,18 +307,15 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
               className={`p-1.5 rounded hover:bg-accent transition-colors duration-100 flex items-center justify-center ${editor.isActive('textStyle') || editor.isActive('highlight') ? 'bg-accent' : ''}`}
               aria-label="Color / highlight"
               title="Color / highlight"
-              onMouseDown={(e) => e.preventDefault()}
             >
               <Palette className="h-4 w-4 pointer-events-none" />
             </button>
           </PopoverTrigger>
           <PopoverContent
+            onMouseDown={(e) => e.preventDefault()} // Add this line
             className="w-auto p-0"
             side="top"
             align="start"
-            onInteractOutside={(e) => {
-              e.preventDefault();
-            }}
           >
             <ColorSelector editor={editor} />
           </PopoverContent>
