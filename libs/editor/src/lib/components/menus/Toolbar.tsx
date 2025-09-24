@@ -21,6 +21,7 @@ import {
   DropdownMenuLabel,
 } from '@nextblock-monorepo/ui/dropdown-menu';
 import { UndoRedoButtons } from '../ui/UndoRedoButtons';
+import { AdvancedColorMenu } from '../ui/AdvancedColorMenu';
 
 interface EditorToolbarProps {
   editor: Editor;
@@ -90,72 +91,21 @@ const FontSizeDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
 };
 
 const ColorPicker: React.FC<{ editor: Editor }> = ({ editor }) => {
-  const colors = [
-    '#000000', '#374151', '#6B7280', '#9CA3AF', '#D1D5DB',
-    '#EF4444', '#F97316', '#EAB308', '#22C55E', '#3B82F6',
-    '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#06B6D4',
-  ];
-  
-  const highlights = [
-    '#FEF3C7', '#FED7D7', '#D1FAE5', '#DBEAFE', '#E0E7FF',
-    '#F3E8FF', '#FCE7F3', '#FEF2F2', '#F0FDF4', '#ECFDF5',
-  ];
-
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0"
+          aria-label="Color menu"
+          title="Color menu"
+        >
           <Palette className="h-4 w-4" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-64">
-        <div className="space-y-3">
-          <div>
-            <h4 className="text-sm font-medium mb-2">Text Color</h4>
-            <div className="grid grid-cols-5 gap-1">
-              {colors.map((color) => (
-                <button
-                  key={color}
-                  onClick={() => editor.chain().focus().setColor(color).run()}
-                  className="w-8 h-8 rounded border-2 border-transparent hover:border-gray-300"
-                  style={{ backgroundColor: color }}
-                  title={color}
-                />
-              ))}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => editor.chain().focus().unsetColor().run()}
-              className="mt-2 w-full"
-            >
-              Remove Color
-            </Button>
-          </div>
-          
-          <div>
-            <h4 className="text-sm font-medium mb-2">Highlight</h4>
-            <div className="grid grid-cols-5 gap-1">
-              {highlights.map((color) => (
-                <button
-                  key={color}
-                  onClick={() => editor.chain().focus().setHighlight({ color }).run()}
-                  className="w-8 h-8 rounded border-2 border-transparent hover:border-gray-300"
-                  style={{ backgroundColor: color }}
-                  title={color}
-                />
-              ))}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => editor.chain().focus().unsetHighlight().run()}
-              className="mt-2 w-full"
-            >
-              Remove Highlight
-            </Button>
-          </div>
-        </div>
+      <PopoverContent className="p-0" side="bottom" align="start">
+        <AdvancedColorMenu editor={editor} className="p-4" />
       </PopoverContent>
     </Popover>
   );
@@ -483,14 +433,6 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
     </div>
   );
 };
-
-
-
-
-
-
-
-
 
 
 

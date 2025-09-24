@@ -83,6 +83,7 @@
     "prettier": "^2.6.2",
     "react": "19.0.0",
     "react-color": "^2.19.3",
+    "react-colorful": "^5.6.1",
     "react-dom": "19.0.0",
     "react-transition-group": "^4.4.5",
     "server-only": "^0.0.1",
@@ -179,3 +180,4 @@
   },
   "packageManager": "pnpm@10.8.0+sha512.0e82714d1b5b43c74610193cb20734897c1d00de89d0e18420aebc5977fa13d780a9cb05734624e81ebd81cc876cd464794850641c48b9544326b5622ca29971"
 }
+
