@@ -62,7 +62,7 @@ const LinkEditor: FC<{ editor: Editor }> = ({ editor }) => {
 
 /** Rich color menu shared with the main toolbar */
 const ColorSelector: FC<{ editor: Editor }> = ({ editor }) => (
-  <div className="w-[380px]">
+  <div className="w-[380px]" onMouseDown={(e) => e.preventDefault()}>
     <AdvancedColorMenu
       editor={editor}
       className="p-4"
@@ -309,7 +309,14 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
               <Palette className="h-4 w-4 pointer-events-none" />
             </button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" side="top" align="start">
+          <PopoverContent
+            className="w-auto p-0"
+            side="top"
+            align="start"
+            onInteractOutside={(e) => {
+              e.preventDefault();
+            }}
+          >
             <ColorSelector editor={editor} />
           </PopoverContent>
         </Popover>
