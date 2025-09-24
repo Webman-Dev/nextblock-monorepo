@@ -1,0 +1,512 @@
+"use client";
+import styles from "./AdvancedColorMenu.module.css";
+
+import { useCallback, useEffect, useState } from "react";
+import type { Editor } from "@tiptap/core";
+import { HexColorPicker } from "react-colorful";
+
+import { Button } from "@nextblock-monorepo/ui/button";
+import { Input } from "@nextblock-monorepo/ui/input";
+import { cn } from "@nextblock-monorepo/utils";
+
+type Mode = "text" | "highlight";
+
+type ColorState = {
+  source: string;
+  hex: string;
+  rgb: string;
+  hsl: string;
+  alpha: number;
+};
+
+interface AdvancedColorMenuProps {
+  editor: Editor;
+  className?: string;
+  initialMode?: Mode;
+}
+
+const DEFAULT_TEXT_COLOR = "#1F2937"; // Slate-800
+const DEFAULT_HIGHLIGHT_COLOR = "#FFF7D1";
+
+const HIGHLIGHT_PRESETS = [
+  "#FFF7D1",
+  "#FFEAE3",
+  "#DCFCE7",
+  "#DBEAFE",
+  "#F5F3FF",
+  "#F1F5F9",
+];
+
+const THEME_COLOR_GROUPS = [
+  {
+    title: "Brand",
+    colors: [
+      { label: "Primary", value: "hsl(var(--primary))" },
+      { label: "Secondary", value: "hsl(var(--secondary))" },
+      { label: "Accent", value: "hsl(var(--accent))" },
+      { label: "Ring", value: "hsl(var(--ring))" },
+    ],
+  },
+  {
+    title: "Neutrals",
+    colors: [
+      { label: "Foreground", value: "hsl(var(--foreground))" },
+      { label: "Muted", value: "hsl(var(--muted-foreground))" },
+      { label: "Background", value: "hsl(var(--background))" },
+      { label: "Card", value: "hsl(var(--card))" },
+    ],
+  },
+  {
+    title: "States",
+    colors: [
+      { label: "Warning", value: "hsl(var(--warning))" },
+      { label: "Destructive", value: "hsl(var(--destructive))" },
+      { label: "Success", value: "hsl(var(--chart-2))" },
+      { label: "Info", value: "hsl(var(--chart-5))" },
+    ],
+  },
+  {
+    title: "Utility",
+    colors: [
+      { label: "Secondary FG", value: "hsl(var(--secondary-foreground))" },
+      { label: "Accent FG", value: "hsl(var(--accent-foreground))" },
+      { label: "Primary FG", value: "hsl(var(--primary-foreground))" },
+      { label: "Border", value: "hsl(var(--border))" },
+    ],
+  },
+] as const;
+
+const HEX_PATTERN = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+function normalizeHex(value: string) {
+  const raw = value.replace("#", "").trim();
+  if (raw.length === 3 || raw.length === 4) {
+    const doubled = raw
+      .split("")
+      .map((char) => char + char)
+      .join("");
+    return `#${doubled.toUpperCase()}`;
+  }
+  if (raw.length === 6 || raw.length === 8) {
+    return `#${raw.toUpperCase()}`;
+  }
+  return value;
+}
+
+function hexToRgba(hex: string) {
+  const normalized = normalizeHex(hex).replace("#", "");
+  if (normalized.length !== 6 && normalized.length !== 8) return null;
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  const a = normalized.length === 8 ? parseInt(normalized.slice(6, 8), 16) / 255 : 1;
+  return { r, g, b, a };
+}
+
+function rgbToHex(r: number, g: number, b: number) {
+  return `#${[r, g, b]
+    .map((component) => Math.max(0, Math.min(255, Math.round(component)))
+      .toString(16)
+      .padStart(2, "0"))
+    .join("")
+    .toUpperCase()}`;
+}
+
+function round(value: number, precision = 2) {
+  const factor = 10 ** precision;
+  return Math.round(value * factor) / factor;
+}
+
+function rgbaToHsl(r: number, g: number, b: number, alpha = 1) {
+  const rNorm = r / 255;
+  const gNorm = g / 255;
+  const bNorm = b / 255;
+  const max = Math.max(rNorm, gNorm, bNorm);
+  const min = Math.min(rNorm, gNorm, bNorm);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+
+    switch (max) {
+      case rNorm:
+        h = (gNorm - bNorm) / d + (gNorm < bNorm ? 6 : 0);
+        break;
+      case gNorm:
+        h = (bNorm - rNorm) / d + 2;
+        break;
+      case bNorm:
+        h = (rNorm - gNorm) / d + 4;
+        break;
+      default:
+        break;
+    }
+
+    h /= 6;
+  }
+
+  const hue = Math.round(h * 360);
+  const saturation = Math.round(s * 100);
+  const lightness = Math.round(l * 100);
+
+  if (alpha !== 1) {
+    return `hsla(${hue}, ${saturation}%, ${lightness}%, ${round(alpha, 2)})`;
+  }
+
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+}
+
+function getComputedRgba(value: string) {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return null;
+  }
+
+  const element = document.createElement("span");
+  element.style.color = "";
+  element.style.color = value;
+
+  if (!element.style.color) {
+    return null;
+  }
+
+  element.style.position = "absolute";
+  element.style.visibility = "hidden";
+  element.style.pointerEvents = "none";
+  document.body.appendChild(element);
+  const computedColor = getComputedStyle(element).color;
+  document.body.removeChild(element);
+
+  const match = computedColor.match(/rgba?\(([^)]+)\)/i);
+  if (!match) {
+    return null;
+  }
+
+  const [r, g, b, a] = match[1]
+    .split(",")
+    .map((component) => component.trim())
+    .map((component, index) => (index === 3 ? parseFloat(component) : parseInt(component, 10)));
+
+  if ([r, g, b].some((component) => Number.isNaN(component))) {
+    return null;
+  }
+
+  return {
+    r: r as number,
+    g: g as number,
+    b: b as number,
+    a: typeof a === "number" && !Number.isNaN(a) ? (a as number) : 1,
+  };
+}
+
+function parseColor(value: string | undefined): ColorState | null {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (HEX_PATTERN.test(trimmed)) {
+    const normalized = normalizeHex(trimmed);
+    const rgba = hexToRgba(normalized);
+    if (!rgba) {
+      return null;
+    }
+
+    const sixDigit = `#${normalized.replace("#", "").slice(0, 6)}`;
+
+    return {
+      source: normalized,
+      hex: sixDigit,
+      rgb: rgba.a === 1
+        ? `rgb(${rgba.r}, ${rgba.g}, ${rgba.b})`
+        : `rgba(${rgba.r}, ${rgba.g}, ${rgba.b}, ${round(rgba.a, 2)})`,
+      hsl: rgbaToHsl(rgba.r, rgba.g, rgba.b, rgba.a),
+      alpha: rgba.a,
+    };
+  }
+
+  const computed = getComputedRgba(trimmed);
+  if (!computed) {
+    return null;
+  }
+
+  return {
+    source: trimmed,
+    hex: rgbToHex(computed.r, computed.g, computed.b),
+    rgb: computed.a === 1
+      ? `rgb(${computed.r}, ${computed.g}, ${computed.b})`
+      : `rgba(${computed.r}, ${computed.g}, ${computed.b}, ${round(computed.a, 2)})`,
+    hsl: rgbaToHsl(computed.r, computed.g, computed.b, computed.a),
+    alpha: computed.a,
+  };
+}
+
+const defaultTextState = parseColor(DEFAULT_TEXT_COLOR)!;
+const defaultHighlightState = parseColor(DEFAULT_HIGHLIGHT_COLOR)!;
+
+export function AdvancedColorMenu({ editor, className, initialMode = "text" }: AdvancedColorMenuProps) {
+  const [mode, setMode] = useState<Mode>(initialMode);
+  const [textColor, setTextColor] = useState<ColorState>(defaultTextState);
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
+  const [highlightColor, setHighlightColor] = useState<ColorState>(defaultHighlightState);
+  const [hexDraft, setHexDraft] = useState<string>(defaultTextState.hex);
+  const [hexInvalid, setHexInvalid] = useState(false);
+  const [customInput, setCustomInput] = useState("");
+  const [inputError, setInputError] = useState<string | null>(null);
+
+  const activeColor = mode === "text" ? textColor : highlightColor;
+
+  useEffect(() => {
+    const updateFromSelection = () => {
+      const textStyleColor = editor.getAttributes("textStyle").color as string | undefined;
+      const highlightColorValue = editor.getAttributes("highlight").color as string | undefined;
+
+      setTextColor(parseColor(textStyleColor) ?? defaultTextState);
+      setHighlightColor(parseColor(highlightColorValue) ?? defaultHighlightState);
+    };
+
+    updateFromSelection();
+
+    editor.on("selectionUpdate", updateFromSelection);
+    editor.on("transaction", updateFromSelection);
+
+    return () => {
+      editor.off("selectionUpdate", updateFromSelection);
+      editor.off("transaction", updateFromSelection);
+    };
+  }, [editor]);
+
+  useEffect(() => {
+    setHexDraft(activeColor.hex);
+    setHexInvalid(false);
+  }, [activeColor.hex]);
+
+  const applyColor = useCallback(
+    (targetMode: Mode, color: ColorState) => {
+      if (targetMode === "text") {
+        setTextColor(color);
+        editor.chain().focus().setColor(color.source).run();
+      } else {
+        setHighlightColor(color);
+        editor.chain().focus().setHighlight({ color: color.source }).run();
+      }
+
+      if (targetMode === mode) {
+        setHexDraft(color.hex);
+      }
+    },
+    [editor, mode]
+  );
+
+  const handleWheelChange = useCallback(
+    (value: string) => {
+      const parsed = parseColor(value);
+      if (!parsed) {
+        return;
+      }
+
+      applyColor(mode, parsed);
+      setHexInvalid(false);
+      setInputError(null);
+      setCustomInput("");
+    },
+    [applyColor, mode]
+  );
+
+  const handleThemePick = useCallback(
+    (value: string) => {
+      const parsed = parseColor(value);
+      if (!parsed) {
+        setInputError("Unable to parse theme color.");
+        return;
+      }
+
+      applyColor(mode, parsed);
+      setInputError(null);
+      setHexInvalid(false);
+      setCustomInput("");
+    },
+    [applyColor, mode]
+  );
+
+  const handleCustomSubmit = useCallback(() => {
+    const value = customInput.trim();
+    if (!value) {
+      setInputError("Enter a color value to apply.");
+      return;
+    }
+
+    const parsed = parseColor(value);
+    if (!parsed) {
+      setInputError("Unsupported color format.");
+      return;
+    }
+
+    applyColor(mode, parsed);
+    setInputError(null);
+    setHexInvalid(false);
+    setCustomInput("");
+  }, [applyColor, customInput, mode]);
+
+  const handleReset = useCallback(
+    (targetMode: Mode) => {
+      const fallback = targetMode === "text" ? defaultTextState : defaultHighlightState;
+
+      applyColor(targetMode, fallback);
+      setInputError(null);
+      setHexInvalid(false);
+      setCustomInput("");
+    },
+    [applyColor]
+  );
+
+  return (
+    <div
+      className={cn(
+        "flex w-full max-w-[400px] flex-col gap-3 sm:gap-4",
+        className
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="inline-flex items-center gap-1 rounded-md bg-muted/60 p-1">
+          <Button
+            type="button"
+            variant={mode === "text" ? "default" : "ghost"}
+            size="sm"
+            className="h-7 px-3 text-xs"
+            onClick={() => setMode("text")}
+          >
+            Text
+          </Button>
+          <Button
+            type="button"
+            variant={mode === "highlight" ? "default" : "ghost"}
+            size="sm"
+            className="h-7 px-3 text-xs"
+            onClick={() => setMode("highlight")}
+          >
+            Highlight
+          </Button>
+        </div>
+        <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleReset(mode)}>
+          Reset
+        </Button>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+        <div className={styles.pickerRoot}>
+          <HexColorPicker color={activeColor.hex} onChange={handleWheelChange} className={styles.picker} />
+        </div>
+        <div className="flex w-full flex-col gap-2 text-[11px] sm:w-auto sm:min-w-[140px] sm:max-w-[200px]">
+          <div className="space-y-1">
+            <p className="font-medium text-muted-foreground">HEX</p>
+            <Input
+              value={hexDraft}
+              onChange={(event) => {
+                const value = event.target.value;
+                setHexDraft(value);
+                if (HEX_PATTERN.test(value)) {
+                  const parsed = parseColor(value);
+                  if (parsed) {
+                    applyColor(mode, parsed);
+                    setHexInvalid(false);
+                  }
+                } else {
+                  setHexInvalid(true);
+                }
+              }}
+              onBlur={() => {
+                if (HEX_PATTERN.test(hexDraft)) {
+                  return;
+                }
+                setHexDraft(activeColor.hex);
+                setHexInvalid(false);
+              }}
+              spellCheck={false}
+              className={cn("h-8 w-full text-xs", hexInvalid && "border-destructive focus-visible:ring-destructive")}
+            />
+          </div>
+          <div className="space-y-1">
+            <p className="font-medium text-muted-foreground">RGB</p>
+            <Input value={activeColor.rgb} readOnly className="h-8 w-full text-xs" />
+          </div>
+          <div className="space-y-1">
+            <p className="font-medium text-muted-foreground">HSL</p>
+            <Input value={activeColor.hsl} readOnly className="h-8 w-full text-xs" />
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-muted-foreground">Custom color</p>
+        <div className="flex items-center gap-2">
+          <Input
+            value={customInput}
+            onChange={(event) => setCustomInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                handleCustomSubmit();
+              }
+            }}
+            placeholder="Paste hex, rgb(), hsl(), or hsl(var(--token))"
+            className="h-8 text-xs"
+          />
+          <Button type="button" size="sm" className="h-8" onClick={handleCustomSubmit}>
+            Apply
+          </Button>
+        </div>
+        {inputError ? <p className="text-[11px] text-destructive">{inputError}</p> : null}
+      </div>
+
+      <div className="space-y-1.5">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Theme colors</p>
+        <div className="space-y-1">
+          {THEME_COLOR_GROUPS.map((group) => (
+            <div key={group.title} className="flex items-center justify-between gap-2">
+              <span className="w-16 shrink-0 text-[11px] font-medium text-muted-foreground/80">{group.title}</span>
+              <div className="flex items-center gap-1.5">
+                {group.colors.map((token) => (
+                  <button
+                    key={token.label}
+                    type="button"
+                    onClick={() => handleThemePick(token.value)}
+                    className="h-6 w-6 rounded border border-border bg-background shadow-sm transition hover:border-primary/40 hover:shadow-sm"
+                    style={{ background: token.value }}
+                    aria-label={`${group.title} color ${token.label}`}
+                    title={`${group.title} color ${token.label}`}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {mode === "highlight" ? (
+        <div className="space-y-2">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Highlight presets</p>
+          <div className="flex flex-wrap gap-1.5">
+            {HIGHLIGHT_PRESETS.map((color) => (
+              <button
+                key={color}
+                type="button"
+                onClick={() => handleThemePick(color)}
+                className="flex items-center gap-1 rounded-full border bg-background px-2 py-1 text-[11px] shadow-sm transition hover:border-primary/40 hover:shadow-sm"
+              >
+                <span className="h-3.5 w-3.5 rounded-full border" style={{ background: color }} aria-hidden />
+                {color}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+
+}

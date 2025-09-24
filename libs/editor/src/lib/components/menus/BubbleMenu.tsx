@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@nextblock-monorepo/ui/popover';
 import { Button } from '@nextblock-monorepo/ui/button';
+import { AdvancedColorMenu } from '../ui/AdvancedColorMenu';
 
 interface BubbleMenuComponentProps {
   editor: Editor;
@@ -59,59 +60,16 @@ const LinkEditor: FC<{ editor: Editor }> = ({ editor }) => {
   );
 };
 
-/** Text color + highlight picker */
-const ColorSelector: FC<{ editor: Editor }> = ({ editor }) => {
-  const colors = ['#000000', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
-  const highlights = ['#ffff00', '#ffc0cb', '#add8e6', '#90ee90', '#ffa07a'];
-
-  return (
-    <div className="p-2" onMouseDown={(e) => e.preventDefault() /* 🔧 keep focus */}>
-      <div className="mb-2">
-        <p className="text-xs font-semibold mb-1">Text Color</p>
-        <div className="flex gap-1">
-          {colors.map((color) => (
-            <button
-              key={color}
-              type="button" /* 🔧 */
-              onClick={() => editor.chain().focus().setColor(color).run()}
-              className={`w-6 h-6 rounded-full border-2 ${
-                editor.isActive('textStyle', { color }) ? 'border-primary' : 'border-transparent'
-              }`}
-              style={{ backgroundColor: color }}
-              aria-label={`Set text color ${color}`}
-              title={`Text color ${color}`}
-            />
-          ))}
-          <Button type="button" size="icon" variant="ghost" onClick={() => editor.chain().focus().unsetColor().run()}>
-            X
-          </Button>
-        </div>
-      </div>
-
-      <div>
-        <p className="text-xs font-semibold mb-1">Highlight</p>
-        <div className="flex gap-1">
-          {highlights.map((color) => (
-            <button
-              key={color}
-              type="button" /* 🔧 */
-              onClick={() => editor.chain().focus().setHighlight({ color }).run()}
-              className={`w-6 h-6 rounded-full border-2 ${
-                editor.isActive('highlight', { color }) ? 'border-primary' : 'border-transparent'
-              }`}
-              style={{ backgroundColor: color }}
-              aria-label={`Set highlight ${color}`}
-              title={`Highlight ${color}`}
-            />
-          ))}
-          <Button type="button" size="icon" variant="ghost" onClick={() => editor.chain().focus().unsetHighlight().run()}>
-            X
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-};
+/** Rich color menu shared with the main toolbar */
+const ColorSelector: FC<{ editor: Editor }> = ({ editor }) => (
+  <div className="w-[400px]">
+    <AdvancedColorMenu
+      editor={editor}
+      className="p-4"
+      initialMode={editor.isActive('highlight') ? 'highlight' : 'text'}
+    />
+  </div>
+);
 
 /** Font size selector */
 const FontSizeSelector: FC<{ editor: Editor }> = ({ editor }) => {
@@ -362,3 +320,6 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
     </div>
   );
 };
+
+
+
