@@ -76,3 +76,14 @@
   position: static !important;
 }
 
+
+/* Custom text selection style */
+::selection {
+  background: rgba(0, 0, 0, 0.05);
+  color: inherit;
+}
+
+::-moz-selection {
+  background: rgba(0, 0, 0, 0.05);
+  color: inherit;
+}

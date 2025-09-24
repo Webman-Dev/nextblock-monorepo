@@ -256,8 +256,6 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
   const [highlightColor, setHighlightColor] = useState<ColorState>(defaultHighlightState);
   const [hexDraft, setHexDraft] = useState<string>(defaultTextState.hex);
   const [hexInvalid, setHexInvalid] = useState(false);
-  const [customInput, setCustomInput] = useState("");
-  const [inputError, setInputError] = useState<string | null>(null);
 
   const activeColor = mode === "text" ? textColor : highlightColor;
 
@@ -312,8 +310,6 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
 
       applyColor(mode, parsed);
       setHexInvalid(false);
-      setInputError(null);
-      setCustomInput("");
     },
     [applyColor, mode]
   );
@@ -322,51 +318,29 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
     (value: string) => {
       const parsed = parseColor(value);
       if (!parsed) {
-        setInputError("Unable to parse theme color.");
         return;
       }
 
       applyColor(mode, parsed);
-      setInputError(null);
       setHexInvalid(false);
-      setCustomInput("");
     },
     [applyColor, mode]
   );
 
-  const handleCustomSubmit = useCallback(() => {
-    const value = customInput.trim();
-    if (!value) {
-      setInputError("Enter a color value to apply.");
-      return;
-    }
-
-    const parsed = parseColor(value);
-    if (!parsed) {
-      setInputError("Unsupported color format.");
-      return;
-    }
-
-    applyColor(mode, parsed);
-    setInputError(null);
-    setHexInvalid(false);
-    setCustomInput("");
-  }, [applyColor, customInput, mode]);
 
   const handleReset = useCallback(
     (targetMode: Mode) => {
       const fallback = targetMode === "text" ? defaultTextState : defaultHighlightState;
 
       applyColor(targetMode, fallback);
-      setInputError(null);
       setHexInvalid(false);
-      setCustomInput("");
     },
     [applyColor]
   );
 
   return (
     <div
+      onMouseDown={(e) => e.preventDefault()}
       className={cn(
         "flex w-full sm:w-auto flex-col gap-3 sm:gap-4",
         className
@@ -442,27 +416,6 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
         </div>
       </div>
 
-      <div className="space-y-2">
-        <p className="text-xs font-medium text-muted-foreground">Custom color</p>
-        <div className="flex items-center gap-2">
-          <Input
-            value={customInput}
-            onChange={(event) => setCustomInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                handleCustomSubmit();
-              }
-            }}
-            placeholder="Paste hex, rgb(), hsl(), or hsl(var(--token))"
-            className="h-8 text-xs"
-          />
-          <Button type="button" size="sm" className="h-8" onClick={handleCustomSubmit}>
-            Apply
-          </Button>
-        </div>
-        {inputError ? <p className="text-[11px] text-destructive">{inputError}</p> : null}
-      </div>
 
       <div className="space-y-1.5">
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Theme colors</p>
