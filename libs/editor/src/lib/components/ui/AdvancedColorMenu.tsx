@@ -142,8 +142,6 @@ function rgbaToHsl(r: number, g: number, b: number, alpha = 1) {
       case bNorm:
         h = (rNorm - gNorm) / d + 4;
         break;
-      default:
-        break;
     }
 
     h /= 6;
@@ -195,10 +193,10 @@ function getComputedRgba(value: string) {
   }
 
   return {
-    r: r as number,
-    g: g as number,
-    b: b as number,
-    a: typeof a === "number" && !Number.isNaN(a) ? (a as number) : 1,
+    r,
+    g,
+    b,
+    a: typeof a === "number" && !Number.isNaN(a) ? a : 1,
   };
 }
 
@@ -306,7 +304,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
       editor.off("selectionUpdate", updateFromSelection);
       editor.off("transaction", updateFromSelection);
     };
-  }, [editor, focusedInput]);
+  }, [editor, focusedInput, mode]);
 
   useEffect(() => {
     if (focusedInput !== "hex") setHexDraft(activeColor.hex);
@@ -336,7 +334,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
         chain.setHighlight({ color: color.source }).run();
       }
     },
-    [editor]
+    [editor, setTextColor, setHighlightColor]
   );
 
   const handleDebouncedColorApply = useCallback(
@@ -362,7 +360,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
       applyColor(mode, parsed, false);
       setHexInvalid(false);
     },
-    [applyColor, mode]
+    [applyColor, mode, setHexInvalid]
   );
 
   const handleThemePick = useCallback(
@@ -376,7 +374,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
       applyColor(mode, parsed);
       setHexInvalid(false);
     },
-    [applyColor, mode]
+    [applyColor, mode, setHexInvalid]
   );
 
 
