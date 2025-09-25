@@ -32,9 +32,7 @@ const HIGHLIGHT_PRESETS = [
   "#FFF7D1",
   "#FFEAE3",
   "#DCFCE7",
-  "#DBEAFE",
-  "#F5F3FF",
-  "#F1F5F9",
+  "#DBEAFE"
 ];
 
 const THEME_COLOR_GROUPS = [
@@ -270,10 +268,12 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
   const [mode, setMode] = useState<Mode>(initialMode);
   const [focusedInput, setFocusedInput] = useState<"hex" | "rgb" | "hsl" | null>(null);
   const [textColor, setTextColor] = useState<ColorState>(defaultTextState);
+  const [highlightColor, setHighlightColor] = useState<ColorState>(defaultHighlightState);
+  const [initialColor, setInitialColor] = useState<ColorState>(defaultTextState);
+
   useEffect(() => {
     setMode(initialMode);
   }, [initialMode]);
-  const [highlightColor, setHighlightColor] = useState<ColorState>(defaultHighlightState);
   const [hexDraft, setHexDraft] = useState<string>(defaultTextState.hex);
   const [hexInvalid, setHexInvalid] = useState(false);
   const [rgbDraft, setRgbDraft] = useState<string>(defaultTextState.rgb);
@@ -289,8 +289,12 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
       const textStyleColor = editor.getAttributes("textStyle").color as string | undefined;
       const highlightColorValue = editor.getAttributes("highlight").color as string | undefined;
 
-      setTextColor(parseColor(textStyleColor) ?? defaultTextState);
-      setHighlightColor(parseColor(highlightColorValue) ?? defaultHighlightState);
+      const newTextColor = parseColor(textStyleColor) ?? defaultTextState;
+      const newHighlightColor = parseColor(highlightColorValue) ?? defaultHighlightState;
+
+      setTextColor(newTextColor);
+      setHighlightColor(newHighlightColor);
+      setInitialColor(mode === "text" ? newTextColor : newHighlightColor);
     };
 
     updateFromSelection();
@@ -376,16 +380,6 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
   );
 
 
-  const handleReset = useCallback(
-    (targetMode: Mode) => {
-      const fallback = targetMode === "text" ? defaultTextState : defaultHighlightState;
-
-      applyColor(targetMode, fallback);
-      setHexInvalid(false);
-    },
-    [applyColor]
-  );
-
   return (
     <div
       className={cn(
@@ -414,9 +408,23 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
             Highlight
           </Button>
         </div>
-        <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleReset(mode)}>
-          Reset
-        </Button>
+        <div className="flex items-center">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => {
+              if (mode === 'text') {
+                editor.chain().focus().unsetColor().run();
+              } else {
+                editor.chain().focus().unsetHighlight().run();
+              }
+            }}
+          >
+            Remove Color
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
