@@ -312,7 +312,7 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
             </button>
           </PopoverTrigger>
           <PopoverContent
-            onMouseDown={(e) => e.preventDefault()}
+            onFocusOutside={(e) => e.preventDefault()}
             className="w-auto p-0"
             side="top"
             align="start"
