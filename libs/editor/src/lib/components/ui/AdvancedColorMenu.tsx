@@ -285,6 +285,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
 
   useEffect(() => {
     const updateFromSelection = () => {
+      if (focusedInput) return;
       const textStyleColor = editor.getAttributes("textStyle").color as string | undefined;
       const highlightColorValue = editor.getAttributes("highlight").color as string | undefined;
 
@@ -301,7 +302,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
       editor.off("selectionUpdate", updateFromSelection);
       editor.off("transaction", updateFromSelection);
     };
-  }, [editor]);
+  }, [editor, focusedInput]);
 
   useEffect(() => {
     if (focusedInput !== "hex") setHexDraft(activeColor.hex);
@@ -316,13 +317,19 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
   }, [activeColor, focusedInput]);
 
   const applyColor = useCallback(
-    (targetMode: Mode, color: ColorState) => {
+    (targetMode: Mode, color: ColorState, shouldFocus = true) => {
+      const chain = editor.chain();
+
+      if (shouldFocus) {
+        chain.focus();
+      }
+
       if (targetMode === "text") {
         setTextColor(color);
-        editor.chain().focus().setColor(color.source).run();
+        chain.setColor(color.source).run();
       } else {
         setHighlightColor(color);
-        editor.chain().focus().setHighlight({ color: color.source }).run();
+        chain.setHighlight({ color: color.source }).run();
       }
     },
     [editor]
@@ -334,7 +341,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
         clearTimeout(debounceTimeoutRef.current);
       }
       debounceTimeoutRef.current = setTimeout(() => {
-        applyColor(targetMode, color);
+        applyColor(targetMode, color, false);
       }, 300);
     },
     [applyColor]
@@ -348,7 +355,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
         return;
       }
 
-      applyColor(mode, parsed);
+      applyColor(mode, parsed, false);
       setHexInvalid(false);
     },
     [applyColor, mode]
