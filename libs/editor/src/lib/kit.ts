@@ -272,7 +272,7 @@ export const editorExtensions: Extensions = [
 
       return element
     },
-    onNodeChange: ({ editor, node }: { editor: Editor; node: ProseMirrorNode | null; pos: number }) => {
+    onNodeChange: ({ editor, node }: { editor: Editor; node: ProseMirrorNode | null }) => {
       if (!dragHandleElement) {
         return
       }
