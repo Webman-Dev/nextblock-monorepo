@@ -1,7 +1,7 @@
 "use client";
 import styles from "./AdvancedColorMenu.module.css";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/core";
 import { HexColorPicker } from "react-colorful";
 
@@ -77,6 +77,9 @@ const THEME_COLOR_GROUPS = [
 ] as const;
 
 const HEX_PATTERN = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+const HEX_INPUT_PATTERN = /^#[0-9a-f]{6}$/i;
+const RGB_PATTERN = /^rgba?\((\s*\d{1,3}\s*,){2}\s*\d{1,3}\s*(,\s*(0|1|0?\.\d+)\s*)?\)$/i;
+const HSL_PATTERN = /^hsla?\((\s*\d{1,3}\s*,)(\s*\d{1,3}%\s*,)\s*\d{1,3}%\s*(,\s*(0|1|0?\.\d+)\s*)?\)$/i;
 
 function normalizeHex(value: string) {
   const raw = value.replace("#", "").trim();
@@ -228,6 +231,21 @@ function parseColor(value: string | undefined): ColorState | null {
     };
   }
 
+  if (RGB_PATTERN.test(trimmed) || HSL_PATTERN.test(trimmed)) {
+    const computed = getComputedRgba(trimmed);
+    if (!computed) return null;
+
+    return {
+      source: trimmed,
+      hex: rgbToHex(computed.r, computed.g, computed.b),
+      rgb: computed.a === 1
+        ? `rgb(${computed.r}, ${computed.g}, ${computed.b})`
+        : `rgba(${computed.r}, ${computed.g}, ${computed.b}, ${round(computed.a, 2)})`,
+      hsl: rgbaToHsl(computed.r, computed.g, computed.b, computed.a),
+      alpha: computed.a,
+    };
+  }
+
   const computed = getComputedRgba(trimmed);
   if (!computed) {
     return null;
@@ -248,7 +266,9 @@ const defaultTextState = parseColor(DEFAULT_TEXT_COLOR)!;
 const defaultHighlightState = parseColor(DEFAULT_HIGHLIGHT_COLOR)!;
 
 export function AdvancedColorMenu({ editor, className, initialMode = "text" }: AdvancedColorMenuProps) {
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [mode, setMode] = useState<Mode>(initialMode);
+  const [focusedInput, setFocusedInput] = useState<"hex" | "rgb" | "hsl" | null>(null);
   const [textColor, setTextColor] = useState<ColorState>(defaultTextState);
   useEffect(() => {
     setMode(initialMode);
@@ -256,6 +276,10 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
   const [highlightColor, setHighlightColor] = useState<ColorState>(defaultHighlightState);
   const [hexDraft, setHexDraft] = useState<string>(defaultTextState.hex);
   const [hexInvalid, setHexInvalid] = useState(false);
+  const [rgbDraft, setRgbDraft] = useState<string>(defaultTextState.rgb);
+  const [rgbInvalid, setRgbInvalid] = useState(false);
+  const [hslDraft, setHslDraft] = useState<string>(defaultTextState.hsl);
+  const [hslInvalid, setHslInvalid] = useState(false);
 
   const activeColor = mode === "text" ? textColor : highlightColor;
 
@@ -280,9 +304,16 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
   }, [editor]);
 
   useEffect(() => {
-    setHexDraft(activeColor.hex);
-    setHexInvalid(false);
-  }, [activeColor.hex]);
+    if (focusedInput !== "hex") setHexDraft(activeColor.hex);
+    if (focusedInput !== "rgb") setRgbDraft(activeColor.rgb);
+    if (focusedInput !== "hsl") setHslDraft(activeColor.hsl);
+
+    if (focusedInput === null) {
+      setHexInvalid(false);
+      setRgbInvalid(false);
+      setHslInvalid(false);
+    }
+  }, [activeColor, focusedInput]);
 
   const applyColor = useCallback(
     (targetMode: Mode, color: ColorState) => {
@@ -293,16 +324,25 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
         setHighlightColor(color);
         editor.chain().focus().setHighlight({ color: color.source }).run();
       }
-
-      if (targetMode === mode) {
-        setHexDraft(color.hex);
-      }
     },
-    [editor, mode]
+    [editor]
+  );
+
+  const handleDebouncedColorApply = useCallback(
+    (targetMode: Mode, color: ColorState) => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+      debounceTimeoutRef.current = setTimeout(() => {
+        applyColor(targetMode, color);
+      }, 300);
+    },
+    [applyColor]
   );
 
   const handleWheelChange = useCallback(
     (value: string) => {
+      if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
       const parsed = parseColor(value);
       if (!parsed) {
         return;
@@ -316,6 +356,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
 
   const handleThemePick = useCallback(
     (value: string) => {
+      if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
       const parsed = parseColor(value);
       if (!parsed) {
         return;
@@ -340,7 +381,6 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
 
   return (
     <div
-      onMouseDown={(e) => e.preventDefault()}
       className={cn(
         "flex w-full sm:w-auto flex-col gap-3 sm:gap-4",
         className
@@ -381,13 +421,14 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
             <p className="font-medium text-muted-foreground">HEX</p>
             <Input
               value={hexDraft}
+              onFocus={() => setFocusedInput("hex")}
               onChange={(event) => {
                 const value = event.target.value;
                 setHexDraft(value);
-                if (HEX_PATTERN.test(value)) {
+                if (HEX_INPUT_PATTERN.test(value)) {
                   const parsed = parseColor(value);
                   if (parsed) {
-                    applyColor(mode, parsed);
+                    handleDebouncedColorApply(mode, parsed);
                     setHexInvalid(false);
                   }
                 } else {
@@ -395,11 +436,11 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
                 }
               }}
               onBlur={() => {
-                if (HEX_PATTERN.test(hexDraft)) {
-                  return;
+                setFocusedInput(null);
+                if (hexInvalid) {
+                  setHexDraft(activeColor.hex);
+                  setHexInvalid(false);
                 }
-                setHexDraft(activeColor.hex);
-                setHexInvalid(false);
               }}
               spellCheck={false}
               className={cn("h-8 w-full text-xs", hexInvalid && "border-destructive focus-visible:ring-destructive")}
@@ -407,11 +448,61 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
           </div>
           <div className="space-y-1">
             <p className="font-medium text-muted-foreground">RGB</p>
-            <Input value={activeColor.rgb} readOnly className="h-8 w-full text-xs" />
+            <Input
+              value={rgbDraft}
+              onFocus={() => setFocusedInput("rgb")}
+              onChange={(event) => {
+                const value = event.target.value;
+                setRgbDraft(value);
+                if (RGB_PATTERN.test(value)) {
+                  const parsed = parseColor(value);
+                  if (parsed) {
+                    handleDebouncedColorApply(mode, parsed);
+                    setRgbInvalid(false);
+                  }
+                } else {
+                  setRgbInvalid(true);
+                }
+              }}
+              onBlur={() => {
+                setFocusedInput(null);
+                if (rgbInvalid) {
+                  setRgbDraft(activeColor.rgb);
+                  setRgbInvalid(false);
+                }
+              }}
+              spellCheck={false}
+              className={cn("h-8 w-full text-xs", rgbInvalid && "border-destructive focus-visible:ring-destructive")}
+            />
           </div>
           <div className="space-y-1">
             <p className="font-medium text-muted-foreground">HSL</p>
-            <Input value={activeColor.hsl} readOnly className="h-8 w-full text-xs" />
+            <Input
+              value={hslDraft}
+              onFocus={() => setFocusedInput("hsl")}
+              onChange={(event) => {
+                const value = event.target.value;
+                setHslDraft(value);
+                if (HSL_PATTERN.test(value)) {
+                  const parsed = parseColor(value);
+                  if (parsed) {
+                    handleDebouncedColorApply(mode, parsed);
+                    setHslInvalid(false);
+                  }
+                } else {
+                  setHslInvalid(true);
+                }
+              }}
+              onBlur={() => {
+                setFocusedInput(null);
+                if (hslInvalid) {
+                  setHslDraft(activeColor.hsl);
+                  setHslInvalid(false);
+                }
+              }}
+              spellCheck={false}
+              className={cn("h-8 w-full text-xs", hslInvalid && "border-destructive focus-visible:ring-destructive")}
+            />
           </div>
         </div>
       </div>
