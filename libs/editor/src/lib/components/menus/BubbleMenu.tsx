@@ -107,6 +107,7 @@ const FontSizeSelector: FC<{ editor: Editor }> = ({ editor }) => {
 export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
   const [visible, setVisible] = useState(false);
   const [ready, setReady] = useState(false);
+  const [isColorMenuOpen, setIsColorMenuOpen] = useState(false);
 
   const { x, y, refs, strategy, update } = useFloating({
     placement: 'top',
@@ -169,21 +170,19 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
       raf = requestAnimationFrame(() => {
         if (shouldShowBubbleMenu()) {
           setVisible(true);
-          setReady(false);
           positionBubbleMenu();
         } else {
-          setVisible(false);
-          setReady(false);
+          if (!isColorMenuOpen) setVisible(false);
         }
       });
     };
 
     const handleBlur = ({ event }: { event: FocusEvent }) => {
+      if (isColorMenuOpen) return;
       if (refs.floating.current && event.relatedTarget && refs.floating.current.contains(event.relatedTarget as Node)) {
         return;
       }
       setVisible(false);
-      setReady(false);
     };
 
     // Initial run
@@ -201,7 +200,7 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
       editor.off('focus', handleUpdate);
       editor.off('blur', handleBlur);
     };
-  }, [editor, shouldShowBubbleMenu, positionBubbleMenu]);
+  }, [editor, shouldShowBubbleMenu, positionBubbleMenu, isColorMenuOpen, refs.floating]);
 
   if (!editor || !visible) return null;
 
@@ -300,10 +299,11 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
         </Popover>
 
         {/* Color and highlight */}
-        <Popover>
+        <Popover open={isColorMenuOpen} onOpenChange={setIsColorMenuOpen}>
           <PopoverTrigger asChild>
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               className={`p-1.5 rounded hover:bg-accent transition-colors duration-100 flex items-center justify-center ${editor.isActive('textStyle') || editor.isActive('highlight') ? 'bg-accent' : ''}`}
               aria-label="Color / highlight"
               title="Color / highlight"
@@ -312,7 +312,7 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
             </button>
           </PopoverTrigger>
           <PopoverContent
-            onMouseDown={(e) => e.preventDefault()} // Add this line
+            onMouseDown={(e) => e.preventDefault()}
             className="w-auto p-0"
             side="top"
             align="start"
