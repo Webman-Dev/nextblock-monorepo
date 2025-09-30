@@ -34,6 +34,7 @@ This document summarizes the architecture and decisions made while enabling HTML
 - Source modal (View/Apply) + Format button
   - In `Toolbar.tsx`, a modal shows `editor.getHTML()` preformatted using `formatHTML`. Apply calls `setContent`.
   - Button: FileCode2 ("View Source (HTML)")
+  - Shortcut: Clicking the CSS/JS placeholder blocks in the editor also opens the Source modal.
 
 - Preview modal (executes scripts)
   - Generates a Blob URL with the current HTML and rewrites inline `<script>` to `blob:` URLs. Iframe sandbox: `allow-scripts allow-same-origin allow-modals`.
@@ -134,4 +135,3 @@ Other notable setup:
 - Optional Monaco/Prettier in Source modal via dynamic imports for rich formatting.
 - Additional nodes for more HTML coverage (e.g., `<iframe>` with safe blocking in editor and full render on page).
 - Merge/append logic for multiple `<style>`/`<script>` insertions (deduplicate or aggregate by type).
-

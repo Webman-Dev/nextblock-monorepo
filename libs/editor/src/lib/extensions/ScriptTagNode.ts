@@ -68,7 +68,7 @@ export const ScriptTagNode = Node.create({
   },
 
   addNodeView() {
-    return () => {
+    return ({ editor }) => {
       const container = document.createElement('div');
       container.setAttribute('data-script-node-placeholder', 'true');
       container.style.border = '1px dashed #999';
@@ -77,10 +77,21 @@ export const ScriptTagNode = Node.create({
       container.style.fontFamily = 'monospace';
       container.style.fontSize = '0.9em';
       container.style.color = '#555';
+      container.style.cursor = 'pointer';
       container.textContent = '[Custom JavaScript Block - Edit in Source View]';
       container.contentEditable = 'false';
+      container.title = 'Click to open Source View';
+
+      // Open the Source View when clicking the placeholder
+      container.addEventListener('click', () => {
+        try {
+          editor?.chain().focus();
+        } catch { /* ignore focus errors */ }
+        try {
+          window.dispatchEvent(new CustomEvent('editor:openSourceView'));
+        } catch { /* ignore dispatch errors */ }
+      });
       return { dom: container };
     };
   },
 });
-

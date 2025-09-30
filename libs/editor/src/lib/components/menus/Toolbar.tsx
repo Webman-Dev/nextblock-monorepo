@@ -305,6 +305,20 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
   const previewBlobUrlsRef = React.useRef<string[]>([]);
 
   // Early return after hooks to satisfy react-hooks/rules-of-hooks
+  React.useEffect(() => {
+    if (!editor) return;
+    const onOpenSource = (_e: Event) => {
+      try {
+        const raw = editor.getHTML();
+        setSourceValue(formatHTML(raw));
+        setIsSourceOpen(true);
+      } catch { /* ignore */ }
+    };
+    const evt = 'editor:openSourceView';
+    window.addEventListener(evt, onOpenSource);
+    return () => window.removeEventListener(evt, onOpenSource);
+  }, [editor]);
+
   if (!editor) {
     return null;
   }
