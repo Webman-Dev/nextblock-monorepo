@@ -12,6 +12,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@nextblock-monorepo/ui/popover';
 import { Button } from '@nextblock-monorepo/ui/button';
 import { AdvancedColorMenu } from '../ui/AdvancedColorMenu';
+import { AdvancedFontSizeMenu } from '../ui/AdvancedFontSizeMenu';
 
 interface BubbleMenuComponentProps {
   editor: Editor;
@@ -71,43 +72,12 @@ const ColorSelector: FC<{ editor: Editor }> = ({ editor }) => (
   </div>
 );
 
-/** Font size selector */
-const FontSizeSelector: FC<{ editor: Editor }> = ({ editor }) => {
-  const sizes = ['12px', '14px', '16px', '18px', '20px', '24px', '28px', '32px'];
-  
-  return (
-    <div className="p-2" onMouseDown={(e) => e.preventDefault()}>
-      <p className="text-xs font-semibold mb-1">Font Size</p>
-      <div className="grid grid-cols-4 gap-1">
-        {sizes.map((size) => (
-          <button
-            key={size}
-            type="button"
-            onClick={() => editor.chain().focus().setFontSize(size).run()}
-            className="px-2 py-1 text-xs rounded border hover:bg-accent"
-            title={`Font size ${size}`}
-          >
-            {size}
-          </button>
-        ))}
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => editor.chain().focus().unsetFontSize().run()}
-          className="text-xs"
-        >
-          Reset
-        </Button>
-      </div>
-    </div>
-  );
-};
 
 export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
   const [visible, setVisible] = useState(false);
   const [ready, setReady] = useState(false);
   const [isColorMenuOpen, setIsColorMenuOpen] = useState(false);
+  const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
 
   const { x, y, refs, strategy, update } = useFloating({
     placement: 'top',
@@ -172,13 +142,13 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
           setVisible(true);
           positionBubbleMenu();
         } else {
-          if (!isColorMenuOpen) setVisible(false);
+          if (!isColorMenuOpen && !isFontMenuOpen) setVisible(false);
         }
       });
     };
 
     const handleBlur = ({ event }: { event: FocusEvent }) => {
-      if (isColorMenuOpen) return;
+      if (isColorMenuOpen || isFontMenuOpen) return;
       if (refs.floating.current && event.relatedTarget && refs.floating.current.contains(event.relatedTarget as Node)) {
         return;
       }
@@ -200,7 +170,7 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
       editor.off('focus', handleUpdate);
       editor.off('blur', handleBlur);
     };
-  }, [editor, shouldShowBubbleMenu, positionBubbleMenu, isColorMenuOpen, refs.floating]);
+  }, [editor, shouldShowBubbleMenu, positionBubbleMenu, isColorMenuOpen, isFontMenuOpen, refs.floating]);
 
   if (!editor || !visible) return null;
 
@@ -269,7 +239,7 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
         <div className="w-px bg-border h-5" />
 
         {/* Font size */}
-        <Popover>
+        <Popover open={isFontMenuOpen} onOpenChange={setIsFontMenuOpen}>
           <PopoverTrigger asChild>
             <button
               type="button"
@@ -281,8 +251,14 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
               <Type className="h-4 w-4 pointer-events-none" />
             </button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" side="top" align="start">
-            <FontSizeSelector editor={editor} />
+          <PopoverContent
+            onFocusOutside={(e) => e.preventDefault()}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="w-[360px] p-0"
+            side="top"
+            align="start"
+          >
+            <AdvancedFontSizeMenu editor={editor} className="p-4" />
           </PopoverContent>
         </Popover>
 

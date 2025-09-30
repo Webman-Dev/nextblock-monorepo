@@ -18,11 +18,11 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
+  DropdownMenuSeparator
 } from '@nextblock-monorepo/ui/dropdown-menu';
 import { UndoRedoButtons } from '../ui/UndoRedoButtons';
 import { AdvancedColorMenu } from '../ui/AdvancedColorMenu';
+import { AdvancedFontSizeMenu } from '../ui/AdvancedFontSizeMenu';
 
 interface EditorToolbarProps {
   editor: Editor;
@@ -58,36 +58,30 @@ const ToolbarButton: React.FC<{
   );
 };
 
-const FontSizeDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
-  const sizes = ['12px', '14px', '16px', '18px', '20px', '24px', '28px', '32px', '36px', '48px'];
-  
+const FontSizePicker: React.FC<{ editor: Editor }> = ({ editor }) => {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 px-2">
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 px-2"
+          aria-label="Font size menu"
+          title="Font size menu"
+        >
           <Type className="h-4 w-4 mr-1" />
           Size
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent>
-        <DropdownMenuLabel>Font Size</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {sizes.map((size) => (
-          <DropdownMenuItem
-            key={size}
-            onClick={() => editor.chain().focus().setFontSize(size).run()}
-          >
-            {size}
-          </DropdownMenuItem>
-        ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => editor.chain().focus().unsetFontSize().run()}
-        >
-          Reset Size
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverTrigger>
+      <PopoverContent
+        onFocusOutside={(e) => e.preventDefault()}
+        className="w-[360px] p-0"
+        side="bottom"
+        align="start"
+      >
+        <AdvancedFontSizeMenu editor={editor} className="p-4" />
+      </PopoverContent>
+    </Popover>
   );
 };
 
@@ -537,7 +531,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         <Separator orientation="vertical" className="h-6 mx-1" />
 
         {/* Font size and colors */}
-        <FontSizeDropdown editor={editor} />
+        <FontSizePicker editor={editor} />
         <ColorPicker editor={editor} />
 
         <Separator orientation="vertical" className="h-6 mx-1" />
