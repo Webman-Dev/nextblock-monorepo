@@ -16,7 +16,7 @@ const config = [
   ...baseConfig,
   ...nx.configs['flat/react-typescript'],
   {
-    ignores: ['.next/**/*'],
+    ignores: ['.next/**/*', '**/next-env.d.ts', 'apps/nextblock/next-env.d.ts'],
   },
   {
     rules: {
