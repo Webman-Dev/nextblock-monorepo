@@ -102,13 +102,20 @@ export function formatHTML(input: string, indentSize = 2): string {
           out.push(l);
         }
       } else {
-        const text = tok.replace(/\s+/g, ' ').trim();
-        if (text) {
+        // Collapse runs of whitespace but DO NOT trim, so spaces
+        // around inline tags (e.g., "a <span>title</span>") are preserved.
+        let collapsed = tok.replace(/\s+/g, ' ');
+        if (collapsed.length > 0) {
           const prev = out.length ? out[out.length - 1] : '';
           if (prev && !prev.endsWith('\n')) {
-            out[out.length - 1] = prev + text;
+            // Continue on same line, keep leading/trailing single spaces
+            out[out.length - 1] = prev + collapsed;
           } else {
-            out.push(indentUnit.repeat(indent) + text);
+            // New line context: drop leading spaces for cleanliness
+            const text = collapsed.replace(/^ +/, '');
+            if (text) {
+              out.push(indentUnit.repeat(indent) + text);
+            }
           }
         }
       }
@@ -120,4 +127,3 @@ export function formatHTML(input: string, indentSize = 2): string {
 }
 
 export default formatHTML;
-
