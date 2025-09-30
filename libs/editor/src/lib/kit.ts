@@ -24,9 +24,6 @@ import DragHandle from '@tiptap/extension-drag-handle'
 import NodeRange from '@tiptap/extension-node-range'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 
-let dragHandleElement: HTMLDivElement | null = null
-let dragHandlePlusButton: HTMLButtonElement | null = null
-
 import { createLowlight } from 'lowlight'
 import css from 'highlight.js/lib/languages/css'
 import js from 'highlight.js/lib/languages/javascript'
@@ -45,9 +42,11 @@ import CtaWidgetNode from './extensions/CtaWidgetNode'
 import { SlashCommand } from './extensions/slash-command'
 import { DraggableNodes } from './extensions/DraggableNodes'
 
+let dragHandleElement: HTMLDivElement | null = null
+let dragHandlePlusButton: HTMLButtonElement | null = null
+
 // bring lowlight into scope with more languages
 const lowlight = createLowlight({ html, css, js, ts, python, json, bash, sql })
-
 
 export const editorExtensions: Extensions = [
   StarterKit.configure({

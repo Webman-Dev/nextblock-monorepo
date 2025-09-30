@@ -67,6 +67,8 @@ interface GutterToggleDetail {
 export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor }) => {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  // Position where we will insert a new block (right after current line)
+  const [insertPos, setInsertPos] = useState<number | null>(null);
   const buttonRef = useRef<HTMLElement | null>(null);
   const handleRef = useRef<HTMLElement | null>(null);
   const openRef = useRef(false);
@@ -110,10 +112,8 @@ export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor }) =
     if (editor.isActive('image')) {
       return false;
     }
-    const { $from } = editor.state.selection as any;
-    const parent = $from?.parent;
-    const isEmptyParagraph = parent?.type?.name === 'paragraph' && parent?.content?.size === 0;
-    return Boolean(isEmptyParagraph);
+    // Allow opening regardless of empty paragraph; only require editable state
+    return true;
   }, [editor]);
 
   useEffect(() => {
@@ -130,9 +130,31 @@ export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor }) =
       const customEvent = event as CustomEvent<GutterToggleDetail>;
       const { handle, button } = customEvent.detail;
 
-      if (!shouldShowTrigger()) {
-        closeMenu();
-        return;
+      // Compute insertion position: end of the current top-level block
+      try {
+        const sel: any = editor.state.selection;
+        const $from = sel?.$from;
+        if ($from) {
+          // Find nearest block node depth to insert after (e.g., paragraph, listItem, heading)
+          let depth = $from.depth;
+          while (depth > 0 && !$from.node(depth)?.isBlock) {
+            depth -= 1;
+          }
+          // Position right AFTER that block node
+          const posAfterNode = typeof $from.after === 'function' ? $from.after(depth) : undefined;
+          if (typeof posAfterNode === 'number') {
+            setInsertPos(posAfterNode);
+          } else if (typeof $from.pos === 'number') {
+            // Fallback to current position if after() is unavailable
+            setInsertPos($from.pos);
+          } else {
+            setInsertPos(null);
+          }
+        } else {
+          setInsertPos(null);
+        }
+      } catch {
+        setInsertPos(null);
       }
 
       if (buttonRef.current === button && openRef.current) {
@@ -171,6 +193,7 @@ export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor }) =
     }
 
     const ensureVisibility = () => {
+      // Keep menu open as long as editor stays editable and focused
       if (!shouldShowTrigger()) {
         closeMenu();
       }
@@ -219,6 +242,20 @@ export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor }) =
   }, [open, closeMenu, refs]);
 
   const runCommand = (command: (editor: Editor) => void) => {
+    // Ensure we insert right after the current line where + was clicked
+    if (insertPos != null) {
+      // Insert a new paragraph at the insertion point, move cursor into it,
+      // then run the selected command so it applies to the new block.
+      editor
+        .chain()
+        .focus()
+        .insertContentAt(insertPos, { type: 'paragraph' })
+        .setTextSelection(insertPos + 1)
+        .run();
+    } else {
+      editor.chain().focus().run();
+    }
+
     command(editor);
     closeMenu();
   };
