@@ -13,6 +13,10 @@ import {
   Image as ImageIcon,
   Table2,
   Minus,
+  Link2,
+  Code2,
+  AlertTriangle,
+  Megaphone,
 } from 'lucide-react';
 import { Button } from '@nextblock-monorepo/ui/button';
 import { useFloating, offset, flip, shift, autoUpdate } from '@floating-ui/react';
@@ -57,6 +61,75 @@ const menuItems: MenuItem[] = [
   },
   { title: 'Table', icon: <Table2 className="h-4 w-4" />, command: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
   { title: 'Horizontal Rule', icon: <Minus className="h-4 w-4" />, command: (e) => e.chain().focus().setHorizontalRule().run() },
+  {
+    title: 'Link',
+    icon: <Link2 className="h-4 w-4" />,
+    command: (e) => {
+      const url = window.prompt('Enter URL:');
+      if (url) {
+        e.chain().focus().setLink({ href: url }).run();
+      }
+    },
+  },
+  {
+    title: 'CSS Block',
+    icon: <Code2 className="h-4 w-4" />,
+    command: (e) => {
+      const css = window.prompt('Enter CSS (without <style> tags):', '/* your styles */');
+      if (css != null) {
+        const content = `<style>${css}</style>`;
+        e.commands.insertContentAt({ from: 0, to: 0 }, content);
+      }
+    },
+  },
+  {
+    title: 'Script Block',
+    icon: <Code2 className="h-4 w-4" />,
+    command: (e) => {
+      const js = window.prompt('Enter JavaScript (without <script> tags):', '// your script');
+      if (js != null) {
+        const content = `<script>${js}</script>`;
+        const end = e.state.doc.content.size;
+        e.commands.insertContentAt(end, content);
+      }
+    },
+  },
+  {
+    title: 'DIV Block',
+    icon: <Code2 className="h-4 w-4" />,
+    command: (e) => {
+      const className = window.prompt('Optional class for DIV:', '');
+      const style = window.prompt('Optional inline style for DIV:', '');
+      const text = window.prompt('Optional content for DIV:', 'New block');
+      const attrs = `${className ? ` class="${className}"` : ''}${style ? ` style="${style}"` : ''}`;
+      const escapeHtml = (s: string) => s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+      const inner = text ? `<p>${escapeHtml(text)}</p>` : '<p><br /></p>';
+      e.chain().focus().insertContent(`<div${attrs}>${inner}</div>`).run();
+    },
+  },
+  {
+    title: 'Alert Widget',
+    icon: <AlertTriangle className="h-4 w-4" />,
+    command: (e) => {
+      e.chain().focus().setAlertWidget().run();
+    },
+  },
+  {
+    title: 'CTA Widget',
+    icon: <Megaphone className="h-4 w-4" />,
+    command: (e) => {
+      e
+        .chain()
+        .focus()
+        .setCtaWidget({ text: 'Learn more', url: '', style: 'primary', size: 'medium', textAlign: 'center' })
+        .run();
+    },
+  },
 ];
 
 interface GutterToggleDetail {
@@ -268,7 +341,7 @@ export const EditorFloatingMenu: FC<FloatingMenuComponentProps> = ({ editor }) =
     <div
       ref={refs.setFloating}
       style={{ position: strategy, top: y ?? 0, left: x ?? 0, zIndex: 10001 }}
-      className="w-48 rounded-md bg-white p-1 shadow-lg"
+      className="w-48 rounded-md bg-white p-1 shadow-lg max-h-[400px] overflow-auto"
       onMouseDown={(event) => event.preventDefault()}
     >
       <div className="flex flex-col">
