@@ -202,8 +202,6 @@
 .ProseMirror .code-block,
 .ProseMirror [data-type="taskList"] {
   position: relative;
-  /* Expand hover area to the left for easier drag handle access */
-  padding-left: 28px;
   margin-left: 0;
   /* Ensure minimum height for proper drag handle centering */
   min-height: 24px;
@@ -370,7 +368,6 @@
   .ProseMirror pre,
   .ProseMirror .code-block,
   .ProseMirror [data-type="taskList"] {
-    padding-left: 28px;
     margin-left: 0;
   }
 
