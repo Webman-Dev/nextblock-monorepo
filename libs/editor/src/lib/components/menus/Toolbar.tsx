@@ -203,8 +203,16 @@ const InsertDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
           onClick={() => {
             const className = window.prompt('Optional class for DIV:', '');
             const style = window.prompt('Optional inline style for DIV:', '');
+            const text = window.prompt('Optional content for DIV:', 'New block');
             const attrs = `${className ? ` class="${className}"` : ''}${style ? ` style="${style}"` : ''}`;
-            editor.chain().focus().insertContent(`<div${attrs}></div>`).run();
+            const escapeHtml = (s: string) => s
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#39;');
+            const inner = text ? `<p>${escapeHtml(text)}</p>` : '<p><br /></p>';
+            editor.chain().focus().insertContent(`<div${attrs}>${inner}</div>`).run();
           }}
         >
           <Code2 className="h-4 w-4 mr-2" />
