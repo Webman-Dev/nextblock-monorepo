@@ -258,8 +258,33 @@ function parseColor(value: string | undefined): ColorState | null {
   };
 }
 
-const defaultTextState = parseColor(DEFAULT_TEXT_COLOR)!;
-const defaultHighlightState = parseColor(DEFAULT_HIGHLIGHT_COLOR)!;
+function colorStateFromHex(hex: string): ColorState {
+  const rgba = hexToRgba(hex);
+  if (rgba) {
+    return {
+      source: normalizeHex(hex),
+      hex: rgbToHex(rgba.r, rgba.g, rgba.b),
+      rgb:
+        rgba.a === 1
+          ? `rgb(${rgba.r}, ${rgba.g}, ${rgba.b})`
+          : `rgba(${rgba.r}, ${rgba.g}, ${rgba.b}, ${round(rgba.a, 2)})`,
+      hsl: rgbaToHsl(rgba.r, rgba.g, rgba.b, rgba.a),
+      alpha: rgba.a,
+    };
+  }
+  // Fallback: return a minimally valid state using the normalized hex
+  const normalized = normalizeHex(hex);
+  return {
+    source: normalized,
+    hex: normalized.slice(0, 7),
+    rgb: "rgb(0, 0, 0)",
+    hsl: rgbaToHsl(0, 0, 0, 1),
+    alpha: 1,
+  };
+}
+
+const defaultTextState = parseColor(DEFAULT_TEXT_COLOR) ?? colorStateFromHex(DEFAULT_TEXT_COLOR);
+const defaultHighlightState = parseColor(DEFAULT_HIGHLIGHT_COLOR) ?? colorStateFromHex(DEFAULT_HIGHLIGHT_COLOR);
 
 export function AdvancedColorMenu({ editor, className, initialMode = "text" }: AdvancedColorMenuProps) {
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -267,7 +292,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
   const [focusedInput, setFocusedInput] = useState<"hex" | "rgb" | "hsl" | null>(null);
   const [textColor, setTextColor] = useState<ColorState>(defaultTextState);
   const [highlightColor, setHighlightColor] = useState<ColorState>(defaultHighlightState);
-  const [initialColor, setInitialColor] = useState<ColorState>(defaultTextState);
+  
 
   useEffect(() => {
     setMode(initialMode);
@@ -292,7 +317,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
 
       setTextColor(newTextColor);
       setHighlightColor(newHighlightColor);
-      setInitialColor(mode === "text" ? newTextColor : newHighlightColor);
+      
     };
 
     updateFromSelection();
