@@ -315,7 +315,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
   const openPreview = () => {
     // cleanup old blob URLs
     for (const u of previewBlobUrlsRef.current) {
-      try { URL.revokeObjectURL(u); } catch (_err) { /* ignore revoke errors */ }
+      try { URL.revokeObjectURL(u); } catch { /* ignore revoke errors */ }
     }
     previewBlobUrlsRef.current = [];
 
@@ -577,7 +577,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
                 >
                   Refresh
                 </Button>
-                <Button size="sm" onClick={() => { for (const u of previewBlobUrlsRef.current) { try { URL.revokeObjectURL(u); } catch (_err) { /* ignore revoke errors */ } } previewBlobUrlsRef.current = []; if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(null); setIsPreviewOpen(false); }}>Close</Button>
+                <Button size="sm" onClick={() => { for (const u of previewBlobUrlsRef.current) { try { URL.revokeObjectURL(u); } catch { /* ignore revoke errors */ } } previewBlobUrlsRef.current = []; if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(null); setIsPreviewOpen(false); }}>Close</Button>
               </div>
             </div>
             <div className="flex-1">

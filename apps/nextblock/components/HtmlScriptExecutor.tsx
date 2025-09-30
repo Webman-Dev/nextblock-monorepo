@@ -36,7 +36,7 @@ export const HtmlScriptExecutor: React.FC<HtmlScriptExecutorProps> = ({ html }) 
     });
 
     return () => {
-      created.forEach((u) => { try { URL.revokeObjectURL(u); } catch {} });
+      created.forEach((u) => { try { URL.revokeObjectURL(u); } catch (error) { console.error('Failed to revoke blob URL:', error); } });
     };
   }, [html]);
 
