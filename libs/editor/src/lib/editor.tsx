@@ -276,7 +276,7 @@ export const Editor: React.FC<EditorProps> = ({
 
       {/* Character Count */}
       {showCharacterCount && characterCount && (
-        <div className="absolute bottom-2 right-2 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm rounded px-2 py-1 border">
+        <div className="absolute bottom-2 right-2 z-10 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm rounded px-2 py-1 border">
           {characters} characters / {words} words
         </div>
       )}

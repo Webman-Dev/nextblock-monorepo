@@ -61,9 +61,15 @@ export function BlockEditorModal({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className={cn("w-[90%] max-w-7xl max-h-[90vh] overflow-y-auto", {
-          "h-[90vh] flex flex-col": block.type === "text",
-        })}
+        className={cn(
+          "w-[90%] max-w-7xl max-h-[90vh]",
+          {
+            // For rich text editor, use fixed height and internal scroll so footer stays visible
+            "h-[90vh] flex flex-col": block.type === "text",
+            // For other blocks, allow the modal itself to scroll if content exceeds viewport
+            "overflow-y-auto": block.type !== "text",
+          }
+        )}
       >
         <DialogHeader>
           <DialogTitle>Editing {blockInfo?.label || "Block"}</DialogTitle>
@@ -71,7 +77,7 @@ export function BlockEditorModal({
             Make changes to your block here. Click save when you&apos;re done.
           </DialogDescription>
         </DialogHeader>
-        <div className="py-4 flex-grow flex flex-col">
+        <div className="py-4 flex-grow flex flex-col min-h-0">
           <Suspense fallback={<div className="flex justify-center items-center h-32">Loading editor...</div>}>
             <EditorComponent
               block={block}

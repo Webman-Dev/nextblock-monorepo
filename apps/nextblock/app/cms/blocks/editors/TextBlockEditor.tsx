@@ -45,7 +45,7 @@ export default function TextBlockEditor({
         Text Content
       </Label>
 
-      <div id={labelId} role="group" aria-labelledby={labelId}>
+      <div id={labelId} role="group" aria-labelledby={labelId} className="flex-1 min-h-0 flex flex-col">
         <NotionEditor
           content={content?.html_content ?? ''}
           onChange={(html) => onChange({ html_content: html })}

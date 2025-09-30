@@ -102,6 +102,8 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
       ref={wrapperRef}
       className={cn(
         "relative w-full rounded-lg border bg-background shadow-sm",
+        // Make wrapper a flex column that can host an internal scroll area
+        "flex flex-col h-full min-h-0",
         "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
         className
       )}
@@ -115,11 +117,14 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
       <ImageToolbar editor={editor} />
       <TableToolbar editor={editor} />
 
-      <EditorContent editor={editor} />
+      {/* Scroll only the editable content, keeping toolbars and footer visible */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <EditorContent editor={editor} />
+      </div>
 
       {/* âœ… Enhanced Character Count with better styling */}
       {showCharacterCount && characterCount && (
-        <div className="absolute bottom-2 right-2 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm rounded px-2 py-1 border">
+        <div className="absolute bottom-2 right-2 text-xs z-10 text-muted-foreground bg-background/80 backdrop-blur-sm rounded px-2 py-1 border">
           {characters} characters / {words} words
         </div>
       )}
