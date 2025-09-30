@@ -162,24 +162,26 @@ export async function middleware(request: NextRequest) {
   finalResponse.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   finalResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
 
-  const nonceValue = requestHeaders.get('x-nonce');
-  if (nonceValue) {
-    const csp = [
-      "default-src 'self'",
-      `script-src 'self' 'nonce-${nonceValue}' 'unsafe-inline' ${
-        process.env.NODE_ENV === 'development' ? "'unsafe-eval'" : ''
-      }`,
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://nrh-next-cms.e260676f72b0b18314b868f136ed72ae.r2.cloudflarestorage.com https://pub-a31e3f1a87d144898aeb489a8221f92e.r2.dev",
-      "font-src 'self'",
-      "object-src 'none'",
-      "connect-src 'self' https://ppcppwsfnrptznvbxnsz.supabase.co wss://ppcppwsfnrptznvbxnsz.supabase.co https://nrh-next-cms.e260676f72b0b18314b868f136ed72ae.r2.cloudflarestorage.com https://pub-a31e3f1a87d144898aeb489a8221f92e.r2.dev",
-      "frame-src 'self' https://www.youtube.com",
-      "form-action 'self'",
-      "base-uri 'self'",
-    ].join('; ');
+  // Only send nonce-based CSP in production. In development, Next.js
+  // Dev Overlay injects inline scripts without a nonce, which would be blocked.
+  if (process.env.NODE_ENV === 'production') {
+    const nonceValue = requestHeaders.get('x-nonce');
+    if (nonceValue) {
+      const csp = [
+        "default-src 'self'",
+        `script-src 'self' blob: data: 'nonce-${nonceValue}'`,
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob: https://nrh-next-cms.e260676f72b0b18314b868f136ed72ae.r2.cloudflarestorage.com https://pub-a31e3f1a87d144898aeb489a8221f92e.r2.dev",
+        "font-src 'self'",
+        "object-src 'none'",
+        "connect-src 'self' https://ppcppwsfnrptznvbxnsz.supabase.co wss://ppcppwsfnrptznvbxnsz.supabase.co https://nrh-next-cms.e260676f72b0b18314b868f136ed72ae.r2.cloudflarestorage.com https://pub-a31e3f1a87d144898aeb489a8221f92e.r2.dev",
+        "frame-src 'self' blob: data: https://www.youtube.com",
+        "form-action 'self'",
+        "base-uri 'self'",
+      ].join('; ');
 
-    finalResponse.headers.set('Content-Security-Policy', csp);
+      finalResponse.headers.set('Content-Security-Policy', csp);
+    }
   }
 
   const responseForLogging = finalResponse.clone();

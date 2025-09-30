@@ -41,6 +41,10 @@ import AlertWidget from './extensions/AlertWidget'
 import CtaWidgetNode from './extensions/CtaWidgetNode'
 import { SlashCommand } from './extensions/slash-command'
 import { DraggableNodes } from './extensions/DraggableNodes'
+import { StyleTagNode } from './extensions/StyleTagNode'
+import { DivNode } from './extensions/DivNode'
+import { PreserveAllAttributesExtension } from './extensions/PreserveAllAttributesExtension'
+import { ScriptTagNode } from './extensions/ScriptTagNode'
 
 let dragHandleElement: HTMLDivElement | null = null
 let dragHandlePlusButton: HTMLButtonElement | null = null
@@ -98,6 +102,12 @@ export const editorExtensions: Extensions = [
       class: 'relative rounded-md bg-muted p-4 font-mono text-sm',
     },
   }),
+
+  // Allow safe representation of custom HTML/CSS/JS blocks
+  DivNode,
+  StyleTagNode,
+  ScriptTagNode,
+  PreserveAllAttributesExtension,
 
   ImageExtended.configure({
     inline: true,

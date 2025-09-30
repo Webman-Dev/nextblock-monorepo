@@ -2,12 +2,13 @@
 import { getOpenImagePicker } from "../../utils/mediaPicker";
 
 import React from 'react';
+import formatHTML from '../../utils/formatHTML';
 import type { Editor } from '@tiptap/core';
 import {
   Bold, Italic, Underline, Strikethrough, Code, Link2, Palette,
   Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare,
   TextQuote, Code2, Image, Table2, Minus, AlignLeft, AlignCenter,
-  AlignRight, AlignJustify, Subscript, Superscript, Type, Download, AlertTriangle, Megaphone,
+  AlignRight, AlignJustify, Subscript, Superscript, Type, Download, AlertTriangle, Megaphone, FileCode2, Eye,
 } from 'lucide-react';
 import { Button } from '@nextblock-monorepo/ui/button';
 import { Separator } from '@nextblock-monorepo/ui/separator';
@@ -171,6 +172,45 @@ const InsertDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
           Horizontal Rule
         </DropdownMenuItem>
         <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => {
+            const css = window.prompt('Enter CSS (without <style> tags):', '/* your styles */');
+            if (css != null) {
+              // Prepend CSS at top of document
+              const content = `<style>${css}</style>`;
+              editor.commands.insertContentAt({ from: 0, to: 0 }, content);
+            }
+          }}
+        >
+          <Code2 className="h-4 w-4 mr-2" />
+          CSS Block
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => {
+            const js = window.prompt('Enter JavaScript (without <script> tags):', '// your script');
+            if (js != null) {
+              // Append JS at end of document
+              const content = `<script>${js}</script>`;
+              const end = editor.state.doc.content.size;
+              editor.commands.insertContentAt(end, content);
+            }
+          }}
+        >
+          <Code2 className="h-4 w-4 mr-2" />
+          Script Block
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => {
+            const className = window.prompt('Optional class for DIV:', '');
+            const style = window.prompt('Optional inline style for DIV:', '');
+            const attrs = `${className ? ` class="${className}"` : ''}${style ? ` style="${style}"` : ''}`;
+            editor.chain().focus().insertContent(`<div${attrs}></div>`).run();
+          }}
+        >
+          <Code2 className="h-4 w-4 mr-2" />
+          DIV Block
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => editor.chain().focus().setAlertWidget().run()}>
           <AlertTriangle className="h-4 w-4 mr-2" />
           Alert Widget
@@ -229,9 +269,8 @@ const ExportDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 px-2">
+        <Button variant="ghost" size="sm" className="h-8 px-2" aria-label="Export menu" title="Export menu">
           <Download className="h-4 w-4 mr-1" />
-          Export
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
@@ -250,12 +289,66 @@ const ExportDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
 };
 
 export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
+  // Hooks must be declared unconditionally at the top level
+  const [isSourceOpen, setIsSourceOpen] = React.useState(false);
+  const [sourceValue, setSourceValue] = React.useState<string>('');
+  const [isPreviewOpen, setIsPreviewOpen] = React.useState(false);
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const previewBlobUrlsRef = React.useRef<string[]>([]);
+
+  // Early return after hooks to satisfy react-hooks/rules-of-hooks
   if (!editor) {
     return null;
   }
 
+  const openSource = () => {
+    const raw = editor.getHTML();
+    setSourceValue(formatHTML(raw));
+    setIsSourceOpen(true);
+  };
+
+  const applySource = () => {
+    editor.chain().focus().setContent(sourceValue).run();
+    setIsSourceOpen(false);
+  };
+
+  const openPreview = () => {
+    // cleanup old blob URLs
+    for (const u of previewBlobUrlsRef.current) {
+      try { URL.revokeObjectURL(u); } catch (_err) { /* ignore revoke errors */ }
+    }
+    previewBlobUrlsRef.current = [];
+
+    const rawBody = editor.getHTML();
+
+    // Rewrite inline <script> to blob URLs so CSP can allow them via script-src blob:
+    const parser = new DOMParser();
+    const docParsed = parser.parseFromString(`<div id="__content__">${rawBody}</div>`, 'text/html');
+    const wrapper = docParsed.body.querySelector('#__content__') as HTMLElement;
+    const scripts = Array.from(wrapper.querySelectorAll('script')) as HTMLScriptElement[];
+    scripts.forEach((s) => {
+      if (!s.getAttribute('src')) {
+        const code = s.textContent || '';
+        const b = new Blob([code], { type: 'text/javascript' });
+        const u = URL.createObjectURL(b);
+        s.setAttribute('src', u);
+        s.textContent = '';
+        previewBlobUrlsRef.current.push(u);
+      }
+    });
+    const bodyHTML = wrapper.innerHTML;
+
+    const fullDoc = `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Preview</title></head><body>${bodyHTML}</body></html>`;
+    const mainBlob = new Blob([fullDoc], { type: 'text/html' });
+    const mainUrl = URL.createObjectURL(mainBlob);
+    previewBlobUrlsRef.current.push(mainUrl);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(mainUrl);
+    setIsPreviewOpen(true);
+  };
+
   return (
-    <div className="border-b bg-background p-2">
+    <div className="border-b bg-background p-2 relative">
       <div className="flex items-center gap-1 flex-wrap">
         {/* Enhanced Undo/Redo Component - More prominent placement */}
         <div className="flex items-center gap-1 mr-2 p-1 rounded-md bg-muted/30 border border-border/50">
@@ -432,9 +525,72 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
 
         <Separator orientation="vertical" className="h-6 mx-1" />
 
+        {/* Source view */}
+        <ToolbarButton onClick={openSource} title="View Source (HTML)">
+          <FileCode2 className="h-4 w-4" />
+        </ToolbarButton>
+
+        <Separator orientation="vertical" className="h-6 mx-1" />
+
+        {/* Preview (runs scripts safely in sandboxed iframe) */}
+        <ToolbarButton onClick={openPreview} title="Preview (executes scripts)">
+          <Eye className="h-4 w-4" />
+        </ToolbarButton>
+
+        <Separator orientation="vertical" className="h-6 mx-1" />
+
         {/* Export menu */}
         <ExportDropdown editor={editor} />
       </div>
+
+      {isSourceOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background border rounded-md shadow-xl w-[90vw] max-w-4xl h-[70vh] flex flex-col">
+            <div className="p-3 border-b font-semibold">Edit HTML Source</div>
+            <textarea
+              className="flex-1 p-3 font-mono text-sm outline-none resize-none bg-muted/30"
+              value={sourceValue}
+              onChange={(e) => setSourceValue(e.target.value)}
+              spellCheck={false}
+            />
+            <div className="p-3 border-t flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setIsSourceOpen(false)}>Cancel</Button>
+              <Button variant="secondary" size="sm" onClick={() => setSourceValue(formatHTML(sourceValue))}>Format</Button>
+              <Button size="sm" onClick={applySource}>Apply</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background border rounded-md shadow-xl w-[95vw] max-w-5xl h-[80vh] flex flex-col">
+            <div className="p-3 border-b flex items-center justify-between">
+              <div className="font-semibold">Preview</div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    openPreview();
+                  }}
+                >
+                  Refresh
+                </Button>
+                <Button size="sm" onClick={() => { for (const u of previewBlobUrlsRef.current) { try { URL.revokeObjectURL(u); } catch (_err) { /* ignore revoke errors */ } } previewBlobUrlsRef.current = []; if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(null); setIsPreviewOpen(false); }}>Close</Button>
+              </div>
+            </div>
+            <div className="flex-1">
+              <iframe
+                title="Editor Preview"
+                className="w-full h-full"
+                sandbox="allow-scripts allow-same-origin allow-modals"
+                src={previewUrl ?? undefined}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
