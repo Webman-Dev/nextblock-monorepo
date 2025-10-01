@@ -30,6 +30,7 @@ interface MediaPickerDialogProps {
   accept?: (m: Media) => boolean; // filter, e.g. only images
   title?: string;
   open?: boolean; onOpenChange?: (open: boolean) => void; hideTrigger?: boolean;
+  defaultFolder?: string; // optional folder to pre-populate upload
 }
 
 export default function MediaPickerDialog({
@@ -41,6 +42,7 @@ export default function MediaPickerDialog({
   open,
   onOpenChange,
   hideTrigger,
+  defaultFolder,
 }: MediaPickerDialogProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = typeof open === "boolean";
@@ -107,6 +109,7 @@ export default function MediaPickerDialog({
         <div className="p-1">
           <MediaUploadForm
             returnJustData={true}
+            defaultFolder={defaultFolder}
             onUploadSuccess={(newMedia) => {
               setItems((prev) => [newMedia, ...prev.filter((m) => m.id !== newMedia.id)]);
               handleSelect(newMedia);

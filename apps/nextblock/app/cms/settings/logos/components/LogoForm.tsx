@@ -152,6 +152,7 @@ export default function LogoForm({ logo, action }: LogoFormProps) {
             onSelect={handleMediaSelect}
             accept={(m: Media) => !!m.file_type?.startsWith('image/')}
             title="Select or Upload Logo"
+            defaultFolder="logos/"
           />
         </div>
       </div>

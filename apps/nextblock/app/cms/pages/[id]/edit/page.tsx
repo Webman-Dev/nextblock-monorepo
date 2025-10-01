@@ -17,6 +17,7 @@ import { Eye, ArrowLeft } from "lucide-react";
 import ContentLanguageSwitcher from "@/app/cms/components/ContentLanguageSwitcher";
 import { getActiveLanguagesServerSide } from "@nextblock-monorepo/db/server";
 import CopyContentFromLanguage from "@/app/cms/components/CopyContentFromLanguage";
+import { UploadFolderProvider } from "@/app/cms/media/UploadFolderContext";
 
 // ... (Interface PageWithBlocks and getPageDataWithBlocks remain the same) ...
 interface PageWithBlocks extends Page {
@@ -75,6 +76,7 @@ export default async function EditPage(props: { params: Promise<{ id: string }> 
   const publicPageUrl = `/${pageWithBlocks.slug}`;
 
   return (
+    <UploadFolderProvider defaultFolder={`pages/${pageWithBlocks.slug}/`}>
     <div className="space-y-8 w-full mx-auto px-6">
       <div className="flex justify-between items-center flex-wrap gap-4 w-full">
         <div className="flex items-center gap-3">
@@ -136,5 +138,6 @@ export default async function EditPage(props: { params: Promise<{ id: string }> 
         />
       </div>
     </div>
+    </UploadFolderProvider>
   );
 }

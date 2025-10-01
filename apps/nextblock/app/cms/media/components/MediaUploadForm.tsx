@@ -1,7 +1,7 @@
 // app/cms/media/components/MediaUploadForm.tsx
 "use client";
 
-import React, { useState, useRef, useTransition } from "react";
+import React, { useState, useRef, useTransition, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@nextblock-monorepo/ui";
 import { Input } from "@nextblock-monorepo/ui";
@@ -19,9 +19,12 @@ interface MediaUploadFormProps {
   // If true, the form expects recordMediaUpload to return data instead of redirecting.
   // And will use onUploadSuccess instead of router.refresh().
   returnJustData?: boolean;
+  defaultFolder?: string; // Optional pre-populated folder
 }
 
-export default function MediaUploadForm({ onUploadSuccess, returnJustData }: MediaUploadFormProps) {
+import { useUploadFolder } from "../UploadFolderContext";
+
+export default function MediaUploadForm({ onUploadSuccess, returnJustData, defaultFolder }: MediaUploadFormProps) {
   const [isPending, startTransition] = useTransition();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null); // For image preview
@@ -32,7 +35,12 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData }: Med
   const [isDraggingOver, setIsDraggingOver] = useState(false); // For drag-and-drop visual feedback
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [processingStatus, setProcessingStatus] = useState<"idle" | "processing" | "processed_error">("idle");
-  const [folder, setFolder] = useState<string>("uploads/");
+  const { defaultFolder: ctxDefaultFolder } = useUploadFolder();
+  const [folder, setFolder] = useState<string>(defaultFolder || ctxDefaultFolder || "uploads/");
+
+  useEffect(() => {
+    setFolder(defaultFolder || ctxDefaultFolder || "uploads/");
+  }, [defaultFolder, ctxDefaultFolder]);
 
   const resetFileSelection = () => {
     setFile(null);

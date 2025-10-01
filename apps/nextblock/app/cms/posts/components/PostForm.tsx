@@ -335,6 +335,7 @@ export default function PostForm({
               <div className="p-1">
                 <MediaUploadForm
                   returnJustData={true}
+                  defaultFolder={`posts/${(slug || 'untitled').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '')}/`}
                   onUploadSuccess={(newlyUploadedMedia) => {
                     setMediaItems(prevItems => [newlyUploadedMedia, ...prevItems.filter(item => item.id !== newlyUploadedMedia.id)]);
                     handleImageSelectInModal(newlyUploadedMedia);

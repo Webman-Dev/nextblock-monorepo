@@ -17,6 +17,7 @@ import { Eye, ArrowLeft } from "lucide-react"; // Removed SeparatorVertical, use
 import ContentLanguageSwitcher from "@/app/cms/components/ContentLanguageSwitcher";
 import { getActiveLanguagesServerSide } from "@nextblock-monorepo/db/server"; // Correct server-side fetch
 import CopyContentFromLanguage from "@/app/cms/components/CopyContentFromLanguage";
+import { UploadFolderProvider } from "@/app/cms/media/UploadFolderContext";
 
 interface PostWithBlocks extends PostType {
   blocks: BlockType[];
@@ -114,6 +115,7 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
   const publicPostUrl = `/blog/${postWithBlocks.slug}`;
   
   return (
+    <UploadFolderProvider defaultFolder={`posts/${postWithBlocks.slug}/`}>
     <div className="space-y-8 w-full mx-auto px-6">
       <div className="flex justify-between items-center flex-wrap gap-4 w-full">
         <div className="flex items-center gap-3">
@@ -174,5 +176,6 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
         />
       </div>
     </div>
+    </UploadFolderProvider>
   );
 }
