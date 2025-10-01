@@ -52,3 +52,6 @@ out
 .env.development.local
 vite.config.*.timestamp*
 vitest.config.*.timestamp*
+
+# custom
+apps/nextblock/backup/

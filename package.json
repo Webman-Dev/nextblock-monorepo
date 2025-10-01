@@ -4,7 +4,9 @@
   "license": "MIT",
   "scripts": {
     "all-builds": "nx run-many --target=build --all --exclude=source",
-    "lint": "npx nx lint nextblock --skip-nx-cache"
+    "lint": "npx nx lint nextblock --skip-nx-cache",
+    "db:backup": "node apps/nextblock/scripts/backup.js",
+    "db:types": "node tools/scripts/gen-db-types.js"
   },
   "private": true,
   "devDependencies": {
