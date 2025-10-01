@@ -33,17 +33,27 @@ export default function ImageBlockEditor({ content, onChange }: BlockEditorProps
   
 
   const handleSelectMediaFromLibrary = (mediaItem: Media) => {
+    // Always reset alt to the new media's description (or derived from filename)
+    const deriveAltFromFilename = (name: string) => {
+      const lastDot = name.lastIndexOf('.');
+      const base = lastDot > 0 ? name.substring(0, lastDot) : name;
+      const spaced = base.replace(/[\-_+]+/g, ' ').replace(/\s+/g, ' ').trim();
+      return spaced.replace(/\b\w+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1));
+    };
+    const newAlt = mediaItem.description && mediaItem.description.trim().length > 0
+      ? mediaItem.description
+      : deriveAltFromFilename(mediaItem.file_name || 'Image');
+
     setSelectedMediaObjectKey(mediaItem.object_key);
     onChange({
       media_id: mediaItem.id,
-      object_key: mediaItem.object_key, // Store the object_key
-      alt_text: content.alt_text || mediaItem.description || mediaItem.file_name,
+      object_key: mediaItem.object_key,
+      alt_text: newAlt, // overwrite alt when image changes
       caption: content.caption || "",
       width: mediaItem.width,
       height: mediaItem.height,
       blur_data_url: mediaItem.blur_data_url,
     });
-    
   };
 
   const handleAltTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {

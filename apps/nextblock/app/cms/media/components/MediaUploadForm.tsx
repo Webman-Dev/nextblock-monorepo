@@ -181,6 +181,19 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData, defau
         setUploadProgress(100);
 
         // 2. Record media in Supabase
+        // Derive a default alt/description for images when none provided
+        const deriveAltFromFilename = (name: string) => {
+          const lastDot = name.lastIndexOf('.');
+          const base = lastDot > 0 ? name.substring(0, lastDot) : name;
+          const spaced = base.replace(/[\-_+]+/g, ' ').replace(/\s+/g, ' ').trim();
+          // Title-case words
+          return spaced.replace(/\b\w+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1));
+        };
+
+        const defaultDescription = currentFileForUpload.type.startsWith('image/')
+          ? deriveAltFromFilename(currentFileForUpload.name)
+          : undefined;
+
         const mediaDataPayload = {
           fileName: currentFileForUpload.name,
           objectKey: objectKey,
@@ -188,6 +201,7 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData, defau
           sizeBytes: currentFileForUpload.size,
           width: imageDimensions?.width,
           height: imageDimensions?.height,
+          description: defaultDescription,
         };
 
         // 3. Process image variants

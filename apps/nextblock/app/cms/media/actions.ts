@@ -82,6 +82,19 @@ export async function recordMediaUpload(payload: {
     index === self.findIndex((v) => v.objectKey === variant.objectKey)
   ); // Ensure unique variants by objectKey
 
+  // If no description provided for images, derive one from the filename (un-slug)
+  const deriveAltFromFilename = (name: string) => {
+    const lastDot = name.lastIndexOf('.');
+    const base = lastDot > 0 ? name.substring(0, lastDot) : name;
+    const spaced = base.replace(/[\-_+]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return spaced.replace(/\b\w+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1));
+  };
+
+  const computedDescription = payload.description
+    ?? ((primaryVariant.fileType?.startsWith('image/') || payload.originalImageDetails?.fileType?.startsWith('image/'))
+      ? deriveAltFromFilename(payload.fileName)
+      : null);
+
   const mediaData: Omit<Media, 'id' | 'created_at' | 'updated_at'> & { uploader_id: string } = {
     uploader_id: user.id,
     file_name: payload.fileName, // Keep original file name for reference
@@ -95,7 +108,7 @@ export async function recordMediaUpload(payload: {
     // file_url is removed as it's not in the Media type; URLs are in variants
     file_type: primaryVariant.fileType,
     size_bytes: primaryVariant.sizeBytes,
-    description: payload.description || null,
+    description: computedDescription,
     width: primaryVariant.width,
     height: primaryVariant.height,
     variants: allVariantsToStore as any, // Store all variants including the original
