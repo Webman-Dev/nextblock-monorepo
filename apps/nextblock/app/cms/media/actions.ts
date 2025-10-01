@@ -87,6 +87,11 @@ export async function recordMediaUpload(payload: {
     file_name: payload.fileName, // Keep original file name for reference
     object_key: primaryVariant.objectKey, // Key of the primary display version
     file_path: primaryVariant.objectKey,
+    folder: (() => {
+      const match = primaryVariant.objectKey.match(/^(.*\/)?.*$/);
+      const path = match && match[1] ? match[1] : null;
+      return path;
+    })(),
     // file_url is removed as it's not in the Media type; URLs are in variants
     file_type: primaryVariant.fileType,
     size_bytes: primaryVariant.sizeBytes,

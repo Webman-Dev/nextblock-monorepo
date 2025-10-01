@@ -11,13 +11,20 @@ type Media = Database['public']['Tables']['media']['Row'];
 import MediaUploadForm from "./components/MediaUploadForm";
 // MediaImage and DeleteMediaButtonClient are used by MediaGridClient, not directly here anymore.
 import MediaGridClient from "./components/MediaGridClient"; // Import the new client component
+import FolderFilterInput from "./components/FolderFilterInput";
 
-async function getMediaItems(): Promise<Media[]> {
+async function getMediaItems(folder?: string): Promise<Media[]> {
   const supabase = createClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("media")
     .select("*")
     .order("created_at", { ascending: false });
+
+  if (folder && folder.trim()) {
+    query = query.eq('folder', folder);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("Error fetching media items:", error);
@@ -28,13 +35,17 @@ async function getMediaItems(): Promise<Media[]> {
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 
-export default async function CmsMediaLibraryPage() {
-  const mediaItems = await getMediaItems();
+export default async function CmsMediaLibraryPage(props: { searchParams?: Promise<{ folder?: string }> }) {
+  const searchParams = (await props.searchParams) || {};
+  const selectedFolder = searchParams.folder;
+  const mediaItems = await getMediaItems(selectedFolder);
 
   return (
     <div className="w-full space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold">Media Library</h1>
+        {/* Simple folder filter via query param */}
+        <FolderFilterInput basePath="/cms/media" initialFolder={selectedFolder || ''} />
       </div>
 
       <MediaUploadForm />

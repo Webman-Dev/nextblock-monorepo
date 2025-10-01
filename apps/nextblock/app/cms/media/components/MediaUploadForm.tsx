@@ -32,6 +32,7 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData }: Med
   const [isDraggingOver, setIsDraggingOver] = useState(false); // For drag-and-drop visual feedback
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [processingStatus, setProcessingStatus] = useState<"idle" | "processing" | "processed_error">("idle");
+  const [folder, setFolder] = useState<string>("uploads/");
 
   const resetFileSelection = () => {
     setFile(null);
@@ -154,6 +155,9 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData }: Med
         // 1. Upload file via proxy
         const formData = new FormData();
         formData.append('file', currentFileForUpload);
+        if (folder) {
+          formData.append('folder', folder);
+        }
 
         const proxyResponse = await fetch('/api/upload/proxy', {
           method: 'POST',
@@ -258,6 +262,17 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData }: Med
       <form onSubmit={handleFormSubmit} className="space-y-4">
         <div>
           <Label htmlFor="media-file" className="text-base font-medium">Upload New Media</Label>
+          <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="media-folder" className="text-sm">Folder (e.g., uploads/images/)</Label>
+              <Input
+                id="media-folder"
+                placeholder="uploads/"
+                value={folder}
+                onChange={(e) => setFolder(e.target.value)}
+              />
+            </div>
+          </div>
           <div className="mt-2 flex items-center justify-center w-full">
             <label
               htmlFor="media-file-input"

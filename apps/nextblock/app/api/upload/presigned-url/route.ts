@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { filename, contentType, size } = await request.json();
+    const { filename, contentType, size, folder: rawFolder } = await request.json();
 
     if (!filename || !contentType || !size) {
       return NextResponse.json({ error: "Missing filename, contentType, or size" }, { status: 400 });
@@ -57,7 +57,21 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     const timestamp = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
 
-    const uniqueKey = `uploads/${sanitizedBaseFilename}_${timestamp}${fileExtension ? '.' + fileExtension : ''}`;
+    // Sanitize and normalize folder path
+    const sanitizeFolder = (input?: string | null) => {
+      const f = (input ?? '').toString().trim();
+      if (!f) return 'uploads/';
+      // remove leading slashes, collapse .. and illegal chars
+      let cleaned = f.replace(/^\/+/, '');
+      cleaned = cleaned.replace(/\\/g, '/');
+      cleaned = cleaned.replace(/\.{2,}/g, '');
+      cleaned = cleaned.replace(/[^a-zA-Z0-9_\-/]+/g, '-');
+      if (cleaned && !cleaned.endsWith('/')) cleaned += '/';
+      return cleaned || 'uploads/';
+    };
+    const folder = sanitizeFolder(rawFolder);
+
+    const uniqueKey = `${folder}${sanitizedBaseFilename}_${timestamp}${fileExtension ? '.' + fileExtension : ''}`;
 
     const command = new PutObjectCommand({
       Bucket: R2_BUCKET_NAME,

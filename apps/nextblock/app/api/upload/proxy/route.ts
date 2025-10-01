@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
+    const rawFolder = (formData.get('folder') as string | null) ?? undefined;
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided.' }, { status: 400 });
@@ -32,7 +33,20 @@ export async function POST(request: NextRequest) {
     const sanitizedBaseFilename = baseFilename.toLowerCase().replace(/\s+/g, '-').replace(/[^\w.-]+/g, '');
     const now = new Date();
     const timestamp = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
-    const uniqueKey = `uploads/${sanitizedBaseFilename}_${timestamp}${fileExtension ? '.' + fileExtension : ''}`;
+    // Sanitize and normalize folder path
+    const sanitizeFolder = (input?: string | null) => {
+      const f = (input ?? '').toString().trim();
+      if (!f) return 'uploads/';
+      let cleaned = f.replace(/^\/+/, '');
+      cleaned = cleaned.replace(/\\/g, '/');
+      cleaned = cleaned.replace(/\.{2,}/g, '');
+      cleaned = cleaned.replace(/[^a-zA-Z0-9_\-/]+/g, '-');
+      if (cleaned && !cleaned.endsWith('/')) cleaned += '/';
+      return cleaned || 'uploads/';
+    };
+    const folder = sanitizeFolder(rawFolder);
+
+    const uniqueKey = `${folder}${sanitizedBaseFilename}_${timestamp}${fileExtension ? '.' + fileExtension : ''}`;
 
     // Convert file to buffer
     const bytes = await file.arrayBuffer();
