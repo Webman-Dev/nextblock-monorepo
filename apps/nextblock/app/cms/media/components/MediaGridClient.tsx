@@ -3,6 +3,8 @@
 import React, { useState, useTransition, useEffect } from "react";
 import type { Database } from "@nextblock-monorepo/db";
 import { Button } from "@nextblock-monorepo/ui";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@nextblock-monorepo/ui";
+import { Progress } from "@nextblock-monorepo/ui";
 
 type Media = Database['public']['Tables']['media']['Row'];
 import { Checkbox } from "@nextblock-monorepo/ui";
@@ -17,7 +19,7 @@ import {
 } from "@nextblock-monorepo/ui";
 import MediaImage from "./MediaImage";
 import DeleteMediaButtonClient from "./DeleteMediaButtonClient"; // For single item deletion
-import { deleteMultipleMediaItems } from "../actions"; // Server action for bulk delete
+import { deleteMultipleMediaItems, moveSingleMediaItem } from "../actions"; // Server actions for bulk ops
 
 interface MediaGridClientProps {
   initialMediaItems: Media[];
@@ -34,6 +36,11 @@ export default function MediaGridClient({ initialMediaItems, r2BaseUrl }: MediaG
   const [mediaItems, setMediaItems] = useState<Media[]>(initialMediaItems);
   const [message, setMessage] = useState<MessageState | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [moveFolder, setMoveFolder] = useState<string>("");
+  const [isMoving, setIsMoving] = useState(false);
+  const [moveProgress, setMoveProgress] = useState(0);
+  const [moveError, setMoveError] = useState<string | null>(null);
 
   useEffect(() => {
     setMediaItems(initialMediaItems);
@@ -72,6 +79,56 @@ export default function MediaGridClient({ initialMediaItems, r2BaseUrl }: MediaG
     });
   };
 
+  const beginBulkMove = () => {
+    if (selectedItems.length === 0) {
+      setMessage({ type: "error", text: "No items selected for move." });
+      return;
+    }
+    setMoveFolder("");
+    setMoveDialogOpen(true);
+  };
+
+  const confirmBulkMove = async () => {
+    const dest = moveFolder.trim();
+    if (!dest) {
+      setMoveError("Please enter a destination folder.");
+      return;
+    }
+    setMoveError(null);
+    setIsMoving(true);
+    setMoveProgress(0);
+    try {
+      const total = selectedItems.length;
+      let moved = 0;
+      let hadError = false;
+      for (const item of selectedItems) {
+        const res = await moveSingleMediaItem(item, dest);
+        if ((res as any)?.error) {
+          // Accumulate errors but keep going
+          hadError = true;
+          setMoveError((prev) => (prev ? prev + " | " : "") + (res as any).error);
+        } else {
+          // Update local list
+          setMediaItems((prev) => prev.map((m) => {
+            if (m.id !== item.id) return m;
+            const filename = m.object_key.substring(m.object_key.lastIndexOf('/') + 1);
+            const folder = ensureFolderSlash(dest);
+            return { ...m, object_key: `${folder}${filename}`, folder } as any;
+          }));
+        }
+        moved += 1;
+        setMoveProgress(Math.round((moved / total) * 100));
+      }
+      if (!hadError) setMessage({ type: "success", text: `Moved ${selectedItems.length} item(s).` });
+      setSelectedItems([]);
+      setMoveDialogOpen(false);
+    } finally {
+      setIsMoving(false);
+    }
+  };
+
+  const ensureFolderSlash = (f: string) => (f.endsWith('/') ? f : `${f}/`);
+
   const isSelected = (itemId: string) => {
     return selectedItems.some((item) => item.id === itemId);
   };
@@ -79,20 +136,54 @@ export default function MediaGridClient({ initialMediaItems, r2BaseUrl }: MediaG
   return (
     <div className="space-y-6">
       {selectedItems.length > 0 && (
-        <div className="flex items-center justify-between p-4 border rounded-lg bg-card">
-          <p className="text-sm font-medium">
-            {selectedItems.length} item(s) selected
-          </p>
-          <Button
-            variant="destructive"
-            onClick={handleBulkDelete}
-            disabled={isPending}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            {isPending ? "Deleting..." : "Delete Selected"}
-          </Button>
+        <div className="flex flex-col gap-3 p-4 border rounded-lg bg-card">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">{selectedItems.length} item(s) selected</p>
+            <div className="flex items-center gap-2">
+              <Button onClick={beginBulkMove} disabled={isPending}>
+                Move Selected
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleBulkDelete}
+                disabled={isPending}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {isPending ? "Deleting..." : "Delete Selected"}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
+
+      <Dialog open={moveDialogOpen} onOpenChange={(open) => { if (!isMoving) setMoveDialogOpen(open); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move {selectedItems.length} item(s)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <input
+              type="text"
+              value={moveFolder}
+              onChange={(e) => setMoveFolder(e.target.value)}
+              placeholder="Destination folder e.g. uploads/images/"
+              className="w-full border rounded-md px-3 h-9"
+              disabled={isMoving}
+            />
+            {isMoving && (
+              <div className="space-y-2">
+                <Progress value={moveProgress} />
+                <p className="text-xs text-muted-foreground">Moving... {moveProgress}%</p>
+              </div>
+            )}
+            {moveError && <p className="text-sm text-red-600">{moveError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoveDialogOpen(false)} disabled={isMoving}>Cancel</Button>
+            <Button onClick={confirmBulkMove} disabled={isMoving || selectedItems.length === 0}>Start Move</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {message && (
         <div

@@ -296,6 +296,214 @@ export async function deleteMultipleMediaItems(items: Array<{ id: string; object
 }
 
 
+export async function moveMultipleMediaItems(
+  items: Array<{ id: string; objectKey: string }>,
+  destinationFolder: string
+) {
+  const supabase = createClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { error: "User not authenticated." };
+  }
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  if (!profile || !["ADMIN", "WRITER"].includes(profile.role)) {
+    return { error: "Forbidden: Insufficient permissions." };
+  }
+
+  const sanitizeFolder = (input?: string | null) => {
+    const f = (input ?? '').toString().trim();
+    if (!f) return 'uploads/';
+    let cleaned = f.replace(/^\/+/, '');
+    cleaned = cleaned.replace(/\\/g, '/');
+    cleaned = cleaned.replace(/\.{2,}/g, '');
+    cleaned = cleaned.replace(/[^a-zA-Z0-9_\-/]+/g, '-');
+    if (cleaned && !cleaned.endsWith('/')) cleaned += '/';
+    return cleaned || 'uploads/';
+  };
+  const folder = sanitizeFolder(destinationFolder);
+
+  const { CopyObjectCommand, DeleteObjectCommand, ListObjectsV2Command, HeadObjectCommand } = await import("@aws-sdk/client-s3");
+  const { s3Client } = await import("@nextblock-monorepo/utils/server");
+  const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
+  const R2_PUBLIC_URL_BASE = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
+
+  if (!R2_BUCKET_NAME) {
+    return { error: "R2 Bucket not configured for move." };
+  }
+
+  if (!items || items.length === 0) {
+    return { error: "No items selected for move." };
+  }
+
+  const results: Array<{ id: string; ok: boolean; error?: string }> = [];
+
+  for (const item of items) {
+    try {
+      // Load media to retrieve variants
+      const { data: mediaRow, error: mediaError } = await supabase
+        .from("media")
+        .select("id, object_key, file_type, variants")
+        .eq("id", item.id)
+        .single();
+
+      if (mediaError || !mediaRow) {
+        results.push({ id: item.id, ok: false, error: mediaError?.message || 'Media not found' });
+        continue;
+      }
+
+      const getFilename = (key: string) => key.substring(key.lastIndexOf('/') + 1);
+      let newMainKey = `${folder}${getFilename(mediaRow.object_key)}`;
+
+      // Build list of keys to move: primary + variant keys (if any)
+      type Variant = { objectKey: string; url?: string; [k: string]: any };
+      const oldVariants: Variant[] = Array.isArray(mediaRow.variants) ? (mediaRow.variants as Variant[]) :
+        (typeof mediaRow.variants === 'object' && mediaRow.variants !== null ? (mediaRow.variants as any) : []);
+
+      const variantMoves = (oldVariants || []).map((v) => ({
+        oldKey: v.objectKey,
+        newKey: `${folder}${getFilename(v.objectKey)}`,
+      }));
+
+      const objectsToMove = [
+        { oldKey: mediaRow.object_key, newKey: newMainKey, isMain: true },
+        ...variantMoves.map(v => ({ ...v, isMain: false })),
+      ];
+
+      // Copy then delete each object; tolerate missing variant keys, but main object must exist
+      const movedKeys = new Set<string>();
+      let mainMoved = false;
+      for (const { oldKey, newKey, isMain } of objectsToMove as Array<{oldKey:string; newKey:string; isMain:boolean}>) {
+        if (oldKey === newKey) continue;
+        // If destination already has the object, treat as moved and try to delete source if present
+        try {
+          await s3Client.send(new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: newKey }));
+          movedKeys.add(oldKey);
+          if (isMain) {
+            mainMoved = true;
+            newMainKey = newKey;
+          }
+          try { await s3Client.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: oldKey })); } catch {}
+          continue;
+        } catch {}
+        const encodedSourceKey = encodeURIComponent(oldKey).replace(/%2F/g, '/');
+        const copySource = `/${R2_BUCKET_NAME}/${encodedSourceKey}`; // S3/R2 expects a leading slash
+        try {
+          await s3Client.send(new CopyObjectCommand({ Bucket: R2_BUCKET_NAME, CopySource: copySource, Key: newKey }));
+          await s3Client.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: oldKey }));
+          movedKeys.add(oldKey);
+          if (isMain) mainMoved = true;
+        } catch (err: any) {
+          const name = err?.name || '';
+          const message = err?.message || String(err);
+          const isNoSuchKey = /NoSuchKey/i.test(name) || /NoSuchKey/i.test(message);
+          if (isMain) {
+            // Main object missing: attempt fallback to any existing variant
+            let promoted = false;
+            for (const vm of variantMoves) {
+              try {
+                const encVar = encodeURIComponent(vm.oldKey).replace(/%2F/g, '/');
+                const srcVar = `/${R2_BUCKET_NAME}/${encVar}`;
+                await s3Client.send(new CopyObjectCommand({ Bucket: R2_BUCKET_NAME, CopySource: srcVar, Key: vm.newKey }));
+                await s3Client.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: vm.oldKey }));
+                movedKeys.add(vm.oldKey);
+                newMainKey = vm.newKey; // promote this variant as new main
+                mainMoved = true;
+                promoted = true;
+                break;
+              } catch {
+                // try next variant
+              }
+            }
+            if (!promoted) {
+              // Last-resort fallback: list objects using a base prefix derived from timestamped key
+              // Keys look like: uploads/name_YYYYMMDDHHMMSS_original.avif or uploads/name_YYYYMMDD.png
+              const withoutExt = mediaRow.object_key.replace(/\.[^/.]+$/, '');
+              const tsMatch = withoutExt.match(/^(.*?_\d{8,14})/); // capture up to timestamp
+              let basePrefix = tsMatch ? tsMatch[1] : withoutExt.replace(/_(original(?:_uploaded)?|xlarge_avif|large_avif|medium_avif|small_avif|thumbnail_avif|[a-z]+)$/i, '');
+              // Ensure it ends with the underscore-delimited base, not variant label
+              const prefixGuess = basePrefix;
+              try {
+                const listed = await s3Client.send(new ListObjectsV2Command({ Bucket: R2_BUCKET_NAME, Prefix: prefixGuess }));
+                const keys = (listed.Contents || []).map(o => o.Key).filter(Boolean) as string[];
+                // Prefer common image extensions if present
+                const preferred = keys.find(k => /\.(avif|png|jpe?g|webp|gif|svg)$/i.test(k)) || keys[0];
+                if (preferred) {
+                  const enc = encodeURIComponent(preferred).replace(/%2F/g, '/');
+                  const src = `/${R2_BUCKET_NAME}/${enc}`;
+                  const targetKey = `${folder}${getFilename(preferred)}`;
+                  await s3Client.send(new CopyObjectCommand({ Bucket: R2_BUCKET_NAME, CopySource: src, Key: targetKey }));
+                  await s3Client.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: preferred }));
+                  movedKeys.add(preferred);
+                  newMainKey = targetKey;
+                  mainMoved = true;
+                } else {
+                  results.push({ id: item.id, ok: false, error: `Main key missing: ${oldKey} (${name}: ${message})` });
+                  mainMoved = false;
+                }
+              } catch (e: any) {
+                results.push({ id: item.id, ok: false, error: `Main key missing: ${oldKey} (${name}: ${message})` });
+                mainMoved = false;
+              }
+            }
+            // Regardless, skip to next objectToMove item
+            continue;
+          }
+          // Variant missing: tolerate and continue; we'll drop it from variants below
+          // Do nothing (optionally could log)
+        }
+      }
+      if (!mainMoved) {
+        // Already pushed a result; proceed to next item
+        continue;
+      }
+
+      // Update variants with new keys + urls
+      const newVariants = (oldVariants || [])
+        .filter((v) => movedKeys.has(v.objectKey)) // keep only variants that were successfully moved
+        .map((v) => {
+          const filename = getFilename(v.objectKey);
+          const updatedKey = `${folder}${filename}`;
+          const updated = { ...v, objectKey: updatedKey } as any;
+          if (R2_PUBLIC_URL_BASE) updated.url = `${R2_PUBLIC_URL_BASE}/${updatedKey}`;
+          return updated;
+        });
+
+      // Update DB
+      const { error: updateError } = await supabase
+        .from('media')
+        .update({ object_key: newMainKey, file_path: newMainKey, folder, variants: newVariants as any })
+        .eq('id', item.id);
+      if (updateError) {
+        results.push({ id: item.id, ok: false, error: updateError.message });
+        continue;
+      }
+
+      results.push({ id: item.id, ok: true });
+    } catch (err: any) {
+      const msg = err?.name && err?.message ? `${err.name}: ${err.message}` : (err?.message || String(err));
+      results.push({ id: item.id, ok: false, error: msg });
+    }
+  }
+
+  const failed = results.filter(r => !r.ok);
+  if (failed.length > 0) {
+    const detail = failed.map(f => `${f.id}${f.error ? ` (${f.error})` : ''}`).join(', ');
+    return { error: `Moved ${results.length - failed.length} item(s), ${failed.length} failed: ${detail}` };
+  }
+
+  revalidatePath('/cms/media');
+  return { success: `Moved ${results.length} item(s) to ${folder}` };
+}
+
+export async function moveSingleMediaItem(item: { id: string; objectKey: string }, destinationFolder: string) {
+  // Reuse the multiple-items logic for a single element to keep behavior aligned.
+  const res = await moveMultipleMediaItems([item], destinationFolder);
+  return res;
+}
+
+
 // Type for inserting media
 
 export async function getMediaItems(
