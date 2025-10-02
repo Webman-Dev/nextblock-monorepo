@@ -246,7 +246,7 @@ export default function MediaGridClient({ initialMediaItems, r2BaseUrl }: MediaG
                 </div>
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
-                <div className="text-xs text-white truncate pt-1" title={item.file_name}>{item.file_name}</div>
+                <div className="text-xs text-black truncate pt-1 ps-5" title={item.file_name}>{item.file_name}</div>
                 <div className="self-end">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

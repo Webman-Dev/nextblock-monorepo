@@ -54,15 +54,42 @@ async function getDistinctFolders(): Promise<string[]> {
   return Array.from(new Set(folders.map((f: string) => (f.endsWith('/') ? f : f + '/'))));
 }
 
+async function getFolderCounts(): Promise<Record<string, number>> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("media")
+    .select("folder");
+  if (error) {
+    console.error("Error fetching folder counts:", error);
+    return {};
+  }
+  const counts: Record<string, number> = {};
+  (data || []).forEach((row: any) => {
+    const f: string | null = row.folder;
+    if (!f || typeof f !== 'string' || f.length === 0) return;
+    const norm = f.endsWith('/') ? f : `${f}/`;
+    // accumulate counts for each prefix in the path
+    const parts = norm.replace(/^\/+/, '').split('/').filter(Boolean);
+    let prefix = '';
+    for (let i = 0; i < parts.length; i++) {
+      prefix += (i === 0 ? '' : '/') + parts[i];
+      const key = `${prefix}/`;
+      counts[key] = (counts[key] || 0) + 1;
+    }
+  });
+  return counts;
+}
+
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 
 export default async function CmsMediaLibraryPage(props: { searchParams?: Promise<{ folder?: string; folderPrefix?: string }> }) {
   const searchParams = (await props.searchParams) || {};
   const selectedFolder = searchParams.folder;
   const selectedFolderPrefix = searchParams.folderPrefix;
-  const [mediaItems, folders] = await Promise.all([
+  const [mediaItems, folders, folderCounts] = await Promise.all([
     getMediaItems(selectedFolder, selectedFolderPrefix),
     getDistinctFolders(),
+    getFolderCounts(),
   ]);
 
   return (
@@ -77,7 +104,7 @@ export default async function CmsMediaLibraryPage(props: { searchParams?: Promis
 
       {/* Compact folder navigator with top tabs and subfolder pills */}
       <div className="mt-2">
-        <FolderNavigator basePath="/cms/media" folders={folders} selectedFolder={selectedFolder || ''} selectedPrefix={selectedFolderPrefix || ''} />
+        <FolderNavigator basePath="/cms/media" folders={folders} selectedFolder={selectedFolder || ''} selectedPrefix={selectedFolderPrefix || ''} counts={folderCounts} />
       </div>
 
       {/* The media grid and empty state are now handled by MediaGridClient */}
