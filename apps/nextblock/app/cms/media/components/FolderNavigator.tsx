@@ -24,8 +24,12 @@ export default function FolderNavigator({ folders, basePath, selectedFolder, sel
       const parts = f.replace(/^\/+/, "").split("/").filter(Boolean);
       const top = (parts[0] || "").toLowerCase();
       const child = parts.length >= 2 ? `${top}/${parts[1]}/` : `${top}/`;
-      if (!map.has(top)) map.set(top, new Set<string>());
-      map.get(top)!.add(child);
+      let set = map.get(top);
+      if (!set) {
+        set = new Set<string>();
+        map.set(top, set);
+      }
+      set.add(child);
     });
     return Array.from(map.entries())
       .map(([name, children]) => ({ name, count: children.size }))

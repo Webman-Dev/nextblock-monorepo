@@ -12,7 +12,6 @@ import MediaUploadForm from "./components/MediaUploadForm";
 // MediaImage and DeleteMediaButtonClient are used by MediaGridClient, not directly here anymore.
 import MediaGridClient from "./components/MediaGridClient"; // Import the new client component
 import FolderFilterInput from "./components/FolderFilterInput";
-import FolderList from "./components/FolderList";
 import FolderNavigator from "./components/FolderNavigator";
 
 async function getMediaItems(folder?: string, folderPrefix?: string): Promise<Media[]> {
@@ -41,7 +40,7 @@ async function getDistinctFolders(): Promise<string[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("media")
-    .select("folder", { distinct: true })
+    .select("folder")
     .order("folder", { ascending: true });
   if (error) {
     console.error("Error fetching folders:", error);
