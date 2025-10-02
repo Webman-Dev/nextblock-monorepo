@@ -137,15 +137,23 @@ export async function recordMediaUpload(payload: {
 }
 
 
-export async function updateMediaItem(mediaId: string, payload: { description?: string; file_name?: string }) {
+export async function updateMediaItem(
+    mediaId: string,
+    payload: { description?: string; file_name?: string },
+    returnJustData?: boolean
+) {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     const mediaEditPath = `/cms/media/${mediaId}/edit`;
 
-    if (!user) return encodedRedirect("error", mediaEditPath, "User not authenticated for media update.");
+    if (!user) {
+        if (returnJustData) return { error: "User not authenticated for media update." };
+        return encodedRedirect("error", mediaEditPath, "User not authenticated for media update.");
+    }
 
     const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
     if (!profile || !["ADMIN", "WRITER"].includes(profile.role)) {
+        if (returnJustData) return { error: "Forbidden to update media." };
         return encodedRedirect("error", mediaEditPath, "Forbidden to update media.");
     }
 
@@ -154,11 +162,12 @@ export async function updateMediaItem(mediaId: string, payload: { description?: 
     if (payload.file_name !== undefined) updateData.file_name = payload.file_name;
 
     if (Object.keys(updateData).length === 0) {
+        if (returnJustData) return { error: "No updatable fields provided for media." };
         return encodedRedirect("error", mediaEditPath, "No updatable fields provided for media.");
     }
     updateData.updated_at = new Date().toISOString();
 
-    const { error } = await supabase
+    const { data: updatedMedia, error } = await supabase
         .from("media")
         .update(updateData)
         .eq("id", mediaId)
@@ -167,10 +176,14 @@ export async function updateMediaItem(mediaId: string, payload: { description?: 
 
     if (error) {
         console.error("Error updating media item:", error);
+        if (returnJustData) return { error: `Error updating media: ${error.message}` };
         return encodedRedirect("error", mediaEditPath, `Error updating media: ${error.message}`);
     }
     revalidatePath("/cms/media");
     revalidatePath(mediaEditPath);
+    if (returnJustData) {
+        return { success: true, media: updatedMedia } as { success: true; media: Media };
+    }
     encodedRedirect("success", mediaEditPath, "Media item updated successfully.");
 }
 

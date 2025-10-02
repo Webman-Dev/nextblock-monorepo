@@ -57,7 +57,8 @@ export default async function EditMediaPage(props: { params: Promise<{ id: strin
     "use server";
     const description = formData.get("description") as string | undefined;
     const file_name = formData.get("file_name") as string | undefined;
-    return await updateMediaItem(mediaItem.id, { description, file_name });
+    // Return data instead of redirect to avoid NEXT_REDIRECT noise during dev
+    return await updateMediaItem(mediaItem.id, { description, file_name }, true);
   };
 
   return (
