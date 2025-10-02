@@ -11,7 +11,6 @@ type Media = Database['public']['Tables']['media']['Row'];
 import MediaUploadForm from "./components/MediaUploadForm";
 // MediaImage and DeleteMediaButtonClient are used by MediaGridClient, not directly here anymore.
 import MediaGridClient from "./components/MediaGridClient"; // Import the new client component
-import FolderFilterInput from "./components/FolderFilterInput";
 import FolderNavigator from "./components/FolderNavigator";
 
 async function getMediaItems(folder?: string, folderPrefix?: string, search?: string): Promise<Media[]> {
@@ -105,8 +104,6 @@ export default async function CmsMediaLibraryPage(props: { searchParams?: Promis
     <div className="w-full space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold">Media Library</h1>
-        {/* Simple folder filter via query param */}
-        <FolderFilterInput basePath="/cms/media" initialFolder={selectedFolder || ''} />
       </div>
 
       <MediaUploadForm />
