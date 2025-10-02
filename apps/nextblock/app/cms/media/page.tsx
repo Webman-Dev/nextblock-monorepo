@@ -14,7 +14,7 @@ import MediaGridClient from "./components/MediaGridClient"; // Import the new cl
 import FolderFilterInput from "./components/FolderFilterInput";
 import FolderNavigator from "./components/FolderNavigator";
 
-async function getMediaItems(folder?: string, folderPrefix?: string): Promise<Media[]> {
+async function getMediaItems(folder?: string, folderPrefix?: string, search?: string): Promise<Media[]> {
   const supabase = createClient();
   let query = supabase
     .from("media")
@@ -27,6 +27,11 @@ async function getMediaItems(folder?: string, folderPrefix?: string): Promise<Me
     query = query.ilike('folder', `${folderPrefix}%`);
   }
 
+  if (search && search.trim()) {
+    const term = search.trim();
+    query = query.or(`file_name.ilike.%${term}%,description.ilike.%${term}%`);
+  }
+
   const { data, error } = await query;
 
   if (error) {
@@ -36,7 +41,7 @@ async function getMediaItems(folder?: string, folderPrefix?: string): Promise<Me
   return data || [];
 }
 
-async function getDistinctFolders(): Promise<string[]> {
+async function getDistinctFolders(search?: string): Promise<string[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("media")
@@ -46,9 +51,13 @@ async function getDistinctFolders(): Promise<string[]> {
     console.error("Error fetching folders:", error);
     return [];
   }
-  const folders = (data || [])
+  let folders = (data || [])
     .map((r: any) => r.folder)
     .filter((f: any) => typeof f === 'string' && f.length > 0);
+  if (search && search.trim()) {
+    const t = search.trim().toLowerCase();
+    folders = folders.filter((f: string) => f.toLowerCase().includes(t));
+  }
   // Ensure trailing slash for consistency
   return Array.from(new Set(folders.map((f: string) => (f.endsWith('/') ? f : f + '/'))));
 }
@@ -81,13 +90,14 @@ async function getFolderCounts(): Promise<Record<string, number>> {
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 
-export default async function CmsMediaLibraryPage(props: { searchParams?: Promise<{ folder?: string; folderPrefix?: string }> }) {
+export default async function CmsMediaLibraryPage(props: { searchParams?: Promise<{ folder?: string; folderPrefix?: string; q?: string }> }) {
   const searchParams = (await props.searchParams) || {};
   const selectedFolder = searchParams.folder;
   const selectedFolderPrefix = searchParams.folderPrefix;
+  const searchQuery = searchParams.q;
   const [mediaItems, folders, folderCounts] = await Promise.all([
-    getMediaItems(selectedFolder, selectedFolderPrefix),
-    getDistinctFolders(),
+    getMediaItems(selectedFolder, selectedFolderPrefix, searchQuery),
+    getDistinctFolders(searchQuery),
     getFolderCounts(),
   ]);
 
@@ -103,7 +113,7 @@ export default async function CmsMediaLibraryPage(props: { searchParams?: Promis
 
       {/* Compact folder navigator with top tabs and subfolder pills */}
       <div className="mt-2">
-        <FolderNavigator basePath="/cms/media" folders={folders} selectedFolder={selectedFolder || ''} selectedPrefix={selectedFolderPrefix || ''} counts={folderCounts} />
+        <FolderNavigator basePath="/cms/media" folders={folders} selectedFolder={selectedFolder || ''} selectedPrefix={selectedFolderPrefix || ''} counts={folderCounts} searchTerm={searchQuery || ''} />
       </div>
 
       {/* The media grid and empty state are now handled by MediaGridClient */}
