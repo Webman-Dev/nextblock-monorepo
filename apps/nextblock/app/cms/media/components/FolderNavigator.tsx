@@ -2,7 +2,8 @@
 
 import React, { useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button } from "@nextblock-monorepo/ui";
+import { Button, Badge } from "@nextblock-monorepo/ui";
+import { Folder as FolderIcon } from "lucide-react";
 
 interface FolderNavigatorProps {
   folders: string[];
@@ -50,13 +51,14 @@ export default function FolderNavigator({ folders, basePath, selectedFolder, sel
       const top = selectedFolder.replace(/^\/+/, "").split("/").filter(Boolean)[0] || "";
       return top.toLowerCase();
     }
-    return groups[0]?.name ?? ""; // default to first group if present
-  }, [selectedPrefix, selectedFolder, groups]);
+    // When "All" is selected, no group is active
+    return "";
+  }, [selectedPrefix, selectedFolder]);
 
   const topTabs = ["logos", "pages", "posts", "uploads"]
     .filter((t) => groups.find((g) => g.name === t));
 
-  const activeChildren = groups.find((g) => g.name === activeGroup)?.children ?? [];
+  const activeChildren = activeGroup ? (groups.find((g) => g.name === activeGroup)?.children ?? []) : [];
   const MAX_CHILDREN = 10;
   const visibleChildren = activeChildren.slice(0, MAX_CHILDREN);
 
@@ -72,7 +74,7 @@ export default function FolderNavigator({ folders, basePath, selectedFolder, sel
           All
         </Button>
         {topTabs.map((t) => {
-          const isActive = activeGroup === t && !selectedFolder && (!!selectedPrefix || groups.length > 0);
+          const isActive = (selectedPrefix === `${t}/`) || (!!selectedFolder && selectedFolder.startsWith(`${t}/`));
           const count = groups.find((g) => g.name === t)?.count ?? 0;
           return (
             <Button
@@ -80,8 +82,15 @@ export default function FolderNavigator({ folders, basePath, selectedFolder, sel
               size="sm"
               variant={isActive ? "default" : "outline"}
               onClick={() => apply({ folder: null, folderPrefix: `${t}/` })}
+              className="flex items-center gap-1"
             >
-              {`${t}/*${count ? ` (${count})` : ""}`}
+              <FolderIcon className="h-3.5 w-3.5" aria-hidden />
+              <span className="capitalize">{t}</span>
+              {typeof count === 'number' && (
+                <Badge variant={isActive ? "secondary" : "outline"} className="ml-1 px-1.5 py-1 text-[10px] leading-none">
+                  {count}
+                </Badge>
+              )}
             </Button>
           );
         })}
@@ -98,6 +107,7 @@ export default function FolderNavigator({ folders, basePath, selectedFolder, sel
               onClick={() => apply({ folder: child, folderPrefix: null })}
               title={child}
             >
+              <FolderIcon className="h-3.5 w-3.5 mr-1" aria-hidden />
               {child}
             </Button>
           ))}
