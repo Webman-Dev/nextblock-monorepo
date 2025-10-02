@@ -1,4 +1,4 @@
-// app/cms/media/page.tsx
+﻿// app/cms/media/page.tsx
 import React from 'react';
 import { createClient } from "@nextblock-monorepo/db/server";
 // import Link from "next/link"; // Unused, MediaGridClient handles item links
@@ -12,8 +12,10 @@ import MediaUploadForm from "./components/MediaUploadForm";
 // MediaImage and DeleteMediaButtonClient are used by MediaGridClient, not directly here anymore.
 import MediaGridClient from "./components/MediaGridClient"; // Import the new client component
 import FolderFilterInput from "./components/FolderFilterInput";
+import FolderList from "./components/FolderList";
+import FolderNavigator from "./components/FolderNavigator";
 
-async function getMediaItems(folder?: string): Promise<Media[]> {
+async function getMediaItems(folder?: string, folderPrefix?: string): Promise<Media[]> {
   const supabase = createClient();
   let query = supabase
     .from("media")
@@ -22,6 +24,8 @@ async function getMediaItems(folder?: string): Promise<Media[]> {
 
   if (folder && folder.trim()) {
     query = query.eq('folder', folder);
+  } else if (folderPrefix && folderPrefix.trim()) {
+    query = query.ilike('folder', `${folderPrefix}%`);
   }
 
   const { data, error } = await query;
@@ -33,12 +37,33 @@ async function getMediaItems(folder?: string): Promise<Media[]> {
   return data || [];
 }
 
+async function getDistinctFolders(): Promise<string[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("media")
+    .select("folder", { distinct: true })
+    .order("folder", { ascending: true });
+  if (error) {
+    console.error("Error fetching folders:", error);
+    return [];
+  }
+  const folders = (data || [])
+    .map((r: any) => r.folder)
+    .filter((f: any) => typeof f === 'string' && f.length > 0);
+  // Ensure trailing slash for consistency
+  return Array.from(new Set(folders.map((f: string) => (f.endsWith('/') ? f : f + '/'))));
+}
+
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 
-export default async function CmsMediaLibraryPage(props: { searchParams?: Promise<{ folder?: string }> }) {
+export default async function CmsMediaLibraryPage(props: { searchParams?: Promise<{ folder?: string; folderPrefix?: string }> }) {
   const searchParams = (await props.searchParams) || {};
   const selectedFolder = searchParams.folder;
-  const mediaItems = await getMediaItems(selectedFolder);
+  const selectedFolderPrefix = searchParams.folderPrefix;
+  const [mediaItems, folders] = await Promise.all([
+    getMediaItems(selectedFolder, selectedFolderPrefix),
+    getDistinctFolders(),
+  ]);
 
   return (
     <div className="w-full space-y-6">
@@ -49,6 +74,11 @@ export default async function CmsMediaLibraryPage(props: { searchParams?: Promis
       </div>
 
       <MediaUploadForm />
+
+      {/* Compact folder navigator with top tabs and subfolder pills */}
+      <div className="mt-2">
+        <FolderNavigator basePath="/cms/media" folders={folders} selectedFolder={selectedFolder || ''} selectedPrefix={selectedFolderPrefix || ''} />
+      </div>
 
       {/* The media grid and empty state are now handled by MediaGridClient */}
       <MediaGridClient initialMediaItems={mediaItems} r2BaseUrl={R2_BASE_URL} />
