@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Badge, Input } from "@nextblock-monorepo/ui";
-import { Folder as FolderIcon, Search as SearchIcon } from "lucide-react";
+import { Folder as FolderIcon, Search as SearchIcon, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface FolderNavigatorProps {
   folders: string[];
@@ -119,7 +119,7 @@ export default function FolderNavigator({ folders, basePath, selectedFolder, sel
         let best: { key: string; score: number } | null = null;
         for (const f of candidates) {
           const full = f.toLowerCase();
-          const last = f.replace(/\/$/, '').split('/').filter(Boolean).pop()!.toLowerCase();
+          const last = f.replace(/\/$/, '').split('/').filter(Boolean).pop()?.toLowerCase() ?? '';
           let score = 0;
           if (last === t) score = 100; // exact last segment
           else if (last.startsWith(t)) score = 85;
@@ -151,7 +151,7 @@ export default function FolderNavigator({ folders, basePath, selectedFolder, sel
       router.push(nextUrl);
     }, 300);
     return () => clearTimeout(handler);
-  }, [query, router, basePath, folders]);
+  }, [query, router, basePath, folders, searchParams]);
 
   // Compute prefixes/rows to render
 
@@ -161,25 +161,78 @@ export default function FolderNavigator({ folders, basePath, selectedFolder, sel
     return [] as string[];
   }, [activeGroup, levelPrefixes]);
 
+  // RowScroller: keep a row on one line with arrows + drag scroll
+  const RowScroller: React.FC<{ children: React.ReactNode; ariaLabel?: string }> = ({ children, ariaLabel }) => {
+    const ref = useRef<HTMLDivElement>(null);
+    const [canLeft, setCanLeft] = useState(false);
+    const [canRight, setCanRight] = useState(false);
+    const isDown = useRef(false);
+    const startX = useRef(0);
+    const startScroll = useRef(0);
+
+    const refresh = () => {
+      const el = ref.current; if (!el) return;
+      setCanLeft(el.scrollLeft > 0);
+      setCanRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1);
+    };
+    useEffect(() => { refresh(); const onResize = () => refresh(); window.addEventListener('resize', onResize); return () => window.removeEventListener('resize', onResize); }, []);
+
+    const onMD = (e: React.MouseEvent) => { const el = ref.current; if (!el) return; isDown.current = true; startX.current = e.pageX; startScroll.current = el.scrollLeft; el.style.cursor = 'grabbing'; };
+    const onMM = (e: React.MouseEvent) => { const el = ref.current; if (!el || !isDown.current) return; el.scrollLeft = startScroll.current - (e.pageX - startX.current); refresh(); };
+    const onMU = () => { const el = ref.current; if (!el) return; isDown.current = false; el.style.cursor = ''; };
+    const scrollBy = (dx: number) => { const el = ref.current; if (!el) return; el.scrollBy({ left: dx, behavior: 'smooth' }); setTimeout(refresh, 200); };
+
+    return (
+      <div className="relative w-full max-w-full overflow-x-hidden">
+        {canLeft && (
+          <div className="absolute inset-y-0 left-0 flex items-center pl-1 z-10">
+            <Button size="icon" variant="outline" onClick={() => scrollBy(-260)} aria-label="Scroll left"><ChevronLeft className="h-4 w-4" /></Button>
+          </div>
+        )}
+        {canRight && (
+          <div className="absolute inset-y-0 right-0 flex items-center pr-1 z-10">
+            <Button size="icon" variant="outline" onClick={() => scrollBy(260)} aria-label="Scroll right"><ChevronRight className="h-4 w-4" /></Button>
+          </div>
+        )}
+        <div
+          ref={ref}
+          aria-label={ariaLabel}
+          className={`overflow-hidden w-full ${canLeft ? 'pl-16' : ''} ${canRight ? 'pr-12' : 'pr-4'}`}
+          onMouseDown={onMD}
+          onMouseMove={onMM}
+          onMouseUp={onMU}
+          onMouseLeave={onMU}
+          onScroll={refresh}
+        >
+          <div className="flex gap-2 items-center py-1 whitespace-nowrap">
+            {children}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-3">
       {/* Top-level tabs + search */}
-      <div className="flex flex-wrap items-center gap-2 justify-between">
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant={!selectedFolder && !selectedPrefix ? "default" : "outline"} onClick={() => apply({ folder: null, folderPrefix: null })}>
-            All
-          </Button>
-          {topTabs.map((t) => {
-            const isActive = selectedPrefix === `${t}/` || (!!selectedFolder && selectedFolder.startsWith(`${t}/`));
-            const count = counts[`${t}/`] ?? 0;
-            return (
-          <Button key={t} size="sm" variant={isActive ? "default" : "outline"} onClick={() => apply({ folder: null, folderPrefix: `${t}/` }, true)} className="flex items-center gap-1">
-                <FolderIcon className="h-3.5 w-3.5" aria-hidden />
-                <span className="capitalize">{t}</span>
-                <Badge variant={isActive ? "secondary" : "outline"} className="ml-1 px-1.5 py-1 text-[10px] leading-none">{count}</Badge>
-              </Button>
-            );
-          })}
+      <div className="flex items-center gap-2 justify-between">
+        <div className="flex-1 min-w-0">
+          <RowScroller ariaLabel="Top folders">
+            <Button size="sm" variant={!selectedFolder && !selectedPrefix ? "default" : "outline"} onClick={() => apply({ folder: null, folderPrefix: null })}>
+              All
+            </Button>
+            {topTabs.map((t) => {
+              const isActive = selectedPrefix === `${t}/` || (!!selectedFolder && selectedFolder.startsWith(`${t}/`));
+              const count = counts[`${t}/`] ?? 0;
+              return (
+                <Button key={t} size="sm" variant={isActive ? "default" : "outline"} onClick={() => apply({ folder: null, folderPrefix: `${t}/` }, true)} className="flex items-center gap-1">
+                  <FolderIcon className="h-3.5 w-3.5" aria-hidden />
+                  <span className="capitalize">{t}</span>
+                  <Badge variant={isActive ? "secondary" : "outline"} className="ml-1 px-1.5 py-1 text-[10px] leading-none">{count}</Badge>
+                </Button>
+              );
+            })}
+          </RowScroller>
         </div>
         <div className="relative min-w-[260px]">
           <SearchIcon className="h-4 w-4 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -194,7 +247,7 @@ export default function FolderNavigator({ folders, basePath, selectedFolder, sel
         const baseLabel = prefix.replace(/\/$/, '').split('/').pop();
         const isBaseActive = selectedPrefix === prefix;
         return (
-          <div key={`row-${prefix}`} className="flex flex-wrap gap-2">
+          <RowScroller key={`row-${prefix}`} ariaLabel={`Folders under ${baseLabel}`}>
             <Button size="sm" variant={isBaseActive ? "default" : "outline"} onClick={() => apply({ folder: null, folderPrefix: prefix }, true)} className="flex items-center gap-1">
               <FolderIcon className="h-3.5 w-3.5" aria-hidden />
               <span className="capitalize">{baseLabel}</span>
@@ -212,7 +265,7 @@ export default function FolderNavigator({ folders, basePath, selectedFolder, sel
                 </Button>
               );
             })}
-          </div>
+          </RowScroller>
         );
       })}
     </div>

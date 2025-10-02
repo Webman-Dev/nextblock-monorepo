@@ -101,7 +101,7 @@ export default async function CmsMediaLibraryPage(props: { searchParams?: Promis
   ]);
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full max-w-screen-2xl mx-auto px-4 overflow-x-hidden space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold">Media Library</h1>
       </div>
