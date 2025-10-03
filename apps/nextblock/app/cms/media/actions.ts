@@ -86,7 +86,7 @@ export async function recordMediaUpload(payload: {
   const deriveAltFromFilename = (name: string) => {
     const lastDot = name.lastIndexOf('.');
     const base = lastDot > 0 ? name.substring(0, lastDot) : name;
-    const spaced = base.replace(/[\-_+]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const spaced = base.replace(/[-+_\\]+/g, ' ').replace(/\s+/g, ' ').trim();
     return spaced.replace(/\b\w+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1));
   };
 
@@ -390,16 +390,26 @@ export async function moveMultipleMediaItems(
       for (const { oldKey, newKey, isMain } of objectsToMove as Array<{oldKey:string; newKey:string; isMain:boolean}>) {
         if (oldKey === newKey) continue;
         // If destination already has the object, treat as moved and try to delete source if present
+        let destinationExists = false;
         try {
           await s3Client.send(new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: newKey }));
+          destinationExists = true;
+        } catch {
+          destinationExists = false;
+        }
+
+        if (destinationExists) {
           movedKeys.add(oldKey);
           if (isMain) {
             mainMoved = true;
             newMainKey = newKey;
           }
-          try { await s3Client.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: oldKey })); } catch {}
+          await s3Client
+            .send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: oldKey }))
+            .catch(() => undefined);
           continue;
-        } catch {}
+        }
+
         const encodedSourceKey = encodeURIComponent(oldKey).replace(/%2F/g, '/');
         const copySource = `/${R2_BUCKET_NAME}/${encodedSourceKey}`; // S3/R2 expects a leading slash
         try {
@@ -410,7 +420,6 @@ export async function moveMultipleMediaItems(
         } catch (err: any) {
           const name = err?.name || '';
           const message = err?.message || String(err);
-          const isNoSuchKey = /NoSuchKey/i.test(name) || /NoSuchKey/i.test(message);
           if (isMain) {
             // Main object missing: attempt fallback to any existing variant
             let promoted = false;
@@ -426,7 +435,7 @@ export async function moveMultipleMediaItems(
                 promoted = true;
                 break;
               } catch {
-                // try next variant
+                continue; // try next variant
               }
             }
             if (!promoted) {
@@ -434,7 +443,7 @@ export async function moveMultipleMediaItems(
               // Keys look like: uploads/name_YYYYMMDDHHMMSS_original.avif or uploads/name_YYYYMMDD.png
               const withoutExt = mediaRow.object_key.replace(/\.[^/.]+$/, '');
               const tsMatch = withoutExt.match(/^(.*?_\d{8,14})/); // capture up to timestamp
-              let basePrefix = tsMatch ? tsMatch[1] : withoutExt.replace(/_(original(?:_uploaded)?|xlarge_avif|large_avif|medium_avif|small_avif|thumbnail_avif|[a-z]+)$/i, '');
+              const basePrefix = tsMatch ? tsMatch[1] : withoutExt.replace(/_(original(?:_uploaded)?|xlarge_avif|large_avif|medium_avif|small_avif|thumbnail_avif|[a-z]+)$/i, '');
               // Ensure it ends with the underscore-delimited base, not variant label
               const prefixGuess = basePrefix;
               try {
@@ -455,7 +464,7 @@ export async function moveMultipleMediaItems(
                   results.push({ id: item.id, ok: false, error: `Main key missing: ${oldKey} (${name}: ${message})` });
                   mainMoved = false;
                 }
-              } catch (e: any) {
+              } catch {
                 results.push({ id: item.id, ok: false, error: `Main key missing: ${oldKey} (${name}: ${message})` });
                 mainMoved = false;
               }

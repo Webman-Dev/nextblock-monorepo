@@ -2,12 +2,10 @@
 "use server";
 
 import { createClient } from "@nextblock-monorepo/db/server";
-import type { Database, Json } from "@nextblock-monorepo/db";
+import type { Json } from "@nextblock-monorepo/db";
 import { compare, applyPatch } from 'fast-json-patch';
 import type { FullPageContent, FullPostContent } from './utils';
 
-type Page = Database['public']['Tables']['pages']['Row'];
-type Post = Database['public']['Tables']['posts']['Row'];
 
 function shouldCreateSnapshot(currentVersion: number): boolean {
   // Create a snapshot every 20 revisions

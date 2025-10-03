@@ -185,7 +185,7 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData, defau
         const deriveAltFromFilename = (name: string) => {
           const lastDot = name.lastIndexOf('.');
           const base = lastDot > 0 ? name.substring(0, lastDot) : name;
-          const spaced = base.replace(/[\-_+]+/g, ' ').replace(/\s+/g, ' ').trim();
+          const spaced = base.replace(/[-+_\\]+/g, ' ').replace(/\s+/g, ' ').trim();
           // Title-case words
           return spaced.replace(/\b\w+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1));
         };

@@ -28,8 +28,13 @@ export default function FolderTree({ folders, basePath, selectedFolder, selected
       const parts = f.replace(/^\/+/, '').split('/').filter(Boolean);
       const top = parts[0] || '';
       const childPrefix = parts.length >= 2 ? `${top}/${parts[1]}/` : `${top}/`;
-      if (!map.has(top)) map.set(top, new Set<string>());
-      map.get(top)!.add(childPrefix);
+      if (!map.has(top)) {
+        map.set(top, new Set<string>());
+      }
+      const childSet = map.get(top);
+      if (childSet) {
+        childSet.add(childPrefix);
+      }
     });
     return Array.from(map.entries()).map(([name, children]) => ({
       name,

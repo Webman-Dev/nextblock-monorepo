@@ -2,8 +2,6 @@
 import { createClient } from "@nextblock-monorepo/db/server";
 import type { Database, Json } from "@nextblock-monorepo/db";
 
-type Page = Database['public']['Tables']['pages']['Row'];
-type Post = Database['public']['Tables']['posts']['Row'];
 type BlockRow = Database['public']['Tables']['blocks']['Row'];
 
 export interface PageMetaContent {

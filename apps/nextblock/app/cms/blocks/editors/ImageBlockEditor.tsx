@@ -1,4 +1,4 @@
-﻿// app/cms/blocks/editors/ImageBlockEditor.tsx
+// app/cms/blocks/editors/ImageBlockEditor.tsx
 "use client";
 
 import React, { useState } from 'react'; // Removed useTransition as it's not used here
@@ -37,7 +37,7 @@ export default function ImageBlockEditor({ content, onChange }: BlockEditorProps
     const deriveAltFromFilename = (name: string) => {
       const lastDot = name.lastIndexOf('.');
       const base = lastDot > 0 ? name.substring(0, lastDot) : name;
-      const spaced = base.replace(/[\-_+]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const spaced = base.replace(/[-+_\\]+/g, ' ').replace(/\s+/g, ' ').trim();
       return spaced.replace(/\b\w+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1));
     };
     const newAlt = mediaItem.description && mediaItem.description.trim().length > 0

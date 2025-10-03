@@ -1,7 +1,7 @@
-// apps/nextblock/app/cms/revisions/RevisionHistoryButton.tsx
+﻿// apps/nextblock/app/cms/revisions/RevisionHistoryButton.tsx
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { Button } from "@nextblock-monorepo/ui";
 import {
   Dialog,
@@ -46,12 +46,6 @@ export default function RevisionHistoryButton({ parentType, parentId }: Revision
   const [activeCompareVersion, setActiveCompareVersion] = useState<number | null>(null);
   const [leftText, setLeftText] = useState<string | null>(null);
   const [rightText, setRightText] = useState<string | null>(null);
-
-  const dateFormatter = useMemo(() => new Intl.DateTimeFormat(undefined, {
-    year: 'numeric', month: 'long', day: 'numeric',
-    hour: 'numeric', minute: '2-digit'
-  }), []);
-
   useEffect(() => {
     if (!open) return;
     setLoading(true);
