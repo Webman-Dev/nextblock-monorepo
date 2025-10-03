@@ -5,6 +5,8 @@ import { createClient } from "@nextblock-monorepo/db/server";
 import { revalidatePath } from "next/cache";
 import type { Database, Json } from "@nextblock-monorepo/db";
 import { getInitialContent, isValidBlockType } from "../../../lib/blocks/blockRegistry";
+import { getFullPageContent, getFullPostContent } from "../revisions/utils";
+import { createPageRevision, createPostRevision } from "../revisions/service";
 
 type Block = Database['public']['Tables']['blocks']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row']['block_type'];
@@ -66,11 +68,22 @@ export async function createBlockForPage(pageId: number, languageId: number, blo
     order: order,
   };
 
+  // capture previous state for revision (before insert)
+  const previousContent = await getFullPageContent(pageId);
+
   const { data, error } = await supabase.from("blocks").insert(payload).select().single();
 
   if (error) {
     console.error("Error creating block:", error);
     return { error: `Failed to create block: ${error.message}` };
+  }
+
+  // create revision (after successful insert)
+  if (previousContent && user) {
+    const newContent = await getFullPageContent(pageId);
+    if (newContent) {
+      await createPageRevision(pageId, user.id, previousContent, newContent);
+    }
   }
 
   revalidatePath(`/cms/pages/${pageId}/edit`);
@@ -105,11 +118,21 @@ export async function createBlockForPost(postId: number, languageId: number, blo
     order: order,
   };
 
+  // capture previous content
+  const previousContent = await getFullPostContent(postId);
+
   const { data, error } = await supabase.from("blocks").insert(payload).select().single();
 
   if (error) {
     console.error("Error creating block:", error);
     return { error: `Failed to create block: ${error.message}` };
+  }
+
+  if (previousContent && user) {
+    const newContent = await getFullPostContent(postId);
+    if (newContent) {
+      await createPostRevision(postId, user.id, previousContent, newContent);
+    }
   }
 
   revalidatePath(`/cms/posts/${postId}/edit`);
@@ -125,6 +148,23 @@ export async function updateBlock(blockId: number, newContent: unknown, pageId?:
     return { error: "Unauthorized to update this block." };
   }
 
+  // fetch current block to identify parent and previous state
+  const { data: existingBlock, error: fetchError } = await supabase
+    .from('blocks')
+    .select('id, page_id, post_id, content')
+    .eq('id', blockId)
+    .single();
+  if (fetchError || !existingBlock) {
+    return { error: "Block not found." };
+  }
+
+  let prevContentAggregate: Awaited<ReturnType<typeof getFullPageContent>> | Awaited<ReturnType<typeof getFullPostContent>> | null = null;
+  if (existingBlock.page_id) {
+    prevContentAggregate = await getFullPageContent(existingBlock.page_id);
+  } else if (existingBlock.post_id) {
+    prevContentAggregate = await getFullPostContent(existingBlock.post_id);
+  }
+
   const { data, error } = await supabase
     .from("blocks")
     .update({ content: newContent, updated_at: new Date().toISOString() })
@@ -135,6 +175,21 @@ export async function updateBlock(blockId: number, newContent: unknown, pageId?:
   if (error) {
     console.error("Error updating block:", error);
     return { error: `Failed to update block: ${error.message}` };
+  }
+
+  // create revision after successful update
+  if (user && prevContentAggregate) {
+    if (existingBlock.page_id) {
+      const nextContentAggregate = await getFullPageContent(existingBlock.page_id, { overrideBlockId: blockId, overrideBlockContent: newContent });
+      if (nextContentAggregate) {
+        await createPageRevision(existingBlock.page_id, user.id, prevContentAggregate, nextContentAggregate);
+      }
+    } else if (existingBlock.post_id) {
+      const nextContentAggregate = await getFullPostContent(existingBlock.post_id, { overrideBlockId: blockId, overrideBlockContent: newContent });
+      if (nextContentAggregate) {
+        await createPostRevision(existingBlock.post_id, user.id, prevContentAggregate as any, nextContentAggregate as any);
+      }
+    }
   }
 
   return { success: true, updatedBlock: data as Block };
@@ -183,11 +238,43 @@ export async function deleteBlock(blockId: number, pageId?: number | null, postI
     return { error: "Unauthorized to delete this block." };
   }
 
+  // fetch parent and capture previous aggregate
+  const { data: existingBlock, error: fetchError } = await supabase
+    .from('blocks')
+    .select('id, page_id, post_id')
+    .eq('id', blockId)
+    .single();
+  if (fetchError || !existingBlock) {
+    return { error: "Block not found." };
+  }
+
+  let previousAggregate: Awaited<ReturnType<typeof getFullPageContent>> | Awaited<ReturnType<typeof getFullPostContent>> | null = null;
+  if (existingBlock.page_id) {
+    previousAggregate = await getFullPageContent(existingBlock.page_id);
+  } else if (existingBlock.post_id) {
+    previousAggregate = await getFullPostContent(existingBlock.post_id);
+  }
+
   const { error } = await supabase.from("blocks").delete().eq("id", blockId);
 
   if (error) {
     console.error("Error deleting block:", error);
     return { error: `Failed to delete block: ${error.message}` };
+  }
+
+  // create revision after delete
+  if (user && previousAggregate) {
+    if (existingBlock.page_id) {
+      const nextAggregate = await getFullPageContent(existingBlock.page_id, { excludeDeletedBlockId: blockId });
+      if (nextAggregate) {
+        await createPageRevision(existingBlock.page_id, user.id, previousAggregate, nextAggregate);
+      }
+    } else if (existingBlock.post_id) {
+      const nextAggregate = await getFullPostContent(existingBlock.post_id, { excludeDeletedBlockId: blockId });
+      if (nextAggregate) {
+        await createPostRevision(existingBlock.post_id, user.id, previousAggregate as any, nextAggregate as any);
+      }
+    }
   }
 
   if (pageId) revalidatePath(`/cms/pages/${pageId}/edit`);

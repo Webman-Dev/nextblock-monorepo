@@ -257,6 +257,51 @@ export type Database = {
           },
         ]
       }
+      page_revisions: {
+        Row: {
+          author_id: string | null
+          content: Json
+          created_at: string
+          id: number
+          page_id: number
+          revision_type: Database["public"]["Enums"]["revision_type"]
+          version: number
+        }
+        Insert: {
+          author_id?: string | null
+          content: Json
+          created_at?: string
+          id?: number
+          page_id: number
+          revision_type: Database["public"]["Enums"]["revision_type"]
+          version: number
+        }
+        Update: {
+          author_id?: string | null
+          content?: Json
+          created_at?: string
+          id?: number
+          page_id?: number
+          revision_type?: Database["public"]["Enums"]["revision_type"]
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "page_revisions_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "page_revisions_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pages: {
         Row: {
           author_id: string | null
@@ -270,6 +315,7 @@ export type Database = {
           title: string
           translation_group_id: string
           updated_at: string
+          version: number
         }
         Insert: {
           author_id?: string | null
@@ -283,6 +329,7 @@ export type Database = {
           title: string
           translation_group_id?: string
           updated_at?: string
+          version?: number
         }
         Update: {
           author_id?: string | null
@@ -296,6 +343,7 @@ export type Database = {
           title?: string
           translation_group_id?: string
           updated_at?: string
+          version?: number
         }
         Relationships: [
           {
@@ -310,6 +358,51 @@ export type Database = {
             columns: ["language_id"]
             isOneToOne: false
             referencedRelation: "languages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_revisions: {
+        Row: {
+          author_id: string | null
+          content: Json
+          created_at: string
+          id: number
+          post_id: number
+          revision_type: Database["public"]["Enums"]["revision_type"]
+          version: number
+        }
+        Insert: {
+          author_id?: string | null
+          content: Json
+          created_at?: string
+          id?: number
+          post_id: number
+          revision_type: Database["public"]["Enums"]["revision_type"]
+          version: number
+        }
+        Update: {
+          author_id?: string | null
+          content?: Json
+          created_at?: string
+          id?: number
+          post_id?: number
+          revision_type?: Database["public"]["Enums"]["revision_type"]
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_revisions_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_revisions_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
             referencedColumns: ["id"]
           },
         ]
@@ -330,6 +423,7 @@ export type Database = {
           title: string
           translation_group_id: string
           updated_at: string
+          version: number
         }
         Insert: {
           author_id?: string | null
@@ -346,6 +440,7 @@ export type Database = {
           title: string
           translation_group_id?: string
           updated_at?: string
+          version?: number
         }
         Update: {
           author_id?: string | null
@@ -362,6 +457,7 @@ export type Database = {
           title?: string
           translation_group_id?: string
           updated_at?: string
+          version?: number
         }
         Relationships: [
           {
@@ -474,6 +570,7 @@ export type Database = {
     Enums: {
       menu_location: "HEADER" | "FOOTER" | "SIDEBAR"
       page_status: "draft" | "published" | "archived"
+      revision_type: "snapshot" | "diff"
       user_role: "ADMIN" | "WRITER" | "USER"
     }
     CompositeTypes: {
@@ -604,6 +701,7 @@ export const Constants = {
     Enums: {
       menu_location: ["HEADER", "FOOTER", "SIDEBAR"],
       page_status: ["draft", "published", "archived"],
+      revision_type: ["snapshot", "diff"],
       user_role: ["ADMIN", "WRITER", "USER"],
     },
   },

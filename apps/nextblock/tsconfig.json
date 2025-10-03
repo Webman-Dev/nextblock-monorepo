@@ -17,7 +17,9 @@
       }
     ],
     "types": [
-      "node"
+      "node",
+      "react",
+      "react-dom"
     ],
     "target": "ES2017",
     "lib": [
@@ -25,8 +27,8 @@
       "dom.iterable",
       "esnext"
     ],
-    "module": "nodenext",
-    "moduleResolution": "nodenext"
+    "module": "esnext",
+    "moduleResolution": "bundler"
   },
   "include": [
     "**/*.ts",

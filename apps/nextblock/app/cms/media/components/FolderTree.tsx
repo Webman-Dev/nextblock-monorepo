@@ -87,7 +87,7 @@ export default function FolderTree({ folders, basePath, selectedFolder, selected
                 <span className="text-xs text-muted-foreground">{g.count} subfolder(s)</span>
               </div>
               {g.count > limit && (
-                <Button size="xs" variant="outline" onClick={() => setExpanded((e) => ({ ...e, [prefix]: !open }))}>
+                <Button size="sm" variant="outline" onClick={() => setExpanded((e) => ({ ...e, [prefix]: !open }))}>
                   {open ? 'Show less' : `Show all ${g.count}`}
                 </Button>
               )}

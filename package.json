@@ -7,7 +7,7 @@
     "lint": "npx nx lint nextblock --skip-nx-cache",
     "db:backup": "node apps/nextblock/scripts/backup.js",
     "db:types": "node tools/scripts/gen-db-types.js",
-    "db:push": "dotenv -e .env.local -- npx supabase db push --workdir libs/db/src"
+    "db:push": "dotenv -e .env.local -- npx supabase db push --workdir libs/db/src --include-all"
   },
   "private": true,
   "devDependencies": {
@@ -51,7 +51,7 @@
     "@swc/helpers": "~0.5.11",
     "@types/highlight.js": "^9.12.4",
     "@types/lodash.debounce": "^4.0.9",
-    "@types/react": "19.0.0",
+    "@types/react": "^19.0.0",
     "@types/react-dom": "19.0.0",
     "@types/react-transition-group": "^4.4.12",
     "@vitejs/plugin-react": "^4.2.0",
@@ -162,11 +162,11 @@
     "@types/js-cookie": "^3.0.6",
     "@types/node": "22.10.2",
     "@types/nodemailer": "^6.4.17",
-    "@types/react": "^19.1.4",
     "@types/react-color": "^3.0.6",
     "@types/react-dom": "19.0.2",
     "@types/uuid": "^10.0.0",
     "cross-env": "^7.0.3",
+    "fast-json-patch": "3",
     "html-react-parser": "^5.2.6",
     "katex": "^0.16.22",
     "lowlight": "^3.3.0",
@@ -177,7 +177,9 @@
     "tailwindcss": "3.4.17",
     "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.16.2",
-    "typescript": "~5.8.2"
+    "typescript": "~5.8.2",
+    "date-fns": "^3.6.0",
+    "react-hot-toast": "^2.4.1"
   },
   "nx": {
     "includedScripts": []

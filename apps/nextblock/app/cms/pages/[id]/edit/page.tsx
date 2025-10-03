@@ -18,6 +18,7 @@ import ContentLanguageSwitcher from "@/app/cms/components/ContentLanguageSwitche
 import { getActiveLanguagesServerSide } from "@nextblock-monorepo/db/server";
 import CopyContentFromLanguage from "@/app/cms/components/CopyContentFromLanguage";
 import { UploadFolderProvider } from "@/app/cms/media/UploadFolderContext";
+import RevisionHistoryButton from "@/app/cms/revisions/RevisionHistoryButton";
 
 // ... (Interface PageWithBlocks and getPageDataWithBlocks remain the same) ...
 interface PageWithBlocks extends Page {
@@ -115,6 +116,7 @@ export default async function EditPage(props: { params: Promise<{ id: string }> 
                 <Eye className="mr-2 h-4 w-4" /> View Live
               </Link>
             </Button>
+            <RevisionHistoryButton parentType="page" parentId={pageId} />
         </div>
       </div>
 

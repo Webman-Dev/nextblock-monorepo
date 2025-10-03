@@ -18,6 +18,7 @@ import ContentLanguageSwitcher from "@/app/cms/components/ContentLanguageSwitche
 import { getActiveLanguagesServerSide } from "@nextblock-monorepo/db/server"; // Correct server-side fetch
 import CopyContentFromLanguage from "@/app/cms/components/CopyContentFromLanguage";
 import { UploadFolderProvider } from "@/app/cms/media/UploadFolderContext";
+import RevisionHistoryButton from "@/app/cms/revisions/RevisionHistoryButton";
 
 interface PostWithBlocks extends PostType {
   blocks: BlockType[];
@@ -151,6 +152,7 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
                 <Eye className="mr-2 h-4 w-4" /> View Live Post
               </Link>
             </Button>
+            <RevisionHistoryButton parentType="post" parentId={postId} />
         </div>
       </div>
 

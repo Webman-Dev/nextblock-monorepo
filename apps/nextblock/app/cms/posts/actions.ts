@@ -9,6 +9,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 type PageStatus = Database['public']['Enums']['page_status'];
 import { encodedRedirect } from "@nextblock-monorepo/utils/server"; // Ensure this is correctly imported
+import { getFullPostContent } from "../revisions/utils";
+import { createPostRevision } from "../revisions/service";
 
 // --- createPost and updatePost functions to be updated similarly for error returns ---
 
@@ -182,6 +184,9 @@ export async function updatePost(postId: number, formData: FormData) {
     feature_image_id: rawFormData.feature_image_id,
   };
 
+  // capture previous full content
+  const previousContent = await getFullPostContent(postId);
+
   const { error: updateError } = await supabase
     .from("posts")
     .update(postUpdateData)
@@ -193,6 +198,14 @@ export async function updatePost(postId: number, formData: FormData) {
         return encodedRedirect("error", postEditPath, `The slug "${postUpdateData.slug}" already exists for the selected language. Please use a unique slug.`);
     }
     return encodedRedirect("error", postEditPath, `Failed to update post: ${updateError.message}`);
+  }
+
+  // create revision after update
+  if (previousContent && user) {
+    const newContent = await getFullPostContent(postId);
+    if (newContent) {
+      await createPostRevision(postId, user.id, previousContent, newContent);
+    }
   }
 
   revalidatePath("/cms/posts");

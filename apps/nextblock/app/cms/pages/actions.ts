@@ -9,6 +9,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 type PageStatus = Database['public']['Enums']['page_status'];
 import { encodedRedirect } from "@nextblock-monorepo/utils/server";
+import { getFullPageContent } from "../revisions/utils";
+import { createPageRevision } from "../revisions/service";
 
 // --- createPage and updatePage functions remain unchanged ---
 
@@ -122,6 +124,9 @@ export async function updatePage(pageId: number, formData: FormData) {
     meta_description: rawFormData.meta_description,
   };
 
+  // capture previous full content before update
+  const previousContent = await getFullPageContent(pageId);
+
   const { error: updateError } = await supabase
     .from("pages")
     .update(pageUpdateData)
@@ -133,6 +138,14 @@ export async function updatePage(pageId: number, formData: FormData) {
         return encodedRedirect("error", pageEditPath, `The slug "${pageUpdateData.slug}" already exists for the selected language. Please use a unique slug.`);
     }
     return encodedRedirect("error", pageEditPath, `Failed to update page: ${updateError.message}`);
+  }
+
+  // create revision after update
+  if (previousContent && user) {
+    const newContent = await getFullPageContent(pageId);
+    if (newContent) {
+      await createPageRevision(pageId, user.id, previousContent, newContent);
+    }
   }
 
   revalidatePath("/cms/pages");
