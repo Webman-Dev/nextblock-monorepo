@@ -1,14 +1,14 @@
 // app/cms/settings/languages/[id]/edit/page.tsx
 import React from "react";
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 import LanguageForm from "../../components/LanguageForm";
 import { updateLanguage } from "../../actions";
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 import { notFound } from "next/navigation";
 
 type Language = Database['public']['Tables']['languages']['Row'];
 import Link from "next/link";
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 import { ArrowLeft } from "lucide-react";
 
 async function getLanguageData(id: number): Promise<Language | null> {

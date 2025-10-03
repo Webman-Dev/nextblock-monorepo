@@ -4,17 +4,17 @@
 import { useEffect, useState, useTransition, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { Button } from "@nextblock-monorepo/ui";
-import { Input } from "@nextblock-monorepo/ui";
-import { Label } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
+import { Input } from "@nextblock-cms/ui";
+import { Label } from "@nextblock-cms/ui";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@nextblock-monorepo/ui";
-import { Textarea } from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
+import { Textarea } from "@nextblock-cms/ui";
 import {
   Dialog,
   DialogContent,
@@ -23,8 +23,8 @@ import {
   DialogTrigger,
   DialogFooter,
   DialogClose,
-} from "@nextblock-monorepo/ui";
-import type { Database } from "@nextblock-monorepo/db";
+} from "@nextblock-cms/ui";
+import type { Database } from "@nextblock-cms/db";
 import { useAuth } from "@/context/AuthContext";
 
 type Post = Database['public']['Tables']['posts']['Row'];
@@ -35,7 +35,7 @@ type Media = Database['public']['Tables']['media']['Row'];
 import MediaImage from "@/app/cms/media/components/MediaImage"; // For displaying images in the modal
 import { getMediaItems } from "@/app/cms/media/actions";
 import MediaUploadForm from "@/app/cms/media/components/MediaUploadForm";
-import { Separator } from "@nextblock-monorepo/ui";
+import { Separator } from "@nextblock-cms/ui";
 
 
 interface PostFormProps {

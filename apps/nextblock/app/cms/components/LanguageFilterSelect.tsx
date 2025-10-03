@@ -9,8 +9,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@nextblock-monorepo/ui";
-import type { Database } from '@nextblock-monorepo/db';
+} from "@nextblock-cms/ui";
+import type { Database } from '@nextblock-cms/db';
 import { Languages as LanguageIcon } from 'lucide-react';
 
 type Language = Database['public']['Tables']['languages']['Row'];

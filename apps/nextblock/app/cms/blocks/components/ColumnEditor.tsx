@@ -2,8 +2,8 @@
 "use client";
 
 import React, { useState, lazy } from 'react';
-import { cn } from '@nextblock-monorepo/utils';
-import { Button } from '@nextblock-monorepo/ui';
+import { cn } from '@nextblock-cms/utils';
+import { Button } from '@nextblock-cms/ui';
 import { PlusCircle, Trash2, Edit2, GripVertical } from "lucide-react";
 import type { SectionBlockContent } from '@/lib/blocks/blockRegistry';
 import { availableBlockTypes, getBlockDefinition, getInitialContent, BlockType } from '@/lib/blocks/blockRegistry';
@@ -11,7 +11,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { BlockEditorModal } from './BlockEditorModal';
-import { ConfirmationDialog } from '@nextblock-monorepo/ui';
+import { ConfirmationDialog } from '@nextblock-cms/ui';
 import BlockTypeSelector from './BlockTypeSelector';
 
 

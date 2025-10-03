@@ -1,8 +1,8 @@
 ﻿// app/cms/media/page.tsx
 import React from 'react';
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 // import Link from "next/link"; // Unused, MediaGridClient handles item links
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 // DropdownMenu related imports are now handled within MediaGridClient or its sub-components if needed individually.
 
 type Media = Database['public']['Tables']['media']['Row'];

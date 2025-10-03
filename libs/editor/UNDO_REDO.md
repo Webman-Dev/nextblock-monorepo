@@ -56,7 +56,7 @@ The undo/redo system works with all editor content types:
 ### UndoRedoButtons Component
 
 ```tsx
-import { UndoRedoButtons } from '@nextblock-monorepo/editor';
+import { UndoRedoButtons } from '@nextblock-cms/editor';
 
 <UndoRedoButtons 
   editor={editor}
@@ -75,7 +75,7 @@ import { UndoRedoButtons } from '@nextblock-monorepo/editor';
 ### useEditorHistory Hook
 
 ```tsx
-import { useEditorHistory } from '@nextblock-monorepo/editor';
+import { useEditorHistory } from '@nextblock-cms/editor';
 
 const {
   canUndo,
@@ -106,7 +106,7 @@ import {
   canExecuteHistoryAction, 
   executeHistoryAction, 
   getHistoryShortcut 
-} from '@nextblock-monorepo/editor';
+} from '@nextblock-cms/editor';
 
 // Check if action is available
 const canUndo = canExecuteHistoryAction(editor, 'undo');

@@ -8,8 +8,8 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from '@nextblock-monorepo/ui';
-import { Button } from '@nextblock-monorepo/ui';
+} from '@nextblock-cms/ui';
+import { Button } from '@nextblock-cms/ui';
 
 interface ConfirmationModalProps {
   isOpen: boolean;

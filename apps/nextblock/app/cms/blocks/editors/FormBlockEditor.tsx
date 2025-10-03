@@ -5,11 +5,11 @@ import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, PlusCircle, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
-import { Button } from '@nextblock-monorepo/ui';
-import { Input } from '@nextblock-monorepo/ui';
-import { Label } from '@nextblock-monorepo/ui';
-import { Checkbox } from '@nextblock-monorepo/ui';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-monorepo/ui';
+import { Button } from '@nextblock-cms/ui';
+import { Input } from '@nextblock-cms/ui';
+import { Label } from '@nextblock-cms/ui';
+import { Checkbox } from '@nextblock-cms/ui';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui';
 import { BlockEditorProps } from '@/app/cms/blocks/components/BlockEditorModal';
 import type { FormBlockContent, FormField, FormFieldOption } from '@/lib/blocks/blockRegistry';
 

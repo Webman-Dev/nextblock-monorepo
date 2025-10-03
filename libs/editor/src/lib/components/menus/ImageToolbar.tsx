@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import type { Editor } from '@tiptap/core'
 import { NodeSelection } from 'prosemirror-state'
 import { useFloating, offset, autoUpdate } from '@floating-ui/react'
-import { Button } from '@nextblock-monorepo/ui/button'
+import { Button } from '@nextblock-cms/ui/button'
 import { AlignLeft, AlignCenter, AlignRight, Download, Trash2 } from 'lucide-react'
 
 interface ImageToolbarProps { editor: Editor }

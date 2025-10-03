@@ -4,11 +4,11 @@
 import React, { useState, useTransition, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import { Button } from '@nextblock-monorepo/ui';
-import { Input } from '@nextblock-monorepo/ui';
-import { Label } from '@nextblock-monorepo/ui';
-import { Textarea } from '@nextblock-monorepo/ui';
-import type { Database } from '@nextblock-monorepo/db';
+import { Button } from '@nextblock-cms/ui';
+import { Input } from '@nextblock-cms/ui';
+import { Label } from '@nextblock-cms/ui';
+import { Textarea } from '@nextblock-cms/ui';
+import type { Database } from '@nextblock-cms/db';
 import { useAuth } from '@/context/AuthContext';
 
 type Media = Database['public']['Tables']['media']['Row'];

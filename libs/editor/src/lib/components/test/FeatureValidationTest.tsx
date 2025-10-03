@@ -2,9 +2,9 @@
 
 import React, { useState } from 'react';
 import { Editor } from '../../editor';
-import { Button } from '@nextblock-monorepo/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@nextblock-monorepo/ui/card';
-import { Badge } from '@nextblock-monorepo/ui/badge';
+import { Button } from '@nextblock-cms/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@nextblock-cms/ui/card';
+import { Badge } from '@nextblock-cms/ui/badge';
 import { CheckCircle, XCircle, AlertCircle, Play, RotateCcw } from 'lucide-react';
 
 interface TestResult {

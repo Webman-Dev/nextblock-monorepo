@@ -1,7 +1,7 @@
 // apps/nextblock/app/api/upload/proxy/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@nextblock-monorepo/db/server';
-import { s3Client } from '@nextblock-monorepo/utils/server';
+import { createClient } from '@nextblock-cms/db/server';
+import { s3Client } from '@nextblock-cms/utils/server';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 
 const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;

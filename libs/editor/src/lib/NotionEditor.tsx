@@ -9,7 +9,7 @@ import { EditorFloatingMenu } from './components/menus/FloatingMenu';
 import { ImageToolbar } from './components/menus/ImageToolbar';
 import { TableToolbar } from './components/menus/TableToolbar';
 import { EditorToolbar } from './components/menus/Toolbar';
-import { cn } from '@nextblock-monorepo/utils';
+import { cn } from '@nextblock-cms/utils';
 import '../styles/drag-handle.css'; // âœ… Import enhanced drag handle styles
 import '../styles/editor.css';
 

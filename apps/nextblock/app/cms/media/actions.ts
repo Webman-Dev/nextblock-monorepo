@@ -1,10 +1,10 @@
 // app/cms/media/actions.ts
 "use server";
 
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 import { revalidatePath } from "next/cache";
-import type { Database } from "@nextblock-monorepo/db";
-import { encodedRedirect } from "@nextblock-monorepo/utils/server";
+import type { Database } from "@nextblock-cms/db";
+import { encodedRedirect } from "@nextblock-cms/utils/server";
 
 type Media = Database['public']['Tables']['media']['Row'];
 
@@ -202,7 +202,7 @@ export async function deleteMediaItem(mediaId: string, objectKey: string) {
     }
 
     const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
-    const { s3Client } = await import("@nextblock-monorepo/utils/server");
+    const { s3Client } = await import("@nextblock-cms/utils/server");
     const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
     if (!R2_BUCKET_NAME) {
@@ -252,7 +252,7 @@ export async function deleteMultipleMediaItems(items: Array<{ id: string; object
   }
 
   const { DeleteObjectsCommand } = await import("@aws-sdk/client-s3"); // Use DeleteObjects for batch
-  const { s3Client } = await import("@nextblock-monorepo/utils/server");
+  const { s3Client } = await import("@nextblock-cms/utils/server");
   const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
   if (!R2_BUCKET_NAME) {
@@ -338,7 +338,7 @@ export async function moveMultipleMediaItems(
   const folder = sanitizeFolder(destinationFolder);
 
   const { CopyObjectCommand, DeleteObjectCommand, ListObjectsV2Command, HeadObjectCommand } = await import("@aws-sdk/client-s3");
-  const { s3Client } = await import("@nextblock-monorepo/utils/server");
+  const { s3Client } = await import("@nextblock-cms/utils/server");
   const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
   const R2_PUBLIC_URL_BASE = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 

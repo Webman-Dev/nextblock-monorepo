@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@nextblock-monorepo/db/server'
+import { createClient } from '@nextblock-cms/db/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { Logo } from './types'

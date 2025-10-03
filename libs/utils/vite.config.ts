@@ -13,12 +13,13 @@ export default defineConfig({
       outDir: '../../dist/libs/utils',
       afterBuild: () => {
         const packageJson = {
-          name: 'utils',
+          name: '@nextblock-cms/utils',
           version: '0.0.1',
           main: 'index.cjs.js',
           module: 'index.es.js',
           types: 'index.d.ts',
         };
+
         fs.writeFileSync(
           path.resolve(__dirname, '../../dist/libs/utils', 'package.json'),
           JSON.stringify(packageJson, null, 2)

@@ -3,7 +3,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Editor } from '@tiptap/react';
 import { GripVertical } from 'lucide-react';
-import { cn } from '@nextblock-monorepo/utils';
+import { cn } from '@nextblock-cms/utils';
 
 interface DragHandleProps {
   editor: Editor | null;

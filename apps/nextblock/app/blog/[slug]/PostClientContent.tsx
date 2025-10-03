@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 import { useLanguage } from '@/context/LanguageContext';
 
 type PostType = Database['public']['Tables']['posts']['Row'];

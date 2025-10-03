@@ -2,11 +2,11 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { createClient } from '@nextblock-monorepo/db';
+import { createClient } from '@nextblock-cms/db';
 import Link from 'next/link';
-import { Button } from '@nextblock-monorepo/ui';
+import { Button } from '@nextblock-cms/ui';
 import { Languages, CheckCircle } from 'lucide-react';
-import type { Database } from '@nextblock-monorepo/db';
+import type { Database } from '@nextblock-cms/db';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,8 +14,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@nextblock-monorepo/ui";
-import { cn } from '@nextblock-monorepo/utils'; // For conditional styling
+} from "@nextblock-cms/ui";
+import { cn } from '@nextblock-cms/utils'; // For conditional styling
 
 type Language = Database['public']['Tables']['languages']['Row'];
 type Page = Database['public']['Tables']['pages']['Row'];

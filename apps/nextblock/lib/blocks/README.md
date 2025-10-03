@@ -119,9 +119,9 @@ Create [`app/cms/blocks/editors/VideoEmbedBlockEditor.tsx`](../../app/cms/blocks
 "use client";
 
 import React from 'react';
-import { Label } from "@nextblock-monorepo/ui";
-import { Input } from "@nextblock-monorepo/ui";
-import { Checkbox } from "@nextblock-monorepo/ui";
+import { Label } from "@nextblock-cms/ui";
+import { Input } from "@nextblock-cms/ui";
+import { Checkbox } from "@nextblock-cms/ui";
 import { generateDefaultContent, VideoEmbedBlockContent } from "@/lib/blocks/blockRegistry";
 
 interface VideoEmbedBlockEditorProps {

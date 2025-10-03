@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import type { Database } from '@nextblock-monorepo/db';
+import type { Database } from '@nextblock-cms/db';
 
 type Language = Database['public']['Tables']['languages']['Row'];
 import { CopyrightSettings, updateCopyrightSettings } from '../actions';
-import { Label } from '@nextblock-monorepo/ui';
-import { Input } from '@nextblock-monorepo/ui';
-import { Button } from '@nextblock-monorepo/ui';
+import { Label } from '@nextblock-cms/ui';
+import { Input } from '@nextblock-cms/ui';
+import { Button } from '@nextblock-cms/ui';
 import { FormMessage, type Message } from '@/components/form-message';
 
 interface CopyrightFormProps {

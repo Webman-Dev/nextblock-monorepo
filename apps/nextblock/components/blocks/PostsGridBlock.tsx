@@ -1,7 +1,7 @@
 // components/blocks/PostsGridBlock.tsx
 import React from 'react';
-import type { Database } from '@nextblock-monorepo/db';
-import { createClient } from '@nextblock-monorepo/db'; // Added import
+import type { Database } from '@nextblock-cms/db';
+import { createClient } from '@nextblock-cms/db'; // Added import
 import type { PostWithMediaDimensions } from './types';
 
 type Block = Database['public']['Tables']['blocks']['Row'];

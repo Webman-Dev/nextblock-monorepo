@@ -1,7 +1,7 @@
 // apps/nextblock/app/cms/revisions/actions.ts
 "use server";
 
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 import { restorePageToVersion, restorePostToVersion, reconstructPageVersionContent, reconstructPostVersionContent } from './service';
 import { getFullPageContent, getFullPostContent } from './utils';
 

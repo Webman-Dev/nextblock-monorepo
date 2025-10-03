@@ -1,10 +1,10 @@
 // app/cms/pages/[id]/edit/page.tsx
 import React from "react";
-import { Separator } from "@nextblock-monorepo/ui";
-import { createClient } from "@nextblock-monorepo/db/server";
+import { Separator } from "@nextblock-cms/ui";
+import { createClient } from "@nextblock-cms/db/server";
 import PageForm from "../../components/PageForm";
 import { updatePage } from "../../actions";
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 import { notFound, redirect } from "next/navigation";
 
 type Page = Database['public']['Tables']['pages']['Row'];
@@ -12,10 +12,10 @@ type Block = Database['public']['Tables']['blocks']['Row'];
 type Language = Database['public']['Tables']['languages']['Row'];
 import BlockEditorArea from "@/app/cms/blocks/components/BlockEditorArea";
 import Link from "next/link";
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 import { Eye, ArrowLeft } from "lucide-react";
 import ContentLanguageSwitcher from "@/app/cms/components/ContentLanguageSwitcher";
-import { getActiveLanguagesServerSide } from "@nextblock-monorepo/db/server";
+import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server";
 import CopyContentFromLanguage from "@/app/cms/components/CopyContentFromLanguage";
 import { UploadFolderProvider } from "@/app/cms/media/UploadFolderContext";
 import RevisionHistoryButton from "@/app/cms/revisions/RevisionHistoryButton";

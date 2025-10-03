@@ -8,7 +8,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
 import { blockRegistry, BlockType } from '@/lib/blocks/blockRegistry';
 import BlockTypeCard from './BlockTypeCard';
 

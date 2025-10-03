@@ -3,13 +3,13 @@
 
 import React, { useState, useRef, useTransition, useEffect } from "react";
 import Image from "next/image";
-import { Button } from "@nextblock-monorepo/ui";
-import { Input } from "@nextblock-monorepo/ui";
-import { Label } from "@nextblock-monorepo/ui";
-import { Progress } from "@nextblock-monorepo/ui"; // Assuming you have this shadcn/ui component
+import { Button } from "@nextblock-cms/ui";
+import { Input } from "@nextblock-cms/ui";
+import { Label } from "@nextblock-cms/ui";
+import { Progress } from "@nextblock-cms/ui"; // Assuming you have this shadcn/ui component
 import { UploadCloud, XCircle, CheckCircle2 } from "lucide-react";
 import { recordMediaUpload } from "../actions"; // Server action
-import type { Database } from "@nextblock-monorepo/db"; // Import Media type
+import type { Database } from "@nextblock-cms/db"; // Import Media type
 
 type Media = Database['public']['Tables']['media']['Row'];
 

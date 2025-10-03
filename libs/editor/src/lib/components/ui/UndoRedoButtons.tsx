@@ -3,8 +3,8 @@
 import React, { useEffect } from 'react';
 import type { Editor } from '@tiptap/core';
 import { Undo2, Redo2 } from 'lucide-react';
-import { Button } from '@nextblock-monorepo/ui/button';
-import { cn } from '@nextblock-monorepo/utils';
+import { Button } from '@nextblock-cms/ui/button';
+import { cn } from '@nextblock-cms/utils';
 import { useEditorHistory, getHistoryShortcut } from '../../hooks/useEditorHistory';
 
 interface UndoRedoButtonsProps {

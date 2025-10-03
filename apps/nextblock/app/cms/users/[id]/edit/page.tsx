@@ -1,8 +1,8 @@
 // app/cms/users/[id]/edit/page.tsx
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 import UserForm from "../../components/UserForm";
 import { updateUserProfile } from "../../actions";
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 import { notFound } from "next/navigation";
 
 type Profile = Database['public']['Tables']['profiles']['Row'];

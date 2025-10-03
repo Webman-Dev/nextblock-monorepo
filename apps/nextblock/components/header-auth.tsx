@@ -1,12 +1,12 @@
 'use client';
 
 import { signOutAction } from "@/app/actions";
-import { hasPublicEnvVars } from "@nextblock-monorepo/utils";
+import { hasPublicEnvVars } from "@nextblock-cms/utils";
 import Link from "next/link";
-import { Badge } from "@nextblock-monorepo/ui";
-import { Button } from "@nextblock-monorepo/ui";
+import { Badge } from "@nextblock-cms/ui";
+import { Button } from "@nextblock-cms/ui";
 import { useAuth } from "@/context/AuthContext";
-import { useTranslations } from "@nextblock-monorepo/utils";
+import { useTranslations } from "@nextblock-cms/utils";
 
 export default function AuthButton() {
   const { user, profile } = useAuth();

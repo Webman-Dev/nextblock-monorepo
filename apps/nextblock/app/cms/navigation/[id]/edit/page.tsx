@@ -1,15 +1,15 @@
 // app/cms/navigation/[id]/edit/page.tsx
 import React from "react";
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 import NavigationItemForm from "../../components/NavigationItemForm";
 import { updateNavigationItem } from "../../actions";
 import { getLanguages, getNavigationItems, getPages } from "../../utils";
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 import { notFound, redirect } from "next/navigation";
 
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
 import Link from "next/link";
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 import { ArrowLeft } from "lucide-react";
 import NavigationLanguageSwitcher from "../../components/NavigationLanguageSwitcher";
 

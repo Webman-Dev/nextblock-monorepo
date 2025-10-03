@@ -31,16 +31,16 @@ import {
   TableHeader,
   TableRow,
   TableCell,
-} from "@nextblock-monorepo/ui";
-import { Button } from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
+import { Button } from "@nextblock-cms/ui";
 import { HierarchicalNavItem, SortableNavItem } from './SortableNavItem';
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 import { updateNavigationStructureBatch } from '../actions';
 import { GripVertical, MoreHorizontal } from 'lucide-react';
 
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
 type MenuLocation = Database['public']['Enums']['menu_location'];
-import { Badge } from "@nextblock-monorepo/ui";
+import { Badge } from "@nextblock-cms/ui";
 import { createPortal } from 'react-dom';
 
 const INDENTATION_WIDTH = 25;

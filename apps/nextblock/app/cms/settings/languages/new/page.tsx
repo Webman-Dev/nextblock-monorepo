@@ -2,8 +2,8 @@
 import React from "react";
 import LanguageForm from "../components/LanguageForm";
 import { createLanguage } from "../actions";
-import { createClient } from "@nextblock-monorepo/db/server"; // To fetch all languages for the form logic
-import type { Database } from "@nextblock-monorepo/db";
+import { createClient } from "@nextblock-cms/db/server"; // To fetch all languages for the form logic
+import type { Database } from "@nextblock-cms/db";
 
 type Language = Database['public']['Tables']['languages']['Row'];
 

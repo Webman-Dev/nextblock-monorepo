@@ -20,15 +20,15 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["apps/nextblock/*"],
-      "@nextblock-monorepo/db": ["libs/db/src/index.ts"],
-      "@nextblock-monorepo/db/server": ["libs/db/src/server.ts"],
-      "@nextblock/editor": ["libs/editor/src/index.ts"],
-      "@nextblock-monorepo/editor/*": ["libs/editor/src/*"],
-      "@nextblock-monorepo/ui": ["libs/ui/src/index.ts"],
-      "@nextblock-monorepo/ui/*": ["libs/ui/src/lib/*"],
-      "@nextblock-monorepo/utils": ["libs/utils/src/index.ts"],
-      "@nextblock-monorepo/utils/server": ["libs/utils/src/server.ts"],
-      "@nextblock/sdk": ["libs/sdk/src/index.ts"]
+      "@nextblock-cms/db": ["libs/db/src/index.ts"],
+      "@nextblock-cms/db/server": ["libs/db/src/server.ts"],
+      "@nextblock-cms/editor/*": ["libs/editor/src/*"],
+      "@nextblock-cms/ui": ["libs/ui/src/index.ts"],
+      "@nextblock-cms/ui/*": ["libs/ui/src/lib/*"],
+      "@nextblock-cms/utils": ["libs/utils/src/index.ts"],
+      "@nextblock-cms/utils/server": ["libs/utils/src/server.ts"],
+      "@nextblock-cms/editor": ["libs/editor/src/index.ts"],
+      "@nextblock-cms/sdk": ["libs/sdk/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

@@ -1,7 +1,7 @@
 // app/cms/navigation/utils.ts
 "use server";
 
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 
 export async function getLanguages() {
   const supabase = createClient();

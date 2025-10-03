@@ -1,5 +1,5 @@
 {
-  "name": "@nextblock-monorepo/source",
+  "name": "@nextblock-cms/source",
   "$schema": "node_modules/nx/schemas/project-schema.json",
   "targets": {
     "local-registry": {

@@ -1,7 +1,7 @@
 'use server';
 
 import { cache } from 'react';
-import { createClient } from '@nextblock-monorepo/db/server';
+import { createClient } from '@nextblock-cms/db/server';
 import { revalidatePath } from 'next/cache';
 import type { PostWithMediaDimensions } from '../../components/blocks/types';
 

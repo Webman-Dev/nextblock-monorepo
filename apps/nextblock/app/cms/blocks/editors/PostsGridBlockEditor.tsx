@@ -1,9 +1,9 @@
 // app/cms/blocks/editors/PostsGridBlockEditor.tsx
 import React, { useState, useEffect } from 'react';
 import { BlockEditorProps } from '../components/BlockEditorModal';
-import { Input } from '@nextblock-monorepo/ui';
-import { Label } from '@nextblock-monorepo/ui';
-// import { useToast } from "@nextblock-monorepo/ui"; // Assuming you have a toast component - Removed for now
+import { Input } from '@nextblock-cms/ui';
+import { Label } from '@nextblock-cms/ui';
+// import { useToast } from "@nextblock-cms/ui"; // Assuming you have a toast component - Removed for now
 
 interface PostsGridBlockContent {
   title?: string;

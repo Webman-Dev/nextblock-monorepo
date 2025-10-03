@@ -9,7 +9,7 @@
     "composite": true,
     "declaration": true,
     "paths": {
-      "@nextblock-monorepo/utils": ["./src/index.ts"]
+      "@nextblock-cms/utils": ["./src/index.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "../../libs/environment.d.ts"],

@@ -1,13 +1,13 @@
 "use client";
 
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
 import { Laptop, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";

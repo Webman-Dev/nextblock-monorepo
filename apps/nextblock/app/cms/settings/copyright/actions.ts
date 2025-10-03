@@ -1,7 +1,7 @@
 // app/cms/settings/copyright/actions.ts
 'use server';
 
-import { createClient } from '@nextblock-monorepo/db/server';
+import { createClient } from '@nextblock-cms/db/server';
 import { revalidatePath } from 'next/cache';
 
 export type CopyrightSettings = {

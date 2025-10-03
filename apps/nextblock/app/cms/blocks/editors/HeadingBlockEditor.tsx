@@ -2,9 +2,9 @@
 "use client";
 
 import React from "react";
-import { Label } from "@nextblock-monorepo/ui";
-import { Input } from "@nextblock-monorepo/ui";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@nextblock-monorepo/ui";
+import { Label } from "@nextblock-cms/ui";
+import { Input } from "@nextblock-cms/ui";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@nextblock-cms/ui";
 import type { HeadingBlockContent } from "@/lib/blocks/blockRegistry";
 import { BlockEditorProps } from '../components/BlockEditorModal';
 

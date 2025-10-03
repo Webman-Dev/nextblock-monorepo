@@ -1,6 +1,6 @@
 import React from 'react'
 import Link from 'next/link'
-import { Button } from '@nextblock-monorepo/ui'
+import { Button } from '@nextblock-cms/ui'
 import {
   Table,
   TableBody,
@@ -8,7 +8,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@nextblock-monorepo/ui'
+} from '@nextblock-cms/ui'
 import { MoreHorizontal, PlusCircle, Edit3, Image as ImageIcon } from 'lucide-react'
 import {
   DropdownMenu,
@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-} from '@nextblock-monorepo/ui'
+} from '@nextblock-cms/ui'
 import { deleteLogo, getLogos } from './actions'
 import MediaImage from '@/app/cms/media/components/MediaImage'
 

@@ -2,7 +2,7 @@
 "use client"; // This is crucial
 
 import React, { useState, useTransition } from "react";
-import { DropdownMenuItem } from "@nextblock-monorepo/ui";
+import { DropdownMenuItem } from "@nextblock-cms/ui";
 import { Trash2, ShieldAlert } from "lucide-react";
 import { deleteUserAndProfile } from "../actions";
 import { ConfirmationModal } from "@/app/cms/components/ConfirmationModal";

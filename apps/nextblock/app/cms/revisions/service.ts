@@ -1,8 +1,8 @@
 // apps/nextblock/app/cms/revisions/service.ts
 "use server";
 
-import { createClient } from "@nextblock-monorepo/db/server";
-import type { Json } from "@nextblock-monorepo/db";
+import { createClient } from "@nextblock-cms/db/server";
+import type { Json } from "@nextblock-cms/db";
 import { compare, applyPatch } from 'fast-json-patch';
 import type { FullPageContent, FullPostContent } from './utils';
 

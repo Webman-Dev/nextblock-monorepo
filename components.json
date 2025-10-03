@@ -10,7 +10,7 @@
     "cssVariables": true
   },
   "aliases": {
-    "components": "@nextblock-monorepo/ui",
-    "utils": "@nextblock-monorepo/utils"
+    "components": "@nextblock-cms/ui",
+    "utils": "@nextblock-cms/utils"
   }
 }

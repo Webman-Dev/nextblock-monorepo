@@ -1,8 +1,8 @@
 // components/Header.tsx
-import { createClient as createSupabaseServerClient } from '@nextblock-monorepo/db/server'; // Adjusted path
+import { createClient as createSupabaseServerClient } from '@nextblock-cms/db/server'; // Adjusted path
  // import Link from 'next/link'; // Appears unused, ResponsiveNav handles links
- import { getProfileWithRoleServerSide } from '@nextblock-monorepo/db/server'; // Adjusted path
- import type { Database } from '@nextblock-monorepo/db'; // Adjusted path
+ import { getProfileWithRoleServerSide } from '@nextblock-cms/db/server'; // Adjusted path
+ import type { Database } from '@nextblock-cms/db'; // Adjusted path
  import HeaderAuth from './header-auth'; // Adjusted path if needed, assuming it's in components/
 
  type UserRole = Database['public']['Enums']['user_role'];

@@ -1,14 +1,14 @@
 import 'libs/ui/src/styles/globals.css';
-import '@nextblock-monorepo/editor/styles/editor.css';
+import '@nextblock-cms/editor/styles/editor.css';
 // app/layout.tsx
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { ThemeSwitcher } from '@/components/theme-switcher';
-import { hasEnvVars } from "@nextblock-monorepo/utils/server";
-import { createClient as createSupabaseServerClient, getProfileWithRoleServerSide } from '@nextblock-monorepo/db/server';
-import { getActiveLanguagesServerSide } from "@nextblock-monorepo/db/server"; // Import server-side language fetcher
+import { hasEnvVars } from "@nextblock-cms/utils/server";
+import { createClient as createSupabaseServerClient, getProfileWithRoleServerSide } from '@nextblock-cms/db/server';
+import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server"; // Import server-side language fetcher
 import { getCopyrightSettings } from '@/app/cms/settings/copyright/actions';
 import { getTranslations } from '@/app/cms/settings/extra-translations/actions';
-import type { Database } from "@nextblock-monorepo/db"; // Import Language type
+import type { Database } from "@nextblock-cms/db"; // Import Language type
 import type { Metadata } from 'next';
 import Header from "@/components/Header";
 import FooterNavigation from "@/components/FooterNavigation";

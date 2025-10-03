@@ -19,11 +19,11 @@ The project is organized into `apps` (deployable units) and `libs` (reusable pac
 | Path             | Type        | Description                                                          | Alias / Import Path           |
 | ---------------- | ----------- | -------------------------------------------------------------------- | ----------------------------- |
 | `apps/nextblock`   | Application | The main Next.js CMS application, admin panel, and public pages.     | N/A                           |
-| `libs/ui`          | Library     | Houses all shared `shadcn/ui` components, custom UI elements, and global styles. | `@nextblock-monorepo/ui`      |
-| `libs/utils`       | Library     | Contains general-purpose utility functions, constants, and shared type definitions. | `@nextblock-monorepo/utils`   |
-| `libs/db`          | Library     | The single source of truth for all Supabase client logic and database interactions. | `@nextblock-monorepo/db`      |
-| `libs/ecommerce`   | Library     | Placeholder for the future premium e-commerce module.         | `@nextblock/ecommerce-premium`|
-| `libs/sdk`         | Library     | Placeholder for the future public SDK for third-party developers. | `@nextblock/sdk`              |
+| `libs/ui`          | Library     | Houses all shared `shadcn/ui` components, custom UI elements, and global styles. | `@nextblock-cms/ui`      |
+| `libs/utils`       | Library     | Contains general-purpose utility functions, constants, and shared type definitions. | `@nextblock-cms/utils`   |
+| `libs/db`          | Library     | The single source of truth for all Supabase client logic and database interactions. | `@nextblock-cms/db`      |
+| `libs/ecommerce`   | Library     | Placeholder for the future premium e-commerce module.         | `@nextblock-cms/ecommerce-premium`|
+| `libs/sdk`         | Library     | Placeholder for the future public SDK for third-party developers. | `@nextblock-cms/sdk`              |
 
 ---
 

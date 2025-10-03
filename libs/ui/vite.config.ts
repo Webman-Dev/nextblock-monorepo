@@ -4,6 +4,8 @@ import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import * as fs from 'fs';
 
+const resolveFrom = (...segments: string[]) => path.resolve(__dirname, ...segments);
+
 export default defineConfig({
   root: __dirname,
   plugins: [
@@ -13,39 +15,36 @@ export default defineConfig({
       outDir: '../../dist/libs/ui',
       afterBuild: () => {
         const packageJson = {
-          name: 'ui',
-          version: '0.0.1',
+          name: '@nextblock-cms/ui',
+          version: '0.0.2',
           main: 'index.cjs.js',
           module: 'index.es.js',
-          types: 'index.d.ts',
+          types: 'index.d.ts'
         };
+
         fs.writeFileSync(
-          path.resolve(__dirname, '../../dist/libs/ui', 'package.json'),
+          resolveFrom('../../dist/libs/ui', 'package.json'),
           JSON.stringify(packageJson, null, 2)
         );
-      },
+      }
     }),
-    react(),
+    react()
   ],
   resolve: {
-    alias: {
-      '@nextblock-monorepo/utils': path.resolve(__dirname, '../utils/src/index.ts'),
-    },
+    alias: [
+      { find: '@nextblock-cms/utils/', replacement: resolveFrom('../utils/src') + '/' },
+      { find: '@nextblock-cms/utils', replacement: resolveFrom('../utils/src/index.ts') }
+    ]
   },
   build: {
     lib: {
       entry: './src/index.ts',
       name: 'ui',
       fileName: 'index',
-      formats: ['es', 'cjs'],
+      formats: ['es', 'cjs']
     },
     rollupOptions: {
-      external: [
-        'react',
-        'react-dom',
-        '@nextblock-monorepo/utils',
-        '@nextblock-monorepo/ui',
-      ],
-    },
-  },
+      external: ['react', 'react-dom', /^@nextblock-cms\/.*/]
+    }
+  }
 });

@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation'; // For navigation on lang switch
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 import { useLanguage } from '@/context/LanguageContext';
 import { useCurrentContent } from '@/context/CurrentContentContext';
 import Link from 'next/link';

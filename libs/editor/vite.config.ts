@@ -4,6 +4,8 @@ import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import * as fs from 'fs';
 
+const resolveFrom = (...segments: string[]) => path.resolve(__dirname, ...segments);
+
 export default defineConfig({
   root: __dirname,
   plugins: [
@@ -13,25 +15,28 @@ export default defineConfig({
       outDir: '../../dist/libs/editor',
       afterBuild: () => {
         const packageJson = {
-          name: 'editor',
+          name: '@nextblock-cms/editor',
           version: '0.0.1',
           main: 'index.cjs.js',
           module: 'index.es.js',
-          types: 'index.d.ts',
+          types: 'index.d.ts'
         };
+
         fs.writeFileSync(
-          path.resolve(__dirname, '../../dist/libs/editor', 'package.json'),
+          resolveFrom('../../dist/libs/editor', 'package.json'),
           JSON.stringify(packageJson, null, 2)
         );
-      },
+      }
     }),
-    react(),
+    react()
   ],
   resolve: {
-    alias: {
-      '@nextblock-monorepo/ui': path.resolve(__dirname, '../ui/src/index.ts'),
-      '@nextblock-monorepo/utils': path.resolve(__dirname, '../utils/src/index.ts'),
-    },
+    alias: [
+      { find: '@nextblock-cms/ui/', replacement: resolveFrom('../ui/src/lib') + '/' },
+      { find: '@nextblock-cms/ui', replacement: resolveFrom('../ui/src/index.ts') },
+      { find: '@nextblock-cms/utils/', replacement: resolveFrom('../utils/src') + '/' },
+      { find: '@nextblock-cms/utils', replacement: resolveFrom('../utils/src/index.ts') }
+    ]
   },
   build: {
     emptyOutDir: true,
@@ -40,10 +45,10 @@ export default defineConfig({
       entry: './src/index.ts',
       name: 'editor',
       fileName: 'index',
-      formats: ['es', 'cjs'],
+      formats: ['es', 'cjs']
     },
     rollupOptions: {
-      external: ['react', 'react-dom', /^@nextblock-monorepo\/.*/],
-    },
-  },
+      external: ['react', 'react-dom', /^@nextblock-cms\/.*/]
+    }
+  }
 });

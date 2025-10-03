@@ -9,8 +9,8 @@ import {
   Bold, Italic, Underline, Strikethrough, Code, Link2, Palette,
   Subscript, Superscript, AlignLeft, AlignCenter, AlignRight, AlignJustify, Type,
 } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '@nextblock-monorepo/ui/popover';
-import { Button } from '@nextblock-monorepo/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@nextblock-cms/ui/popover';
+import { Button } from '@nextblock-cms/ui/button';
 import { AdvancedColorMenu } from '../ui/AdvancedColorMenu';
 import { AdvancedFontSizeMenu } from '../ui/AdvancedFontSizeMenu';
 

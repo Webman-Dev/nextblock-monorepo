@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { useActionState } from 'react';
 import { getTranslations, createTranslation, updateTranslation } from './actions';
 import { getLanguages } from '@/app/cms/settings/languages/actions';
-import { Button } from '@nextblock-monorepo/ui';
+import { Button } from '@nextblock-cms/ui';
 import {
   Dialog,
   DialogContent,
@@ -12,9 +12,9 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
-} from '@nextblock-monorepo/ui';
-import { Input } from '@nextblock-monorepo/ui';
-import { Label } from '@nextblock-monorepo/ui';
+} from '@nextblock-cms/ui';
+import { Input } from '@nextblock-cms/ui';
+import { Label } from '@nextblock-cms/ui';
 import {
   Table,
   TableBody,
@@ -22,7 +22,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@nextblock-monorepo/ui';
+} from '@nextblock-cms/ui';
 import { SubmitButton } from '@/components/submit-button';
 
 type Translation = Awaited<ReturnType<typeof getTranslations>>[number];

@@ -1,5 +1,5 @@
 import React from 'react';
-import { cn } from '@nextblock-monorepo/utils';
+import { cn } from '@nextblock-cms/utils';
 
 export const Toolbar = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (
   <div

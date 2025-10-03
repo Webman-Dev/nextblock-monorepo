@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { DropdownMenuItem } from "@nextblock-monorepo/ui";
+import { DropdownMenuItem } from "@nextblock-cms/ui";
 import { Trash2 } from "lucide-react";
 import { deleteNavigationItem } from "../actions";
 import { ConfirmationModal } from "../../components/ConfirmationModal";

@@ -6,7 +6,7 @@ import React, {
   useRef,
 } from 'react'
 import type { CommandItemProps } from '../../extensions/slash-command'
-import { cn } from '@nextblock-monorepo/utils'
+import { cn } from '@nextblock-cms/utils'
 
 interface SlashCommandListProps {
   items: CommandItemProps[]

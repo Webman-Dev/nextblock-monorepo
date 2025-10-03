@@ -1,6 +1,6 @@
 // app/blog/page.tsx
 import React from 'react';
-import { getSsgSupabaseClient } from "@nextblock-monorepo/db";
+import { getSsgSupabaseClient } from "@nextblock-cms/db";
 import { notFound } from "next/navigation";
 import type { Metadata, ResolvingMetadata } from 'next';
 import PageClientContent from "../[slug]/PageClientContent";

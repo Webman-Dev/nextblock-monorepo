@@ -1,6 +1,6 @@
 // app/cms/blocks/components/BlockTypeCard.tsx
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@nextblock-monorepo/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@nextblock-cms/ui";
 import {
   FileText,
   Heading,

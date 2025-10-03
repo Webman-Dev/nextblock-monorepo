@@ -1,9 +1,9 @@
 "use client";
 
-import { DropdownMenuItem } from "@nextblock-monorepo/ui";
+import { DropdownMenuItem } from "@nextblock-cms/ui";
 import { Trash2, ShieldAlert } from "lucide-react";
 import { deleteLanguage } from "../actions"; // Server action
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 import { useTransition, useState } from 'react';
 import { ConfirmationModal } from "@/app/cms/components/ConfirmationModal";
 

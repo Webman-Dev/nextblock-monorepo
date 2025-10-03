@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 
 interface FolderTreeProps {
   folders: string[];

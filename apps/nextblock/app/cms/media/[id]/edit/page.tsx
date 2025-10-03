@@ -1,15 +1,15 @@
 // app/cms/media/[id]/edit/page.tsx
 import React from "react";
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 import MediaEditForm from "../../components/MediaEditForm"; // Adjusted path
 import { updateMediaItem } from "../../actions"; // Server action for updating
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 import { notFound, redirect } from "next/navigation";
 
 type Media = Database['public']['Tables']['media']['Row'];
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 
 async function getMediaData(id: string): Promise<Media | null> {
   const supabase = createClient();

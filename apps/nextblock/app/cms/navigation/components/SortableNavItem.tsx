@@ -4,9 +4,9 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { TableCell, TableRow } from "@nextblock-monorepo/ui";
-import { Button } from '@nextblock-monorepo/ui';
-import { Badge } from "@nextblock-monorepo/ui";
+import { TableCell, TableRow } from "@nextblock-cms/ui";
+import { Button } from '@nextblock-cms/ui';
+import { Badge } from "@nextblock-cms/ui";
 import { GripVertical, MoreHorizontal, Edit3 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -14,9 +14,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
 import DeleteNavItemButton from "./DeleteNavItemButton"; // Assuming this exists and works
-import type { Database } from '@nextblock-monorepo/db'; // Ensure this path is correct
+import type { Database } from '@nextblock-cms/db'; // Ensure this path is correct
 
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
 

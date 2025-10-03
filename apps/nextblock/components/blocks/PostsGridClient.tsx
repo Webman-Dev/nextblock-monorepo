@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import type { Database } from '@nextblock-monorepo/db';
+import type { Database } from '@nextblock-cms/db';
 import Link from 'next/link';
 
 type PostWithMediaDimensions = Database['public']['Tables']['posts']['Row'] & {
@@ -12,7 +12,7 @@ type PostWithMediaDimensions = Database['public']['Tables']['posts']['Row'] & {
     blur_data_url: string | null;
 };
 import Image from 'next/image';
-import { Button } from '@nextblock-monorepo/ui'; // Adjusted path
+import { Button } from '@nextblock-cms/ui'; // Adjusted path
 import PostCardSkeleton from './PostCardSkeleton'; // Added import
 
 interface PostsGridClientProps {

@@ -1,8 +1,8 @@
 // app/cms/pages/new/page.tsx
 import PageForm from "../components/PageForm";
 import { createPage } from "../actions"; // Server action for creating a page
-import { createClient } from "@nextblock-monorepo/db/server";
-import type { Database } from "@nextblock-monorepo/db";
+import { createClient } from "@nextblock-cms/db/server";
+import type { Database } from "@nextblock-cms/db";
 
 type Language = Database['public']['Tables']['languages']['Row'];
 

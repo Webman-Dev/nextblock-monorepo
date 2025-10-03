@@ -1,6 +1,6 @@
 import * as React from "react"
 
-import { cn } from "@nextblock-monorepo/utils"
+import { cn } from "@nextblock-cms/utils"
 
 const Textarea = React.forwardRef<
   HTMLTextAreaElement,

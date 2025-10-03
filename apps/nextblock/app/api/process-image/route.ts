@@ -1,6 +1,6 @@
 // app/api/process-image/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { s3Client } from '@nextblock-monorepo/utils/server';
+import { s3Client } from '@nextblock-cms/utils/server';
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import { Readable } from 'stream';

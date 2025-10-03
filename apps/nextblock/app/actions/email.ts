@@ -1,6 +1,6 @@
 "use server";
 
-import { getEmailServerConfig } from '@nextblock-monorepo/utils/server';
+import { getEmailServerConfig } from '@nextblock-cms/utils/server';
 import nodemailer from 'nodemailer';
 
 interface EmailParams {

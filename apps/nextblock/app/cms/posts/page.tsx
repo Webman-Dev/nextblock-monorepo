@@ -1,8 +1,8 @@
 // app/cms/posts/page.tsx
 import React from "react";
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 import Link from "next/link";
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 import {
   Table,
   TableBody,
@@ -10,8 +10,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@nextblock-monorepo/ui";
-import { Badge } from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
+import { Badge } from "@nextblock-cms/ui";
 import { MoreHorizontal, PlusCircle, Edit3, PenTool } from "lucide-react"; // Removed Trash2 as it's in the client component
 import {
   DropdownMenu,
@@ -19,10 +19,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-} from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
 // deletePost server action is now used by DeletePostButtonClient
-import type { Database } from "@nextblock-monorepo/db";
-import { getActiveLanguagesServerSide } from "@nextblock-monorepo/db/server";
+import type { Database } from "@nextblock-cms/db";
+import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server";
 
 type Post = Database['public']['Tables']['posts']['Row'] & { feature_image_url?: string | null };
 import LanguageFilterSelect from "@/app/cms/components/LanguageFilterSelect";

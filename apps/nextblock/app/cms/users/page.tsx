@@ -1,7 +1,7 @@
 import React from "react";
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 import Link from "next/link";
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 import {
   Table,
   TableBody,
@@ -9,8 +9,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@nextblock-monorepo/ui";
-import { Badge } from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
+import { Badge } from "@nextblock-cms/ui";
 import { MoreHorizontal, Edit3, Users } from "lucide-react";
 import {
   DropdownMenu,
@@ -18,9 +18,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@nextblock-monorepo/ui";
-import type { Database } from "@nextblock-monorepo/db";
-import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
+import type { Database } from "@nextblock-cms/db";
+import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui";
 
 type AuthUser = {
     id: string;

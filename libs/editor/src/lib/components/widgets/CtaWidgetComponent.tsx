@@ -2,7 +2,7 @@
 
 import { NodeViewWrapper, NodeViewProps } from '@tiptap/react';
 import { useState } from 'react';
-import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-monorepo/ui';
+import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui';
 
 const CtaWidgetComponent = ({ node, updateAttributes, editor }: NodeViewProps) => {
   const [isEditing, setIsEditing] = useState(false);

@@ -10,16 +10,16 @@ import {
   TextQuote, Code2, Image, Table2, Minus, AlignLeft, AlignCenter,
   AlignRight, AlignJustify, Subscript, Superscript, Type, Download, AlertTriangle, Megaphone, FileCode2, Eye,
 } from 'lucide-react';
-import { Button } from '@nextblock-monorepo/ui/button';
-import { Separator } from '@nextblock-monorepo/ui/separator';
-import { Popover, PopoverContent, PopoverTrigger } from '@nextblock-monorepo/ui/popover';
+import { Button } from '@nextblock-cms/ui/button';
+import { Separator } from '@nextblock-cms/ui/separator';
+import { Popover, PopoverContent, PopoverTrigger } from '@nextblock-cms/ui/popover';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator
-} from '@nextblock-monorepo/ui/dropdown-menu';
+} from '@nextblock-cms/ui/dropdown-menu';
 import { UndoRedoButtons } from '../ui/UndoRedoButtons';
 import { AdvancedColorMenu } from '../ui/AdvancedColorMenu';
 import { AdvancedFontSizeMenu } from '../ui/AdvancedFontSizeMenu';

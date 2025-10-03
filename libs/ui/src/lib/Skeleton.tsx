@@ -1,5 +1,5 @@
 "use client";
-import { cn } from "@nextblock-monorepo/utils";
+import { cn } from "@nextblock-cms/utils";
 
 function Skeleton({
   className,

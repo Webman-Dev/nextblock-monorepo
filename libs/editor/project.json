@@ -7,10 +7,16 @@
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
         "outputPath": "dist/libs/editor",
-        "configFile": "libs/editor/vite.config.ts"
+        "configFile": "libs/editor/vite.config.ts",
+        "assets": [
+          "libs/editor/*.md",
+          "libs/editor/package.json"
+        ]
       },
       "dependencies": {
         "build": [
@@ -33,7 +39,9 @@
   },
   "release": {
     "version": {
-      "manifestRootsToUpdate": ["dist/{projectRoot}"],
+      "manifestRootsToUpdate": [
+        "dist/{projectRoot}"
+      ],
       "currentVersionResolver": "git-tag",
       "fallbackCurrentVersionResolver": "disk"
     }

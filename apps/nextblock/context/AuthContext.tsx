@@ -3,8 +3,8 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { User, Subscription, SupabaseClient } from '@supabase/supabase-js';
-import { createClient as createSupabaseBrowserClient, getProfileWithRoleClientSide } from '@nextblock-monorepo/db';
-import { Database } from '@nextblock-monorepo/db';
+import { createClient as createSupabaseBrowserClient, getProfileWithRoleClientSide } from '@nextblock-cms/db';
+import { Database } from '@nextblock-cms/db';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type UserRole = Database['public']['Enums']['user_role'];

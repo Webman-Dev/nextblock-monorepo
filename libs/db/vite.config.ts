@@ -13,12 +13,13 @@ export default defineConfig({
       exclude: ['vite.config.ts'],
       afterBuild: () => {
         const packageJson = {
-          name: 'db',
+          name: '@nextblock-cms/db',
           version: '0.0.1',
           main: 'index.cjs.js',
           module: 'index.es.js',
           types: 'index.d.ts',
         };
+
         fs.writeFileSync(
           path.resolve(__dirname, '../../dist/libs/db', 'package.json'),
           JSON.stringify(packageJson, null, 2)

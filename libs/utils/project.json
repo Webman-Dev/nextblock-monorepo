@@ -8,9 +8,15 @@
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
-        "outputPath": "dist/libs/utils"
+        "outputPath": "dist/libs/utils",
+        "assets": [
+          "libs/utils/*.md",
+          "libs/utils/package.json"
+        ]
       }
     }
   }

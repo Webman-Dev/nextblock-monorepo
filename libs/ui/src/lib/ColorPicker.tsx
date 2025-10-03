@@ -6,9 +6,9 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@nextblock-monorepo/ui";
-import { Label } from "@nextblock-monorepo/ui";
-import { cn } from "@nextblock-monorepo/utils";
+} from "./popover";
+import { Label } from "./label";
+import { cn } from "@nextblock-cms/utils";
 
 interface ColorPickerProps {
   label: string;

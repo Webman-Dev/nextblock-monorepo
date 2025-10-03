@@ -3,10 +3,10 @@
 
 import React, { useState } from 'react'; // Removed useTransition as it's not used here
 import Image from 'next/image';
-import { Label } from "@nextblock-monorepo/ui";
-import { Input } from "@nextblock-monorepo/ui";
-import { Button } from "@nextblock-monorepo/ui";
-import type { Database } from "@nextblock-monorepo/db";
+import { Label } from "@nextblock-cms/ui";
+import { Input } from "@nextblock-cms/ui";
+import { Button } from "@nextblock-cms/ui";
+import type { Database } from "@nextblock-cms/db";
 
 type Media = Database['public']['Tables']['media']['Row'];
 export type ImageBlockContent = {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, type ComponentType, Suspense, LazyExoticComponent } from "react";
-import { cn } from "@nextblock-monorepo/utils";
+import { cn } from "@nextblock-cms/utils";
 import {
   Dialog,
   DialogContent,
@@ -9,8 +9,8 @@ import {
   DialogTitle,
   DialogFooter,
   DialogDescription,
-} from "@nextblock-monorepo/ui";
-import { Button } from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
+import { Button } from "@nextblock-cms/ui";
 import { blockRegistry, type BlockType } from "@/lib/blocks/blockRegistry";
 
 // A generic representation of a block object.

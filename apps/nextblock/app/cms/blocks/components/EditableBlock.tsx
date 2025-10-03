@@ -2,16 +2,16 @@
 "use client";
 
 import React, { useState, Suspense, useMemo, lazy, LazyExoticComponent, ComponentType } from 'react';
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 import PostsGridBlockEditor from '../editors/PostsGridBlockEditor';
 
 type Block = Database['public']['Tables']['blocks']['Row'];
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 import { GripVertical, Edit2 } from "lucide-react";
 import { getBlockDefinition, blockRegistry, BlockType } from "@/lib/blocks/blockRegistry";
 import { BlockEditorModal } from './BlockEditorModal';
 import { DeleteBlockButtonClient } from './DeleteBlockButtonClient';
-import { cn } from '@nextblock-monorepo/utils';
+import { cn } from '@nextblock-cms/utils';
 
 export interface EditableBlockProps {
   block: Block;

@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import type { Database } from '@nextblock-monorepo/db' // Relative path from components/
+import type { Database } from '@nextblock-cms/db' // Relative path from components/
 import { useCurrentContent } from '../context/CurrentContentContext';
-import { useTranslations } from '@nextblock-monorepo/utils';
+import { useTranslations } from '@nextblock-cms/utils';
 
 type Logo = Database['public']['Tables']['logos']['Row'] & { media: (Database['public']['Tables']['media']['Row'] & { alt_text: string | null }) | null };
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];

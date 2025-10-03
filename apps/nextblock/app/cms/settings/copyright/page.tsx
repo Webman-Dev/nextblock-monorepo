@@ -2,7 +2,7 @@
 import { getActiveLanguagesServerSide } from '@/app/cms/settings/languages/actions';
 import { getCopyrightSettings } from './actions';
 import CopyrightForm from './components/CopyrightForm';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@nextblock-monorepo/ui';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@nextblock-cms/ui';
 
 export default async function CopyrightSettingsPage() {
   const languages = await getActiveLanguagesServerSide();

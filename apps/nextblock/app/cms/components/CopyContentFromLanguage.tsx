@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 import {
   Dialog,
   DialogContent,
@@ -11,17 +11,17 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogClose,
-} from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@nextblock-monorepo/ui";
-import { Label } from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
+import { Label } from "@nextblock-cms/ui";
 import { copyBlocksFromLanguage } from "@/app/cms/blocks/actions";
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 import { useRouter } from "next/navigation";
 
 type Language = Database['public']['Tables']['languages']['Row'];

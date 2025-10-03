@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, Badge, Input } from "@nextblock-monorepo/ui";
+import { Button, Badge, Input } from "@nextblock-cms/ui";
 import { Folder as FolderIcon, Search as SearchIcon, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface FolderNavigatorProps {

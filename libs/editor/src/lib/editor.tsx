@@ -9,10 +9,10 @@ import { EnhancedFloatingMenu } from './components/menus/EnhancedFloatingMenu';
 import { EditorToolbar } from './components/menus/Toolbar';
 import { DragHandle } from './components/DragHandle';
 import { MobileToolbar } from './components/mobile/MobileToolbar';
-import { Button } from '@nextblock-monorepo/ui/button';
+import { Button } from '@nextblock-cms/ui/button';
 import { Search, X, Replace } from 'lucide-react';
-import { Input } from '@nextblock-monorepo/ui/input';
-import { cn } from '@nextblock-monorepo/utils';
+import { Input } from '@nextblock-cms/ui/input';
+import { cn } from '@nextblock-cms/utils';
 
 interface EditorProps {
   content: string;

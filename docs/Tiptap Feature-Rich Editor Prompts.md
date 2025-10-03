@@ -20,7 +20,7 @@ Your goal is to perform the initial setup for the new editor library. This inclu
 
 The project is an Nx monorepo. The architectural principles are defined in the "Monorepo Architecture & Development Guide".1 Reusable functionality must be placed in
 
-libs packages, and shared UI components are imported from @nextblock-monorepo/ui. Path aliases are defined in the root tsconfig.base.json.
+libs packages, and shared UI components are imported from @nextblock-cms/ui. Path aliases are defined in the root tsconfig.base.json.
 
 ### **Detailed Step-by-Step Instructions**
 
@@ -32,7 +32,7 @@ Execute the following command in the monorepo root to scaffold the new, publisha
 
 Bash
 
-nx g @nx/react:library editor \--directory=libs \--publishable \--importPath="@nextblock-monorepo/editor"
+nx g @nx/react:library editor \--directory=libs \--publishable \--importPath="@nextblock-cms/editor"
 
 #### **Step 1.2: Comprehensive Dependency Installation**
 
@@ -92,7 +92,7 @@ To make the editor a self-contained, reusable product, the custom widgets curren
    * Update any relative paths (../../...) to use the monorepo's absolute path aliases defined in tsconfig.base.json.1  
    * **Crucially**, any component imported from the old UI path must now be imported from the shared UI library. For example:  
      * **Change this:** import { Button } from '../../../../../../../../libs/ui/src/lib/button';  
-     * **To this:** import { Button } from '@nextblock-monorepo/ui';
+     * **To this:** import { Button } from '@nextblock-cms/ui';
 
 #### **Step 1.5: Create Initial Editor Component**
 
@@ -542,7 +542,7 @@ You are an expert AI developer specializing in TypeScript, React, Next.js, and t
 
 ### **Primary Objective**
 
-Your goal is to implement a Notion-style Bubble Menu for the editor. This menu must appear whenever a user selects text and provide contextual controls for inline formatting, linking, styling, and inserting custom widgets. The menu's UI must be built using the shared components from the @nextblock-monorepo/ui library to ensure visual consistency.
+Your goal is to implement a Notion-style Bubble Menu for the editor. This menu must appear whenever a user selects text and provide contextual controls for inline formatting, linking, styling, and inserting custom widgets. The menu's UI must be built using the shared components from the @nextblock-cms/ui library to ensure visual consistency.
 
 ### **Project Context & Key Files**
 
@@ -550,7 +550,7 @@ This prompt focuses on creating new React components within the libs/editor libr
 
 * **Create:** libs/editor/src/lib/components/menus/BubbleMenu.tsx  
 * **Modify:** libs/editor/src/lib/NotionEditor.tsx to include the new BubbleMenu component.  
-* **Leverage:** UI components from @nextblock-monorepo/ui (e.g., Button, Popover, Toolbar).
+* **Leverage:** UI components from @nextblock-cms/ui (e.g., Button, Popover, Toolbar).
 
 ### **Detailed Step-by-Step Instructions**
 
@@ -566,7 +566,7 @@ The menu will contain:
 * A popover for selecting **Text Color** and **Highlight Color**.  
 * Buttons for inserting the custom **Alert** and **CTA** widgets.
 
-Use lucide-react for icons and components from @nextblock-monorepo/ui for the structure.
+Use lucide-react for icons and components from @nextblock-cms/ui for the structure.
 
 TypeScript
 
@@ -586,9 +586,9 @@ import {
   Megaphone,  
 } from 'lucide-react';  
 import { FC, useState } from 'react';  
-import { Popover, PopoverContent, PopoverTrigger } from '@nextblock-monorepo/ui/popover';  
-import { Button } from '@nextblock-monorepo/ui/button';  
-import { Toolbar, ToolbarGroup, ToolbarButton, ToolbarSeparator } from '@nextblock-monorepo/ui/toolbar';
+import { Popover, PopoverContent, PopoverTrigger } from '@nextblock-cms/ui/popover';  
+import { Button } from '@nextblock-cms/ui/button';  
+import { Toolbar, ToolbarGroup, ToolbarButton, ToolbarSeparator } from '@nextblock-cms/ui/toolbar';
 
 interface BubbleMenuComponentProps {  
   editor: Editor;  
@@ -737,7 +737,7 @@ export const EditorBubbleMenu: FC\<BubbleMenuComponentProps\> \= ({ editor }) \=
   );  
 };
 
-*Note: This assumes you have corresponding Toolbar components in your @nextblock-monorepo/ui library. If not, replace them with simple div elements with flexbox styling.*
+*Note: This assumes you have corresponding Toolbar components in your @nextblock-cms/ui library. If not, replace them with simple div elements with flexbox styling.*
 
 #### **Step 5.2: Integrate the Bubble Menu into the Main Editor**
 
@@ -898,7 +898,7 @@ TypeScript
 // libs/editor/src/lib/components/menus/SlashCommandList.tsx  
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';  
 import { CommandItemProps } from '../../extensions/slash-command';  
-import { cn } from '@nextblock-monorepo/utils'; // Assuming you have a cn utility
+import { cn } from '@nextblock-cms/utils'; // Assuming you have a cn utility
 
 interface SlashCommandListProps {  
   items: CommandItemProps;  
@@ -1028,8 +1028,8 @@ import {
   Heading1, Heading2, List, ListOrdered, TextQuote, Code, ImageIcon, Table2, Minus  
 } from 'lucide-react';  
 import { FC } from 'react';  
-import { Popover, PopoverContent, PopoverTrigger } from '@nextblock-monorepo/ui/popover';  
-import { Button } from '@nextblock-monorepo/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@nextblock-cms/ui/popover';  
+import { Button } from '@nextblock-cms/ui/button';
 
 interface FloatingMenuComponentProps {  
   editor: Editor;  
@@ -1160,7 +1160,7 @@ You are an expert AI developer specializing in TypeScript, React, Next.js, and t
 
 Your goal is to complete the editor refactoring project by performing three final critical tasks:
 
-1. **Integrate** the new @nextblock-monorepo/editor library into the main nextblock application, replacing the old editor.  
+1. **Integrate** the new @nextblock-cms/editor library into the main nextblock application, replacing the old editor.  
 2. **Cleanup** the project by systematically deleting all old, now-redundant editor-related files and directories from the apps/nextblock codebase.  
 3. **Verify** the entire system through linting and live testing to confirm that the new editor is functioning perfectly in its production environment.
 
@@ -1188,7 +1188,7 @@ Navigate to the file(s) within the apps/nextblock application that currently use
 1. **Remove Old Imports**: Delete any import statements related to the old RichTextEditor and MenuBar.  
 2. **Import the New Editor**: Add the following import statement to bring in the newly created library component. This demonstrates the success of the monorepo architecture.1  
    TypeScript  
-   import { NotionEditor } from '@nextblock-monorepo/editor';
+   import { NotionEditor } from '@nextblock-cms/editor';
 
 3. **Replace the Component**: In the JSX, replace the usage of \<RichTextEditor... /\> with \<NotionEditor... /\>.  
 4. **Wire up Props**: Ensure you pass the necessary props. The NotionEditor component expects content (the HTML string to display) and an onChange handler (a function that receives the updated HTML string). This will likely involve connecting to your form state management logic (e.g., React Hook Form, Zustand, etc.).
@@ -1202,8 +1202,8 @@ TypeScript
 'use client';
 
 import { useState } from 'react';  
-import { NotionEditor } from '@nextblock-monorepo/editor';  
-import { Button } from '@nextblock-monorepo/ui';
+import { NotionEditor } from '@nextblock-cms/editor';  
+import { Button } from '@nextblock-cms/ui';
 
 const PageEditor \= () \=\> {  
   // Example state management  

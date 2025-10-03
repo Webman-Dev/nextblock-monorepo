@@ -1,8 +1,8 @@
 // app/cms/pages/page.tsx
 import React from "react";
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 import Link from "next/link";
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 import {
   Table,
   TableBody,
@@ -10,8 +10,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@nextblock-monorepo/ui";
-import { Badge } from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
+import { Badge } from "@nextblock-cms/ui";
 import {
   MoreHorizontal,
   PlusCircle,
@@ -24,10 +24,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-} from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
 // Server action `deletePage` is used by DeletePageButtonClient
-import type { Database } from "@nextblock-monorepo/db";
-import { getActiveLanguagesServerSide } from "@nextblock-monorepo/db/server";
+import type { Database } from "@nextblock-cms/db";
+import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server";
 
 type Page = Database["public"]["Tables"]["pages"]["Row"];
 import LanguageFilterSelect from "@/app/cms/components/LanguageFilterSelect";

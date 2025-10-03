@@ -18,7 +18,7 @@ import {
   AlertTriangle,
   Megaphone,
 } from 'lucide-react';
-import { Button } from '@nextblock-monorepo/ui/button';
+import { Button } from '@nextblock-cms/ui/button';
 import { useFloating, offset, flip, shift, autoUpdate } from '@floating-ui/react';
 
 interface FloatingMenuComponentProps {

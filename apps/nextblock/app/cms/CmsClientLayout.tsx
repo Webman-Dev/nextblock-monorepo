@@ -9,9 +9,9 @@ import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon,
 } from "lucide-react"
-import { Button } from "@nextblock-monorepo/ui"
-import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-monorepo/ui"
-import { cn } from "@nextblock-monorepo/utils"
+import { Button } from "@nextblock-cms/ui"
+import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
+import { cn } from "@nextblock-cms/utils"
 import { signOutAction } from "@/app/actions";
 
 const LoadingSpinner = () => (

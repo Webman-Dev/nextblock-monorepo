@@ -3,10 +3,10 @@
 import { signInAction } from "../../actions";
 import { FormMessage, Message } from "../../../components/form-message";
 import { SubmitButton } from "../../../components/submit-button";
-import { Input } from "@nextblock-monorepo/ui";
-import { Label } from "@nextblock-monorepo/ui";
+import { Input } from "@nextblock-cms/ui";
+import { Label } from "@nextblock-cms/ui";
 import Link from "next/link";
-import { useTranslations } from "@nextblock-monorepo/utils";
+import { useTranslations } from "@nextblock-cms/utils";
 import { useSearchParams } from "next/navigation";
 
 function getMessage(searchParams: URLSearchParams): Message | undefined {

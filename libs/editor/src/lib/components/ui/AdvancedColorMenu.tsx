@@ -5,9 +5,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/core";
 import { HexColorPicker } from "react-colorful";
 
-import { Button } from "@nextblock-monorepo/ui/button";
-import { Input } from "@nextblock-monorepo/ui/input";
-import { cn } from "@nextblock-monorepo/utils";
+import { Button } from "@nextblock-cms/ui/button";
+import { Input } from "@nextblock-cms/ui/input";
+import { cn } from "@nextblock-cms/utils";
 
 type Mode = "text" | "highlight";
 

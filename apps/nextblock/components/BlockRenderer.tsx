@@ -1,9 +1,9 @@
 // components/BlockRenderer.tsx
 import React from "react";
 import dynamic from "next/dynamic";
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 import { getBlockDefinition, type SectionBlockContent, type BlockType } from "../lib/blocks/blockRegistry";
-import { Skeleton } from "@nextblock-monorepo/ui"; // Import the new Skeleton component
+import { Skeleton } from "@nextblock-cms/ui"; // Import the new Skeleton component
 
 type Block = Database['public']['Tables']['blocks']['Row'];
 import HeroBlockRenderer from "./blocks/renderers/HeroBlockRenderer"; // Static import for LCP

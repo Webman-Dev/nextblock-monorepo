@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@nextblock-monorepo/db';
+import { createClient } from '@nextblock-cms/db';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getLanguageByCode } from '@/app/cms/settings/languages/actions';

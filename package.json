@@ -1,9 +1,10 @@
 {
-  "name": "@nextblock-monorepo/source",
+  "name": "@nextblock-cms/source",
   "version": "0.0.1",
   "license": "MIT",
   "scripts": {
-    "all-builds": "nx run-many --target=build --all --exclude=source",
+    "all-builds": "nx run-many --target=build --all",
+    "lib-builds": "nx run-many -t build -p ui -p utils -p db -p editor -p sdk",
     "lint": "npx nx lint nextblock --skip-nx-cache",
     "db:backup": "node apps/nextblock/scripts/backup.js",
     "db:types": "node tools/scripts/gen-db-types.js",
@@ -22,10 +23,12 @@
     "@eslint/eslintrc": "^2.1.1",
     "@eslint/js": "^9.8.0",
     "@next/eslint-plugin-next": "^15.4.4",
+    "@nx/esbuild": "21.6.3",
     "@nx/eslint": "21.3.6",
     "@nx/eslint-plugin": "21.3.6",
-    "@nx/js": "21.3.6",
+    "@nx/js": "21.6.3",
     "@nx/next": "21.3.6",
+    "@nx/node": "^21.6.3",
     "@nx/react": "21.3.6",
     "@nx/vite": "21.3.6",
     "@nx/web": "21.3.6",
@@ -64,6 +67,7 @@
     "critters": "^0.0.23",
     "dotenv": "^16.5.0",
     "dotenv-cli": "^10.0.0",
+    "esbuild": "^0.19.2",
     "eslint": "^9.8.0",
     "eslint-config-next": "^15.4.4",
     "eslint-config-prettier": "^10.0.0",
@@ -102,7 +106,9 @@
     "vite-plugin-dts": "~4.5.0",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.0.0",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "@types/fs-extra": "^11.0.4",
+    "@types/inquirer": "^9.0.7"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.7.3",
@@ -166,6 +172,7 @@
     "@types/react-dom": "19.0.2",
     "@types/uuid": "^10.0.0",
     "cross-env": "^7.0.3",
+    "date-fns": "^3.6.0",
     "fast-json-patch": "3",
     "html-react-parser": "^5.2.6",
     "katex": "^0.16.22",
@@ -173,13 +180,16 @@
     "postcss": "8.4.49",
     "react": "19.0.0",
     "react-dom": "19.0.0",
+    "react-hot-toast": "^2.4.1",
     "tailwind-merge": "^2.5.2",
     "tailwindcss": "3.4.17",
     "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.16.2",
     "typescript": "~5.8.2",
-    "date-fns": "^3.6.0",
-    "react-hot-toast": "^2.4.1"
+    "chalk": "^5.3.0",
+    "fs-extra": "^11.2.0",
+    "inquirer": "^9.3.7",
+    "execa": "^9.4.0"
   },
   "nx": {
     "includedScripts": []

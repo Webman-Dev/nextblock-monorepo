@@ -17,18 +17,20 @@ export default defineConfig(() => ({
       pathsToAliases: false,
       afterBuild: () => {
         const packageJson = {
-          name: 'sdk',
+          name: '@nextblock-cms/sdk',
           version: '0.0.1',
           main: 'index.js',
           module: 'index.js',
           types: 'index.d.ts',
         };
+
         fs.writeFileSync(
           path.resolve(__dirname, '../../dist/libs/sdk', 'package.json'),
           JSON.stringify(packageJson, null, 2)
         );
       },
     }),
+    nxViteTsPaths(),
   ],
   // Uncomment this if you are using workers.
   // worker: {
@@ -44,7 +46,6 @@ export default defineConfig(() => ({
       transformMixedEsModules: true,
     },
     lib: {
-      // Could also be a dictionary or array of multiple entry points.
       entry: 'src/index.ts',
       name: 'sdk',
       fileName: 'index',

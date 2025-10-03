@@ -2,7 +2,7 @@
 
 import { NodeViewWrapper, NodeViewProps } from '@tiptap/react';
 import { useState } from 'react';
-import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from '@nextblock-monorepo/ui';
+import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from '@nextblock-cms/ui';
 
 const AlertWidgetComponent = ({ node, updateAttributes, editor }: NodeViewProps) => {
   const [isEditing, setIsEditing] = useState(false);

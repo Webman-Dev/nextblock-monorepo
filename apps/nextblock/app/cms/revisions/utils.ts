@@ -1,6 +1,6 @@
 // apps/nextblock/app/cms/revisions/utils.ts
-import { createClient } from "@nextblock-monorepo/db/server";
-import type { Database, Json } from "@nextblock-monorepo/db";
+import { createClient } from "@nextblock-cms/db/server";
+import type { Database, Json } from "@nextblock-cms/db";
 
 type BlockRow = Database['public']['Tables']['blocks']['Row'];
 

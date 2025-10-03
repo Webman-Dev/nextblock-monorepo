@@ -1,4 +1,4 @@
-import { Skeleton } from "@nextblock-monorepo/ui";
+import { Skeleton } from "@nextblock-cms/ui";
 
 const PostCardSkeleton = () => {
   return (

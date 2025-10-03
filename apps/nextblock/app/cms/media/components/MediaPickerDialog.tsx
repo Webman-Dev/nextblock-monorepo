@@ -1,8 +1,8 @@
 ﻿"use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import type { Database } from "@nextblock-monorepo/db";
-import { createClient as createBrowserClient } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
+import { createClient as createBrowserClient } from "@nextblock-cms/db";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,7 @@ import {
   Button,
   Input,
   Separator,
-} from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
 import { Search, CheckCircle } from "lucide-react";
 import Image from "next/image";
 import MediaUploadForm from "./MediaUploadForm";

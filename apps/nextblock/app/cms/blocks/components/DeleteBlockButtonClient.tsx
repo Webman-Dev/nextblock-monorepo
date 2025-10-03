@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
 
-import { Button } from "@nextblock-monorepo/ui";
-import { ConfirmationDialog } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
+import { ConfirmationDialog } from "@nextblock-cms/ui";
 
 interface Props {
   blockId: number;

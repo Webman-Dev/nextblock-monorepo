@@ -59,7 +59,7 @@ npm install @tiptap/extension-drag-handle @tiptap/extension-drag-handle-react @t
 
 #### Basic Implementation
 ```typescript
-import { Editor, DragHandle } from '@nextblock-monorepo/editor';
+import { Editor, DragHandle } from '@nextblock-cms/editor';
 
 function MyEditor() {
   const editor = useEditor({

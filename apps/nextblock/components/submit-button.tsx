@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 import { type ComponentProps } from "react";
 import { useFormStatus } from "react-dom";
 

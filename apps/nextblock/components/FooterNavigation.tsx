@@ -1,6 +1,6 @@
 // components/FooterNavigation.tsx
 import Link from 'next/link';
-import type { Database } from '@nextblock-monorepo/db';
+import type { Database } from '@nextblock-cms/db';
 import { getNavigationMenu } from '@/app/cms/navigation/actions';
 
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];

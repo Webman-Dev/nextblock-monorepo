@@ -1,8 +1,8 @@
 // app/cms/settings/languages/page.tsx
 import React from 'react';
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 import Link from "next/link";
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 import {
   Table,
   TableBody,
@@ -10,8 +10,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@nextblock-monorepo/ui";
-import { Badge } from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
+import { Badge } from "@nextblock-cms/ui";
 import { MoreHorizontal, PlusCircle, Edit3, Languages as LanguagesIcon, ShieldAlert } from "lucide-react";
 import {
   DropdownMenu,
@@ -19,8 +19,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-} from "@nextblock-monorepo/ui";
-import type { Database } from "@nextblock-monorepo/db";
+} from "@nextblock-cms/ui";
+import type { Database } from "@nextblock-cms/db";
 import DeleteLanguageClientButton from './components/DeleteLanguageButton';
 
 type Language = Database['public']['Tables']['languages']['Row'];

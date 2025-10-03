@@ -2,9 +2,9 @@
 "use client";
 
 import React, { useState, useTransition } from 'react';
-import { DropdownMenuItem } from "@nextblock-monorepo/ui";
+import { DropdownMenuItem } from "@nextblock-cms/ui";
 import { Trash2 } from "lucide-react";
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 import { deleteMediaItem } from "../actions";
 import { ConfirmationModal } from '@/app/cms/components/ConfirmationModal';
 

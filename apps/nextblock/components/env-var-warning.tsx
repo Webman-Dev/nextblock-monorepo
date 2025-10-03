@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Badge } from "@nextblock-monorepo/ui";
-import { Button } from "@nextblock-monorepo/ui";
+import { Badge } from "@nextblock-cms/ui";
+import { Button } from "@nextblock-cms/ui";
 
 export function EnvVarWarning() {
   return (

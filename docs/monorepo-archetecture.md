@@ -11,11 +11,11 @@ This document provides a comprehensive overview of the NextBlock CMS project, wh
 | Path             | Type        | Description                                                          | Alias / Import Path           |
 | ---------------- | ----------- | -------------------------------------------------------------------- | ----------------------------- |
 | `apps/nextblock`   | Application | The main Next.js CMS application, admin panel, and public pages.     | N/A                           |
-| `libs/ui`          | Library     | Houses all shared `shadcn/ui` components, custom UI elements, and global styles. | `@nextblock-monorepo/ui`      |
-| `libs/utils`       | Library     | Contains general-purpose utility functions, constants, and shared type definitions. | `@nextblock-monorepo/utils`   |
-| `libs/db`          | Library     | The single source of truth for all Supabase client logic and database interactions. | `@nextblock-monorepo/db`      |
-| `libs/ecommerce`   | Library     | [cite_start]Placeholder for the future premium e-commerce module. [cite: 879]         | `@nextblock/ecommerce-premium`|
-| `libs/sdk`         | Library     | [cite_start]Placeholder for the future public SDK for third-party developers. [cite: 1078] | `@nextblock/sdk`              |
+| `libs/ui`          | Library     | Houses all shared `shadcn/ui` components, custom UI elements, and global styles. | `@nextblock-cms/ui`      |
+| `libs/utils`       | Library     | Contains general-purpose utility functions, constants, and shared type definitions. | `@nextblock-cms/utils`   |
+| `libs/db`          | Library     | The single source of truth for all Supabase client logic and database interactions. | `@nextblock-cms/db`      |
+| `libs/ecommerce`   | Library     | [cite_start]Placeholder for the future premium e-commerce module. [cite: 879]         | `@nextblock-cms/ecommerce-premium`|
+| `libs/sdk`         | Library     | [cite_start]Placeholder for the future public SDK for third-party developers. [cite: 1078] | `@nextblock-cms/sdk`              |
 
 ---
 ## 2. Shared Libraries (`libs/`)
@@ -31,10 +31,10 @@ This document provides a comprehensive overview of the NextBlock CMS project, wh
 * [cite_start]**Import Convention**: All components must be imported from the root of the library alias. [cite: 1044]
     ```typescript
     // Correct
-    import { Button, Card } from '@nextblock-monorepo/ui';
+    import { Button, Card } from '@nextblock-cms/ui';
 
     // Incorrect
-    import { Button } from '@nextblock-monorepo/ui/lib/button';
+    import { Button } from '@nextblock-cms/ui/lib/button';
     ```
 
 ### 2.2. Utilities Library (`libs/utils`)
@@ -44,7 +44,7 @@ This document provides a comprehensive overview of the NextBlock CMS project, wh
 * [cite_start]**Contents**: Includes core helper functions like `cn` for class names[cite: 1020], utilities for internationalization (`translations.ts`), object storage (`r2-client.ts`), and environment variable validation (`check-env-vars.ts`).
 * **Import Convention**:
     ```typescript
-    import { cn, checkEnvVars } from '@nextblock-monorepo/utils';
+    import { cn, checkEnvVars } from '@nextblock-cms/utils';
     ```
 
 ### 2.3. Database Library (`libs/db`)
@@ -56,7 +56,7 @@ This document provides a comprehensive overview of the NextBlock CMS project, wh
     * `libs/db/src/supabase/`: Contains the actual Supabase migrations and the `config.toml` file.
 * **Import Convention**:
     ```typescript
-    import { createClient } from '@nextblock-monorepo/db';
+    import { createClient } from '@nextblock-cms/db';
     ```
 
 ---
@@ -72,7 +72,7 @@ This document provides a comprehensive overview of the NextBlock CMS project, wh
 ## 4. Key Configurations & Development
 
 * [cite_start]**`package.json`**: Located at the monorepo root, this single file manages all `npm` dependencies for the entire workspace to ensure version consistency. [cite: 929]
-* [cite_start]**`tsconfig.base.json`**: Located at the monorepo root, this file defines the global TypeScript path aliases (`@nextblock-monorepo/*`) that allow for clean, non-relative imports between libraries and applications. [cite: 934]
+* [cite_start]**`tsconfig.base.json`**: Located at the monorepo root, this file defines the global TypeScript path aliases (`@nextblock-cms/*`) that allow for clean, non-relative imports between libraries and applications. [cite: 934]
 * [cite_start]**`components.json`**: Located at the monorepo root, this file configures the `shadcn/ui` CLI with the correct monorepo-aware paths for adding new components to the `libs/ui` library. [cite: 994, 996]
 * **`tailwind.config.ts` (Two-File Structure)**:
     * [cite_start]**Root Config** (`./tailwind.config.ts`): The main configuration holding the entire shared theme, plugins, and a `content` array that scans all `apps` and `libs`. [cite: 1008, 1009]

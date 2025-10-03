@@ -1,10 +1,10 @@
 // app/cms/navigation/page.tsx
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 import Link from "next/link";
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 import { PlusCircle, ListTree } from "lucide-react";
-import type { Database } from "@nextblock-monorepo/db";
-import { getActiveLanguagesServerSide } from "@nextblock-monorepo/db/server";
+import type { Database } from "@nextblock-cms/db";
+import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server";
 
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'] & { pages?: { slug: string } | null };
 type MenuLocation = Database['public']['Enums']['menu_location'];

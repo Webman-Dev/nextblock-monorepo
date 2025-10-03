@@ -1,4 +1,4 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@nextblock-monorepo/ui"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@nextblock-cms/ui"
 import { Calendar, FileText, PenTool, Users, ArrowUpRight, ArrowDownRight, Eye } from "lucide-react"
 
 export default function CmsDashboardPage() {

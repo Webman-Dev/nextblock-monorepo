@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import { useFloating, offset, flip, shift, autoUpdate } from '@floating-ui/react';
-import { Button } from '@nextblock-monorepo/ui/button';
+import { Button } from '@nextblock-cms/ui/button';
 import { Rows3, Rows2, Columns3, Columns2, Trash2 } from 'lucide-react';
 
 interface TableToolbarProps {

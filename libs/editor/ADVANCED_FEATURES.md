@@ -190,8 +190,8 @@ Comprehensive CSS for all advanced features:
 ### Basic Setup with All Features
 
 ```tsx
-import { Editor } from '@nextblock-monorepo/editor';
-import '@nextblock-monorepo/editor/styles/advanced-features.css';
+import { Editor } from '@nextblock-cms/editor';
+import '@nextblock-cms/editor/styles/advanced-features.css';
 
 function MyEditor() {
   const [content, setContent] = useState('<p>Start writing...</p>');
@@ -259,7 +259,7 @@ import {
   AdvancedPlaceholder, 
   EnhancedFocus, 
   KeyboardShortcuts 
-} from '@nextblock-monorepo/editor';
+} from '@nextblock-cms/editor';
 
 // Custom configuration
 const customExtensions = [

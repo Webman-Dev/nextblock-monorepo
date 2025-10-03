@@ -46,13 +46,13 @@ A comprehensive, feature-rich text editor built with Tiptap v3, providing a mode
 ## Installation
 
 ```bash
-npm install @nextblock-monorepo/editor
+npm install @nextblock-cms/editor
 ```
 
 ## Basic Usage
 
 ```tsx
-import { Editor } from '@nextblock-monorepo/editor';
+import { Editor } from '@nextblock-cms/editor';
 
 function MyEditor() {
   const [content, setContent] = useState('<p>Hello world!</p>');
@@ -74,7 +74,7 @@ function MyEditor() {
 ### Custom Configuration
 
 ```tsx
-import { Editor, editorExtensions } from '@nextblock-monorepo/editor';
+import { Editor, editorExtensions } from '@nextblock-cms/editor';
 import { useEditor, EditorContent } from '@tiptap/react';
 
 function CustomEditor() {
@@ -99,7 +99,7 @@ import {
   EditorToolbar, 
   EditorBubbleMenu, 
   EditorFloatingMenu 
-} from '@nextblock-monorepo/editor';
+} from '@nextblock-cms/editor';
 
 function ComponentEditor({ editor }) {
   return (

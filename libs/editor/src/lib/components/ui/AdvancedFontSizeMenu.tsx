@@ -1,9 +1,9 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Editor } from "@tiptap/core";
-import { Button } from "@nextblock-monorepo/ui/button";
-import { Input } from "@nextblock-monorepo/ui/input";
-import { cn } from "@nextblock-monorepo/utils";
+import { Button } from "@nextblock-cms/ui/button";
+import { Input } from "@nextblock-cms/ui/input";
+import { cn } from "@nextblock-cms/utils";
 import { Eraser, Type } from "lucide-react";
 
 type Unit = "px" | "pt" | "rem" | "em" | "%";

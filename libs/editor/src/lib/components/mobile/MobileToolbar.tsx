@@ -9,8 +9,8 @@ import {
   Image, Table2, Palette, Type, AlignLeft, AlignCenter,
   AlignRight, X, Menu
 } from 'lucide-react';
-import { Button } from '@nextblock-monorepo/ui/button';
-import { cn } from '@nextblock-monorepo/utils';
+import { Button } from '@nextblock-cms/ui/button';
+import { cn } from '@nextblock-cms/utils';
 
 interface MobileToolbarProps {
   editor: Editor;

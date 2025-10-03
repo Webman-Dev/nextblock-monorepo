@@ -1,10 +1,10 @@
 // app/cms/settings/languages/actions.ts
 "use server";
 
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 
 type Language = Database["public"]["Tables"]["languages"]["Row"];
 

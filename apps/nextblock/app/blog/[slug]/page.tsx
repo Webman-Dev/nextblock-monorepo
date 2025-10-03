@@ -1,7 +1,7 @@
 // app/blog/[slug]/page.tsx
 import React from 'react';
 // Remove or alias the problematic import if only used by other functions:
-// import { createClient } from "@nextblock-monorepo/db/server";
+// import { createClient } from "@nextblock-cms/db/server";
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js'; // Import base client
 import { notFound } from "next/navigation";
 import type { Metadata, ResolvingMetadata } from 'next';
@@ -9,7 +9,7 @@ import PostClientContent from "./PostClientContent";
 
 import { getPostDataBySlug } from "./page.utils";
 import BlockRenderer from "../../../components/BlockRenderer";
-import { getSsgSupabaseClient } from "@nextblock-monorepo/db"; // Correct import
+import { getSsgSupabaseClient } from "@nextblock-cms/db"; // Correct import
 import type { HeroBlockContent } from '../../../lib/blocks/blockRegistry';
 
 export const dynamicParams = true;

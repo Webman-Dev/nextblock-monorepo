@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useState, useTransition, useEffect } from "react";
-import type { Database } from "@nextblock-monorepo/db";
-import { Button } from "@nextblock-monorepo/ui";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@nextblock-monorepo/ui";
-import { Progress } from "@nextblock-monorepo/ui";
+import type { Database } from "@nextblock-cms/db";
+import { Button } from "@nextblock-cms/ui";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@nextblock-cms/ui";
+import { Progress } from "@nextblock-cms/ui";
 
 type Media = Database['public']['Tables']['media']['Row'];
-import { Checkbox } from "@nextblock-monorepo/ui";
+import { Checkbox } from "@nextblock-cms/ui";
 import { Trash2, Edit3, MoreHorizontal, FileText, Image as ImageIconLucideHost, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import {
@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-} from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
 import MediaImage from "./MediaImage";
 import DeleteMediaButtonClient from "./DeleteMediaButtonClient"; // For single item deletion
 import { deleteMultipleMediaItems, moveSingleMediaItem } from "../actions"; // Server actions for bulk ops

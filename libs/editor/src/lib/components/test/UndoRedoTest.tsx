@@ -4,8 +4,8 @@ import React, { useState } from 'react';
 import { Editor } from '../../editor';
 import { UndoRedoButtons } from '../ui/UndoRedoButtons';
 import { useEditorHistory } from '../../hooks/useEditorHistory';
-import { Button } from '@nextblock-monorepo/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@nextblock-monorepo/ui/card';
+import { Button } from '@nextblock-cms/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@nextblock-cms/ui/card';
 
 /**
  * Test component to verify undo/redo functionality with all content types

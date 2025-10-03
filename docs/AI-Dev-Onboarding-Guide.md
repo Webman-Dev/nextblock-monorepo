@@ -15,11 +15,11 @@ The project uses an Nx monorepo to enforce separation of concerns, manage depend
 | Path | Description | Import Alias | License |
 | :--- | :--- | :--- | :--- |
 | `apps/nextblock` | The main Next.js application (the free, open-source CMS). | N/A | AGPL v3 |
-| `libs/ui` | Shared `shadcn/ui` components and global styles. | `@nextblock-monorepo/ui` | AGPL v3 |
-| `libs/utils` | General-purpose helper functions (e.g., `cn`, i18n, R2 client). | `@nextblock-monorepo/utils` | AGPL v3 |
-| `libs/db` | The dedicated data access layer for all Supabase interactions. | `@nextblock-monorepo/db` | AGPL v3 |
-| `libs/sdk` | The public SDK for third-party developers. | `@nextblock/sdk` | AGPL v3 |
-| `libs/ecommerce` | **Premium Module:** A proprietary, closed-source e-commerce library. | `@nextblock/ecommerce-premium` | Commercial |
+| `libs/ui` | Shared `shadcn/ui` components and global styles. | `@nextblock-cms/ui` | AGPL v3 |
+| `libs/utils` | General-purpose helper functions (e.g., `cn`, i18n, R2 client). | `@nextblock-cms/utils` | AGPL v3 |
+| `libs/db` | The dedicated data access layer for all Supabase interactions. | `@nextblock-cms/db` | AGPL v3 |
+| `libs/sdk` | The public SDK for third-party developers. | `@nextblock-cms/sdk` | AGPL v3 |
+| `libs/ecommerce` | **Premium Module:** A proprietary, closed-source e-commerce library. | `@nextblock-cms/ecommerce-premium` | Commercial |
 
 ## 3. Intellectual Property & Monetization
 *   **Dual-Licensing**:

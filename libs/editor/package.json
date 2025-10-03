@@ -1,5 +1,5 @@
 {
-  "name": "@nextblock-monorepo/editor",
+  "name": "@nextblock-cms/editor",
   "version": "0.0.1",
   "main": "./index.js",
   "typings": "./index.d.ts",
@@ -9,5 +9,8 @@
       "require": "./index.js"
     },
     "./styles/editor.css": "./src/styles/editor.css"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

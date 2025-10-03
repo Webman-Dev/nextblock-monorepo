@@ -1,4 +1,4 @@
-import { createClient } from '@nextblock-monorepo/db/server';
+import { createClient } from '@nextblock-cms/db/server';
 
 interface SitemapEntry {
   path: string;

@@ -1,6 +1,6 @@
 import React from "react";
 import PostsGridBlock from "@/components/blocks/PostsGridBlock";
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 
 type Block = Database['public']['Tables']['blocks']['Row'];
 type PostsGridBlockContent = {

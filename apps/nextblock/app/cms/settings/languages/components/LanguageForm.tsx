@@ -3,11 +3,11 @@
 
 import React, { useState, useTransition, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button } from '@nextblock-monorepo/ui';
-import { Input } from '@nextblock-monorepo/ui';
-import { Label } from '@nextblock-monorepo/ui';
-import { Checkbox } from '@nextblock-monorepo/ui'; // Assuming shadcn/ui Checkbox
-import type { Database } from "@nextblock-monorepo/db";
+import { Button } from '@nextblock-cms/ui';
+import { Input } from '@nextblock-cms/ui';
+import { Label } from '@nextblock-cms/ui';
+import { Checkbox } from '@nextblock-cms/ui'; // Assuming shadcn/ui Checkbox
+import type { Database } from "@nextblock-cms/db";
 
 type Language = Database["public"]["Tables"]["languages"]["Row"];
 import { useAuth } from '@/context/AuthContext';

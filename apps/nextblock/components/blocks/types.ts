@@ -1,4 +1,4 @@
-import type { Database } from '@nextblock-monorepo/db';
+import type { Database } from '@nextblock-cms/db';
 
 export type PostWithMediaDimensions = Database['public']['Tables']['posts']['Row'] & {
     feature_image_url: string | null;

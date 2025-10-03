@@ -2,8 +2,8 @@
 'use client'; // This directive applies to the rest of the file.
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { Database } from '@nextblock-monorepo/db';
-import { getActiveLanguagesClientSide } from '@nextblock-monorepo/db';
+import { Database } from '@nextblock-cms/db';
+import { getActiveLanguagesClientSide } from '@nextblock-cms/db';
 
 type Language = Database['public']['Tables']['languages']['Row'];
 import Cookies from 'js-cookie';

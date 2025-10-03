@@ -46,7 +46,7 @@ experimental: {
     optimizeCss: true,
     cssChunking: 'strict',
   },
-  transpilePackages: ['@nextblock-monorepo/utils', '@nextblock-monorepo/ui', '@nextblock-monorepo/editor'],
+  transpilePackages: ['@nextblock-cms/utils', '@nextblock-cms/ui', '@nextblock-cms/editor'],
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.module.rules.push({

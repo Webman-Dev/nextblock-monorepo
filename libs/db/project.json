@@ -8,9 +8,15 @@
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
-        "outputPath": "dist/libs/db"
+        "outputPath": "dist/libs/db",
+        "assets": [
+          "libs/db/*.md",
+          "libs/db/package.json"
+        ]
       }
     },
     "gen-types": {

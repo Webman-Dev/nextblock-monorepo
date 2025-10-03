@@ -3,17 +3,17 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button } from "@nextblock-monorepo/ui";
-import { Input } from "@nextblock-monorepo/ui";
-import { Label } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
+import { Input } from "@nextblock-cms/ui";
+import { Label } from "@nextblock-cms/ui";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@nextblock-monorepo/ui";
-import type { Database } from "@nextblock-monorepo/db";
+} from "@nextblock-cms/ui";
+import type { Database } from "@nextblock-cms/db";
 import { useAuth } from "@/context/AuthContext";
 
 type Profile = Database['public']['Tables']['profiles']['Row'];

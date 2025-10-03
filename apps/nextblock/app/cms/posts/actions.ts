@@ -1,14 +1,14 @@
 // app/cms/posts/actions.ts
 "use server";
 
-import { createClient } from "@nextblock-monorepo/db/server";
+import { createClient } from "@nextblock-cms/db/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 import { v4 as uuidv4 } from 'uuid';
 
 type PageStatus = Database['public']['Enums']['page_status'];
-import { encodedRedirect } from "@nextblock-monorepo/utils/server"; // Ensure this is correctly imported
+import { encodedRedirect } from "@nextblock-cms/utils/server"; // Ensure this is correctly imported
 import { getFullPostContent } from "../revisions/utils";
 import { createPostRevision } from "../revisions/service";
 

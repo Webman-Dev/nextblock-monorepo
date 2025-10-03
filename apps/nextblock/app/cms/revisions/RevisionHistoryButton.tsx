@@ -2,14 +2,14 @@
 "use client";
 
 import { useEffect, useState, useTransition } from 'react';
-import { Button } from "@nextblock-monorepo/ui";
+import { Button } from "@nextblock-cms/ui";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@nextblock-monorepo/ui";
+} from "@nextblock-cms/ui";
 import { listPageRevisions, listPostRevisions, restorePageVersion, restorePostVersion, comparePageVersion, comparePostVersion } from './actions';
 import { useRouter } from 'next/navigation';
 import JsonDiffView from './JsonDiffView';

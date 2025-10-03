@@ -1,6 +1,6 @@
-import { createClient, getProfileWithRoleServerSide } from "@nextblock-monorepo/db/server";
+import { createClient, getProfileWithRoleServerSide } from "@nextblock-cms/db/server";
 import { NextResponse } from "next/server";
-import type { Database } from "@nextblock-monorepo/db";
+import type { Database } from "@nextblock-cms/db";
 
 export type UserRole = Database['public']['Enums']['user_role'];
 

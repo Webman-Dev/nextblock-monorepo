@@ -4,7 +4,7 @@
 import React, { useId, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import MediaPickerDialog from '@/app/cms/media/components/MediaPickerDialog';
-import { Label } from '@nextblock-monorepo/ui';
+import { Label } from '@nextblock-cms/ui';
 import { BlockEditorProps } from '../components/BlockEditorModal';
 
 // Props expected by NotionEditor
@@ -14,9 +14,9 @@ type NotionEditorProps = {
   openImagePicker?: () => Promise<{ src: string; alt?: string; width?: number | null; height?: number | null; blurDataURL?: string | null } | null>;
 };
 
-// Use the alias that resolves in your repo; if you mapped @nextblock-monorepo/editor, swap it here.
+// Use the alias that resolves in your repo; if you mapped @nextblock-cms/editor, swap it here.
 const NotionEditor = dynamic<NotionEditorProps>(
-  () => import('@nextblock/editor').then((m) => m.NotionEditor),
+  () => import('@nextblock-cms/editor').then((m) => m.NotionEditor),
   { ssr: false }
 );
 

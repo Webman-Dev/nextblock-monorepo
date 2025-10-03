@@ -1,6 +1,6 @@
 // app/blog/[slug]/page.utils.ts
-import { createClient } from "@nextblock-monorepo/db/server";
-import type { Database } from "@nextblock-monorepo/db";
+import { createClient } from "@nextblock-cms/db/server";
+import type { Database } from "@nextblock-cms/db";
 
 type PostType = Database['public']['Tables']['posts']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];

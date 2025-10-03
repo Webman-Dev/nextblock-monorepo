@@ -9,7 +9,7 @@ import {
   Image as ImageIcon, Table2, Minus, PlusCircle, Type, CheckSquare,
   Video, AlertTriangle, Megaphone, Hash, Terminal
 } from 'lucide-react';
-import { Button } from '@nextblock-monorepo/ui/button';
+import { Button } from '@nextblock-cms/ui/button';
 import { useFloating, offset, flip, shift, autoUpdate, size } from '@floating-ui/react';
 
 interface EnhancedFloatingMenuProps {

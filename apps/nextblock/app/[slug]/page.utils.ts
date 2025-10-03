@@ -1,6 +1,6 @@
 // app/[slug]/page.utils.ts
-import { getSsgSupabaseClient } from "@nextblock-monorepo/db/server";
-import type { Database } from "@nextblock-monorepo/db";
+import { getSsgSupabaseClient } from "@nextblock-cms/db/server";
+import type { Database } from "@nextblock-cms/db";
 
 type PageType = Database['public']['Tables']['pages']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];

@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Editor } from '@tiptap/react';
 import Image from 'next/image';
 import { Image as ImageIconLucide, Search, CheckCircle } from 'lucide-react';
-import { Button } from '@nextblock-monorepo/ui';
+import { Button } from '@nextblock-cms/ui';
 import {
   Dialog,
   DialogContent,
@@ -13,10 +13,10 @@ import {
   DialogTrigger,
   DialogFooter,
   DialogClose,
-} from '@nextblock-monorepo/ui';
-import { Input } from '@nextblock-monorepo/ui';
-import type { Database } from '@nextblock-monorepo/db';
-import { createClient as createBrowserClient } from '@nextblock-monorepo/db';
+} from '@nextblock-cms/ui';
+import { Input } from '@nextblock-cms/ui';
+import type { Database } from '@nextblock-cms/db';
+import { createClient as createBrowserClient } from '@nextblock-cms/db';
 
 type Media = Database['public']['Tables']['media']['Row'];
 

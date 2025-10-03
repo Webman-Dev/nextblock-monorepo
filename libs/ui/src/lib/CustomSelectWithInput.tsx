@@ -9,15 +9,15 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@nextblock-monorepo/ui"
-import { Input } from "@nextblock-monorepo/ui"
-import { Label } from "@nextblock-monorepo/ui"
+} from "./select"
+import { Input } from "./input"
+import { Label } from "./label"
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@nextblock-monorepo/ui"
+} from "./tooltip"
 
 interface CustomSelectWithInputProps {
   label: string
