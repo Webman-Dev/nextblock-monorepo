@@ -14,6 +14,7 @@ import Header from "@/components/Header";
 import FooterNavigation from "@/components/FooterNavigation";
 import { headers, cookies } from 'next/headers';
 import { Providers } from './providers';
+import { ToasterProvider } from './ToasterProvider';
 
 type Language = Database['public']['Tables']['languages']['Row'];
 
@@ -116,6 +117,7 @@ export default async function RootLayout({
           translations={translations}
           nonce={nonce}
         >
+          <ToasterProvider />
           <div className="flex-1 w-full flex flex-col items-center">
             <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
               <div className="w-full max-w-7xl flex justify-between items-center p-3 px-5 text-sm">

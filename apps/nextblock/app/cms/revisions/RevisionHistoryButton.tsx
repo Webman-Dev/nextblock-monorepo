@@ -13,6 +13,8 @@ import {
 import { listPageRevisions, listPostRevisions, restorePageVersion, restorePostVersion, comparePageVersion, comparePostVersion } from './actions';
 import { useRouter } from 'next/navigation';
 import JsonDiffView from './JsonDiffView';
+import { formatDistanceToNow } from 'date-fns';
+import { toast } from 'react-hot-toast';
 
 type ParentType = 'page' | 'post';
 
@@ -58,14 +60,14 @@ export default function RevisionHistoryButton({ parentType, parentId }: Revision
       try {
         if (parentType === 'page') {
           const res = await listPageRevisions(parentId);
-                if ('error' in res) {
-                  setError(res.error ?? 'Unknown error');
-                  setRevisions(null);
-                  setCurrentVersion(null);
-                } else {
-                  setRevisions(res.revisions as unknown as RevisionItem[]);
-                  setCurrentVersion((res as any).currentVersion ?? null);
-                }
+        if ('error' in res) {
+          setError(res.error ?? 'Unknown error');
+          setRevisions(null);
+          setCurrentVersion(null);
+        } else {
+          setRevisions(res.revisions as unknown as RevisionItem[]);
+          setCurrentVersion((res as any).currentVersion ?? null);
+        }
         } else {
           const res = await listPostRevisions(parentId);
           if ('error' in res) { setError(res.error ?? 'Unknown error'); setRevisions(null); setCurrentVersion(null); }
@@ -89,15 +91,18 @@ export default function RevisionHistoryButton({ parentType, parentId }: Revision
           : await restorePostVersion(parentId, version);
         if ('error' in res) {
           setError(res.error ?? 'Unknown error');
+          toast.error(res.error ?? 'Failed to restore version');
           return;
         }
         setMessage('Version restored successfully.');
+        toast.success('Version restored successfully');
         // refresh current page to fetch restored content
         router.refresh();
         // Close the dialog after a short delay
         setTimeout(() => setOpen(false), 800);
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to restore version');
+        toast.error(e instanceof Error ? e.message : 'Failed to restore version');
       }
     });
   };
@@ -148,10 +153,10 @@ export default function RevisionHistoryButton({ parentType, parentId }: Revision
             <div className="text-sm text-muted-foreground">No revisions yet.</div>
           )}
 
-          {revisions && revisions.length > 0 && (
-            <div className="divide-y rounded border">
-              {revisions.map((rev: RevisionItem) => {
-                const when = rev.created_at ? dateFormatter.format(new Date(rev.created_at)) : '';
+              {revisions && revisions.length > 0 && (
+                <div className="divide-y rounded border">
+                  {revisions.map((rev: RevisionItem) => {
+                const when = rev.created_at ? formatDistanceToNow(new Date(rev.created_at), { addSuffix: true }) : '';
                 const who = rev.author?.full_name || rev.author?.username || rev.author_id || 'Unknown';
                 return (
                   <div key={rev.id} className="flex items-center justify-between gap-4 p-3">
