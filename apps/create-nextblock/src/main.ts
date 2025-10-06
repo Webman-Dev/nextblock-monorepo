@@ -5,11 +5,56 @@ import process from 'node:process';
 
 type PackageManager = 'npm' | 'yarn' | 'pnpm';
 
-const SKIP_DIRECTORIES = new Set(['node_modules', '.next', 'dist', '.turbo', '.git', 'workspace_modules']);
+type PackageJson = {
+  name?: string;
+  private?: boolean;
+  version?: string;
+  scripts?: Record<string, string>;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  [key: string]: unknown;
+};
+
+type IgnoreInstance = import('ignore').Ignore;
+
+const SKIP_DIRECTORIES = new Set([
+  'node_modules',
+  '.next',
+  'dist',
+  '.turbo',
+  '.git',
+  '.nx',
+  'workspace_modules',
+  '.nx-helpers',
+  'backup'
+]);
+const SKIP_FILES = new Set([
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+  'npm-shrinkwrap.json'
+]);
+const SKIP_PATH_PREFIXES = ['apps/create-nextblock'];
 const PACKAGE_MANAGER_INSTALL_ARGS: Record<PackageManager, { command: string; args: string[]; runDev: string }> = {
   npm: { command: 'npm', args: ['install'], runDev: 'npm run dev' },
   yarn: { command: 'yarn', args: ['install'], runDev: 'yarn dev' },
   pnpm: { command: 'pnpm', args: ['install'], runDev: 'pnpm dev' }
+};
+
+const REQUIRED_SCRIPTS: Record<string, string> = {
+  dev: 'nx serve nextblock',
+  build: 'nx build nextblock',
+  start: 'nx serve nextblock --configuration=production',
+  lint: 'nx lint nextblock --skip-nx-cache'
+};
+
+const REQUIRED_DEPENDENCIES: Record<string, string> = {
+  '@nextblock-cms/ui': 'latest',
+  '@nextblock-cms/utils': 'latest',
+  '@nextblock-cms/db': 'latest',
+  '@nextblock-cms/editor': 'latest',
+  '@nextblock-cms/sdk': 'latest',
+  dotenv: '^16.5.0'
 };
 
 async function main(): Promise<void> {
@@ -58,20 +103,15 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const templateDir = await resolveTemplateDir(fs, getCliEntryFilePath());
-  const workspaceRoot = path.resolve(templateDir, '..', '..');
+  const workspaceRoot = await findWorkspaceRoot(fs, getCliEntryFilePath());
 
   console.log(chalk.gray('Creating project directory...'));
   await fs.ensureDir(projectDir);
 
-  console.log(chalk.gray('Copying project template...'));
-  await fs.copy(templateDir, projectDir, {
-    overwrite: false,
-    errorOnExist: true,
-    filter: (absolutePath: string) => shouldCopyPath(templateDir, absolutePath)
-  });
+  console.log(chalk.gray('Copying workspace files...'));
+  await copyWorkspaceContents(fs, workspaceRoot, projectDir, projectName);
 
-  await transformPackageJson(fs, path.join(projectDir, 'package.json'), projectName);
+  await transformPackageJson(fs, workspaceRoot, path.join(projectDir, 'package.json'), projectName);
 
   await copyEnvFile(fs, workspaceRoot, projectDir, chalk);
 
@@ -80,20 +120,82 @@ async function main(): Promise<void> {
   await execa(installConfig.command, installConfig.args, { cwd: projectDir, stdio: 'inherit' });
 
   console.log(chalk.green(`\nYour NextBlock project is ready!`));
-  console.log(`\nNext steps:`);
+  console.log('\nNext steps:');
   console.log(`  cd ${projectName}`);
   console.log(`  ${installConfig.runDev}`);
   console.log('\nRemember to review and update your .env.local file before starting the development server.\n');
 }
 
-function shouldCopyPath(templateDir: string, absolutePath: string): boolean {
-  const relative = path.relative(templateDir, absolutePath);
-  if (!relative || relative === '') {
+async function copyWorkspaceContents(
+  fs: typeof import('fs-extra'),
+  workspaceRoot: string,
+  projectDir: string,
+  projectName: string
+): Promise<void> {
+  const [{ default: createIgnore }] = await Promise.all([import('ignore')]);
+  const ig = createIgnore();
+  const gitignorePath = path.join(workspaceRoot, '.gitignore');
+  if (await fs.pathExists(gitignorePath)) {
+    ig.add(await fs.readFile(gitignorePath, 'utf8'));
+  }
+
+  const items = await fs.readdir(workspaceRoot);
+
+  for (const item of items) {
+    if (item === projectName) {
+      continue;
+    }
+
+    const src = path.join(workspaceRoot, item);
+    const dest = path.join(projectDir, item);
+
+    if (!shouldIncludePath(normalizeForIgnore(item), projectName, ig)) {
+      continue;
+    }
+
+    await fs.copy(src, dest, {
+      overwrite: false,
+      errorOnExist: false,
+      filter: (entryPath) => {
+        const normalized = normalizeForIgnore(path.relative(workspaceRoot, entryPath));
+        return shouldIncludePath(normalized, projectName, ig);
+      }
+    });
+  }
+}
+
+function shouldIncludePath(normalizedPath: string, projectName: string, ig: IgnoreInstance): boolean {
+  if (!normalizedPath) {
     return true;
   }
 
-  const segments = relative.split(path.sep);
-  return !segments.some((segment) => SKIP_DIRECTORIES.has(segment));
+  if (normalizedPath === projectName || normalizedPath.startsWith(`${projectName}/`)) {
+    return false;
+  }
+
+  if (ig.ignores(normalizedPath)) {
+    return false;
+  }
+
+  if (SKIP_PATH_PREFIXES.some((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`))) {
+    return false;
+  }
+
+  const segments = normalizedPath.split('/').filter(Boolean);
+  if (segments.some((segment) => SKIP_DIRECTORIES.has(segment))) {
+    return false;
+  }
+
+  const basename = segments.at(-1);
+  if (basename && SKIP_FILES.has(basename)) {
+    return false;
+  }
+
+  return true;
+}
+
+function normalizeForIgnore(value: string): string {
+  return value.split(path.sep).join('/');
 }
 
 function getCliEntryFilePath(): string {
@@ -105,43 +207,81 @@ function getCliEntryFilePath(): string {
   throw new Error('Unable to determine CLI entry point path.');
 }
 
+async function findWorkspaceRoot(
+  fs: typeof import('fs-extra'),
+  entryFilePath: string
+): Promise<string> {
+  let dir = path.dirname(entryFilePath);
+  const root = path.parse(dir).root;
+
+  while (dir && dir !== root) {
+    if (await fs.pathExists(path.join(dir, 'nx.json'))) {
+      return dir;
+    }
+    dir = path.dirname(dir);
+  }
+
+  throw new Error('Unable to locate Nx workspace root (nx.json not found).');
+}
+
 async function transformPackageJson(
   fs: typeof import('fs-extra'),
+  workspaceRoot: string,
   packageJsonPath: string,
   projectName: string
 ): Promise<void> {
-  if (!(await fs.pathExists(packageJsonPath))) {
-    throw new Error('Template package.json not found.');
-  }
-
-  const raw = await fs.readFile(packageJsonPath, 'utf8');
-  const pkg = JSON.parse(raw) as Record<string, unknown>;
+  const pkg = await loadTemplatePackageJson(fs, workspaceRoot, packageJsonPath);
 
   pkg.name = projectName;
+  pkg.private = true;
+
+  const dependencies = (pkg.dependencies ??= {});
+  for (const [dep, version] of Object.entries(REQUIRED_DEPENDENCIES)) {
+    dependencies[dep] ??= version;
+  }
 
   sanitizeWorkspaceDependencies(pkg, 'dependencies');
   sanitizeWorkspaceDependencies(pkg, 'devDependencies');
 
-  const existingScripts = (pkg.scripts as Record<string, string> | undefined) ?? {};
-  const cleanedScripts: Record<string, string> = {};
-
-  for (const [scriptName, command] of Object.entries(existingScripts)) {
-    if (!isNxScript(command)) {
-      cleanedScripts[scriptName] = command;
-    }
+  const scripts = (pkg.scripts ??= {});
+  for (const [scriptName, command] of Object.entries(REQUIRED_SCRIPTS)) {
+    scripts[scriptName] ??= command;
   }
-
-  cleanedScripts.dev = 'next dev';
-  cleanedScripts.build = 'next build';
-  cleanedScripts.start = 'next start';
-  cleanedScripts.lint = 'next lint';
-
-  pkg.scripts = cleanedScripts;
 
   await fs.writeFile(packageJsonPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
 }
 
-function sanitizeWorkspaceDependencies(pkg: Record<string, unknown>, key: 'dependencies' | 'devDependencies'): void {
+async function loadTemplatePackageJson(
+  fs: typeof import('fs-extra'),
+  workspaceRoot: string,
+  destinationPath: string
+): Promise<PackageJson> {
+  if (await fs.pathExists(destinationPath)) {
+    const raw = await fs.readFile(destinationPath, 'utf8');
+    return JSON.parse(raw) as PackageJson;
+  }
+
+  const rootPackageJson = path.join(workspaceRoot, 'package.json');
+  if (await fs.pathExists(rootPackageJson)) {
+    const raw = await fs.readFile(rootPackageJson, 'utf8');
+    return JSON.parse(raw) as PackageJson;
+  }
+
+  return {
+    name: projectNameFromPath(destinationPath),
+    private: true,
+    version: '0.0.0',
+    scripts: {},
+    dependencies: { ...REQUIRED_DEPENDENCIES }
+  };
+}
+
+function projectNameFromPath(destinationPath: string): string {
+  const dirName = path.basename(path.dirname(destinationPath));
+  return dirName || 'nextblock-project';
+}
+
+function sanitizeWorkspaceDependencies(pkg: PackageJson, key: 'dependencies' | 'devDependencies'): void {
   const section = pkg[key];
   if (!section || typeof section !== 'object') {
     return;
@@ -153,14 +293,6 @@ function sanitizeWorkspaceDependencies(pkg: Record<string, unknown>, key: 'depen
       deps[depName] = 'latest';
     }
   }
-}
-
-function isNxScript(command: string | undefined): boolean {
-  if (!command) {
-    return false;
-  }
-
-  return /(^|\s)(?:npx\s+)?nx\b/.test(command);
 }
 
 async function copyEnvFile(
@@ -177,25 +309,6 @@ async function copyEnvFile(
   } else {
     console.log(chalk.yellow('No .env.exemple file found in the workspace root. Skipping environment file copy.'));
   }
-}
-
-async function resolveTemplateDir(
-  fs: typeof import('fs-extra'),
-  entryFilePath: string
-): Promise<string> {
-  const currentDir = path.dirname(entryFilePath);
-  const root = path.parse(currentDir).root;
-  let dir = currentDir;
-
-  while (dir && dir !== root) {
-    const candidate = path.join(dir, 'apps', 'nextblock');
-    if (await fs.pathExists(candidate)) {
-      return candidate;
-    }
-    dir = path.dirname(dir);
-  }
-
-  throw new Error('Unable to locate the template directory at apps/nextblock.');
 }
 
 main().catch((error: unknown) => {

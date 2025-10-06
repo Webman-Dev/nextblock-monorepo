@@ -189,7 +189,8 @@
     "chalk": "^5.3.0",
     "fs-extra": "^11.2.0",
     "inquirer": "^9.3.7",
-    "execa": "^9.4.0"
+    "execa": "^9.4.0",
+    "ignore": "^5.3.1"
   },
   "nx": {
     "includedScripts": []
