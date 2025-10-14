@@ -5,6 +5,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 const resolveFrom = (...segments: string[]) => path.resolve(__dirname, ...segments);
+const packageJsonPath = resolveFrom('package.json');
+const { version } = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 
 export default defineConfig({
   root: __dirname,
@@ -16,7 +18,7 @@ export default defineConfig({
       afterBuild: () => {
         const packageJson = {
           name: '@nextblock-cms/ui',
-          version: '0.0.2',
+          version,
           main: 'index.cjs.js',
           module: 'index.es.js',
           types: 'index.d.ts'

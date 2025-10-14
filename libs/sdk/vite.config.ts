@@ -6,6 +6,9 @@ import * as fs from 'fs';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
 
+const packageJsonPath = path.resolve(__dirname, 'package.json');
+const { version } = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+
 export default defineConfig(() => ({
   root: __dirname,
   cacheDir: '../../node_modules/.vite/libs/sdk',
@@ -18,7 +21,7 @@ export default defineConfig(() => ({
       afterBuild: () => {
         const packageJson = {
           name: '@nextblock-cms/sdk',
-          version: '0.0.1',
+          version,
           main: 'index.js',
           module: 'index.js',
           types: 'index.d.ts',

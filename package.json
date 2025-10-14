@@ -3,6 +3,11 @@
   "version": "0.0.1",
   "license": "MIT",
   "scripts": {
+    "build:utils": "node tools/scripts/release-lib.js utils",
+    "build:ui": "node tools/scripts/release-lib.js ui",
+    "build:db": "node tools/scripts/release-lib.js db",
+    "build:editor": "node tools/scripts/release-lib.js editor",
+    "build:sdk": "node tools/scripts/release-lib.js sdk",
     "all-builds": "nx run-many --target=build --all",
     "lib-builds": "nx run-many -t build -p ui -p utils -p db -p editor -p sdk",
     "lint": "npx nx lint nextblock --skip-nx-cache",

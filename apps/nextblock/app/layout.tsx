@@ -1,4 +1,5 @@
-import 'libs/ui/src/styles/globals.css';
+import '@nextblock-cms/ui/styles/globals.css';
+
 import '@nextblock-cms/editor/styles/editor.css';
 // app/layout.tsx
 import { EnvVarWarning } from "@/components/env-var-warning";

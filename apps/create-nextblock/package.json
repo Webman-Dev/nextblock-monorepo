@@ -1,8 +1,0 @@
-{
-  "name": "create-nextblock",
-  "version": "0.0.1",
-  "private": true,
-  "bin": {
-    "create-nextblock": "main.js"
-  }
-}
