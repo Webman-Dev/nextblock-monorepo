@@ -142,13 +142,17 @@ async function ensureClientTranslations() {
   }
 
   let content = await fs.readFile(providersPath, 'utf8');
-  const wrapperImportPath = '@/lib/client-translations';
+  const wrapperImportPath = '@nextblock-cms/utils';
+  const wrapperImportStatement = `import { TranslationsProvider } from '${wrapperImportPath}';`;
   const existingImportRegex =
     /import\s+\{\s*TranslationsProvider\s*\}\s*from\s*['"]@nextblock-cms\/utils['"];?/;
-  const wrapperImportStatement = `import { TranslationsProvider } from '${wrapperImportPath}';`;
+  const legacyImportRegex =
+    /import\s+\{\s*TranslationsProvider\s*\}\s*from\s*['"]@\/lib\/client-translations['"];?/;
 
-  if (existingImportRegex.test(content)) {
-    content = content.replace(existingImportRegex, wrapperImportStatement);
+  if (existingImportRegex.test(content) || legacyImportRegex.test(content)) {
+    content = content
+      .replace(existingImportRegex, wrapperImportStatement)
+      .replace(legacyImportRegex, wrapperImportStatement);
   } else if (!content.includes(wrapperImportStatement)) {
     const lines = content.split(/\r?\n/);
     const insertIndex = lines.findIndex((line) => line.startsWith('import')) + 1;
@@ -163,88 +167,8 @@ async function ensureClientTranslations() {
   await fs.writeFile(providersPath, content);
 
   const wrapperPath = resolve(TARGET_DIR, 'lib/client-translations.tsx');
-  const wrapperContentLines = [
-    "'use client';",
-    '',
-    "import React, { createContext, useContext, useMemo } from 'react';",
-    '',
-    'type TranslationEntry = {',
-    '  key: string;',
-    "  translations: Record<string, string>;",
-    '};',
-    '',
-    'type TranslationsMap = Record<string, Record<string, string>>;',
-    '',
-    'type TranslationsContextType = {',
-    '  translations: TranslationsMap;',
-    "  t: (key: string, params?: Record<string, string | number>) => string;",
-    '};',
-    '',
-    'const TranslationsContext = createContext<TranslationsContextType | undefined>(undefined);',
-    '',
-    'export function TranslationsProvider({',
-    '  children,',
-    '  translations,',
-    '  lang,',
-    '}: {',
-    '  children: React.ReactNode;',
-    '  translations: TranslationEntry[];',
-    '  lang: string;',
-    '}) {',
-    '  const processedTranslations = useMemo(() => {',
-    '    const result: TranslationsMap = {};',
-    '    for (const item of translations) {',
-    '      result[item.key] = item.translations;',
-    '    }',
-    '    return result;',
-    '  }, [translations]);',
-    '',
-    '  const translate = (',
-    '    key: string,',
-    '    currentLang: string,',
-    "    params?: Record<string, string | number>,",
-    '  ): string => {',
-    '    const translationSet = processedTranslations[key];',
-    '    if (!translationSet) {',
-    '      return key;',
-    '    }',
-    '',
-    '    let text = translationSet[currentLang] || translationSet.en || key;',
-    '',
-    '    if (params) {',
-    '      Object.entries(params).forEach(([paramKey, value]) => {',
-    "        text = text.replace(`{${paramKey}}`, String(value));",
-    '      });',
-    '    }',
-    '',
-    '    return text;',
-    '  };',
-    '',
-    '  const value: TranslationsContextType = {',
-    '    translations: processedTranslations,',
-    "    t: (key: string, params?: Record<string, string | number>) => translate(key, lang, params),",
-    '  };',
-    '',
-    '  return <TranslationsContext.Provider value={value}>{children}</TranslationsContext.Provider>;',
-    '}',
-    '',
-    'export function useTranslations() {',
-    '  const context = useContext(TranslationsContext);',
-    '  if (context === undefined) {',
-    "    throw new Error('useTranslations must be used within a TranslationsProvider');",
-    '  }',
-    '  return context;',
-    '}',
-    '',
-  ];
-  const wrapperContent = `${wrapperContentLines.join('\n')}\n`;
-
-  const existingWrapper = (await fs.pathExists(wrapperPath))
-    ? await fs.readFile(wrapperPath, 'utf8')
-    : '';
-
-  if (existingWrapper.trim() !== wrapperContent.trim()) {
-    await fs.outputFile(wrapperPath, wrapperContent);
+  if (await fs.pathExists(wrapperPath)) {
+    await fs.remove(wrapperPath);
   }
 }
 

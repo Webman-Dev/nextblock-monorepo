@@ -351,100 +351,31 @@ async function ensureClientProviders(projectDir) {
   }
 
   let content = await fs.readFile(providersPath, 'utf8');
-  const wrapperImportStatement = "import { TranslationsProvider } from '@/lib/client-translations';";
-  const existingImportRegex =
-    /import\s+\{\s*TranslationsProvider\s*\}\s*from\s*['"]@nextblock-cms\/utils['"];?/;
+    const wrapperImportStatement = "import { TranslationsProvider } from '@nextblock-cms/utils';";
+    const existingImportRegex =
+      /import\s+\{\s*TranslationsProvider\s*\}\s*from\s*['"]@nextblock-cms\/utils['"];?/;
+    const legacyImportRegex =
+      /import\s+\{\s*TranslationsProvider\s*\}\s*from\s*['"]@\/lib\/client-translations['"];?/;
 
-  if (existingImportRegex.test(content)) {
-    content = content.replace(existingImportRegex, wrapperImportStatement);
-  } else if (!content.includes(wrapperImportStatement)) {
-    const lines = content.split(/\r?\n/);
-    const firstImport = lines.findIndex((line) => line.startsWith('import'));
-    const insertIndex = firstImport === -1 ? 0 : firstImport + 1;
-    lines.splice(insertIndex, 0, wrapperImportStatement);
-    content = lines.join('\n');
+    if (existingImportRegex.test(content) || legacyImportRegex.test(content)) {
+      content = content
+        .replace(existingImportRegex, wrapperImportStatement)
+        .replace(legacyImportRegex, wrapperImportStatement);
+    } else if (!content.includes(wrapperImportStatement)) {
+      const lines = content.split(/\r?\n/);
+      const firstImport = lines.findIndex((line) => line.startsWith('import'));
+      const insertIndex = firstImport === -1 ? 0 : firstImport + 1;
+      lines.splice(insertIndex, 0, wrapperImportStatement);
+      content = lines.join('\n');
   }
 
-  await fs.writeFile(providersPath, content);
+    await fs.writeFile(providersPath, content);
 
-  const wrapperPath = resolve(projectDir, 'lib/client-translations.tsx');
-  const wrapperContent = [
-    "'use client';",
-    '',
-    "import React, { createContext, useContext, useMemo } from 'react';",
-    '',
-    'type TranslationEntry = {',
-    '  key: string;',
-    "  translations: Record<string, string>;",
-    '};',
-    '',
-    'type TranslationsMap = Record<string, Record<string, string>>;',
-    '',
-    'type TranslationsContextType = {',
-    '  translations: TranslationsMap;',
-    "  t: (key: string, params?: Record<string, string | number>) => string;",
-    '};',
-    '',
-    'const TranslationsContext = createContext<TranslationsContextType | undefined>(undefined);',
-    '',
-    'export function TranslationsProvider({',
-    '  children,',
-    '  translations,',
-    '  lang,',
-    '}: {',
-    '  children: React.ReactNode;',
-    '  translations: TranslationEntry[];',
-    '  lang: string;',
-    '}) {',
-    '  const processedTranslations = useMemo(() => {',
-    '    const result: TranslationsMap = {};',
-    '    for (const item of translations) {',
-    '      result[item.key] = item.translations;',
-    '    }',
-    '    return result;',
-    '  }, [translations]);',
-    '',
-    '  const translate = (',
-    '    key: string,',
-    '    currentLang: string,',
-    "    params?: Record<string, string | number>,",
-    '  ): string => {',
-    '    const translationSet = processedTranslations[key];',
-    '    if (!translationSet) {',
-    '      return key;',
-    '    }',
-    '',
-    '    let text = translationSet[currentLang] || translationSet.en || key;',
-    '',
-    '    if (params) {',
-    '      Object.entries(params).forEach(([paramKey, value]) => {',
-    "        text = text.replace(`{${paramKey}}`, String(value));",
-    '      });',
-    '    }',
-    '',
-    '    return text;',
-    '  };',
-    '',
-    '  const value: TranslationsContextType = {',
-    '    translations: processedTranslations,',
-    '    t: (key: string, params?: Record<string, string | number>) => translate(key, lang, params),',
-    '  };',
-    '',
-    '  return <TranslationsContext.Provider value={value}>{children}</TranslationsContext.Provider>;',
-    '}',
-    '',
-    'export function useTranslations() {',
-    '  const context = useContext(TranslationsContext);',
-    '  if (context === undefined) {',
-    "    throw new Error('useTranslations must be used within a TranslationsProvider');",
-    '  }',
-    '  return context;',
-    '}',
-    '',
-  ].join('\n');
-
-  await fs.outputFile(wrapperPath, wrapperContent);
-}
+    const wrapperPath = resolve(projectDir, 'lib/client-translations.tsx');
+    if (await fs.pathExists(wrapperPath)) {
+      await fs.remove(wrapperPath);
+    }
+  }
 
 async function ensureEditorUtils(projectDir) {
   const exists = await fs.pathExists(EDITOR_UTILS_SOURCE_DIR);
@@ -1021,3 +952,4 @@ function buildNextConfigContent(editorUtilNames) {
 
   return lines.join('\n');
 }
+
