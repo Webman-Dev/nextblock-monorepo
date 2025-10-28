@@ -487,17 +487,17 @@ async function sanitizeLayout(projectDir) {
   }
 
   const requiredImports = [
-    "import './globals.css';",
-    "import './editor.css';",
+    "import '@nextblock-cms/ui/styles/globals.css';",
+    "import '@nextblock-cms/editor/styles/editor.css';",
   ];
 
   let content = await fs.readFile(layoutPath, 'utf8');
   let updated = content.replace(
-    /import\s+['"]@nextblock-cms\/ui\/styles\/globals\.css['"];?\s*/g,
+    /import\s+['"]\.\/globals\.css['"];?\s*/g,
     '',
   );
   updated = updated.replace(
-    /import\s+['"]@nextblock-cms\/editor\/styles\/editor\.css['"];?\s*/g,
+    /import\s+['"]\.\/editor\.css['"];?\s*/g,
     '',
   );
 
@@ -514,58 +514,36 @@ async function sanitizeLayout(projectDir) {
 async function ensureGlobalStyles(projectDir) {
   const destination = resolve(projectDir, 'app/globals.css');
 
-  try {
-    if (await fs.pathExists(UI_GLOBALS_SOURCE)) {
-      await fs.copy(UI_GLOBALS_SOURCE, destination);
-      return;
-    }
-  } catch {
-    // fall through to fallback
-  }
-
-  if (await fs.pathExists(destination)) {
+  if (!(await fs.pathExists(destination))) {
     return;
   }
 
-  const fallback = `@tailwind base;
-@tailwind components;
-@tailwind utilities;
-`;
-
-  await fs.outputFile(destination, fallback);
+  const content = (await fs.readFile(destination, 'utf8')).trim();
+  if (
+    content === '' ||
+    content.startsWith('/* Project-level overrides') ||
+    content.includes('@tailwind base')
+  ) {
+    await fs.remove(destination);
+  }
 }
 
 async function ensureEditorStyles(projectDir) {
   const stylesDir = resolve(projectDir, 'app');
-
-  try {
-    if (await fs.pathExists(EDITOR_STYLES_SOURCE)) {
-      const sourceDir = resolve(EDITOR_STYLES_SOURCE, '..');
-      const entries = await fs.readdir(sourceDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isFile() && entry.name.endsWith('.css')) {
-          const sourcePath = resolve(sourceDir, entry.name);
-          const destinationPath = resolve(stylesDir, entry.name);
-          await fs.copy(sourcePath, destinationPath);
-        }
-      }
-      return;
-    }
-  } catch {
-    // fall through to fallback
-  }
-
   const editorPath = resolve(stylesDir, 'editor.css');
   const dragHandlePath = resolve(stylesDir, 'drag-handle.css');
 
-  if (!(await fs.pathExists(editorPath))) {
-    const fallbackEditor = `/* Editor styles placeholder. Replace with package styles if available. */\n`;
-    await fs.outputFile(editorPath, fallbackEditor);
-  }
-
-  if (!(await fs.pathExists(dragHandlePath))) {
-    const fallbackDragHandle = `/* Drag handle styles placeholder. */\n`;
-    await fs.outputFile(dragHandlePath, fallbackDragHandle);
+  for (const filePath of [editorPath, dragHandlePath]) {
+    if (await fs.pathExists(filePath)) {
+      const content = (await fs.readFile(filePath, 'utf8')).trim();
+      if (
+        content === '' ||
+        content.startsWith('/* Editor styles placeholder') ||
+        content.includes("@nextblock-cms/editor/styles")
+      ) {
+        await fs.remove(filePath);
+      }
+    }
   }
 }
 

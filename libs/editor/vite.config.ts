@@ -28,6 +28,21 @@ export default defineConfig({
           resolveFrom('../../dist/libs/editor', 'package.json'),
           JSON.stringify(packageJson, null, 2)
         );
+
+        const stylesSource = resolveFrom('src/styles');
+        const stylesDestination = resolveFrom('../../dist/libs/editor', 'styles');
+
+        if (fs.existsSync(stylesSource)) {
+          fs.mkdirSync(stylesDestination, { recursive: true });
+          const entries = fs.readdirSync(stylesSource, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isFile() && entry.name.endsWith('.css')) {
+              const sourcePath = resolveFrom('src/styles', entry.name);
+              const destinationPath = resolveFrom('../../dist/libs/editor/styles', entry.name);
+              fs.copyFileSync(sourcePath, destinationPath);
+            }
+          }
+        }
       }
     }),
     react()

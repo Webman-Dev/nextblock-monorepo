@@ -1,6 +1,6 @@
 {
   "name": "@nextblock-cms/editor",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "main": "./index.js",
   "typings": "./index.d.ts",
   "exports": {
@@ -8,8 +8,14 @@
       "import": "./index.mjs",
       "require": "./index.js"
     },
-    "./styles/editor.css": "./src/styles/editor.css"
+    "./styles/*": "./styles/*"
   },
+  "files": [
+    "index.mjs",
+    "index.js",
+    "index.d.ts",
+    "styles"
+  ],
   "publishConfig": {
     "access": "public"
   }
