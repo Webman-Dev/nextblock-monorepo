@@ -13,8 +13,9 @@ export default defineConfig({
   plugins: [
     dts({
       entryRoot: 'src',
-      tsconfigPath: './tsconfig.json',
+      tsconfigPath: './tsconfig.lib.json',
       outDir: '../../dist/libs/ui',
+      skipDiagnostics: true,
       afterBuild: () => {
         const packageJson = {
           name: '@nextblock-cms/ui',
@@ -32,12 +33,6 @@ export default defineConfig({
     }),
     react()
   ],
-  resolve: {
-    alias: [
-      { find: '@nextblock-cms/utils/', replacement: resolveFrom('../utils/src') + '/' },
-      { find: '@nextblock-cms/utils', replacement: resolveFrom('../utils/src/index.ts') }
-    ]
-  },
   build: {
     lib: {
       entry: './src/index.ts',

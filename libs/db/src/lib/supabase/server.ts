@@ -1,8 +1,14 @@
-import 'server-only';
 // utils/supabase/server.ts
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies, type UnsafeUnwrappedCookies } from 'next/headers';
 import { Database } from './types'; // Import custom types
+
+const SERVER_ONLY_ERROR_MESSAGE =
+  'This module cannot be imported from a Client Component module. It should only be used from a Server Component.';
+
+if (typeof window !== 'undefined') {
+  throw new Error(SERVER_ONLY_ERROR_MESSAGE);
+}
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type Language = Database['public']['Tables']['languages']['Row'];

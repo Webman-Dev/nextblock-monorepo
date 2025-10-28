@@ -7,14 +7,17 @@
       "node",
       "@nx/react/typings/cssmodule.d.ts",
       "@nx/react/typings/image.d.ts"
-    ]
+    ],
+    "paths": {
+      "@nextblock-cms/utils": ["../../dist/out-tsc/libs/utils/src/index"],
+      "@nextblock-cms/utils/*": ["../../dist/out-tsc/libs/utils/src/*"],
+      "@nextblock-cms/utils/server": ["../../dist/out-tsc/libs/utils/src/server"]
+    },
   },
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
-    "../../libs/environment.d.ts",
-    "../utils/src/**/*.ts",
-    "../utils/src/**/*.tsx"
+    "../../libs/environment.d.ts"
   ],
   "exclude": [
     "src/**/*.spec.ts",

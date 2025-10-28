@@ -1,2 +1,9 @@
-export * from './lib/server-utils.js';
-export * from './lib/r2-client.js';
+"use server";
+
+export {
+  encodedRedirect,
+  getEmailServerConfig,
+  hasEnvVars,
+} from './lib/server-utils';
+
+export { getS3Client } from './lib/r2-client';

@@ -1,34 +1,48 @@
-import 'server-only';
-// lib/cloudflare/r2-client.ts
+'use server';
+
+const SERVER_ONLY_ERROR_MESSAGE =
+  'This module cannot be imported from a Client Component module. It should only be used from a Server Component.';
+
+if (typeof window !== 'undefined') {
+  throw new Error(SERVER_ONLY_ERROR_MESSAGE);
+}
+
 import { S3Client } from "@aws-sdk/client-s3";
 
-const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
-const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
-const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
-// The R2_S3_ENDPOINT might be directly set, or constructed if you prefer.
-// Typically it's `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
-const R2_ENDPOINT = process.env.R2_S3_ENDPOINT || `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+let cachedClient: S3Client | null = null;
+let warnedMissingEnv = false;
 
-let s3Client: S3Client;
+function buildClient(): S3Client | null {
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  const endpoint =
+    process.env.R2_S3_ENDPOINT ||
+    (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : undefined);
 
-if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_ENDPOINT) {
-  console.warn(
-    'R2 client environment variables are missing. File uploads will not work. ' +
-    'Needed: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_S3_ENDPOINT (or construct from R2_ACCOUNT_ID)'
-  );
-  s3Client = {} as S3Client;
-} else {
-  s3Client = new S3Client({
+  if (!accountId || !accessKeyId || !secretAccessKey || !endpoint) {
+    if (!warnedMissingEnv) {
+      console.warn(
+        "R2 client environment variables are missing. File uploads will not work. Needed: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_S3_ENDPOINT (or construct from R2_ACCOUNT_ID)",
+      );
+      warnedMissingEnv = true;
+    }
+    return null;
+  }
+
+  return new S3Client({
     region: process.env.R2_REGION || "auto",
-    endpoint: R2_ENDPOINT,
+    endpoint,
     credentials: {
-      accessKeyId: R2_ACCESS_KEY_ID,
-      secretAccessKey: R2_SECRET_ACCESS_KEY,
+      accessKeyId,
+      secretAccessKey,
     },
   });
 }
 
-// Ensure region is explicitly set, even if R2 doesn't use it like AWS S3.
-// "auto" is a common placeholder for R2.
-
-export { s3Client };
+export async function getS3Client(): Promise<S3Client | null> {
+  if (!cachedClient) {
+    cachedClient = buildClient();
+  }
+  return cachedClient;
+}

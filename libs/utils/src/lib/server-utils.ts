@@ -1,7 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
-
 /**
  * Redirects to a specified path with an encoded message as a query parameter.
  * @param {('error' | 'success')} type - The type of message, either 'error' or 'success'.
@@ -14,6 +12,7 @@ export async function encodedRedirect(
   path: string,
   message: string,
 ) {
+  const { redirect } = await import("next/navigation");
   return redirect(`${path}?${type}=${encodeURIComponent(message)}`);
 }
 export async function getEmailServerConfig() {
@@ -52,8 +51,8 @@ export async function getEmailServerConfig() {
   };
 }
 export async function hasEnvVars() {
-  return (
+  return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   );
 }

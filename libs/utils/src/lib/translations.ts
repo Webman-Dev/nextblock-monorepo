@@ -1,4 +1,9 @@
-import 'server-only'
+const SERVER_ONLY_ERROR_MESSAGE =
+  'This module cannot be imported from a Client Component module. It should only be used from a Server Component.';
+
+if (typeof window !== 'undefined') {
+  throw new Error(SERVER_ONLY_ERROR_MESSAGE);
+}
 
 // A placeholder implementation to break the circular dependency.
 // The actual implementation needs to be found or recreated.
