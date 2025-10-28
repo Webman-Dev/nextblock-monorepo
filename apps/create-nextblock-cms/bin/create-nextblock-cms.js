@@ -523,6 +523,10 @@ async function ensureGlobalStyles(projectDir) {
     // fall through to fallback
   }
 
+  if (await fs.pathExists(destination)) {
+    return;
+  }
+
   const fallback = `@tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -551,11 +555,18 @@ async function ensureEditorStyles(projectDir) {
     // fall through to fallback
   }
 
-  const fallbackEditor = `/* Editor styles placeholder. Replace with package styles if available. */\n`;
-  const fallbackDragHandle = `/* Drag handle styles placeholder. */\n`;
+  const editorPath = resolve(stylesDir, 'editor.css');
+  const dragHandlePath = resolve(stylesDir, 'drag-handle.css');
 
-  await fs.outputFile(resolve(stylesDir, 'editor.css'), fallbackEditor);
-  await fs.outputFile(resolve(stylesDir, 'drag-handle.css'), fallbackDragHandle);
+  if (!(await fs.pathExists(editorPath))) {
+    const fallbackEditor = `/* Editor styles placeholder. Replace with package styles if available. */\n`;
+    await fs.outputFile(editorPath, fallbackEditor);
+  }
+
+  if (!(await fs.pathExists(dragHandlePath))) {
+    const fallbackDragHandle = `/* Drag handle styles placeholder. */\n`;
+    await fs.outputFile(dragHandlePath, fallbackDragHandle);
+  }
 }
 
 async function sanitizeTailwindConfig(projectDir) {

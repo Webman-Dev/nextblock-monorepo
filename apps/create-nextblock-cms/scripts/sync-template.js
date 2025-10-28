@@ -83,6 +83,7 @@ async function ensureTemplateSync() {
   await sanitizeBlockEditorImports();
   await sanitizeUiImports();
   await ensureUiProxies();
+  await ensureTemplateProjectJson();
 
   console.log(chalk.green('Template sync complete.'));
 }
@@ -247,6 +248,19 @@ async function ensureUiProxies() {
       await fs.outputFile(proxyPath, proxyContent);
     }
   }
+}
+
+async function ensureTemplateProjectJson() {
+  const projectJsonPath = resolve(TARGET_DIR, 'project.json');
+  const minimalConfig = {
+    name: 'nextblock-template',
+    projectType: 'application',
+    root: 'apps/create-nextblock-cms/templates/nextblock-template',
+    sourceRoot: 'apps/create-nextblock-cms/templates/nextblock-template',
+    targets: {},
+  };
+
+  await fs.writeJSON(projectJsonPath, minimalConfig, { spaces: 2 });
 }
 
 ensureTemplateSync().catch((error) => {

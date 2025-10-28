@@ -12,6 +12,8 @@ import { EditorToolbar } from './components/menus/Toolbar';
 import { cn } from '@nextblock-cms/utils';
 import '../styles/drag-handle.css'; // âœ… Import enhanced drag handle styles
 import '../styles/editor.css';
+import type { OpenImagePicker } from './utils/mediaPicker';
+import { setOpenImagePicker } from './utils/mediaPicker';
 
 interface NotionEditorProps {
   content: string;
@@ -23,7 +25,7 @@ interface NotionEditorProps {
   className?: string;
   onFocus?: () => void;
   onBlur?: () => void;
-  openImagePicker?: import("./utils/mediaPicker").OpenImagePicker;
+  openImagePicker?: OpenImagePicker;
 }
 
 export const NotionEditor: React.FC<NotionEditorProps> = ({
@@ -77,10 +79,11 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   // Bridge the openImagePicker into editor.storage so menus/extensions can access it
   useEffect(() => {
     if (!editor) return;
-    const { setOpenImagePicker } = require('./utils/mediaPicker');
     setOpenImagePicker(editor, openImagePicker);
     return () => setOpenImagePicker(editor, undefined);
-  }, [editor, openImagePicker]);  // Optional: keep editor in sync if `content` prop changes (e.g., loading a draft)
+  }, [editor, openImagePicker]);
+
+  // Optional: keep editor in sync if `content` prop changes (e.g., loading a draft)
   useEffect(() => {
     if (!editor) return;
     const current = editor.getHTML();
