@@ -568,6 +568,9 @@ const config = {
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './context/**/*.{js,ts,jsx,tsx,mdx}',
+    './lib/**/*.{js,ts,jsx,tsx,mdx}',
+    './node_modules/@nextblock-cms/ui/**/*.{js,ts,jsx,tsx}',
+    './node_modules/@nextblock-cms/editor/**/*.{js,ts,jsx,tsx}',
   ],
   safelist: [
     'animate-enter',
