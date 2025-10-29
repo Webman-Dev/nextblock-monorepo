@@ -2,7 +2,7 @@
 
 _Last updated: 2025-10-29_
 
-This note captures the current understanding of the **NextBlock monorepo** and the `create-nextblock-cms` scaffolding CLI. Use it as context for future sessions or threads.
+This note captures the current understanding of the **NextBlock monorepo** and the `create-nextblock` scaffolding CLI. Use it as context for future sessions or threads.
 
 ---
 
@@ -12,7 +12,7 @@ This note captures the current understanding of the **NextBlock monorepo** and t
 - **Tooling**: Nx (workspace-managed), Vite for library builds, Next.js 15.x for apps.
 - **Primary apps**  
   - `apps/nextblock` — the production Next.js application.  
-  - `apps/create-nextblock-cms/templates/nextblock-template` — template consumed by the CLI when generating new projects (kept out of the Nx graph and renamed to `nextblock-template` to avoid collisions).
+  - `apps/create-nextblock/templates/nextblock-template` — template consumed by the CLI when generating new projects (kept out of the Nx graph and renamed to `nextblock-template` to avoid collisions).
 - **Key libraries**  
   - `libs/ui` — shared UI components (Radix-based dialog, etc.).  
   - `libs/utils` — utilities (translations provider, Supabase helpers, etc.).  
@@ -22,11 +22,11 @@ This note captures the current understanding of the **NextBlock monorepo** and t
 
 ---
 
-## 2. CLI (`create-nextblock-cms`) Summary
+## 2. CLI (`create-nextblock`) Summary
 
-- Executable: `apps/create-nextblock-cms/bin/create-nextblock-cms.js`
+- Executable: `apps/create-nextblock/bin/create-nextblock.js`
 - Generates projects (e.g., `npm run test-create -- <name>`). Steps include:  
-  1. Copy template from `apps/create-nextblock-cms/templates/nextblock-template`.  
+  1. Copy template from `apps/create-nextblock/templates/nextblock-template`.  
   2. Ensure client directives and providers.  
   3. Sanitize Tailwind, Next.js, tsconfig, etc.  
   4. Install dependencies (unless `--skip-install`) and initialise git.
@@ -43,7 +43,7 @@ This note captures the current understanding of the **NextBlock monorepo** and t
       './node_modules/@nextblock-cms/editor/**/*.{js,ts,jsx,tsx}',
     ]
     ```
-- Template sync command: `npm run sync:create-nextblock-cms` (copies the latest `apps/nextblock` files into the template).
+- Template sync command: `npm run sync:create-nextblock` (copies the latest `apps/nextblock` files into the template).
 - Generated Tailwind config lives in the new project root (`tailwind.config.ts`) and should match the snippet above.
 
 ---
@@ -96,8 +96,8 @@ This note captures the current understanding of the **NextBlock monorepo** and t
 
 ## 5. Useful File References
 
-- `apps/create-nextblock-cms/bin/create-nextblock-cms.js` — CLI entry point (gitignore merge, layout sanitiser, Tailwind writer).  
-- `apps/create-nextblock-cms/scripts/sync-template.js` — copies backups, rewrites template `project.json`, normalises imports.  
+- `apps/create-nextblock/bin/create-nextblock.js` — CLI entry point (gitignore merge, layout sanitiser, Tailwind writer).  
+- `apps/create-nextblock/scripts/sync-template.js` — copies backups, rewrites template `project.json`, normalises imports.  
 - `libs/ui/vite.config.ts` & `libs/editor/vite.config.ts` — build pipelines that copy `styles/` and emit package manifests.  
 - `libs/editor/src/lib/NotionEditor.tsx` — static imports for media picker plus Tailwind class definitions.  
 - `apps/nextblock/app/layout.tsx` — reference app-wide style imports (`@nextblock-cms/ui` / `@nextblock-cms/editor`).
@@ -107,7 +107,7 @@ This note captures the current understanding of the **NextBlock monorepo** and t
 ## 6. Quick Commands
 
 - `nx serve nextblock` — run the monorepo app.  
-- `npm run sync:create-nextblock-cms` — refresh the template from `apps/nextblock`.  
+- `npm run sync:create-nextblock` — refresh the template from `apps/nextblock`.  
 - `npm run test-create -- <name>` — scaffold a project (uses published package versions).  
 - `npm run dev` (generated project) — start Next.js dev server.  
 - `npx vite build --config libs/ui/vite.config.ts` — rebuild UI library bundle.  

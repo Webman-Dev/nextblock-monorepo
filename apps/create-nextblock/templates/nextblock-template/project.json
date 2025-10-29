@@ -1,0 +1,7 @@
+{
+  "name": "nextblock-template",
+  "projectType": "application",
+  "root": "apps/create-nextblock/templates/nextblock-template",
+  "sourceRoot": "apps/create-nextblock/templates/nextblock-template",
+  "targets": {}
+}

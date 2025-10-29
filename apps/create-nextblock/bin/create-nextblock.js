@@ -49,7 +49,7 @@ const PACKAGE_VERSION_SOURCES = {
 };
 
 program
-  .name('create-nextblock-cms')
+  .name('create-nextblock')
   .description('Bootstrap a NextBlock CMS project')
   .argument('[project-directory]', 'The name of the project directory to create')
   .option('--skip-install', 'Skip installing dependencies')
@@ -185,7 +185,7 @@ async function copyTemplateTo(projectDir) {
   const templateExists = await fs.pathExists(TEMPLATE_DIR);
   if (!templateExists) {
     throw new Error(
-      `Template directory not found at ${TEMPLATE_DIR}. Run "npm run sync:create-nextblock-cms" to populate it.`,
+      `Template directory not found at ${TEMPLATE_DIR}. Run "npm run sync:create-nextblock" to populate it.`,
     );
   }
 

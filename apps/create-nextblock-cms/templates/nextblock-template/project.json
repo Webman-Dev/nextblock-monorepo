@@ -1,7 +1,0 @@
-{
-  "name": "nextblock-template",
-  "projectType": "application",
-  "root": "apps/create-nextblock-cms/templates/nextblock-template",
-  "sourceRoot": "apps/create-nextblock-cms/templates/nextblock-template",
-  "targets": {}
-}

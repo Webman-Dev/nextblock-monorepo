@@ -17,18 +17,18 @@
     "nx:build:db": "nx build db",
     "nx:build:sdk": "nx build sdk",
     "nx:lint:nextblock": "npx nx lint nextblock --skip-nx-cache",
-    "nx:lint:create-nextblock-cms": "npx nx lint create-nextblock-cms --skip-nx-cache",
+    "nx:lint:create-nextblock": "npx nx lint create-nextblock --skip-nx-cache",
     "nx:lint:ui": "npx nx lint ui --skip-nx-cache",
     "nx:lint:editor": "npx nx lint editor --skip-nx-cache",
     "nx:lint:utils": "npx nx lint utils --skip-nx-cache",
     "nx:lint:db": "npx nx lint db --skip-nx-cache",
     "nx:lint:sdk": "npx nx lint sdk --skip-nx-cache",
-    "lint": "npx nx lint nextblock --skip-nx-cache",
+    "lint": "npx nx run-many --target=lint --all --skip-nx-cache",
     "db:backup": "node apps/nextblock/scripts/backup.js",
     "db:types": "node tools/scripts/gen-db-types.js",
     "db:push": "dotenv -e .env.local -- npx supabase db push --workdir libs/db/src --include-all",
-    "sync:create-nextblock-cms": "npm --prefix apps/create-nextblock-cms run sync-template",
-    "test-create": "node apps/create-nextblock-cms/bin/create-nextblock-cms.js"
+    "sync:create-nextblock": "npm --prefix apps/create-nextblock run sync-template",
+    "test-create": "node apps/create-nextblock/bin/create-nextblock.js"
   },
   "private": true,
   "devDependencies": {

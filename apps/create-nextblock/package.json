@@ -1,10 +1,10 @@
 {
-  "name": "create-nextblock-cms",
+  "name": "create-nextblock",
   "version": "0.0.1",
   "description": "",
   "main": "index.js",
   "bin": {
-    "create-nextblock-cms": "./bin/create-nextblock-cms.js"
+    "create-nextblock": "./bin/create-nextblock.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

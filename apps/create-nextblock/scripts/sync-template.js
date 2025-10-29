@@ -270,8 +270,8 @@ async function ensureTemplateProjectJson() {
   const minimalConfig = {
     name: 'nextblock-template',
     projectType: 'application',
-    root: 'apps/create-nextblock-cms/templates/nextblock-template',
-    sourceRoot: 'apps/create-nextblock-cms/templates/nextblock-template',
+    root: 'apps/create-nextblock/templates/nextblock-template',
+    sourceRoot: 'apps/create-nextblock/templates/nextblock-template',
     targets: {},
   };
 
