@@ -18,6 +18,8 @@ async function canEditParent(
   pageId?: number | null,
   postId?: number | null
 ): Promise<boolean> {
+  void pageId;
+  void postId;
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")

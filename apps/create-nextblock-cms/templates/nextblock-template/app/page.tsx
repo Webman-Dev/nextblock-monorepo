@@ -2,7 +2,7 @@
 import React from 'react';
 import { cookies, headers } from 'next/headers'; // Import headers
 import { notFound } from "next/navigation";
-import type { Metadata, ResolvingMetadata } from 'next';
+import type { Metadata } from 'next';
 import PageClientContent from "./[slug]/PageClientContent"; // Reuse your existing client content component
 import { getPageDataBySlug } from "./[slug]/page.utils";   // Reuse your existing data fetching utility
 import BlockRenderer from "../components/BlockRenderer";  // Adjust path as needed
@@ -37,10 +37,7 @@ async function getHomepageSlugForLocale(locale: string): Promise<string> {
   // return locale === 'fr' ? 'accueil' : 'home'; // Fallback
 }
 
-export async function generateMetadata(
-  _params: object, // params will be empty for the root page
-  parent: ResolvingMetadata
-): Promise<Metadata> {
+export async function generateMetadata(): Promise<Metadata> {
   const head = await headers();
   let currentLocale = head.get('x-user-locale') || DEFAULT_LOCALE;
 

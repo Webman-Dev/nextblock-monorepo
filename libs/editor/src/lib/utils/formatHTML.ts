@@ -48,7 +48,7 @@ export function formatHTML(input: string, indentSize = 2): string {
 
   const indentUnit = ' '.repeat(indentSize);
   let indent = 0;
-  let out: string[] = [];
+  const out: string[] = [];
   let inProtectedBlock: null | 'pre' | 'code' | 'script' | 'style' = null;
 
   for (let i = 0; i < tokens.length; i++) {
@@ -104,7 +104,7 @@ export function formatHTML(input: string, indentSize = 2): string {
       } else {
         // Collapse runs of whitespace but DO NOT trim, so spaces
         // around inline tags (e.g., "a <span>title</span>") are preserved.
-        let collapsed = tok.replace(/\s+/g, ' ');
+        const collapsed = tok.replace(/\s+/g, ' ');
         if (collapsed.length > 0) {
           const prev = out.length ? out[out.length - 1] : '';
           if (prev && !prev.endsWith('\n')) {

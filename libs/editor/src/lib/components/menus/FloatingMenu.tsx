@@ -106,7 +106,7 @@ const menuItems: MenuItem[] = [
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/\"/g, '&quot;')
+        .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
       const inner = text ? `<p>${escapeHtml(text)}</p>` : '<p><br /></p>';
       e.chain().focus().insertContent(`<div${attrs}>${inner}</div>`).run();

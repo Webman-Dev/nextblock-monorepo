@@ -2,7 +2,7 @@
 import React from 'react';
 import { getSsgSupabaseClient } from "@nextblock-cms/db";
 import { notFound } from "next/navigation";
-import type { Metadata, ResolvingMetadata } from 'next';
+import type { Metadata } from 'next';
 import PageClientContent from "../[slug]/PageClientContent";
 import { getPageDataBySlug } from "../[slug]/page.utils";
 import BlockRenderer from "../../components/BlockRenderer";
@@ -11,11 +11,7 @@ import { getPageTranslations } from '@/app/actions/languageActions'; // Added im
 export const dynamicParams = true;
 export const revalidate = 3600;
 
-export async function generateMetadata(
-  { params }: { params: Promise<object>}, // params will be empty for app/blog/page.tsx, slug is hardcoded
-  parent: ResolvingMetadata
-): Promise<Metadata> {
-  await params; // Await the params promise even though it's empty
+export async function generateMetadata(): Promise<Metadata> {
   const slug = "blog"; // Hardcoded slug
   const pageData = await getPageDataBySlug(slug);
 

@@ -25,10 +25,6 @@ const DEFAULT_LOCALE_FOR_LAYOUT = 'en';
 
 type Language = Database['public']['Tables']['languages']['Row'];
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
-type Logo =
-  Database['public']['Tables']['logos']['Row'] & {
-    media: (Database['public']['Tables']['media']['Row'] & { alt_text: string | null }) | null;
-  };
 
 async function loadLayoutData() {
   const supabase = createSupabaseServerClient();

@@ -53,7 +53,11 @@ export const HtmlContent: React.FC<HtmlContentProps> = ({ html, className }) => 
       createdUrls.forEach((u) => {
         try {
           URL.revokeObjectURL(u);
-        } catch {}
+        } catch (error) {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("Failed to revoke object URL", u, error);
+          }
+        }
       });
     };
   }, [html]);
@@ -62,4 +66,3 @@ export const HtmlContent: React.FC<HtmlContentProps> = ({ html, className }) => 
 };
 
 export default HtmlContent;
-

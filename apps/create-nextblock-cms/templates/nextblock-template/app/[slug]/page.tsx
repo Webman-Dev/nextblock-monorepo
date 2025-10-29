@@ -2,7 +2,7 @@
 import React from 'react';
 import { getSsgSupabaseClient } from "@nextblock-cms/db/server";
 import { notFound } from "next/navigation";
-import type { Metadata, ResolvingMetadata } from 'next';
+import type { Metadata } from 'next';
 import PageClientContent from "./PageClientContent";
 import { getPageDataBySlug } from "./page.utils";
 import BlockRenderer from "../../components/BlockRenderer";
@@ -42,7 +42,6 @@ export async function generateStaticParams(): Promise<ResolvedPageParams[]> {
 
 export async function generateMetadata(
   { params: paramsPromise }: PageProps,
-  parent: ResolvingMetadata
 ): Promise<Metadata> {
   const params = await paramsPromise;
   const pageData = await getPageDataBySlug(params.slug);

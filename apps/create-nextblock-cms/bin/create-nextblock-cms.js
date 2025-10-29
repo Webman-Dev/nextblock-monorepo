@@ -7,7 +7,6 @@ import { program } from 'commander';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import fs from 'fs-extra';
-import ora from 'ora';
 
 const DEFAULT_PROJECT_NAME = 'nextblock-cms';
 const __filename = fileURLToPath(import.meta.url);
@@ -16,8 +15,6 @@ const TEMPLATE_DIR = resolve(__dirname, '../templates/nextblock-template');
 const REPO_ROOT = resolve(__dirname, '../../..');
 const EDITOR_UTILS_SOURCE_DIR = resolve(REPO_ROOT, 'libs/editor/src/lib/utils');
 const IS_WINDOWS = process.platform === 'win32';
-const UI_GLOBALS_SOURCE = resolve(REPO_ROOT, 'libs/ui/src/styles/globals.css');
-const EDITOR_STYLES_SOURCE = resolve(REPO_ROOT, 'libs/editor/src/styles/editor.css');
 
 const UI_PROXY_MODULES = [
   'avatar',
@@ -461,7 +458,7 @@ async function sanitizeBlockEditorImports(projectDir) {
     return;
   }
 
-  let content = await fs.readFile(blockEditorPath, 'utf8');
+  const content = await fs.readFile(blockEditorPath, 'utf8');
   const replacements = [
     { pattern: /(\.\.\/editors\/[A-Za-z0-9_-]+)\.js/g, replacement: '$1.tsx' },
     { pattern: /(\.\.\/actions)\.js/g, replacement: '$1.ts' },
@@ -544,7 +541,7 @@ async function sanitizeLayout(projectDir) {
     "import '@nextblock-cms/editor/styles/editor.css';",
   ];
 
-  let content = await fs.readFile(layoutPath, 'utf8');
+  const content = await fs.readFile(layoutPath, 'utf8');
   let updated = content.replace(
     /import\s+['"]\.\/globals\.css['"];?\s*/g,
     '',

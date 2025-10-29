@@ -12,6 +12,7 @@ interface ClientTextBlockRendererProps {
 }
 
 const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({ content, languageId }) => {
+  void languageId;
   const options: HTMLReactParserOptions = {
     replace: (domNode) => {
       if (domNode instanceof Element && domNode.attribs) {

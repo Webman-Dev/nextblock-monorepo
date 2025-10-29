@@ -16,6 +16,7 @@ export function DeleteUserButtonClient({
   userEmail?: string;
   currentAdminId?: string;
 }) {
+  void userEmail;
   const [isPending, startTransition] = useTransition();
   const [isModalOpen, setIsModalOpen] = useState(false);
 

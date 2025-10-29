@@ -1,7 +1,5 @@
 'use client';
 
-import { getOpenImagePicker } from "../utils/mediaPicker";
-
 import { Extension, type Editor, type Range } from '@tiptap/core';
 import { ReactRenderer } from '@tiptap/react';
 import { Suggestion, type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion';

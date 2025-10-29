@@ -44,10 +44,6 @@ function formatFontSize(size: ParsedSize): string | null {
   return `${rounded}${unit}`;
 }
 
-function unique<T>(arr: T[]): T[] {
-  return Array.from(new Set(arr));
-}
-
 function normalizeSizeToken(token: string): string | null {
   const parsed = parseFontSize(token);
   return parsed ? formatFontSize(parsed) : null;
@@ -258,7 +254,7 @@ export function AdvancedFontSizeMenu({ editor, className }: AdvancedFontSizeMenu
     }
 
     // Convert px to target unit with sensible rounding
-    let nextVal = valueFromPx(px, unit, editor);
+    const nextVal = valueFromPx(px, unit, editor);
     let displayVal: string;
     if (unit === "px" || unit === "pt") {
       displayVal = String(Math.round(nextVal));

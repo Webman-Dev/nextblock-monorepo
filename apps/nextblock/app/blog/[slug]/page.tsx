@@ -4,7 +4,7 @@ import React from 'react';
 // import { createClient } from "@nextblock-cms/db/server";
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js'; // Import base client
 import { notFound } from "next/navigation";
-import type { Metadata, ResolvingMetadata } from 'next';
+import type { Metadata } from 'next';
 import PostClientContent from "./PostClientContent";
 
 import { getPostDataBySlug } from "./page.utils";
@@ -56,8 +56,7 @@ export async function generateStaticParams(): Promise<ResolvedPostParams[]> {
 
 // Generate metadata for the specific post slug
 export async function generateMetadata(
-  { params: paramsPromise }: PostPageProps, // Destructure the promise
-  parent: ResolvingMetadata
+  { params: paramsPromise }: PostPageProps,
 ): Promise<Metadata> {
   const params = await paramsPromise; // Await the promise to get the actual params
   const postData = await getPostDataBySlug(params.slug);

@@ -24,6 +24,7 @@ const ImageBlockRenderer: React.FC<ImageBlockRendererProps> = ({
   languageId,
   priority = false,
 }) => {
+  void languageId;
   if (!content.media_id || !content.object_key) {
     return (
       <div className="my-4 p-4 border rounded text-center text-muted-foreground italic">

@@ -10,6 +10,7 @@ const VideoEmbedBlockRenderer: React.FC<VideoEmbedBlockRendererProps> = ({
   content,
   languageId,
 }) => {
+  void languageId;
   // Optional: Validate content against registry schema
   const validation = validateBlockContent("video_embed", content);
   if (!validation.isValid) {

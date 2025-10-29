@@ -170,6 +170,8 @@ export async function getPageDataBySlug(slug: string): Promise<(PageType & { blo
   }
   
   const { language_details, blocks, ...basePageData } = selectedPage;
+  void language_details;
+  void blocks;
 
   return {
     ...(basePageData as PageType),

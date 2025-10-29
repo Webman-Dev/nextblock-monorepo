@@ -30,6 +30,7 @@ export default function EditableBlock({
   onEditNestedBlock,
   className,
 }: EditableBlockProps) {
+  void onEditNestedBlock;
   // Move all hooks to the top before any conditional returns
   const [isConfigPanelOpen, setIsConfigPanelOpen] = useState(false);
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);

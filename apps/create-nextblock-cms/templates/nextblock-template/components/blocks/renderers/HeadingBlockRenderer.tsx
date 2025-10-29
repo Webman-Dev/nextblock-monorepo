@@ -10,6 +10,7 @@ const HeadingBlockRenderer: React.FC<HeadingBlockRendererProps> = ({
   content,
   languageId,
 }) => {
+  void languageId;
   // Ensure level is between 1 and 6, default to 2
   const level =
     typeof content.level === "number" &&

@@ -972,8 +972,8 @@ export function getRequiredProperties(blockType: BlockType): string[] {
   if (!schema) return [];
   
   return Object.entries(schema)
-    .filter(([_, def]) => def.required)
-    .map(([name, _]) => name);
+    .filter(([, def]) => def.required)
+    .map(([name]) => name);
 }
 
 /**

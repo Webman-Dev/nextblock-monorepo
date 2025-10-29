@@ -21,6 +21,7 @@ const PostsGridBlockRenderer: React.FC<PostsGridBlockRendererProps> = ({
   languageId,
   block,
 }) => {
+  void content;
   return (
     <PostsGridBlock
       block={block}

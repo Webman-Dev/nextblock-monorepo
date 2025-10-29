@@ -187,7 +187,7 @@ async function sanitizeBlockEditorImports() {
     { pattern: /(\.\.\/actions)\.js/g, replacement: '$1.ts' },
   ];
 
-  let content = await fs.readFile(blockEditorPath, 'utf8');
+  const content = await fs.readFile(blockEditorPath, 'utf8');
   let updated = content;
 
   for (const { pattern, replacement } of replacements) {
@@ -255,7 +255,7 @@ async function ensureUiProxies() {
 
 async function ensureBackups() {
   if (!(await fs.pathExists(BACKUP_SOURCE_DIR))) {
-    await fs.remove(BACKUP_TARGET_DIR).catch(() => {});
+    await fs.remove(BACKUP_TARGET_DIR).catch(() => undefined);
     return;
   }
 

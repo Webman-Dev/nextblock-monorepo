@@ -177,6 +177,7 @@ interface NavigationMenuDndProps {
 }
 
 export default function NavigationMenuDnd({ menuKey, languageCode, initialItems }: NavigationMenuDndProps) {
+  void menuKey;
   // Prevent SSR/hydration mismatches from dnd-kit by rendering on client only
   // Keep hooks order stable; move early return after hooks
   const [isMounted, setIsMounted] = useState(false);
