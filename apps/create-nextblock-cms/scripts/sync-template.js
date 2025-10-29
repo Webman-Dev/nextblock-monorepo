@@ -12,6 +12,8 @@ const SOURCE_DIR = resolve(PROJECT_ROOT, '../nextblock');
 const TARGET_DIR = resolve(PROJECT_ROOT, 'templates/nextblock-template');
 const REPO_ROOT = resolve(PROJECT_ROOT, '..', '..');
 const UI_GLOBALS_SOURCE = resolve(PROJECT_ROOT, '../../libs/ui/src/styles/globals.css');
+const BACKUP_SOURCE_DIR = resolve(SOURCE_DIR, 'backup');
+const BACKUP_TARGET_DIR = resolve(TARGET_DIR, 'backup');
 const UI_PROXY_MODULES = [
   'avatar',
   'badge',
@@ -83,6 +85,7 @@ async function ensureTemplateSync() {
   await sanitizeBlockEditorImports();
   await sanitizeUiImports();
   await ensureUiProxies();
+  await ensureBackups();
   await ensureTemplateProjectJson();
 
   console.log(chalk.green('Template sync complete.'));
@@ -248,6 +251,18 @@ async function ensureUiProxies() {
       await fs.outputFile(proxyPath, proxyContent);
     }
   }
+}
+
+async function ensureBackups() {
+  if (!(await fs.pathExists(BACKUP_SOURCE_DIR))) {
+    await fs.remove(BACKUP_TARGET_DIR).catch(() => {});
+    return;
+  }
+
+  await fs.ensureDir(BACKUP_TARGET_DIR);
+  await fs.copy(BACKUP_SOURCE_DIR, BACKUP_TARGET_DIR, {
+    dereference: true,
+  });
 }
 
 async function ensureTemplateProjectJson() {

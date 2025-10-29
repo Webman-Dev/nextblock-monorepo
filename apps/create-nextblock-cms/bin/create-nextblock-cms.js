@@ -102,6 +102,8 @@ async function handleCommand(projectDirectory, options) {
     await copyTemplateTo(projectDir);
     console.log(chalk.green('Template copied successfully.'));
 
+    await removeBackups(projectDir);
+
     await ensureClientComponents(projectDir);
     console.log(chalk.green('Client component directives applied.'));
 
@@ -206,9 +208,17 @@ async function copyTemplateTo(projectDir) {
   });
 }
 
+async function removeBackups(projectDir) {
+  const backupDir = resolve(projectDir, 'backup');
+  if (await fs.pathExists(backupDir)) {
+    await fs.remove(backupDir);
+  }
+}
+
 async function ensureGitignore(projectDir) {
   const gitignorePath = resolve(projectDir, '.gitignore');
   const npmIgnorePath = resolve(projectDir, '.npmignore');
+  const repoGitignorePath = resolve(REPO_ROOT, '.gitignore');
 
   const defaultLines = [
     '# Dependencies',
@@ -243,6 +253,16 @@ async function ensureGitignore(projectDir) {
     '.DS_Store',
   ];
 
+  let repoLines = [];
+  if (await fs.pathExists(repoGitignorePath)) {
+    const raw = await fs.readFile(repoGitignorePath, 'utf8');
+    repoLines = raw
+      .replace(/\r\n/g, '\n')
+      .split('\n')
+      .map((line) => line.replace(/\s+$/, '').replace(/apps\/nextblock\//g, ''))
+      .map((line) => (line.trim() === '' ? '' : line));
+  }
+
   let content = '';
 
   if (await fs.pathExists(gitignorePath)) {
@@ -254,33 +274,66 @@ async function ensureGitignore(projectDir) {
     content = defaultLines.join('\n') + '\n';
   }
 
-  const lines = content.replace(/\r\n/g, '\n').split('\n');
-  const existing = new Set(lines.filter(Boolean));
+  const lines =
+    content === ''
+      ? []
+      : content
+          .replace(/\r\n/g, '\n')
+          .split('\n')
+          .map((line) => line.replace(/\s+$/, ''));
+
+  const existing = new Set(lines);
   let updated = false;
 
-  for (const line of defaultLines) {
-    if (!line) {
-      continue;
+  const mergeLine = (line) => {
+    if (line === undefined || line === null) {
+      return;
+    }
+    if (line === '') {
+      if (lines.length === 0 || lines[lines.length - 1] === '') {
+        return;
+      }
+      lines.push('');
+      updated = true;
+      return;
     }
     if (!existing.has(line)) {
       lines.push(line);
+      existing.add(line);
       updated = true;
+    }
+  };
+
+  for (const line of repoLines) {
+    mergeLine(line);
+  }
+
+  mergeLine('');
+
+  for (const line of defaultLines) {
+    mergeLine(line);
+  }
+
+  const normalized = [];
+  for (const line of lines) {
+    if (line === '') {
+      if (normalized.length === 0 || normalized[normalized.length - 1] === '') {
+        continue;
+      }
+      normalized.push('');
+    } else {
+      normalized.push(line);
     }
   }
 
-  const normalized = lines.filter((line, index, array) => {
-    if (line !== '') {
-      return true;
-    }
-    return index > 0 && array[index - 1] !== '';
-  });
-
-  if (normalized[normalized.length - 1] !== '') {
+  if (normalized.length === 0 || normalized[normalized.length - 1] !== '') {
     normalized.push('');
   }
 
-  if (updated || content !== normalized.join('\n')) {
-    await fs.writeFile(gitignorePath, normalized.join('\n'));
+  const nextContent = normalized.join('\n');
+
+  if (updated || content !== nextContent) {
+    await fs.writeFile(gitignorePath, nextContent);
   }
 }
 
