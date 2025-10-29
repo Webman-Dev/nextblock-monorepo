@@ -273,7 +273,7 @@
     ├── block-editor-analysis.md
     ├── inline-cta-widget-design.md
     ├── inline-widget-design.md
-    └── monorepo-archetecture.md
+    └── monorepo-architecture.md
 ├── eslint.config.mjs
 ├── libs
     ├── db

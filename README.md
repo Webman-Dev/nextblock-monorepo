@@ -160,6 +160,6 @@ Development is managed through a set of Nx commands run from the monorepo root.
 
 For a deeper dive into the project's architecture and application structure, please refer to the following documents:
 
-*   [`docs/monorepo-archetecture.md`](docs/monorepo-archetecture.md)
+*   [`docs/monorepo-architecture.md`](docs/monorepo-architecture.md)
 *   [`apps/nextblock/docs/cms-application-overview.md`](apps/nextblock/docs/cms-application-overview.md)
 *   [`apps/nextblock/docs/cms-architecture-overview.md`](apps/nextblock/docs/cms-architecture-overview.md)

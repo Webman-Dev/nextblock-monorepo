@@ -10,7 +10,7 @@
     *   **Ecosystem & Marketplace**: Foster a third-party marketplace for blocks, themes, and plugins.
 
 ## 2. Monorepo Architecture (`Nx`)
-The project uses an Nx monorepo to enforce separation of concerns, manage dependencies, and share code efficiently. (Source: [`/docs/monorepo-archetecture.md`](/docs/monorepo-archetecture.md))
+The project uses an Nx monorepo to enforce separation of concerns, manage dependencies, and share code efficiently. (See [`docs/monorepo-architecture.md`](./monorepo-architecture.md))
 
 | Path | Description | Import Alias | License |
 | :--- | :--- | :--- | :--- |
