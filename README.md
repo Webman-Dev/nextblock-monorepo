@@ -1,3 +1,11 @@
+<table style="border:2px solid #dc2626;border-radius:6px;background:#fee2e2;padding:12px;">
+  <tr>
+    <td>
+      <strong>Warning:</strong> This project is not ready to be tested locally. I'm still working on a database seed to help people start with a basic template.
+    </td>
+  </tr>
+</table>
+
 # NextBlock CMS Monorepo
 
 This project is a starter template for building an ultra-fast, localized, block-based Content Management System (CMS). It is structured as an [Nx](https://nx.dev) monorepo to facilitate seamless code sharing and streamline dependency management.
