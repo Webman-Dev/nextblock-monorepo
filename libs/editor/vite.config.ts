@@ -43,6 +43,42 @@ export default defineConfig({
             }
           }
         }
+
+        const ensureClientDirective = (fileName: string) => {
+          const filePath = resolveFrom('../../dist/libs/editor', fileName);
+          if (!fs.existsSync(filePath)) {
+            return;
+          }
+
+          const contents = fs.readFileSync(filePath, 'utf8');
+          if (contents.startsWith("'use client'") || contents.startsWith('"use client"')) {
+            return;
+          }
+
+          const directive = "'use client';\n";
+          const strictPatterns = [
+            "'use strict';\r\n",
+            "'use strict';\n",
+            "'use strict';",
+            '"use strict";\r\n',
+            '"use strict";\n',
+            '"use strict";',
+          ];
+
+          for (const pattern of strictPatterns) {
+            if (contents.startsWith(pattern)) {
+              const suffix = contents.slice(pattern.length);
+              const lineBreak = pattern.endsWith('\n') || pattern.endsWith('\r\n') ? '' : '\n';
+              fs.writeFileSync(filePath, `${pattern}${lineBreak}${directive}${suffix}`);
+              return;
+            }
+          }
+
+          fs.writeFileSync(filePath, `${directive}${contents}`);
+        };
+
+        ensureClientDirective('index.mjs');
+        ensureClientDirective('index.js');
       }
     }),
     react()

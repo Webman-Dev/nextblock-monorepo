@@ -86,7 +86,7 @@ async function ensureTemplateSync() {
   await sanitizeUiImports();
   await ensureUiProxies();
   await ensureBackups();
-  await ensureTemplateProjectJson();
+  await removeTemplateProjectJson();
 
   console.log(chalk.green('Template sync complete.'));
 }
@@ -265,17 +265,9 @@ async function ensureBackups() {
   });
 }
 
-async function ensureTemplateProjectJson() {
+async function removeTemplateProjectJson() {
   const projectJsonPath = resolve(TARGET_DIR, 'project.json');
-  const minimalConfig = {
-    name: 'nextblock-template',
-    projectType: 'application',
-    root: 'apps/create-nextblock/templates/nextblock-template',
-    sourceRoot: 'apps/create-nextblock/templates/nextblock-template',
-    targets: {},
-  };
-
-  await fs.writeJSON(projectJsonPath, minimalConfig, { spaces: 2 });
+  await fs.remove(projectJsonPath).catch(() => undefined);
 }
 
 ensureTemplateSync().catch((error) => {

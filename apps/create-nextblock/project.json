@@ -1,0 +1,19 @@
+{
+  "name": "create-nextblock",
+  "projectType": "application",
+  "root": "apps/create-nextblock",
+  "sourceRoot": "apps/create-nextblock",
+  "targets": {
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": [
+          "apps/create-nextblock/bin/**/*.js",
+          "apps/create-nextblock/scripts/**/*.js"
+        ]
+      }
+    }
+  },
+  "tags": []
+}
