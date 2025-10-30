@@ -8,7 +8,7 @@ const { composePlugins, withNx } = require('@nx/next');
 const nextConfig = {
   // Use this to set Nx-specific options
   // See: https://nx.dev/recipes/next/next-config-setup
-  nx: {svgr: false},
+  nx: {},
   env: {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -35,25 +35,31 @@ const nextConfig = {
       ...(process.env.NEXT_PUBLIC_URL
         ? [
             {
-              protocol: /** @type {'http' | 'https'} */ (new URL(process.env.NEXT_PUBLIC_URL).protocol.slice(0, -1)),
+              protocol: /** @type {'http' | 'https'} */ (
+                new URL(process.env.NEXT_PUBLIC_URL).protocol.slice(0, -1)
+              ),
               hostname: new URL(process.env.NEXT_PUBLIC_URL).hostname,
             },
           ]
         : []),
     ],
   },
-experimental: {
+  experimental: {
     optimizeCss: true,
     cssChunking: 'strict',
   },
-  transpilePackages: ['@nextblock-cms/utils', '@nextblock-cms/ui', '@nextblock-cms/editor'],
+  transpilePackages: [
+    '@nextblock-cms/utils',
+    '@nextblock-cms/ui',
+    '@nextblock-cms/editor',
+  ],
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.module.rules.push({
-      test: /\.svg$/i,
-      issuer: /\.[jt]sx?$/,
-      use: ['@svgr/webpack'],
-    });
+        test: /\.svg$/i,
+        issuer: /\.[jt]sx?$/,
+        use: ['@svgr/webpack'],
+      });
       // Optimize TipTap bundle separation for client-side
       config.optimization = {
         ...config.optimization,
@@ -88,7 +94,7 @@ experimental: {
   },
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
-  }
+  },
 };
 
 const plugins = [

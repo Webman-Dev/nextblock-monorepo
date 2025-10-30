@@ -17,6 +17,7 @@ Use this file as the entry point when priming an AI assistant or onboarding a ne
 - [`block-editor-analysis.md`](./block-editor-analysis.md) — Deep dive into the block/section layout system, data flow, and registry patterns.
 - [`tiptap-v3-editor.md`](./tiptap-v3-editor.md) — Extension list, UI components, dependency map, and QA checklist for the rich-text editor library.
 - [`editor-context.md`](./editor-context.md) — CSP workflow, preview sandbox, and custom HTML node strategy.
+- You may use context7 MCP to look for tiptap version 3 latest documentations.
 
 ## Widget & UI Design Specs
 
@@ -31,5 +32,6 @@ Use this file as the entry point when priming an AI assistant or onboarding a ne
 2. Pull in Tooling & Distribution when working on the CLI or release workflows.
 3. Reference Application Architecture docs for block editor or Tiptap changes.
 4. Use the Widget specs when implementing or revising inline components.
+5. You may use context7 MCP at any time to look for latest documentations.
 
 Keep this index up to date as documentation evolves so future threads can load the right context quickly.
