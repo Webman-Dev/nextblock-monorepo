@@ -34,7 +34,7 @@ This note captures the current understanding of the **NextBlock monorepo** and t
   4. Install dependencies (unless `--skip-install`) and initialise git.
 - Important helpers:
   - `ensureClientProviders` imports `TranslationsProvider` from `@nextblock-cms/utils`.
-  - `ensureTailwindConfig` writes `tailwind.config.ts` with content globs that include local files and the published UI/editor packages:
+  - `ensureTailwindConfig` writes `tailwind.config.js` with content globs that include local files and the published UI/editor packages:
     ```ts
     content: [
       './app/**/*.{js,ts,jsx,tsx,mdx}',
@@ -46,7 +46,7 @@ This note captures the current understanding of the **NextBlock monorepo** and t
     ];
     ```
 - Template sync command: `npm run sync:create-nextblock` (copies the latest `apps/nextblock` files into the template and removes `project.json`).
-- Generated Tailwind config lives in the new project root (`tailwind.config.ts`) and should match the snippet above.
+- Generated Tailwind config lives in the new project root (`tailwind.config.js`) and should match the snippet above.
 
 ---
 
@@ -82,7 +82,7 @@ This note captures the current understanding of the **NextBlock monorepo** and t
 
 ### 3.8 Editor Runtime Fixes
 - `libs/editor/src/lib/NotionEditor.tsx` uses static imports for `mediaPicker`, preventing runtime resolution errors once bundled.
-- Tailwind content globs are baked into the scaffolded `tailwind.config.ts`, preserving utilities needed for dialogs and editors.
+- Tailwind content globs are baked into the scaffolded `tailwind.config.js`, preserving utilities needed for dialogs and editors.
 
 ### 3.9 Template Lint Stability
 - Synced files now mirror template lint expectations: metadata helpers drop unused `parent` arguments, renderer props consumed client-side are explicit, and shared helpers avoid unused tuple placeholders.

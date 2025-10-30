@@ -253,7 +253,7 @@
     │       └── blocks
     │       │   ├── README.md
     │       │   └── blockRegistry.ts
-    │   ├── middleware.ts
+    │   ├── proxy.ts
     │   ├── next-env.d.ts
     │   ├── next.config.js
     │   ├── postcss.config.js
@@ -264,7 +264,7 @@
     │       ├── backfill-image-meta.ts
     │       ├── backup.js
     │       └── test-bundle-optimization.js
-    │   ├── tailwind.config.ts
+    │   ├── tailwind.config.js
     │   └── tsconfig.json
 ├── components.json
 ├── docs
@@ -285,7 +285,7 @@
     │   │   ├── lib
     │   │   │   └── supabase
     │   │   │   │   ├── client.ts
-    │   │   │   │   ├── middleware.ts
+    │   │   │   │   ├── proxy.ts
     │   │   │   │   ├── server.ts
     │   │   │   │   ├── ssg-client.ts
     │   │   │   │   └── types.ts
@@ -422,5 +422,5 @@
 ├── package-lock.json
 ├── package.json
 ├── project.json
-├── tailwind.config.ts
+├── tailwind.config.js
 └── tsconfig.base.json

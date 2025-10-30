@@ -1,3 +1,5 @@
+@config "../../../../tailwind.config.js";
+@import "tailwindcss/theme";
 /*─────────────────────────────────────────────────────────────────────────────
   globals.css — complete rewrite
 ─────────────────────────────────────────────────────────────────────────────*/
@@ -194,45 +196,81 @@
   ───────────────────────────────────────────────────────────────────────────*/
   /* Apply your border color everywhere */
   * {
-    @apply border-border;
+    border-color: hsl(var(--border));
   }
 
   /* Body background & text */
   body {
-    @apply bg-background text-foreground;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
   }
 
   /* Semantic headings */
-  ul, ol {
-    @apply pl-6 mb-4;
+  ul,
+  ol {
+    padding-left: 1.5rem;
+    margin-bottom: 1rem;
   }
   li {
-    @apply mb-1;
+    margin-bottom: 0.25rem;
   }
   blockquote {
-    @apply p-4 italic border-l-4 border-border bg-muted text-muted-foreground mb-4;
+    padding: 1rem;
+    font-style: italic;
+    border-left-width: 4px;
+    border-left-style: solid;
+    border-left-color: hsl(var(--border));
+    background-color: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    margin-bottom: 1rem;
   }
   code {
-    @apply bg-muted text-muted-foreground px-1 py-0.5 rounded-sm font-mono text-sm;
+    background-color: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    padding: 0.25rem 0.25rem;
+    padding-top: 0.125rem;
+    padding-bottom: 0.125rem;
+    border-radius: 0.125rem;
+    font-family:
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Monaco,
+      Consolas,
+      'Liberation Mono',
+      'Courier New',
+      monospace;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
   }
   pre {
-    @apply bg-muted p-4 rounded-md overflow-x-auto mb-4;
+    background-color: hsl(var(--muted));
+    padding: 1rem;
+    border-radius: 0.375rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
   }
 
   table {
-    @apply w-full border-collapse mb-4;
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
   }
   thead {
-    @apply bg-muted;
+    background-color: hsl(var(--muted));
   }
-  th, td {
-    @apply border border-border p-2 text-left;
+  th,
+  td {
+    border: 1px solid hsl(var(--border));
+    padding: 0.5rem;
+    text-align: left;
   }
   th {
-    @apply font-semibold;
+    font-weight: 600;
   }
   hr {
-    @apply border-t border-border my-8;
+    border-top: 1px solid hsl(var(--border));
+    margin: 2rem 0;
   }
 }
 

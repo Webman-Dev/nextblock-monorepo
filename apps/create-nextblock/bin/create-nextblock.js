@@ -131,7 +131,7 @@ async function handleCommand(projectDirectory, options) {
     console.log(chalk.green('Global styles configured.'));
 
     await sanitizeTailwindConfig(projectDir);
-    console.log(chalk.green('tailwind.config.ts sanitized.'));
+    console.log(chalk.green('tailwind.config.js sanitized.'));
 
     await normalizeTsconfig(projectDir);
     console.log(chalk.green('tsconfig.json normalized.'));
@@ -598,10 +598,9 @@ async function ensureEditorStyles(projectDir) {
 }
 
 async function sanitizeTailwindConfig(projectDir) {
-  const tailwindConfigPath = resolve(projectDir, 'tailwind.config.ts');
-  const content = `import type { Config } from 'tailwindcss';
-
-const config = {
+  const tailwindConfigPath = resolve(projectDir, 'tailwind.config.js');
+  const content = `/** @type {import('tailwindcss').Config} */
+module.exports = {
   darkMode: ['class'],
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
@@ -693,9 +692,7 @@ const config = {
     },
   },
   plugins: [require('tailwindcss-animate')],
-} satisfies Config;
-
-export default config;
+};
 `;
 
   await fs.writeFile(tailwindConfigPath, content);
@@ -994,4 +991,3 @@ function buildNextConfigContent(editorUtilNames) {
 
   return lines.join('\n');
 }
-

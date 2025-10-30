@@ -60,8 +60,8 @@ The repository follows the standard Nx model: deployable applications live in `a
 - **`tsconfig.base.json`** defines path aliases for every library.
 - **`components.json`** points the shadcn/ui CLI at `libs/ui`.
 - **Tailwind** uses a two-level setup:
-  - Root `tailwind.config.ts` contains the shared theme and content globs.
-  - App-specific configs (e.g. `apps/nextblock/tailwind.config.ts`) extend the root via `presets`.
+  - Root `tailwind.config.js` contains the shared theme and content globs.
+  - App-specific configs (e.g. `apps/nextblock/tailwind.config.js`) extend the root via `presets`.
 
 ## 5. Common Nx Commands
 

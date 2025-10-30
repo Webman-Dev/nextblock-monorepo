@@ -129,13 +129,13 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
     debouncedSave(updatedBlock);
   };
 
-  const DynamicTextBlockEditor = dynamic(() => import('../editors/TextBlockEditor.tsx').then(mod => mod.default), { loading: () => <p>Loading editor...</p> });
-  const DynamicHeadingBlockEditor = dynamic(() => import('../editors/HeadingBlockEditor.tsx').then(mod => mod.default), { loading: () => <p>Loading editor...</p> });
-  const DynamicImageBlockEditor = dynamic(() => import('../editors/ImageBlockEditor.tsx').then(mod => mod.default), { loading: () => <p>Loading editor...</p> });
-  const DynamicButtonBlockEditor = dynamic(() => import('../editors/ButtonBlockEditor.tsx').then(mod => mod.default), { loading: () => <p>Loading editor...</p> });
-  const DynamicPostsGridBlockEditor = dynamic(() => import('../editors/PostsGridBlockEditor.tsx').then(mod => mod.default), { loading: () => <p>Loading editor...</p> });
-  const DynamicVideoEmbedBlockEditor = dynamic(() => import('../editors/VideoEmbedBlockEditor.tsx').then(mod => mod.default), { loading: () => <p>Loading editor...</p> });
-  const DynamicSectionBlockEditor = dynamic(() => import('../editors/SectionBlockEditor.tsx').then(mod => mod.default), { loading: () => <p>Loading editor...</p> });
+  const DynamicTextBlockEditor = dynamic(() => import('../editors/TextBlockEditor').then(mod => mod.default), { loading: () => <p>Loading editor...</p> });
+  const DynamicHeadingBlockEditor = dynamic(() => import('../editors/HeadingBlockEditor').then(mod => mod.default), { loading: () => <p>Loading editor...</p> });
+  const DynamicImageBlockEditor = dynamic(() => import('../editors/ImageBlockEditor').then(mod => mod.default), { loading: () => <p>Loading editor...</p> });
+  const DynamicButtonBlockEditor = dynamic(() => import('../editors/ButtonBlockEditor').then(mod => mod.default), { loading: () => <p>Loading editor...</p> });
+  const DynamicPostsGridBlockEditor = dynamic(() => import('../editors/PostsGridBlockEditor').then(mod => mod.default), { loading: () => <p>Loading editor...</p> });
+  const DynamicVideoEmbedBlockEditor = dynamic(() => import('../editors/VideoEmbedBlockEditor').then(mod => mod.default), { loading: () => <p>Loading editor...</p> });
+  const DynamicSectionBlockEditor = dynamic(() => import('../editors/SectionBlockEditor').then(mod => mod.default), { loading: () => <p>Loading editor...</p> });
 
   useEffect(() => {
     if (editingNestedBlockInfo) {
@@ -444,7 +444,7 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
                   onContentChange={handleContentChange}
                   onDelete={async (blockIdToDelete) => {
                     startTransition(async () => {
-                      const result = await import("../actions.ts").then(({ deleteBlock }) =>
+                      const result = await import("../actions").then(({ deleteBlock }) =>
                         deleteBlock(
                           blockIdToDelete,
                           parentType === "page" ? parentId : null,

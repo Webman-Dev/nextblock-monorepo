@@ -1,4 +1,6 @@
-﻿/* libs/editor/src/styles/editor.css */
+@config "../../../../tailwind.config.js";
+@import "tailwindcss/theme";
+/* libs/editor/src/styles/editor.css */
 
 /* Import drag handle styles */
 @import './drag-handle.css';
