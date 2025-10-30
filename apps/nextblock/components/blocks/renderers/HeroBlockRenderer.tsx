@@ -4,6 +4,29 @@ import type { SectionBlockContent, Gradient } from "../../../lib/blocks/blockReg
 import Image from 'next/image';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
+const HERO_BACKGROUND_DEFAULT_QUALITY = 60;
+
+function resolveImageQuality(value: unknown, fallback: number): number {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+
+  const numeric =
+    typeof value === 'number'
+      ? value
+      : Number.parseInt(String(value), 10);
+
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  const rounded = Math.round(numeric);
+  if (rounded < 1 || rounded > 100) {
+    return fallback;
+  }
+
+  return rounded;
+}
 
 interface SectionBlockRendererProps {
   content: SectionBlockContent;
@@ -176,6 +199,7 @@ const HeroBlockRenderer: React.FC<SectionBlockRendererProps> = ({
   if (backgroundImage) {
     delete styles.backgroundImage;
   }
+  const heroImageQuality = resolveImageQuality(backgroundImage?.quality, HERO_BACKGROUND_DEFAULT_QUALITY);
 
   // Build CSS classes
   const containerClass = containerClasses[content.container_type] || containerClasses.container;
@@ -208,7 +232,7 @@ const HeroBlockRenderer: React.FC<SectionBlockRendererProps> = ({
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 100vw, 100vw"
           priority={true}
           fetchPriority="high"
-          quality={35}
+          quality={heroImageQuality}
           {...imageProps}
         />
       )}

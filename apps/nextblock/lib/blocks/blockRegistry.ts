@@ -126,6 +126,7 @@ export interface SectionBlockContent {
       blur_data_url?: string;
       size: 'cover' | 'contain';
       position: 'center' | 'top' | 'bottom' | 'left' | 'right';
+      quality?: number | null;
       overlay?: {
         type: 'gradient';
         gradient: Gradient;
