@@ -1,5 +1,6 @@
 // libs/editor/src/lib/kit.ts
-import type { Editor, Extensions } from '@tiptap/core'
+import type { Extensions } from '@tiptap/core'
+import { offset } from '@floating-ui/dom'
 import StarterKit from '@tiptap/starter-kit'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import ImageExtended from './extensions/ImageExtended'
@@ -22,7 +23,6 @@ import Underline from '@tiptap/extension-underline'
 import History from '@tiptap/extension-history'
 import DragHandle from '@tiptap/extension-drag-handle'
 import NodeRange from '@tiptap/extension-node-range'
-import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 
 import { createLowlight } from 'lowlight'
 import css from 'highlight.js/lib/languages/css'
@@ -46,11 +46,25 @@ import { DivNode } from './extensions/DivNode'
 import { PreserveAllAttributesExtension } from './extensions/PreserveAllAttributesExtension'
 import { ScriptTagNode } from './extensions/ScriptTagNode'
 
-let dragHandleElement: HTMLDivElement | null = null
-let dragHandlePlusButton: HTMLButtonElement | null = null
-
 // bring lowlight into scope with more languages
 const lowlight = createLowlight({ html, css, js, ts, python, json, bash, sql })
+
+const SVG_NS = 'http://www.w3.org/2000/svg'
+
+function createFilledIcon(pathData: string[]) {
+  const svg = document.createElementNS(SVG_NS, 'svg')
+  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('fill', 'currentColor')
+  svg.classList.add('tiptap-drag-handle__icon', 'tiptap-drag-handle__icon--filled')
+
+  pathData.forEach(d => {
+    const path = document.createElementNS(SVG_NS, 'path')
+    path.setAttribute('d', d)
+    svg.appendChild(path)
+  })
+
+  return svg
+}
 
 export const editorExtensions: Extensions = [
   StarterKit.configure({
@@ -202,107 +216,112 @@ export const editorExtensions: Extensions = [
   DraggableNodes,
   NodeRange,
   DragHandle.configure({
-    render: () => {
-      const element = document.createElement('div')
-      dragHandleElement = element
-      element.classList.add('tiptap-drag-handle')
-      element.dataset.active = 'false'
-      element.style.visibility = 'hidden'
-      element.style.pointerEvents = 'none'
+    computePositionConfig: {
+      placement: 'left-start',
+      strategy: 'absolute',
+      middleware: [offset({ mainAxis: 5, crossAxis: 0 })],
+    },
+    onElementDragStart: () => {
+      if (typeof document !== 'undefined') {
+        document.body.classList.add('dragging')
+      }
+    },
+    onElementDragEnd: () => {
+      if (typeof document !== 'undefined') {
+        document.body.classList.remove('dragging')
+      }
+    },
+    onNodeChange: ({ editor }) => {
+      // no-op, but keep hook defined to satisfy eslint and future custom behaviour
+      void editor
+    },
+    render() {
+      const handle = document.createElement('div')
+      handle.classList.add('drag-handle', 'tiptap-drag-handle')
+
+      if (typeof window !== 'undefined') {
+        ;(window as any).__dragHandleElement = handle
+      }
+
+      const group = document.createElement('div')
+      group.classList.add('tiptap-drag-handle__group')
+      group.setAttribute('role', 'group')
+      group.dataset.orientation = 'horizontal'
+      handle.appendChild(group)
 
       const plusButton = document.createElement('button')
-      dragHandlePlusButton = plusButton
       plusButton.type = 'button'
-      plusButton.className = 'tiptap-drag-handle__button tiptap-drag-handle__plus'
+      plusButton.classList.add(
+        'tiptap-drag-handle__button',
+        'tiptap-drag-handle__button--ghost',
+        'tiptap-drag-handle__plus',
+      )
       plusButton.setAttribute('aria-label', 'Insert block')
-      plusButton.setAttribute('aria-expanded', 'false')
-      plusButton.draggable = false
-      plusButton.textContent = '+'
-      plusButton.dataset.tooltip = 'Insert block'
+      plusButton.setAttribute('title', 'Insert block')
 
-      const grip = document.createElement('span')
-      grip.className = 'tiptap-drag-handle__button tiptap-drag-handle__grip'
-      grip.innerHTML = `
-        <svg width="12" height="18" viewBox="0 0 12 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="3" cy="3" r="1.5" fill="currentColor"/>
-          <circle cx="9" cy="3" r="1.5" fill="currentColor"/>
-          <circle cx="3" cy="9" r="1.5" fill="currentColor"/>
-          <circle cx="9" cy="9" r="1.5" fill="currentColor"/>
-          <circle cx="3" cy="15" r="1.5" fill="currentColor"/>
-          <circle cx="9" cy="15" r="1.5" fill="currentColor"/>
-        </svg>
-      `
+      const plusIcon = createFilledIcon([
+        'M13 5C13 4.44772 12.5523 4 12 4C11.4477 4 11 4.44772 11 5V11H5C4.44772 11 4 11.4477 4 12C4 12.5523 4.44772 13 5 13H11V19C11 19.5523 11.4477 20 12 20C12.5523 20 13 19.5523 13 19V13H19C19.5523 13 20 12.5523 20 12C20 11.4477 19.5523 11 19 11H13V5Z',
+      ])
+      plusButton.appendChild(plusIcon)
+      group.appendChild(plusButton)
 
-      grip.setAttribute('aria-hidden', 'true')
+      const grip = document.createElement('button')
+      grip.type = 'button'
+      grip.classList.add(
+        'tiptap-drag-handle__button',
+        'tiptap-drag-handle__button--ghost',
+        'tiptap-drag-handle__grip',
+      )
+      grip.setAttribute('aria-label', 'Drag to reorder')
+      grip.setAttribute('title', 'Drag to reorder')
+      grip.setAttribute('tabindex', '0')
+      grip.setAttribute('aria-haspopup', 'menu')
+      grip.setAttribute('aria-expanded', 'false')
 
-      element.dataset.tooltip = 'Click for options\nHold for drag'
-      element.appendChild(plusButton)
-      element.appendChild(grip)
+      const gripIcon = createFilledIcon([
+        'M9 3C7.89543 3 7 3.89543 7 5C7 6.10457 7.89543 7 9 7C10.1046 7 11 6.10457 11 5C11 3.89543 10.1046 3 9 3Z',
+        'M9 10C7.89543 10 7 10.8954 7 12C7 13.1046 7.89543 14 9 14C10.1046 14 11 13.1046 11 12C11 10.8954 10.1046 10 9 10Z',
+        'M7 19C7 17.8954 7.89543 17 9 17C10.1046 17 11 17.8954 11 19C11 20.1046 10.1046 21 9 21C7.89543 21 7 20.1046 7 19Z',
+        'M15 10C13.8954 10 13 10.8954 13 12C13 13.1046 13.8954 14 15 14C16.1046 14 17 13.1046 17 12C17 10.8954 16.1046 10 15 10Z',
+        'M13 5C13 3.89543 13.8954 3 15 3C16.1046 3 17 3.89543 17 5C17 6.10457 16.1046 7 15 7C13.8954 7 13 6.10457 13 5Z',
+        'M15 17C13.8954 17 13 17.8954 13 19C13 20.1046 13.8954 21 15 21C16.1046 21 17 20.1046 17 19C17 17.8954 16.1046 17 15 17Z',
+      ])
+      grip.appendChild(gripIcon)
+      group.appendChild(grip)
 
-      const showHint = () => element.classList.add('tiptap-drag-handle--hint')
-      const hideHint = () => element.classList.remove('tiptap-drag-handle--hint')
+      const dispatchToggle = () => {
+        const event = new CustomEvent('tiptap-gutter-toggle', {
+          bubbles: true,
+          detail: {
+            handle: group,
+            button: plusButton,
+          },
+        })
+        group.dispatchEvent(event)
+      }
 
-      grip.addEventListener('mouseenter', showHint)
-      grip.addEventListener('mouseleave', hideHint)
-      element.addEventListener('mouseleave', hideHint)
-
-      plusButton.addEventListener('mousedown', event => {
+      plusButton.addEventListener('click', event => {
         event.preventDefault()
         event.stopPropagation()
-      })
-
-      plusButton.addEventListener('dragstart', event => {
-        event.preventDefault()
-        event.stopPropagation()
+        dispatchToggle()
       })
 
       plusButton.addEventListener('keydown', event => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()
-          plusButton.click()
+          dispatchToggle()
         }
       })
 
-      plusButton.addEventListener('click', event => {
-        event.preventDefault()
-        event.stopPropagation()
-        element.classList.remove('tiptap-drag-handle--hint')
-
-        const toggleEvent = new CustomEvent('tiptap-gutter-toggle', {
-          bubbles: true,
-          detail: {
-            handle: element,
-            button: plusButton,
-          },
-        })
-
-        element.dispatchEvent(toggleEvent)
+      grip.addEventListener('mousedown', () => {
+        grip.setAttribute('aria-expanded', 'true')
       })
 
-      return element
-    },
-    onNodeChange: ({ editor, node }: { editor: Editor; node: ProseMirrorNode | null }) => {
-      if (!dragHandleElement) {
-        return
-      }
+      grip.addEventListener('mouseup', () => {
+        grip.setAttribute('aria-expanded', 'false')
+      })
 
-      const isDocNode = node?.type.name === 'doc'
-      const shouldShow = Boolean(node) && !isDocNode && editor.isFocused && editor.isEditable
-
-      if (shouldShow) {
-        dragHandleElement.dataset.active = 'true'
-        dragHandleElement.style.visibility = ''
-        dragHandleElement.style.pointerEvents = 'auto'
-      } else {
-        dragHandleElement.dataset.active = 'false'
-        dragHandleElement.classList.remove('tiptap-drag-handle--hint')
-        dragHandleElement.removeAttribute('data-menu-open')
-        dragHandleElement.style.visibility = 'hidden'
-        dragHandleElement.style.pointerEvents = 'none'
-
-        dragHandlePlusButton?.setAttribute('aria-expanded', 'false')
-      }
+      return handle
     },
   }),
 ]
-

@@ -82,7 +82,6 @@ export default async function proxy(request: NextRequest) {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
-
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith('/cms')) {
@@ -175,11 +174,7 @@ export default async function proxy(request: NextRequest) {
   }
 
   const acceptHeader = request.headers.get('accept');
-  if (
-    acceptHeader &&
-    acceptHeader.includes('text/html') &&
-    !pathname.startsWith('/api/')
-  ) {
+  if (acceptHeader && acceptHeader.includes('text/html') && !pathname.startsWith('/api/')) {
     finalResponse.headers.set('Cache-Control', 'public, max-age=0, must-revalidate');
     finalResponse.headers.set('X-BFCache-Applied', 'true');
   }

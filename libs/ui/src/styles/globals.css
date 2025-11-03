@@ -1,13 +1,10 @@
 @config "../../../../tailwind.config.js";
+@import "tailwindcss/preflight";
 @import "tailwindcss/theme";
+@import "tailwindcss/utilities";
 /*─────────────────────────────────────────────────────────────────────────────
   globals.css — complete rewrite
 ─────────────────────────────────────────────────────────────────────────────*/
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 /*─────────────────────────────────────────────────────────────────────────────
   1. Critical CSS Resets (formerly in <style id="critical-css">)
 ─────────────────────────────────────────────────────────────────────────────*/

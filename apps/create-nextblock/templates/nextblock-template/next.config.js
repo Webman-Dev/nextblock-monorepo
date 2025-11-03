@@ -23,10 +23,6 @@ const nextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
   },
-  experimental: {
-    svgr: true,
-  },
-  turbopack: {},
   transpilePackages: [
     '@nextblock-cms/utils',
     '@nextblock-cms/ui',

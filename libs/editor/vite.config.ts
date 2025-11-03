@@ -101,7 +101,10 @@ export default defineConfig({
       formats: ['es', 'cjs']
     },
     rollupOptions: {
-      external: ['react', 'react-dom', /^@nextblock-cms\/.*/]
+      external: ['react', 'react-dom', /^@nextblock-cms\/.*/],
+      output: {
+        exports: 'named'
+      }
     }
   }
 });

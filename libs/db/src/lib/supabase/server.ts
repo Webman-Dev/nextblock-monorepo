@@ -1,7 +1,7 @@
 // utils/supabase/server.ts
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
-import { cookies, type UnsafeUnwrappedCookies } from 'next/headers';
-import { Database } from './types'; // Import custom types
+import { cookies } from 'next/headers';
+import { Database } from './types';
 
 const SERVER_ONLY_ERROR_MESSAGE =
   'This module cannot be imported from a Client Component module. It should only be used from a Server Component.';
@@ -13,10 +13,15 @@ if (typeof window !== 'undefined') {
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type Language = Database['public']['Tables']['languages']['Row'];
 
+type ServerCookies = Awaited<ReturnType<typeof cookies>>;
+type SupabaseCookiePayload = {
+  name: string;
+  value: string;
+  options: CookieOptions;
+};
+
 // This is the standard server client creation function from the Vercel example
 export const createClient = () => {
-  const cookieStorePromise = (cookies() as unknown as UnsafeUnwrappedCookies);
-
   const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
   const supabaseAnonKey = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
   
@@ -29,28 +34,28 @@ export const createClient = () => {
     supabaseAnonKey,
     {
       cookies: {
-        async get(name: string) {
-          const cookieStore = await cookieStorePromise;
-          return cookieStore.get(name)?.value;
-        },
-        set(name: string, value: string, options: CookieOptions) {
+        getAll: async () => {
           try {
-            (async () => {
-              const cookieStore = await cookieStorePromise;
-              cookieStore.set({ name, value, ...options });
-            })();
+            const cookieStore: ServerCookies = await cookies();
+            return cookieStore.getAll();
           } catch {
-            // The `set` method was called from a Server Component.
+            return [];
           }
         },
-        remove(name: string, options: CookieOptions) {
+        setAll: async (cookieList: SupabaseCookiePayload[]) => {
           try {
-            (async () => {
-              const cookieStore = await cookieStorePromise;
-              cookieStore.set({ name, value: '', ...options });
-            })();
+            const cookieStore: ServerCookies = await cookies();
+            for (const { name, value, options } of cookieList) {
+              if (value && value.length > 0) {
+                cookieStore.set({ name, value, ...options });
+              } else if (options && Object.keys(options).length > 0) {
+                cookieStore.delete({ name, ...options });
+              } else {
+                cookieStore.delete(name);
+              }
+            }
           } catch {
-            // The `delete` method was called from a Server Component.
+            // Setting cookies is only allowed in Server Actions and Route Handlers.
           }
         },
       },

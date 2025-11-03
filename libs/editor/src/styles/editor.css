@@ -1,9 +1,6 @@
-@config "../../../../tailwind.config.js";
 @import "tailwindcss/theme";
+@config "../../../../tailwind.config.js";
 /* libs/editor/src/styles/editor.css */
-
-/* Import drag handle styles */
-@import './drag-handle.css';
 
 .is-editor-empty,
 .is-empty {
@@ -37,6 +34,15 @@
 .ProseMirror .is-empty-heading-3::before {
   font-size: 1.5rem;
   font-weight: 600;
+}
+
+.tiptap h1,
+.tiptap h2,
+.tiptap h3,
+.tiptap h4,
+.tiptap h5,
+.tiptap h6 {
+  margin-top: 0;
 }
 
 .ProseMirror .is-empty-blockquote::before {
@@ -88,4 +94,158 @@
 ::-moz-selection {
   background: rgba(0, 0, 0, 0.05);
   color: inherit;
+}
+
+/* Drag handle styles */
+.tiptap-drag-handle {
+  position: absolute;
+  z-index: 50;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(0);
+  transition: opacity 120ms var(--ease-out, ease), transform 120ms var(--ease-out, ease);
+}
+
+.tiptap-drag-handle__group {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.125rem 0.1rem;
+  border-radius: 0.5rem;
+  border: none;
+  background-color: transparent;
+  box-shadow: none;
+  color: color-mix(in srgb, hsl(var(--muted-foreground)) 80%, hsl(var(--foreground)) 20%);
+  transition:
+    background-color 120ms var(--ease-out, ease),
+    color 120ms var(--ease-out, ease);
+  min-height: 1.65rem;
+  line-height: 1;
+}
+
+.tiptap-drag-handle__group:hover,
+.tiptap-drag-handle__group:focus-within {
+  background-color: transparent;
+  color: color-mix(in srgb, hsl(var(--foreground)) 90%, hsl(var(--muted-foreground)) 10%);
+}
+
+.dark .tiptap-drag-handle__group {
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  color: color-mix(in srgb, hsl(var(--muted-foreground)) 85%, white 15%);
+}
+
+.tiptap-drag-handle__group[data-menu-open='true'] {
+  border: none;
+  background-color: transparent;
+  color: hsl(var(--primary));
+}
+
+.tiptap-drag-handle__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 0.5rem;
+  border: none;
+  background-color: transparent;
+  color: inherit;
+  transition:
+    background-color 120ms var(--ease-out, ease),
+    border-color 120ms var(--ease-out, ease),
+    transform 120ms var(--ease-out, ease),
+    color 120ms var(--ease-out, ease);
+}
+
+.tiptap-drag-handle__button--ghost:hover,
+.tiptap-drag-handle__button--ghost:focus-visible {
+  background-color: color-mix(in srgb, hsl(var(--muted)) 55%, transparent 45%);
+  border-color: transparent;
+  color: hsl(var(--foreground));
+  transform: translateY(-1px);
+}
+
+.dark .tiptap-drag-handle__button--ghost:hover,
+.dark .tiptap-drag-handle__button--ghost:focus-visible {
+  background-color: color-mix(in srgb, hsl(var(--muted)) 68%, transparent 32%);
+  border-color: transparent;
+}
+
+.tiptap-drag-handle__button:active {
+  transform: translateY(0);
+}
+
+.tiptap-drag-handle__plus {
+  cursor: pointer;
+}
+
+.tiptap-drag-handle__grip {
+  cursor: grab;
+  border-left: none;
+  padding-left: 0.1rem;
+}
+
+.tiptap-drag-handle__grip:active {
+  cursor: grabbing;
+}
+
+body.dragging {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+body.dragging .tiptap-drag-handle__group {
+  box-shadow: none;
+}
+
+body.dragging .tiptap-drag-handle__button {
+  background-color: color-mix(in srgb, hsl(var(--primary)) 18%, transparent 82%);
+  border-color: transparent;
+  color: hsl(var(--primary-foreground));
+}
+
+.tiptap-drag-handle__icon {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.tiptap-drag-handle__icon--filled {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.tiptap-drag-hover-target {
+  position: relative;
+}
+
+.tiptap-drag-hover-target::before {
+  content: '';
+  position: absolute;
+  left: -0.75rem;
+  right: -0.75rem;
+  top: -0.5rem;
+  bottom: -0.5rem;
+  border-radius: 0.75rem;
+  border: 1px dashed transparent;
+  transition: border-color 120ms var(--ease-out, ease);
+}
+
+.tiptap-drag-hover-target.is-drag-over::before {
+  border-color: hsl(var(--primary));
+}
+
+@media (max-width: 768px) {
+  .tiptap-drag-handle {
+    transform: translateX(calc(-100% - 0.5rem));
+  }
+
+  .tiptap-drag-handle__group {
+    gap: 0.1rem;
+    padding: 0.15rem 0.2rem;
+  }
 }

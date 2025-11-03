@@ -7,7 +7,6 @@ import { EditorBubbleMenu } from './components/menus/BubbleMenu';
 import { EditorFloatingMenu } from './components/menus/FloatingMenu';
 import { EnhancedFloatingMenu } from './components/menus/EnhancedFloatingMenu';
 import { EditorToolbar } from './components/menus/Toolbar';
-import { DragHandle } from './components/DragHandle';
 import { MobileToolbar } from './components/mobile/MobileToolbar';
 import { Button } from '@nextblock-cms/ui/button';
 import { Search, X, Replace } from 'lucide-react';
@@ -251,26 +250,6 @@ export const Editor: React.FC<EditorProps> = ({
         <EditorFloatingMenu editor={editor} />
       )}
       
-      {/* Drag Handle */}
-      <DragHandle
-        editor={editor}
-        onDragStart={(event) => {
-          console.log('Drag started:', event);
-          // Add visual feedback for drag start
-          document.body.classList.add('dragging');
-        }}
-        onDragEnd={(event) => {
-          console.log('Drag ended:', event);
-          // Remove visual feedback for drag end
-          document.body.classList.remove('dragging');
-        }}
-        onNodeChange={({ node, editor, pos }) => {
-          if (node) {
-            console.log('Hovering over node:', node.type.name, 'at position:', pos);
-          }
-        }}
-      />
-
       {/* Editor Content */}
       <EditorContent editor={editor} />
 
