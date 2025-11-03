@@ -555,17 +555,11 @@ export type Database = {
     }
     Functions: {
       get_current_user_role: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
-      get_my_claim: {
-        Args: { claim: string }
-        Returns: string
-      }
-      get_my_role: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
+      get_my_claim: { Args: { claim: string }; Returns: string }
+      get_my_role: { Args: never; Returns: string }
     }
     Enums: {
       menu_location: "HEADER" | "FOOTER" | "SIDEBAR"
