@@ -55,5 +55,8 @@ vitest.config.*.timestamp*
 
 # custom
 apps/nextblock/backup/
+apps/nextblock/backups/
+bak.env.local
+test.env.local
 
 test-cli

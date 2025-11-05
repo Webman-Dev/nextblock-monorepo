@@ -78,7 +78,6 @@ This note captures the current understanding of the **NextBlock monorepo** and t
 - `sanitizeLayout` rewrites generated `app/layout.tsx` to import package styles and drops stale `./globals.css` / `./editor.css` imports.
 - `ensureGlobalStyles` and `ensureEditorStyles` remove placeholder files to align scaffolds with package styles.
 - `ensureGitignore` merges the root `.gitignore` (normalising `apps/nextblock/` prefixes) with a default Next.js ignore list.
-- Template sync copies `apps/nextblock/backup` into the template so generated projects include the latest SQL backups, then the CLI deletes the folder after copying to keep scaffolds clean.
 
 ### 3.8 Editor Runtime Fixes
 - `libs/editor/src/lib/NotionEditor.tsx` uses static imports for `mediaPicker`, preventing runtime resolution errors once bundled.

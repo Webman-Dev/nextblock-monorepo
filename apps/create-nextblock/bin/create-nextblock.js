@@ -210,6 +210,10 @@ async function removeBackups(projectDir) {
   if (await fs.pathExists(backupDir)) {
     await fs.remove(backupDir);
   }
+  const backupsDir = resolve(projectDir, 'backups');
+  if (await fs.pathExists(backupsDir)) {
+    await fs.remove(backupsDir);
+  }
 }
 
 async function ensureGitignore(projectDir) {
@@ -245,6 +249,7 @@ async function ensureGitignore(projectDir) {
     '',
     '# Backups',
     'backup/',
+    'backups/',
     '',
     '# Misc',
     '.DS_Store',

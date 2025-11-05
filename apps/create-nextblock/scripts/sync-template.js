@@ -12,8 +12,6 @@ const SOURCE_DIR = resolve(PROJECT_ROOT, '../nextblock');
 const TARGET_DIR = resolve(PROJECT_ROOT, 'templates/nextblock-template');
 const REPO_ROOT = resolve(PROJECT_ROOT, '..', '..');
 const UI_GLOBALS_SOURCE = resolve(PROJECT_ROOT, '../../libs/ui/src/styles/globals.css');
-const BACKUP_SOURCE_DIR = resolve(SOURCE_DIR, 'backup');
-const BACKUP_TARGET_DIR = resolve(TARGET_DIR, 'backup');
 const UI_PROXY_MODULES = [
   'avatar',
   'badge',
@@ -45,6 +43,8 @@ const IGNORED_SEGMENTS = new Set([
   'dist',
   'tmp',
   'coverage',
+  'backup',
+  'backups',
 ]);
 
 async function ensureTemplateSync() {
@@ -85,7 +85,7 @@ async function ensureTemplateSync() {
   await sanitizeBlockEditorImports();
   await sanitizeUiImports();
   await ensureUiProxies();
-  await ensureBackups();
+  await removeBackups();
   await removeTemplateProjectJson();
 
   console.log(chalk.green('Template sync complete.'));
@@ -253,16 +253,19 @@ async function ensureUiProxies() {
   }
 }
 
-async function ensureBackups() {
-  if (!(await fs.pathExists(BACKUP_SOURCE_DIR))) {
-    await fs.remove(BACKUP_TARGET_DIR).catch(() => undefined);
-    return;
-  }
+async function removeBackups() {
+  const targets = [
+    resolve(TARGET_DIR, 'backup'),
+    resolve(TARGET_DIR, 'backups'),
+  ];
 
-  await fs.ensureDir(BACKUP_TARGET_DIR);
-  await fs.copy(BACKUP_SOURCE_DIR, BACKUP_TARGET_DIR, {
-    dereference: true,
-  });
+  await Promise.all(
+    targets.map((dir) =>
+      fs
+        .remove(dir)
+        .catch(() => undefined),
+    ),
+  );
 }
 
 async function removeTemplateProjectJson() {
