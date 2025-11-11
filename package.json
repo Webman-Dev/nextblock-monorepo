@@ -25,7 +25,7 @@
     "nx:lint:sdk": "npx nx lint sdk --skip-nx-cache",
     "lint": "npx nx run-many --target=lint --all --exclude nextblock-template --skip-nx-cache",
     "db:backup": "node apps/nextblock/scripts/backup.js",
-    "db:restore": "node apps/nextblock/scripts/dbRestore.js",
+    "db:restore": "node apps/nextblock/scripts/restore.js",
     "db:types": "node tools/scripts/gen-db-types.js",
     "db:push": "dotenv -e .env.local -- npx supabase db push --workdir libs/db/src --include-all",
     "sync:create-nextblock": "npm --prefix apps/create-nextblock run sync-template",
