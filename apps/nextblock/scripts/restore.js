@@ -317,6 +317,16 @@ const user = connectionUrl.username;
 const password = connectionUrl.password;
 const sslMode = connectionUrl.searchParams.get('sslmode') || 'require';
 
+function formatBackupLabel(dirName) {
+  const delimiter = '__';
+  const idx = dirName.indexOf(delimiter);
+  if (idx === -1) {
+    return dirName;
+  }
+  const label = dirName.slice(idx + delimiter.length);
+  return label || dirName;
+}
+
 // List available backup folders
 const backupsPath = path.join(__dirname, '../backups');
 if (!fs.existsSync(backupsPath)) {
@@ -337,7 +347,9 @@ if (backupDirs.length === 0) {
 // Show list of backups
 console.log("Available backups:");
 backupDirs.forEach((dir, index) => {
-  console.log(`${index + 1}. ${dir}`);
+  const label = formatBackupLabel(dir);
+  const prefix = index === 0 ? '(latest) ' : '';
+  console.log(`${index + 1}. ${prefix}${label}`);
 });
 
 // Prompt user to choose a backup
@@ -345,9 +357,10 @@ const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout
 });
-rl.question("Enter the number of the backup to restore: ", (answer) => {
+rl.question("Enter the number of the backup to restore (press Enter for latest): ", (answer) => {
   rl.close();
-  const choice = parseInt(answer.trim(), 10);
+  const trimmed = answer.trim();
+  const choice = trimmed === '' ? 1 : parseInt(trimmed, 10);
   if (isNaN(choice) || choice < 1 || choice > backupDirs.length) {
     console.error("❌ Invalid selection. Exiting.");
     process.exit(1);
