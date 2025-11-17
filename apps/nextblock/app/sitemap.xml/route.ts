@@ -31,7 +31,7 @@ export async function GET() {
 
     const staticRoutes: SitemapEntry[] = [
       { path: '/', lastModified: new Date().toISOString() },
-      { path: '/blog', lastModified: new Date().toISOString() },
+      { path: '/articles', lastModified: new Date().toISOString() },
     ];
 
     const allEntries = [...staticRoutes, ...pages, ...posts];

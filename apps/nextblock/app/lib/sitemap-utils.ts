@@ -58,7 +58,7 @@ export async function fetchAllPublishedPosts(): Promise<SitemapEntry[]> {
     }
 
     return posts.map((post) => ({
-      path: `/blog/${post.slug}`,
+      path: `/article/${post.slug}`,
       lastModified: new Date(post.updated_at).toISOString(),
     }));
   } catch (err) {

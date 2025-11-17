@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
   if (table === 'pages') {
     pathToRevalidate = `/${relevantRecord.slug}`;
   } else if (table === 'posts') {
-    pathToRevalidate = `/blog/${relevantRecord.slug}`;
+    pathToRevalidate = `/article/${relevantRecord.slug}`;
   } else {
     console.log(`Revalidation not configured for table: ${table}`);
     return NextResponse.json({ message: `Revalidation not configured for table: ${table}` }, { status: 200 }); // Acknowledge but don't process
@@ -59,18 +59,18 @@ export async function POST(request: NextRequest) {
       await revalidatePath(normalizedPath, 'page'); 
       console.log(`Successfully revalidated path: ${normalizedPath}`);
       
-      // Additionally, if it's a blog post, you might want to revalidate the main blog listing page.
+      // Additionally, if it's an article, you might want to revalidate the main listing page.
       if (table === 'posts') {
-        // Assuming your main blog listing page is at '/blog' or similar.
+        // Assuming your main articles listing page is at '/articles' or similar.
         // This path needs to be known and consistent.
-        // If your blog listing is at the root of the language segment (e.g. /en/blog),
-        // and you are NOT using [lang] in URL, then the path is just '/blog'.
-        // However, if your LanguageContext means /blog shows different content per lang,
-        // revalidating just '/blog' will rebuild its default language version.
+        // If your listing is at the root of the language segment (e.g. /en/articles),
+        // and you are NOT using [lang] in URL, then the path is just '/articles'.
+        // However, if your LanguageContext means /articles shows different content per lang,
+        // revalidating just '/articles' will rebuild its default language version.
         // Client-side fetches would still get latest for other languages.
-        // For now, let's revalidate a generic /blog path if it exists.
-        // await revalidatePath('/blog', 'page'); // Example: revalidate main blog listing
-        // console.log("Also attempted to revalidate /blog listing page.");
+        // For now, let's revalidate a generic /articles path if it exists.
+        // await revalidatePath('/articles', 'page'); // Example: revalidate main listing
+        // console.log("Also attempted to revalidate /articles listing page.");
       }
 
       return NextResponse.json({ revalidated: true, revalidatedPath: normalizedPath, now: Date.now() });

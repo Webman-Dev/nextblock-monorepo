@@ -7,6 +7,7 @@ import type { Database } from "@nextblock-cms/db";
 import { useLanguage } from '@/context/LanguageContext';
 import { useCurrentContent } from '@/context/CurrentContentContext';
 import Link from 'next/link';
+import { createClient } from '@nextblock-cms/db';
 
 type PageType = Database['public']['Tables']['pages']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
@@ -48,12 +49,13 @@ export default function PageClientContent({ initialPageData, currentSlug, childr
   const router = useRouter();
   // currentPageData is the data for the slug currently in the URL.
   // It's initially set by the server for the slug it resolved.
-  const [currentPageData] = useState(initialPageData);
+  const [currentPageData, setCurrentPageData] = useState(initialPageData);
   const [isLoadingTargetLang, setIsLoadingTargetLang] = useState(false);
+  const supabase = useMemo(() => createClient(), []);
 
   // Memoize pageId and pageSlug
   const pageId = useMemo(() => currentPageData?.id, [currentPageData?.id]);
-  const pageSlug = useMemo(() => currentPageData?.slug, [currentPageData?.slug]);
+  const pageSlug = useMemo(() => currentPageData?.slug, [currentPageData?.id, currentLocale]); // include locale so updates propagate
 
   useEffect(() => {
     if (currentLocale && currentPageData && currentPageData.language_code !== currentLocale && translatedSlugs) {
@@ -64,12 +66,37 @@ export default function PageClientContent({ initialPageData, currentSlug, childr
       if (targetSlug && targetSlug !== currentSlug) {
         router.push(`/${targetSlug}`); // Navigate to the translated slug's URL
       } else if (targetSlug && targetSlug === currentSlug) {
-        // Already on the correct page for the selected language, do nothing or refresh data if needed
+        // Same slug across languages - refetch the page in the target language and update content
+        (async () => {
+          const { data, error } = await supabase
+            .from("pages")
+            .select("*, languages!inner(code), blocks(*)")
+            .eq("slug", targetSlug)
+            .eq("languages.code", currentLocale)
+            .eq("status", "published")
+            .order('order', { foreignTable: 'blocks', ascending: true })
+            .maybeSingle();
+
+          if (!error && data) {
+            const langInfo = Array.isArray(data.languages) ? data.languages[0] : (data.languages as unknown as { code?: string });
+            setCurrentPageData({
+              ...(data as PageType),
+              blocks: (data as any).blocks || [],
+              language_code: langInfo?.code || currentLocale,
+              language_id: data.language_id,
+              translation_group_id: data.translation_group_id || currentPageData.translation_group_id,
+            } as typeof currentPageData);
+          } else {
+            // fallback to refresh if fetch fails
+            router.refresh();
+          }
+          setIsLoadingTargetLang(false);
+        })();
       } else {
         console.warn(`No published translation found for group ${currentPageData.translation_group_id} in language ${currentLocale} using pre-fetched slugs.`);
         // Optionally, provide feedback to the user that translation is not available
+        setIsLoadingTargetLang(false);
       }
-      setIsLoadingTargetLang(false);
     }
   }, [currentLocale, currentPageData, currentSlug, router, initialPageData, translatedSlugs]); // Rerun if initialPageData changes (e.g. after revalidation)
 

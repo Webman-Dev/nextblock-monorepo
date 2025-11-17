@@ -113,7 +113,7 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
   }
 
   const updatePostWithId = updatePost.bind(null, postId);
-  const publicPostUrl = `/blog/${postWithBlocks.slug}`;
+  const publicPostUrl = `/article/${postWithBlocks.slug}`;
   
   return (
     <UploadFolderProvider defaultFolder={`posts/${postWithBlocks.slug}/`}>

@@ -24,5 +24,5 @@ USING (true);
 
 -- Seed initial copyright setting
 INSERT INTO public.site_settings (key, value)
-VALUES ('footer_copyright', '{"en": "© {year} Nextblock CMS. All rights reserved."}')
+VALUES ('footer_copyright', '{"en": "© {year} Nextblock CMS. All rights reserved.", "fr": "© {year} Nextblock CMS. Tous droits réservés."}')
 ON CONFLICT (key) DO NOTHING;

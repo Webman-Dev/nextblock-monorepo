@@ -1,4 +1,4 @@
-// app/blog/[slug]/page.utils.ts
+// app/article/[slug]/page.utils.ts
 import { createClient } from "@nextblock-cms/db/server";
 import type { Database } from "@nextblock-cms/db";
 

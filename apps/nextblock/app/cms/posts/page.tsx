@@ -158,7 +158,7 @@ export default async function CmsPostsListPage(props: CmsPostsListPageProps) {
                     </Badge>
                   </TableCell>
                   <TableCell><Badge variant="outline" className="dark:border-slate-600">{languageCode}</Badge></TableCell>
-                  <TableCell className="text-muted-foreground text-xs hidden md:table-cell">/blog/{post.slug}</TableCell>
+                  <TableCell className="text-muted-foreground text-xs hidden md:table-cell">/article/{post.slug}</TableCell>
                   <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
                     {post.published_at ? new Date(post.published_at).toLocaleDateString() : "Not yet"}
                   </TableCell>
