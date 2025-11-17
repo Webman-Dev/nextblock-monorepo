@@ -1,6 +1,4 @@
--- This function is triggered when a new user signs up in auth.users
--- It creates a corresponding profile in public.profiles
--- and assigns 'ADMIN' to the first user, then 'USER' thereafter, using a KV flag in site_settings.
+-- Ensure handle_new_user uses the enum type and works with the KV admin flag
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
@@ -10,7 +8,7 @@ SET search_path = 'public'
 AS $$
 DECLARE
   admin_flag_set BOOLEAN := FALSE;
-  user_role TEXT;
+  user_role public.user_role;
 BEGIN
   -- Ensure the admin flag row exists
   INSERT INTO public.site_settings (key, value)
@@ -25,12 +23,12 @@ BEGIN
   FOR UPDATE;
 
   IF admin_flag_set = FALSE THEN
-    user_role := 'ADMIN';
+    user_role := 'ADMIN'::public.user_role;
     UPDATE public.site_settings
     SET value = 'true'::jsonb
     WHERE key = 'is_admin_created';
   ELSE
-    user_role := 'USER';
+    user_role := 'USER'::public.user_role;
   END IF;
 
   INSERT INTO public.profiles (id, role)
@@ -42,7 +40,6 @@ $$;
 
 -- Drop and recreate the trigger to use the updated function
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();

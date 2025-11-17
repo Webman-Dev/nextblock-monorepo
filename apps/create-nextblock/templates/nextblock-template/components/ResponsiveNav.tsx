@@ -10,7 +10,8 @@ type Logo = Database['public']['Tables']['logos']['Row'] & { media: (Database['p
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
 import Image from 'next/image'
 
-const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || ''
+const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
+const FALLBACK_LOGO_PATH = '/images/nextblock-logo-small.webp';
 
 // Define a type for hierarchical navigation items
 interface HierarchicalNavigationItem extends NavigationItem {
@@ -261,16 +262,21 @@ export default function ResponsiveNav({
             {logo && logo.media ? (
               <Image
                 src={`${R2_BASE_URL}/${logo.media.object_key}`}
-                alt={logo.media.alt_text || 'Home'}
+                alt={logo.media.alt_text || siteTitle || 'Nextblock'}
                 width={logo.media.width || 100}
                 height={logo.media.height || 32}
                 className="h-14 w-auto object-contain"
                 priority
               />
             ) : (
-              <span className="text-xl font-semibold text-foreground">
-                {siteTitle}
-              </span>
+              <Image
+                src={FALLBACK_LOGO_PATH}
+                alt={siteTitle || 'Nextblock'}
+                width={120}
+                height={40}
+                className="h-14 w-auto object-contain"
+                priority
+              />
             )}
           </Link>
           {/* Desktop: Additional Nav items */}

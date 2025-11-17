@@ -13,6 +13,7 @@ import { Button } from "@nextblock-cms/ui"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
 import { cn } from "@nextblock-cms/utils"
 import { signOutAction } from "@/app/actions";
+import Image from "next/image";
 
 const LoadingSpinner = () => (
   <div className="flex justify-center items-center h-full w-full py-20">
@@ -212,11 +213,16 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
         <div className="flex flex-col h-full">
           <div className="p-4 border-b dark:border-slate-700/60 h-16 flex items-center shrink-0">
             <Link href="/cms/dashboard" className="flex items-center gap-2 px-2">
-              <div className="h-8 w-8 rounded-md bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center text-white font-bold">
-                NRH
-              </div>
-              <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70 dark:from-primary dark:to-primary/80">
-                CMS
+              <Image
+                src="/images/nextblock-logo-small.webp"
+                alt="Nextblock logo"
+                width={32}
+                height={32}
+                className="h-8 w-auto"
+                priority
+              />
+              <h2 className="text-xl font-bold text-foreground">
+                Nextblock CMS
               </h2>
             </Link>
           </div>

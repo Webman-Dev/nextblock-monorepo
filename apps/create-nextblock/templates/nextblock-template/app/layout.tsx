@@ -49,7 +49,7 @@ async function loadLayoutData() {
   ] = await Promise.all([
     supabase.auth.getUser(),
     getActiveLanguagesServerSide().catch(() => []),
-    getCopyrightSettings().catch(() => ({ en: 'Ac {year} My Ultra-Fast CMS. All rights reserved.' })),
+    getCopyrightSettings().catch(() => ({ en: '© {year} Nextblock CMS. All rights reserved.' })),
     getTranslations().catch(() => []),
   ]);
 
@@ -66,7 +66,7 @@ async function loadLayoutData() {
 
   const copyrightSettings = copyrightSettingsResult as Record<string, string>;
   const fallbackTemplate =
-    copyrightSettings['en'] ?? 'Ac {year} My Ultra-Fast CMS. All rights reserved.';
+    copyrightSettings['en'] ?? '© {year} Nextblock CMS. All rights reserved.';
   const templateForLocale =
     copyrightSettings[serverDeterminedLocale] ?? fallbackTemplate;
   const copyrightText = templateForLocale.replace('{year}', new Date().getFullYear().toString());
@@ -82,7 +82,7 @@ async function loadLayoutData() {
 
   const role = profile?.role ?? null;
   const canAccessCms = role === 'ADMIN' || role === 'WRITER';
-  const siteTitle = logo?.site_title ?? 'NRH';
+  const siteTitle = logo?.site_title ?? 'Nextblock';
 
   return {
     user,
@@ -104,8 +104,8 @@ async function loadLayoutData() {
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: 'My Ultra-Fast CMS',
-  description: 'A block-based TypeScript CMS with Next.js and Supabase',
+  title: 'Nextblock CMS',
+  description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
 };
 
 export default async function RootLayout({

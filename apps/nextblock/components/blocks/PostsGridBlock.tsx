@@ -40,13 +40,18 @@ const PostsGridBlock: React.FC<PostsGridBlockProps> = async ({ block, languageId
     console.error("Error fetching initial posts directly in PostsGridBlock:", queryError);
     postsError = queryError.message;
   } else {
+    const buildMediaUrl = (objectKey?: string | null) => {
+      if (!objectKey) return null;
+      if (objectKey.startsWith('/')) return objectKey;
+      const base = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
+      return base ? `${base}/${objectKey}` : objectKey;
+    };
+
     initialPosts = (postsData as any)?.map((p: any) => {
       // feature_media_object is an object here, not an array, due to the query structure media!feature_image_id(object_key, width, height)
       // Cast to 'unknown' then to the expected single object type to satisfy TypeScript, reflecting runtime reality.
       const mediaObject = p.feature_media_object as unknown as { object_key: string; width?: number | null; height?: number | null; blur_data_url?: string | null } | null;
-      const imageUrl = mediaObject?.object_key
-        ? `${process.env.NEXT_PUBLIC_R2_BASE_URL}/${mediaObject.object_key}`
-        : null;
+      const imageUrl = buildMediaUrl(mediaObject?.object_key);
       return {
         ...p,
         // Convert feature_media_object to array format to match the type

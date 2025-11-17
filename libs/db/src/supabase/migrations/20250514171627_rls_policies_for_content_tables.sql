@@ -8,12 +8,7 @@ begin;
 --
 alter table public.pages enable row level security;
 
--- allow anonymous and authenticated users to read published pages
-create policy "pages_are_publicly_readable_when_published"
-on public.pages for select
-to anon, authenticated
-using (status = 'published');
-
+drop policy if exists "authors_writers_admins_can_read_own_or_all_drafts" on public.pages;
 -- allow authenticated users (authors, writers, admins) to read their own or all non-published pages
 create policy "authors_writers_admins_can_read_own_or_all_drafts"
 on public.pages for select
@@ -28,6 +23,7 @@ using (
 --
 alter table public.posts enable row level security;
 
+drop policy if exists "authors_writers_admins_can_read_own_or_all_draft_posts" on public.posts;
 -- allow authenticated users (authors, writers, admins) to read their own or all non-published posts
 create policy "authors_writers_admins_can_read_own_or_all_draft_posts"
 on public.posts for select
@@ -48,6 +44,7 @@ alter table public.media enable row level security;
 --
 alter table public.blocks enable row level security;
 
+drop policy if exists "blocks_are_readable_if_parent_is_published" on public.blocks;
 -- allow anonymous and authenticated users to read blocks if their parent page/post is published
 create policy "blocks_are_readable_if_parent_is_published"
 on public.blocks for select
@@ -58,6 +55,7 @@ using (
 );
 
 -- allow admins and writers to insert, update, delete blocks
+drop policy if exists "admins_and_writers_can_manage_blocks" on public.blocks;
 create policy "admins_and_writers_can_manage_blocks"
 on public.blocks for all
 to authenticated
