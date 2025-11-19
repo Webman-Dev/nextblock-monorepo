@@ -146,7 +146,7 @@ It features:
         * `app/cms/[entity]/`: CRUD pages for different content types (pages, posts, media, users, navigation, languages).
         * `app/cms/blocks/`: Components and actions related to the block editor.
     * `app/[slug]/`: Dynamic route for public "Pages".
-    * `app/blog/[slug]/`: Dynamic route for public "Posts".
+    * `app/article/[slug]/`: Dynamic route for public "Articles".
     * `app/api/`: API routes (e.g., for revalidation, R2 pre-signed URLs).
 * `components/`: Shared UI components (shadcn/ui based).
     * `components/ui/`: shadcn/ui components.

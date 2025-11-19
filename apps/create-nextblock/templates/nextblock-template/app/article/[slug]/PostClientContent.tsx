@@ -1,4 +1,4 @@
-// app/blog/[slug]/PostClientContent.tsx
+// app/article/[slug]/PostClientContent.tsx
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -29,6 +29,8 @@ export default function PostClientContent({ initialPostData, currentSlug, childr
   const { currentContent, setCurrentContent } = useCurrentContent();
   const router = useRouter();
   
+  const currentPrefix = "articles";
+
   // currentPostData is always for the slug in the URL.
   // It's initially set by the server. It only changes if the URL itself changes (which happens on language switch).
   const [currentPostData, setCurrentPostData] = useState(initialPostData);
@@ -48,7 +50,7 @@ export default function PostClientContent({ initialPostData, currentSlug, childr
       const targetSlug = translatedSlugs[currentLocale];
 
       if (targetSlug && targetSlug !== currentSlug) {
-        router.push(`/blog/${targetSlug}`); // Navigate to the translated slug's URL
+        router.push(`/article/${targetSlug}`); // Navigate to the translated slug's URL
       } else if (!targetSlug) {
         console.warn(`No published translation found for post group ${initialPostData.translation_group_id} in language ${currentLocale} using pre-fetched slugs.`);
         // Optionally, provide user feedback here (e.g., a toast message)
@@ -114,10 +116,10 @@ export default function PostClientContent({ initialPostData, currentSlug, childr
     // This is a fallback or could indicate an issue if reached.
     return (
       <div className="container mx-auto px-4 py-8 text-center">
-        <h1 className="text-2xl font-bold mb-4">Post Not Found</h1>
-        <p className="text-muted-foreground">The post for slug &quot;{currentSlug}&quot; could not be loaded.</p>
+        <h1 className="text-2xl font-bold mb-4">Article Not Found</h1>
+        <p className="text-muted-foreground">The article for slug &quot;{currentSlug}&quot; could not be loaded.</p>
         <p className="mt-4">
-          <Link href="/blog" className="text-primary hover:underline">Back to Blog</Link>
+          <Link href={`/${currentPrefix}`} className="text-primary hover:underline">Back to Articles</Link>
           <span className="mx-2">|</span>
           <Link href="/" className="text-primary hover:underline">Go to Homepage</Link>
         </p>
@@ -127,12 +129,12 @@ export default function PostClientContent({ initialPostData, currentSlug, childr
   
   // If initialPostData was null but we are still loading language context or trying to navigate
   if (!currentPostData && (isLoadingLanguages || isLoadingTargetLang)) {
-     return <div className="container mx-auto px-4 py-20 text-center"><p>Loading post content...</p></div>;
+     return <div className="container mx-auto px-4 py-20 text-center"><p>Loading article content...</p></div>;
   }
 
   // If after all attempts, currentPostData is still null (should be caught by notFound in server component ideally)
   if (!currentPostData) {
-     return <div className="container mx-auto px-4 py-20 text-center"><p>Could not load post content for &quot;{currentSlug}&quot;.</p></div>;
+     return <div className="container mx-auto px-4 py-20 text-center"><p>Could not load article content for &quot;{currentSlug}&quot;.</p></div>;
   }
 
   return (

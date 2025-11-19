@@ -136,10 +136,11 @@ export async function createLanguage(formData: FormData) {
 
   revalidatePath("/cms/settings/languages");
   revalidatePath("/"); // Revalidate home page as language switcher might change
+  revalidatePath("/cms/settings/extra-translations");
   if (data?.id) {
-    redirect(`/cms/settings/languages/${data.id}/edit?success=Language created successfully`);
+    redirect(`/cms/settings/extra-translations?language=${encodeURIComponent(data.code)}&success=${encodeURIComponent("Language created successfully. Please fill the extra translations.")}`);
   } else {
-    redirect(`/cms/settings/languages?success=Language created successfully`);
+    redirect(`/cms/settings/extra-translations?success=${encodeURIComponent("Language created successfully. Please fill the extra translations.")}`);
   }
 }
 

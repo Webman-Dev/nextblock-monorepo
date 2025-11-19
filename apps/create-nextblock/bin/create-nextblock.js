@@ -1,18 +1,23 @@
 #!/usr/bin/env node
 
+import * as clack from '@clack/prompts';
 import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
 import { dirname, resolve, relative, sep, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { execa } from 'execa';
 import { program } from 'commander';
-import inquirer from 'inquirer';
 import chalk from 'chalk';
 import fs from 'fs-extra';
+import open from 'open';
 
 const DEFAULT_PROJECT_NAME = 'nextblock-cms';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const TEMPLATE_DIR = resolve(__dirname, '../templates/nextblock-template');
 const REPO_ROOT = resolve(__dirname, '../../..');
+const require = createRequire(import.meta.url);
 const EDITOR_UTILS_SOURCE_DIR = resolve(REPO_ROOT, 'libs/editor/src/lib/utils');
 const IS_WINDOWS = process.platform === 'win32';
 
@@ -72,16 +77,16 @@ async function handleCommand(projectDirectory, options) {
         projectName = DEFAULT_PROJECT_NAME;
         console.log(chalk.blue(`Using default project name because --yes was provided: ${projectName}`));
       } else {
-        const answers = await inquirer.prompt([
-          {
-            type: 'input',
-            name: 'projectName',
-            message: 'What is your project named?',
-            default: DEFAULT_PROJECT_NAME,
-          },
-        ]);
+        const projectPrompt = await clack.text({
+          message: 'What is your project named?',
+          initialValue: DEFAULT_PROJECT_NAME,
+          validate: (value) => (!value ? 'Project name is required' : undefined),
+        });
+        if (clack.isCancel(projectPrompt)) {
+          handleWizardCancel('Setup cancelled.');
+        }
 
-        projectName = answers.projectName?.trim() || DEFAULT_PROJECT_NAME;
+        projectName = projectPrompt.trim() || DEFAULT_PROJECT_NAME;
       }
     }
 
@@ -148,25 +153,345 @@ async function handleCommand(projectDirectory, options) {
       console.log(chalk.yellow('Skipping dependency installation.'));
     }
 
-    await initializeGit(projectDir);
-    console.log(chalk.green('Initialized a new Git repository.'));
+    // Run setup wizard after dependencies are installed so package assets are available
+    if (!yes) {
+      await runSetupWizard(projectDir, projectName);
+    } else {
+      console.log(chalk.yellow('Skipping interactive setup wizard because --yes was provided.'));
+    }
 
-    console.log(
-      chalk.green(
-        `\nSuccess! Your NextBlock CMS project "${projectName}" is ready.\n\n` +
-          'Next steps:\n' +
-          `1. \`cd ${projectName}\`\n` +
-          '2. Copy your existing `.env` file or rename `.env.example` to `.env` and fill in your credentials.\n' +
-          '3. `npm run dev` to start the development server.\n\n' +
-          'Happy building!',
-      ),
-    );
+    await initializeGit(projectDir);
+
+    console.log(chalk.green(`\nSuccess! Your NextBlock CMS project "${projectName}" is ready.\n`));
+    console.log(chalk.cyan('Next step:'));
+    console.log(chalk.cyan(`  cd ${projectName} && npm run dev`));
   } catch (error) {
     console.error(
       chalk.red(error instanceof Error ? error.message : 'An unexpected error occurred'),
     );
     process.exit(1);
   }
+}
+
+async function runSetupWizard(projectDir, projectName) {
+  const projectPath = resolve(projectDir);
+  process.chdir(projectPath);
+
+  clack.intro('🚀 Welcome to the NextBlock setup wizard!');
+
+  const supabaseDir = resolve(projectPath, 'supabase');
+  await fs.ensureDir(supabaseDir);
+  await resetSupabaseProjectRef(projectPath);
+
+  clack.note('Connecting to Supabase...');
+  clack.note('I will now open your browser to log into Supabase.');
+  await runSupabaseCli(['login'], { cwd: projectPath });
+
+  clack.note('Now, please select your NextBlock project when prompted.');
+  await runSupabaseCli(['link'], { cwd: projectPath });
+  if (process.stdin.isTTY) {
+    try {
+      process.stdin.setRawMode(false);
+    } catch (_) {
+      // ignore
+    }
+    process.stdin.setEncoding('utf8');
+    process.stdin.resume();
+  }
+
+  let projectId = await readSupabaseProjectRef(projectPath);
+
+  if (!projectId) {
+    clack.note('I could not detect your Supabase project ref automatically.');
+    const manual = await clack.text({
+      message:
+        'Enter your Supabase project ref (from the Supabase dashboard URL or the link output, e.g., abcdefghijklmnopqrstu):',
+      validate: (val) => (!val ? 'Project ref is required' : undefined),
+    });
+    if (clack.isCancel(manual)) {
+      handleWizardCancel('Setup cancelled.');
+    }
+    projectId = manual.trim();
+  }
+  await ensureSupabaseAssets(projectPath, { required: true });
+
+  const siteUrlPrompt = await clack.text({
+    message: 'What is the public URL of your site? (NEXT_PUBLIC_URL)',
+    initialValue: 'http://localhost:3000',
+    validate: (val) => (!val ? 'URL is required' : undefined),
+  });
+  if (clack.isCancel(siteUrlPrompt)) {
+    handleWizardCancel('Setup cancelled.');
+  }
+  const siteUrl = siteUrlPrompt.trim();
+
+  clack.note('Please go to your Supabase project dashboard to get the following secrets.');
+  const supabaseKeys = await clack.group(
+    {
+      dbPassword: () =>
+        clack.password({
+          message: 'What is your Database Password? (Settings > Database > Connection Parameters)',
+          validate: (val) => (!val ? 'Password is required' : undefined),
+        }),
+      anonKey: () =>
+        clack.password({
+          message: 'What is your Project API Key (anon key)? (Settings > API > Project API Keys)',
+          validate: (val) => (!val ? 'Anon Key is required' : undefined),
+        }),
+      serviceKey: () =>
+        clack.password({
+          message: 'What is your Service Role Key (service_role key)? (Settings > API > Project API Keys)',
+          validate: (val) => (!val ? 'Service Role Key is required' : undefined),
+        }),
+    },
+    { onCancel: () => handleWizardCancel('Setup cancelled.') },
+  );
+
+  clack.note('Generating local secrets...');
+  const revalidationToken = crypto.randomBytes(32).toString('hex');
+  const supabaseUrl = `https://${projectId}.supabase.co`;
+
+  const dbHost = `db.${projectId}.supabase.co`;
+  const dbUser = 'postgres';
+  const dbPassword = supabaseKeys.dbPassword;
+  const dbName = 'postgres';
+
+  const postgresUrl = `postgresql://${dbUser}:${dbPassword}@${dbHost}:5432/${dbName}`;
+
+  const envPath = resolve(projectPath, '.env');
+  const appendEnvBlock = async (label, lines) => {
+    const normalized = lines.join('\n');
+    const blockContent = normalized.endsWith('\n') ? normalized : `${normalized}\n`;
+    if (canWriteEnv) {
+      await fs.appendFile(envPath, blockContent);
+    } else {
+      clack.note(`Add the following ${label} values to your existing .env:\n${blockContent}`);
+    }
+  };
+  const envLines = [
+    `NEXT_PUBLIC_URL=${siteUrl}`,
+    '# Vercel / Supabase',
+    `SUPABASE_PROJECT_ID=${projectId}`,
+    `NEXT_PUBLIC_SUPABASE_URL=${supabaseUrl}`,
+    `NEXT_PUBLIC_SUPABASE_ANON_KEY=${supabaseKeys.anonKey}`,
+    `SUPABASE_SERVICE_ROLE_KEY=${supabaseKeys.serviceKey}`,
+    `POSTGRES_URL=${postgresUrl}`,
+    '',
+    '# Revalidation',
+    `REVALIDATE_SECRET_TOKEN=${revalidationToken}`,
+    '',
+  ];
+
+  let canWriteEnv = true;
+  if (await fs.pathExists(envPath)) {
+    const overwrite = await clack.confirm({
+      message: '.env already exists. Overwrite with generated values?',
+      initialValue: false,
+    });
+    if (clack.isCancel(overwrite)) {
+      handleWizardCancel('Setup cancelled.');
+    }
+    if (!overwrite) {
+      canWriteEnv = false;
+      clack.note('Keeping existing .env. Add/merge the generated values manually.');
+    }
+  }
+
+  if (canWriteEnv) {
+    await fs.writeFile(envPath, envLines.join('\n'));
+    clack.note('Supabase configuration saved to .env');
+  }
+
+  clack.note('Setting up your database...');
+  const dbPushSpinner = clack.spinner();
+  dbPushSpinner.start('Pushing database schema... (~10-15 minutes, please keep this terminal open)');
+  try {
+    process.env.POSTGRES_URL = postgresUrl;
+    const migrationsDir = resolve(projectPath, 'supabase', 'migrations');
+    const hasMigrations = async () =>
+      (await fs.pathExists(migrationsDir)) &&
+      (await fs.readdir(migrationsDir)).some((name) => name.endsWith('.sql'));
+
+    if (!(await hasMigrations())) {
+      await ensureSupabaseAssets(projectPath);
+    }
+
+    if (!(await hasMigrations())) {
+      dbPushSpinner.stop(
+        `No migrations found in ${migrationsDir}; skipping db push. Ensure @nextblock-cms/db includes supabase/migrations.`,
+      );
+    } else {
+      await execa('npx', ['supabase', 'db', 'push'], { stdio: 'inherit', cwd: projectPath });
+      dbPushSpinner.stop('Database schema pushed successfully!');
+    }
+  } catch (error) {
+    dbPushSpinner.stop('Database push failed. Please run `npx supabase db push` manually.');
+    if (error instanceof Error) {
+      clack.note(error.message);
+    }
+  }
+
+  const setupR2 = await clack.confirm({
+    message: 'Do you want to set up Cloudflare R2 for media storage now? (Optional)',
+  });
+  if (clack.isCancel(setupR2)) {
+    handleWizardCancel('Setup cancelled.');
+  }
+
+  let r2Values = {
+    publicBaseUrl: '',
+    accountId: '',
+    bucketName: '',
+    accessKey: '',
+    secretKey: '',
+  };
+
+  if (setupR2) {
+    clack.note('I will open your browser to the R2 dashboard.\nYou need to create a bucket and an R2 API Token.');
+    await open('https://dash.cloudflare.com/?to=/:account/r2', { wait: false });
+
+    const r2Keys = await clack.group(
+      {
+        accountId: () =>
+          clack.text({
+            message: 'R2: Paste your Cloudflare Account ID:',
+            validate: (val) => (!val ? 'Account ID is required' : undefined),
+          }),
+        bucketName: () =>
+          clack.text({
+            message: 'R2: Paste your Bucket Name:',
+            validate: (val) => (!val ? 'Bucket name is required' : undefined),
+          }),
+        accessKey: () =>
+          clack.password({
+            message: 'R2: Paste your Access Key ID:',
+            validate: (val) => (!val ? 'Access Key ID is required' : undefined),
+          }),
+        secretKey: () =>
+          clack.password({
+            message: 'R2: Paste your Secret Access Key:',
+            validate: (val) => (!val ? 'Secret Access Key is required' : undefined),
+          }),
+        publicBaseUrl: () =>
+          clack.text({
+            message: 'R2: Public Base URL (e.g., https://pub-xxx.r2.dev/your-bucket):',
+            validate: (val) => (!val ? 'Public base URL is required' : undefined),
+          }),
+      },
+      { onCancel: () => handleWizardCancel('Setup cancelled.') },
+    );
+
+    r2Values = {
+      publicBaseUrl: r2Keys.publicBaseUrl,
+      accountId: r2Keys.accountId,
+      bucketName: r2Keys.bucketName,
+      accessKey: r2Keys.accessKey,
+      secretKey: r2Keys.secretKey,
+    };
+  }
+
+  await appendEnvBlock('Cloudflare R2', [
+    '',
+    '# Cloudflare',
+    `NEXT_PUBLIC_R2_BASE_URL=${r2Values.publicBaseUrl}`,
+    `R2_ACCOUNT_ID=${r2Values.accountId}`,
+    `R2_BUCKET_NAME=${r2Values.bucketName}`,
+    `R2_ACCESS_KEY_ID=${r2Values.accessKey}`,
+    `R2_SECRET_ACCESS_KEY=${r2Values.secretKey}`,
+    '',
+  ]);
+  if (setupR2) {
+    clack.note('Cloudflare R2 configuration saved!');
+  } else if (canWriteEnv) {
+    clack.note('Cloudflare R2 placeholders added to .env. Configure them later when ready.');
+  }
+
+  const setupSMTP = await clack.confirm({
+    message: 'Do you want to set up an SMTP server for emails now? (Optional)',
+  });
+  if (clack.isCancel(setupSMTP)) {
+    handleWizardCancel('Setup cancelled.');
+  }
+
+  let smtpValues = {
+    host: '',
+    port: '',
+    user: '',
+    pass: '',
+    fromEmail: '',
+    fromName: '',
+  };
+
+  if (setupSMTP) {
+    const smtpKeys = await clack.group(
+      {
+        host: () =>
+          clack.text({
+            message: 'SMTP: Host (e.g., smtp.resend.com):',
+            validate: (val) => (!val ? 'SMTP host is required' : undefined),
+          }),
+        port: () =>
+          clack.text({
+            message: 'SMTP: Port (e.g., 465):',
+            validate: (val) => (!val ? 'SMTP port is required' : undefined),
+          }),
+        user: () =>
+          clack.text({
+            message: 'SMTP: User (e.g., apikey):',
+            validate: (val) => (!val ? 'SMTP user is required' : undefined),
+          }),
+        pass: () =>
+          clack.password({
+            message: 'SMTP: Password:',
+            validate: (val) => (!val ? 'SMTP password is required' : undefined),
+          }),
+        fromEmail: () =>
+          clack.text({
+            message: 'SMTP: From Email (e.g., onboarding@my.site):',
+            validate: (val) => (!val ? 'From email is required' : undefined),
+          }),
+        fromName: () =>
+          clack.text({
+            message: 'SMTP: From Name (e.g., NextBlock):',
+            validate: (val) => (!val ? 'From name is required' : undefined),
+          }),
+      },
+      { onCancel: () => handleWizardCancel('Setup cancelled.') },
+    );
+
+    smtpValues = {
+      host: smtpKeys.host,
+      port: smtpKeys.port,
+      user: smtpKeys.user,
+      pass: smtpKeys.pass,
+      fromEmail: smtpKeys.fromEmail,
+      fromName: smtpKeys.fromName,
+    };
+  }
+
+  await appendEnvBlock('SMTP', [
+    '',
+    '# Email SMTP Configuration',
+    `SMTP_HOST=${smtpValues.host}`,
+    `SMTP_PORT=${smtpValues.port}`,
+    `SMTP_USER=${smtpValues.user}`,
+    `SMTP_PASS=${smtpValues.pass}`,
+    `SMTP_FROM_EMAIL=${smtpValues.fromEmail}`,
+    `SMTP_FROM_NAME=${smtpValues.fromName}`,
+    '',
+  ]);
+  if (setupSMTP) {
+    clack.note('SMTP configuration saved!');
+  } else if (canWriteEnv) {
+    clack.note('SMTP placeholders added to .env. Configure them later when ready.');
+  }
+
+  clack.outro(`🎉 Your NextBlock project ${projectName ? `"${projectName}" ` : ''}is ready!`);
+}
+
+function handleWizardCancel(message) {
+  clack.cancel(message ?? 'Setup cancelled.');
+  process.exit(1);
 }
 
 async function ensureEmptyDirectory(projectDir) {
@@ -359,14 +684,162 @@ async function ensureEnvExample(projectDir) {
   }
 
   const placeholder = `# Environment variables for NextBlock CMS
+NEXT_PUBLIC_URL=
+# Vercel / Supabase
+SUPABASE_PROJECT_ID=
+POSTGRES_URL=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-SUPABASE_JWT_SECRET=
-NEXT_PUBLIC_URL=http://localhost:3000
+
+# Cloudflare
+NEXT_PUBLIC_R2_BASE_URL=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=
+R2_ACCOUNT_ID=
+
+REVALIDATE_SECRET_TOKEN=
+
+# Email SMTP Configuration
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM_EMAIL=
+SMTP_FROM_NAME=
 `;
 
   await fs.writeFile(destination, placeholder);
+}
+
+async function ensureSupabaseAssets(projectDir, options = {}) {
+  const { required = false } = options;
+  const destSupabaseDir = resolve(projectDir, 'supabase');
+  await fs.ensureDir(destSupabaseDir);
+
+  const { dir: packageSupabaseDir, triedPaths } = await resolvePackageSupabaseDir(projectDir);
+  if (!packageSupabaseDir) {
+    const message =
+      'Unable to locate supabase assets in @nextblock-cms/db. Please ensure dependencies are installed.' +
+      (triedPaths.length > 0 ? `\nChecked:\n - ${triedPaths.join('\n - ')}` : '');
+    if (required) {
+      throw new Error(message);
+    } else {
+      clack.note(message);
+      return { migrationsCopied: false, configCopied: false, projectId: null };
+    }
+  }
+
+  let migrationsCopied = false;
+  let configCopied = false;
+
+  const sourceConfigPath = resolve(packageSupabaseDir, 'config.toml');
+  const destinationConfigPath = resolve(destSupabaseDir, 'config.toml');
+  if (await fs.pathExists(sourceConfigPath)) {
+    await fs.copy(sourceConfigPath, destinationConfigPath, { overwrite: true, errorOnExist: false });
+    configCopied = true;
+  }
+
+  const sourceMigrations = resolve(packageSupabaseDir, 'migrations');
+  const destMigrations = resolve(destSupabaseDir, 'migrations');
+  if (await fs.pathExists(sourceMigrations)) {
+    await fs.copy(sourceMigrations, destMigrations, { overwrite: true, errorOnExist: false });
+    migrationsCopied = true;
+  }
+
+  if (required) {
+    if (!configCopied) {
+      throw new Error(
+        `Missing supabase/config.toml in the installed @nextblock-cms/db package (checked ${packageSupabaseDir}).`,
+      );
+    }
+    if (!migrationsCopied) {
+      throw new Error(
+        `Missing supabase/migrations in the installed @nextblock-cms/db package (checked ${packageSupabaseDir}).`,
+      );
+    }
+  }
+
+  return { migrationsCopied, configCopied };
+}
+
+async function resolvePackageSupabaseDir(projectDir) {
+  const triedPaths = [];
+  const candidateBases = new Set();
+
+  const installDir = resolve(projectDir, 'node_modules', '@nextblock-cms', 'db');
+  candidateBases.add(installDir);
+
+  const tryResolveFrom = (fromPath) => {
+    try {
+      const resolver = createRequire(fromPath);
+      const pkgPath = resolver.resolve('@nextblock-cms/db/package.json');
+      return dirname(pkgPath);
+    } catch {
+      return null;
+    }
+  };
+
+  const projectPkg = resolve(projectDir, 'package.json');
+  const resolvedProject = tryResolveFrom(projectPkg);
+  if (resolvedProject) {
+    candidateBases.add(resolvedProject);
+    const parent = dirname(resolvedProject);
+    candidateBases.add(parent);
+  }
+
+  const localResolve = tryResolveFrom(__filename);
+  if (localResolve) {
+    candidateBases.add(localResolve);
+    candidateBases.add(dirname(localResolve));
+  }
+
+  candidateBases.add(REPO_ROOT);
+  candidateBases.add(resolve(REPO_ROOT, 'libs', 'db'));
+  candidateBases.add(resolve(REPO_ROOT, 'dist', 'libs', 'db'));
+
+  const candidateSegments = [
+    'supabase',
+    'src/supabase',
+    'dist/supabase',
+    'dist/libs/db/supabase',
+    'dist/lib/supabase',
+    'lib/supabase',
+  ];
+
+  for (const base of Array.from(candidateBases).filter(Boolean)) {
+    for (const segment of candidateSegments) {
+      const candidate = resolve(base, segment);
+      triedPaths.push(candidate);
+      if (await fs.pathExists(candidate)) {
+        return { dir: candidate, triedPaths };
+      }
+    }
+  }
+
+  return { dir: null, triedPaths };
+}
+
+async function readSupabaseProjectRef(projectDir) {
+  const projectRefPath = resolve(projectDir, 'supabase', '.temp', 'project-ref');
+  if (await fs.pathExists(projectRefPath)) {
+    const value = (await fs.readFile(projectRefPath, 'utf8')).trim();
+    if (/^[a-z0-9]{20,}$/i.test(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+async function resetSupabaseProjectRef(projectDir) {
+  const tempDir = resolve(projectDir, 'supabase', '.temp');
+  await fs.ensureDir(tempDir);
+  const projectRefPath = resolve(tempDir, 'project-ref');
+  if (await fs.pathExists(projectRefPath)) {
+    await fs.remove(projectRefPath);
+  }
 }
 
 async function ensureClientComponents(projectDir) {
@@ -853,6 +1326,29 @@ function runCommand(command, args, options = {}) {
         resolve();
       } else {
         reject(new Error(`${command} exited with code ${code}`));
+      }
+    });
+  });
+}
+
+async function runSupabaseCli(args, options = {}) {
+  const { cwd } = options;
+  return new Promise((resolve, reject) => {
+    const child = spawn('npx', ['supabase', ...args], {
+      cwd,
+      shell: IS_WINDOWS,
+      stdio: 'inherit',
+    });
+
+    child.on('error', (error) => {
+      reject(error);
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`supabase ${args.join(' ')} exited with code ${code}`));
       }
     });
   });

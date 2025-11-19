@@ -29,29 +29,55 @@ interface SelectedPageType extends PageType { // Assumes PageType includes field
   blocks: BlockType[];
 }
 
-export async function getPageDataBySlug(slug: string): Promise<(PageType & { blocks: BlockType[]; language_code: string; language_id: number; translation_group_id: string | null; }) | null> {
+export async function getPageDataBySlug(
+  slug: string,
+  preferredLanguageCode?: string,
+): Promise<(PageType & { blocks: BlockType[]; language_code: string; language_id: number; translation_group_id: string | null; }) | null> {
   const supabase = getSsgSupabaseClient();
 
-  // Optimized query with specific field selection instead of *
-  const { data: candidatePagesData, error: pageError } = await supabase
-    .from("pages")
-    .select(`
+  const baseSelect = `
       id, slug, title, meta_title, meta_description, status, language_id, translation_group_id, author_id, created_at, updated_at,
       language_details:languages!inner(id, code),
       blocks (id, page_id, block_type, content, order)
-    `)
-    .eq("slug", slug)
-    .eq("status", "published")
-    .order('order', { foreignTable: 'blocks', ascending: true });
+    `;
 
-  if (pageError) {
-    return null;
+  const toSelected = (rows: any[] | null | undefined): SelectedPageType[] =>
+    (rows || []).map(page => ({
+      ...page,
+      language_details: Array.isArray(page.language_details) ? page.language_details[0] : page.language_details,
+    })) as SelectedPageType[];
+
+  let candidatePages: SelectedPageType[] = [];
+
+  // First try to fetch the preferred language explicitly when provided
+  if (preferredLanguageCode) {
+    const { data: preferredData, error: preferredError } = await supabase
+      .from("pages")
+      .select(baseSelect)
+      .eq("slug", slug)
+      .eq("status", "published")
+      .eq("languages.code", preferredLanguageCode)
+      .order('order', { foreignTable: 'blocks', ascending: true })
+      .maybeSingle();
+    if (!preferredError && preferredData) {
+      candidatePages = toSelected([preferredData]);
+    }
   }
 
-  const candidatePages: SelectedPageType[] = (candidatePagesData || []).map(page => ({
-    ...page,
-    language_details: Array.isArray(page.language_details) ? page.language_details[0] : page.language_details
-  })) as SelectedPageType[];
+  // Fallback: fetch all published pages with this slug
+  if (candidatePages.length === 0) {
+    const { data: candidatePagesData, error: pageError } = await supabase
+      .from("pages")
+      .select(baseSelect)
+      .eq("slug", slug)
+      .eq("status", "published")
+      .order('order', { foreignTable: 'blocks', ascending: true });
+
+    if (pageError) {
+      return null;
+    }
+    candidatePages = toSelected(candidatePagesData);
+  }
 
   if (candidatePages.length === 0) {
     return null;
@@ -59,14 +85,35 @@ export async function getPageDataBySlug(slug: string): Promise<(PageType & { blo
 
   let selectedPage: SelectedPageType | null = null;
 
-  if (candidatePages.length === 1) {
+  if (preferredLanguageCode) {
+    selectedPage = candidatePages.find(
+      p => p.language_details && p.language_details.code === preferredLanguageCode,
+    ) || null;
+  }
+
+  if (!selectedPage && candidatePages.length === 1) {
     selectedPage = candidatePages[0];
-  } else {
+  }
+
+  if (!selectedPage) {
+    // Prefer default language if available
+    const { data: defaultLang } = await supabase
+      .from('languages')
+      .select('id, code')
+      .eq('is_default', true)
+      .maybeSingle();
+    if (defaultLang) {
+      const match = candidatePages.find(p => p.language_details && p.language_details.id === defaultLang.id);
+      if (match) selectedPage = match;
+    }
+  }
+
+  if (!selectedPage) {
     const enPage = candidatePages.find(p => p.language_details && p.language_details.code === 'en');
     if (enPage) {
       selectedPage = enPage;
     } else {
-      return null;
+      selectedPage = candidatePages[0];
     }
   }
   

@@ -1,4 +1,4 @@
-// app/blog/[slug]/page.tsx
+// app/article/[slug]/page.tsx
 import React from 'react';
 // Remove or alias the problematic import if only used by other functions:
 // import { createClient } from "@nextblock-cms/db/server";
@@ -27,8 +27,19 @@ interface PostTranslation {
   slug: string;
   languages: {
     code: string;
-  }[];
+  }[] | { code: string };
 }
+
+const resolveLanguageCode = (languagesField: PostTranslation["languages"]): string | null => {
+  if (!languagesField) return null;
+  if (Array.isArray(languagesField)) {
+    return languagesField[0]?.code ?? null;
+  }
+  if (typeof languagesField === 'object' && 'code' in languagesField) {
+    return (languagesField as { code?: string }).code ?? null;
+  }
+  return null;
+};
 
 export async function generateStaticParams(): Promise<ResolvedPostParams[]> {
   // Use a new Supabase client instance that doesn't rely on cookies
@@ -63,8 +74,8 @@ export async function generateMetadata(
 
   if (!postData) {
     return {
-      title: "Post Not Found",
-      description: "The post you are looking for does not exist or is not yet published.",
+      title: "Article Not Found",
+      description: "The article you are looking for does not exist or is not yet published.",
     };
   }
 
@@ -83,7 +94,7 @@ export async function generateMetadata(
     postTranslations.forEach(pt => {
       const langInfo = languages.find(l => l.id === pt.language_id);
       if (langInfo) {
-        alternates[langInfo.code] = `${siteUrl}/blog/${pt.slug}`;
+        alternates[langInfo.code] = `${siteUrl}/article/${pt.slug}`;
       }
     });
   }
@@ -96,7 +107,7 @@ export async function generateMetadata(
       description: postData.meta_description || postData.excerpt || "",
       type: 'article',
       publishedTime: postData.published_at || postData.created_at,
-      url: `${siteUrl}/blog/${params.slug}`,
+      url: `${siteUrl}/article/${params.slug}`,
       images: postData.feature_image_url
         ? [
             {
@@ -110,7 +121,7 @@ export async function generateMetadata(
         : undefined, // Or an empty array if you prefer: [],
     },
     alternates: {
-      canonical: `${siteUrl}/blog/${params.slug}`,
+      canonical: `${siteUrl}/article/${params.slug}`,
       languages: Object.keys(alternates).length > 0 ? alternates : undefined,
     },
   };
@@ -125,9 +136,9 @@ export default async function DynamicPostPage({ params: paramsPromise }: PostPag
     notFound();
   }
 
+  const supabase = getSsgSupabaseClient(); // Use SSG client
   const translatedSlugs: { [key: string]: string } = {};
   if (initialPostData.translation_group_id) {
-    const supabase = getSsgSupabaseClient(); // Use SSG client
     const { data: translations } = await supabase
       .from("posts")
       .select("slug, languages!inner(code)")
@@ -137,9 +148,8 @@ export default async function DynamicPostPage({ params: paramsPromise }: PostPag
 
     if (translations) {
       translations.forEach((translation: PostTranslation) => {
-        if (translation.languages && translation.languages.length > 0 && typeof translation.languages[0].code === 'string' && translation.slug) {
-          translatedSlugs[translation.languages[0].code] = translation.slug;
-        }
+        const code = resolveLanguageCode(translation.languages);
+        if (code && translation.slug) translatedSlugs[code] = translation.slug;
       });
     }
   }

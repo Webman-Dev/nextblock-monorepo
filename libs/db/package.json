@@ -1,6 +1,10 @@
 {
   "name": "@nextblock-cms/db",
-  "version": "0.1.0",
+  "version": "0.2.14",
+  "files": [
+    "dist",
+    "supabase"
+  ],
   "publishConfig": {
     "access": "public"
   }

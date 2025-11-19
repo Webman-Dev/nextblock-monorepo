@@ -1,6 +1,6 @@
 {
   "name": "create-nextblock",
-  "version": "0.1.0",
+  "version": "0.2.24",
   "description": "",
   "main": "index.js",
   "bin": {
@@ -16,10 +16,15 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@clack/prompts": "^0.8.1",
+    "@nextblock-cms/db": "latest",
     "chalk": "^5.6.2",
     "commander": "^14.0.1",
+    "execa": "^9.3.0",
     "fs-extra": "^11.3.2",
     "inquirer": "^12.10.0",
-    "ora": "^8.0.1"
+    "open": "^10.1.0",
+    "ora": "^8.0.1",
+    "picocolors": "^1.1.1"
   }
 }

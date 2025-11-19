@@ -7,9 +7,12 @@ import PageClientContent from "./PageClientContent";
 import { getPageDataBySlug } from "./page.utils";
 import BlockRenderer from "../../components/BlockRenderer";
 import type { HeroBlockContent } from '../../lib/blocks/blockRegistry';
+import { cookies, headers } from "next/headers";
 
 export const dynamicParams = true;
-export const revalidate = 3600;
+export const revalidate = 360;
+export const dynamic = 'force-dynamic'; // keeps per-request locale; paired with short revalidate
+export const fetchCache = 'force-no-store';
 
 interface ResolvedPageParams {
   slug: string;
@@ -44,7 +47,23 @@ export async function generateMetadata(
   { params: paramsPromise }: PageProps,
 ): Promise<Metadata> {
   const params = await paramsPromise;
-  const pageData = await getPageDataBySlug(params.slug);
+  let preferredLocale: string | undefined;
+  try {
+    const store = await cookies();
+    preferredLocale = store.get("NEXT_USER_LOCALE")?.value || store.get("NEXT_LOCALE")?.value;
+  } catch {
+    preferredLocale = undefined;
+  }
+  if (!preferredLocale) {
+    try {
+      const hdrs = await headers();
+      const al = hdrs.get("accept-language");
+      if (al) preferredLocale = al.split(",")[0]?.split("-")[0];
+    } catch {
+      // ignore header lookup errors
+    }
+  }
+  const pageData = await getPageDataBySlug(params.slug, preferredLocale);
 
   if (!pageData) {
     return { title: "Page Not Found" };
@@ -88,7 +107,23 @@ export async function generateMetadata(
 
 export default async function DynamicPage({ params: paramsPromise }: PageProps) {
   const params = await paramsPromise;
-  const pageData = await getPageDataBySlug(params.slug);
+  let preferredLocale: string | undefined;
+  try {
+    const store = await cookies();
+    preferredLocale = store.get("NEXT_USER_LOCALE")?.value || store.get("NEXT_LOCALE")?.value;
+  } catch {
+    preferredLocale = undefined;
+  }
+  if (!preferredLocale) {
+    try {
+      const hdrs = await headers();
+      const al = hdrs.get("accept-language");
+      if (al) preferredLocale = al.split(",")[0]?.split("-")[0];
+    } catch {
+      // ignore header lookup errors
+    }
+  }
+  const pageData = await getPageDataBySlug(params.slug, preferredLocale);
 
   if (!pageData) {
     notFound();

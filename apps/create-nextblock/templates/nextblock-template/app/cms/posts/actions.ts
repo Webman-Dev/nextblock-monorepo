@@ -114,7 +114,8 @@ export async function createPost(formData: FormData) {
   }
 
   revalidatePath("/cms/posts");
-  if (newPost?.slug) revalidatePath(`/blog/${newPost.slug}`);
+  if (newPost?.slug) revalidatePath(`/article/${newPost.slug}`);
+  revalidatePath("/articles");
 
   if (newPost?.id) {
     redirect(`/cms/posts/${newPost.id}/edit?success=${encodeURIComponent(successMessage)}`);
@@ -209,10 +210,11 @@ export async function updatePost(postId: number, formData: FormData) {
   }
 
   revalidatePath("/cms/posts");
-  if (existingPost.slug) revalidatePath(`/blog/${existingPost.slug}`);
+  if (existingPost.slug) revalidatePath(`/article/${existingPost.slug}`);
   if (rawFormData.slug && rawFormData.slug !== existingPost.slug) {
-      revalidatePath(`/blog/${rawFormData.slug}`);
+      revalidatePath(`/article/${rawFormData.slug}`);
   }
+  revalidatePath("/articles");
   revalidatePath(postEditPath);
   redirect(`${postEditPath}?success=Post updated successfully`);
 }
@@ -246,7 +248,7 @@ export async function deletePost(postId: number) {
 
   // 3. Delete All Associated Navigation Links
   if (relatedPosts && relatedPosts.length > 0) {
-    const urlsToDelete = relatedPosts.map(p => `/blog/${p.slug}`);
+    const urlsToDelete = relatedPosts.map(p => `/article/${p.slug}`);
     const { error: navError } = await supabase
       .from("navigation_items")
       .delete()
@@ -274,10 +276,11 @@ export async function deletePost(postId: number) {
   if (relatedPosts) {
     relatedPosts.forEach(p => {
       if (p.slug) {
-        revalidatePath(`/blog/${p.slug}`);
+        revalidatePath(`/article/${p.slug}`);
       }
     });
   }
+  revalidatePath("/articles");
 
   // 5. Update Redirect Message
   redirect(`/cms/posts?success=${encodeURIComponent("Post and all its translations were deleted successfully.")}`);

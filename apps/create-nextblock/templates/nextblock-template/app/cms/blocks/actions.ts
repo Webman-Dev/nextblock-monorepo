@@ -418,7 +418,7 @@ export async function copyBlocksFromLanguage(
             console.warn("Could not fetch target post slug for revalidation:", postError);
         } else {
             targetSlug = postData.slug;
-            if (targetSlug) revalidatePath(`/blog/${targetSlug}`);
+            if (targetSlug) revalidatePath(`/article/${targetSlug}`);
         }
         revalidatePath(`/cms/posts/${parentId}/edit`); // Revalidate edit page
     }

@@ -159,11 +159,11 @@ export default async function proxy(request: NextRequest) {
   } else if (pathname === '/') {
     finalResponse.headers.set('X-Page-Type', 'home');
     finalResponse.headers.set('X-Prefetch-Priority', 'high');
-  } else if (pathname === '/blog') {
-    finalResponse.headers.set('X-Page-Type', 'blog-index');
+  } else if (pathname === '/articles') {
+    finalResponse.headers.set('X-Page-Type', 'articles-index');
     finalResponse.headers.set('X-Prefetch-Priority', 'high');
-  } else if (pathname.startsWith('/blog/')) {
-    finalResponse.headers.set('X-Page-Type', 'blog-post');
+  } else if (pathname.startsWith('/article/')) {
+    finalResponse.headers.set('X-Page-Type', 'article');
     finalResponse.headers.set('X-Prefetch-Priority', 'medium');
   } else {
     const segments = pathname.split('/').filter(Boolean);
