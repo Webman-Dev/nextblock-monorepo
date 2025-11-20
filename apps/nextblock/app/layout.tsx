@@ -106,6 +106,17 @@ export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
   title: 'Nextblock CMS',
   description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
+  icons: {
+    icon: [
+      { url: '/favicon/favicon.ico' },
+      { url: '/favicon/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/favicon/apple-touch-icon.png' },
+    ],
+  },
+  manifest: '/favicon/site.webmanifest',
 };
 
 export default async function RootLayout({
