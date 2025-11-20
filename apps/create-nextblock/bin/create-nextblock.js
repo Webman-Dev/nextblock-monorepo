@@ -183,6 +183,13 @@ async function runSetupWizard(projectDir, projectName) {
   await fs.ensureDir(supabaseDir);
   await resetSupabaseProjectRef(projectPath);
 
+  clack.note(
+    "Before proceeding, ensure you have a Supabase project ready.\n\n" +
+    "1. Supabase Cloud: Create a project at https://supabase.com/dashboard\n" +
+    "2. Vercel Storage: If created via Vercel > Storage, check your .env.local snippet on Vercel for keys.",
+    "Supabase Prerequisites"
+  );
+
   clack.note('Connecting to Supabase...');
   clack.note('I will now open your browser to log into Supabase.');
   await runSupabaseCli(['login'], { cwd: projectPath });
@@ -230,17 +237,20 @@ async function runSetupWizard(projectDir, projectName) {
     {
       dbPassword: () =>
         clack.password({
-          message: 'What is your Database Password? (Settings > Database > Connection Parameters)',
+          message:
+            'What is your Database Password? (Supabase: Database > Database Settings > Reset database password | Vercel: POSTGRES_PASSWORD)',
           validate: (val) => (!val ? 'Password is required' : undefined),
         }),
       anonKey: () =>
         clack.password({
-          message: 'What is your Project API Key (anon key)? (Settings > API > Project API Keys)',
+          message:
+            'What is your Project API Key (anon key)? (Supabase: Project Settings > API Keys > Project Legacy API Keys | Vercel: SUPABASE_ANON_KEY)',
           validate: (val) => (!val ? 'Anon Key is required' : undefined),
         }),
       serviceKey: () =>
         clack.password({
-          message: 'What is your Service Role Key (service_role key)? (Settings > API > Project API Keys)',
+          message:
+            'What is your Service Role Key (service_role key)? (Supabase: Project Settings > API Keys > Project Legacy API Keys | Vercel: SUPABASE_SERVICE_ROLE_KEY)',
           validate: (val) => (!val ? 'Service Role Key is required' : undefined),
         }),
     },
@@ -331,8 +341,11 @@ async function runSetupWizard(projectDir, projectName) {
     }
   }
 
+  clack.note(
+    'Optional Cloudflare R2 Setup:\nHave your Account ID, API token (Access + Secret), bucket name, and public bucket URL handy if you want media storage ready now.',
+  );
   const setupR2 = await clack.confirm({
-    message: 'Do you want to set up Cloudflare R2 for media storage now? (Optional)',
+    message: 'Do you want to set up Cloudflare R2 for media storage now? (Optional > populate .env keys)',
   });
   if (clack.isCancel(setupR2)) {
     handleWizardCancel('Setup cancelled.');
@@ -354,7 +367,7 @@ async function runSetupWizard(projectDir, projectName) {
       {
         accountId: () =>
           clack.text({
-            message: 'R2: Paste your Cloudflare Account ID:',
+            message: 'R2: Paste your Cloudflare Account ID (Overview > Account Details - Bottom right):',
             validate: (val) => (!val ? 'Account ID is required' : undefined),
           }),
         bucketName: () =>
@@ -364,7 +377,7 @@ async function runSetupWizard(projectDir, projectName) {
           }),
         accessKey: () =>
           clack.password({
-            message: 'R2: Paste your Access Key ID:',
+            message: 'R2: Paste your Access Key ID (create API tokens):',
             validate: (val) => (!val ? 'Access Key ID is required' : undefined),
           }),
         secretKey: () =>
@@ -374,7 +387,8 @@ async function runSetupWizard(projectDir, projectName) {
           }),
         publicBaseUrl: () =>
           clack.text({
-            message: 'R2: Public Base URL (e.g., https://pub-xxx.r2.dev/your-bucket):',
+            message:
+              'R2: Public Base URL (Bucket > Settings > Public Development URL-Enable: e.g., https://pub-xxx.r2.dev)',
             validate: (val) => (!val ? 'Public base URL is required' : undefined),
           }),
       },
@@ -406,6 +420,9 @@ async function runSetupWizard(projectDir, projectName) {
     clack.note('Cloudflare R2 placeholders added to .env. Configure them later when ready.');
   }
 
+  clack.note(
+    'Optional SMTP Setup:\nProvide the host, port, credentials, and from details for your email provider (e.g., Resend, Postmark) to send transactional emails immediately.',
+  );
   const setupSMTP = await clack.confirm({
     message: 'Do you want to set up an SMTP server for emails now? (Optional)',
   });

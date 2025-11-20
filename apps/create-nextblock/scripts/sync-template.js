@@ -80,6 +80,7 @@ async function ensureTemplateSync() {
   });
 
   await ensureEnvExample();
+  await ensureTemplateGitignore();
   await ensureGlobalStyles();
   await ensureClientTranslations();
   await sanitizeBlockEditorImports();
@@ -117,6 +118,40 @@ NEXT_PUBLIC_URL=http://localhost:3000
 `;
 
   await fs.writeFile(destination, placeholder);
+}
+
+async function ensureTemplateGitignore() {
+  const destination = resolve(TARGET_DIR, '.gitignore');
+  const content = `.DS_Store
+node_modules
+dist
+.next
+out
+build
+coverage
+*.log
+logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+.env
+.env.*
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
+
+.vscode
+.idea
+.swp
+*.sw?
+
+supabase/.temp
+supabase/.branches
+`;
+  await fs.outputFile(destination, content);
 }
 
 async function ensureGlobalStyles() {
