@@ -52,28 +52,29 @@ project's core technologies and benefits into a concise, compelling pitch.
 1
 
 ○ Text: NextBlock is an open-source, developer-first Content Management System
-built on Next.js 15 and Supabase. Achieve perfect Lighthouse scores, empower
+built on Next.js 16 and Supabase. Achieve perfect Lighthouse scores, empower
 content creators with a Notion-style block editor, and build scalable, modern web
 experiences with unparalleled performance.
 ● Primary Calls to Action (CTAs): Position two distinct buttons directly below the
 sub-headline.
+
 1. Primary CTA: A prominently styled button using the vibrant gradient fill. This CTA
-should target the core action for a developer audience.
-■ Text: Star on GitHub
-■ Icon: GitHub logo
-■ Link: https://github.com/Webman-Dev/nextblock
+   should target the core action for a developer audience.
+   ■ Text: Star on GitHub
+   ■ Icon: GitHub logo
+   ■ Link: https://github.com/Webman-Dev/nextblock
 2. Secondary CTA: A ghost or outlined button style. This provides an alternative for
-users who want to evaluate the project's technical depth before committing. The
-developer documentation is a key early deliverable aimed at boosting developer
-adoption.
-1
-■ Text: Read the Docs
-■ Icon: Book or document icon
-● Social Proof & Community Links: Directly below the CTA buttons, display a row of
-small, monochrome icons with links to all provided social and community platforms. This
-immediately establishes the project's public presence and invites engagement from day
-one.
-○ Icons/Links: GitHub, X (Twitter), LinkedIn, Dev.to, npm.
+   users who want to evaluate the project's technical depth before committing. The
+   developer documentation is a key early deliverable aimed at boosting developer
+   adoption.
+   1
+   ■ Text: Read the Docs
+   ■ Icon: Book or document icon
+   ● Social Proof & Community Links: Directly below the CTA buttons, display a row of
+   small, monochrome icons with links to all provided social and community platforms. This
+   immediately establishes the project's public presence and invites engagement from day
+   one.
+   ○ Icons/Links: GitHub, X (Twitter), LinkedIn, Dev.to, npm.
 
 II. The Three Pillars of NextBlock: The "Why"
 
@@ -206,7 +207,7 @@ For Content Creators & Editors For Developers & Agencies
 Intuitive Block Editor: Build beautiful
 pages with a drag-and-drop, Notion-like
 
-Next.js 15 Core: Harness the full power of
+Next.js 16 Core: Harness the full power of
 the React framework, including Server
 
 interface. No code required.
@@ -341,8 +342,9 @@ as small icons for easy access.
 ○ Navigation: Include text links to key pages such as Documentation, GitHub, and
 Roadmap.
 Works cited
-1. 100-Day Roadmap for NextBlock CMS_ Achieving the Fastest, Best-UX CMS.pdf
-2. Business Plan_ Monetization Strategy for Next.js Open-Source CMS.pdf
+
+1. 100-Day Roadmap for NextBlock CMS\_ Achieving the Fastest, Best-UX CMS.pdf
+2. Business Plan\_ Monetization Strategy for Next.js Open-Source CMS.pdf
 3. Monorepo Architecture & Development Guide
 4. Monorepo, Open Source, and Monetization
 5. Enhanced Tiptap Editor Implementation Plan

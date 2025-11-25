@@ -35,7 +35,7 @@ SELECT
 <p>Within <code>apps/nextblock/app/cms</code>, each feature area—pages, posts, media, navigation, users, settings—follows a predictable file pattern: a list page, creation and edit routes, server actions, and scoped client components. The root CMS layout enforces authentication, builds the shell (sidebar, responsive header, profile menu), and injects role-aware navigation. That means writers can jump straight into the block editor while admins unlock additional menus such as language management or user provisioning, all without duplicating layout logic.</p>
 <p>Server actions wrap Supabase calls so mutations never leak credentials into the browser. Media uploads coordinate with Cloudflare R2, navigation management includes drag-and-drop ordering, and every table interaction respects the row-level security policies defined in the Supabase migrations—e.g., only admins and writers can mutate pages or posts while anonymous traffic can only read published content.</p>
 <h3>Tech Stack and Runtime</h3>
-<p>The stack highlighted in the project README—Next.js 15, Supabase, Tailwind CSS, and shadcn/ui—was selected to balance developer velocity with runtime performance. Next.js App Router unlocks Server Components, streaming, and incremental static regeneration so marketing experiences remain edge-fast. Supabase covers Postgres, Auth, and Storage, shrinking the operational footprint while still allowing custom SQL migrations. Tailwind plus shadcn/ui provide composable building blocks so the CMS interface, marketing site, and generated client projects all inherit the same visual language.</p>
+<p>The stack highlighted in the project README—Next.js 16, Supabase, Tailwind CSS, and shadcn/ui—was selected to balance developer velocity with runtime performance. Next.js App Router unlocks Server Components, streaming, and incremental static regeneration so marketing experiences remain edge-fast. Supabase covers Postgres, Auth, and Storage, shrinking the operational footprint while still allowing custom SQL migrations. Tailwind plus shadcn/ui provide composable building blocks so the CMS interface, marketing site, and generated client projects all inherit the same visual language.</p>
 <p>Nx tooling ties it together. Common commands such as <code>nx serve nextblock</code>, <code>nx build nextblock</code>, or workspace-wide tasks like <code>nx run-many -t lint --all</code> respect dependency caching, so even large rebuilds feel snappy during the 100-day roadmap.</p>
 <pre><code>nx serve nextblock
 nx run-many -t build --all
@@ -74,7 +74,7 @@ SELECT
   </aside>
 </div>
 <h3>Stack technique et exécution</h3>
-<p>Le stack—Next.js 15, Supabase, Tailwind CSS, shadcn/ui—équilibre vélocité et performance. L'App Router active les Server Components et l'ISR pour un rendu edge rapide. Supabase gère Postgres/Auth/Storage, réduisant l'opérationnel tout en gardant la liberté SQL. Tailwind + shadcn/ui fournissent des blocs réutilisables pour le CMS, le site marketing et les projets générés.</p>
+<p>Le stack—Next.js 16, Supabase, Tailwind CSS, shadcn/ui—équilibre vélocité et performance. L'App Router active les Server Components et l'ISR pour un rendu edge rapide. Supabase gère Postgres/Auth/Storage, réduisant l'opérationnel tout en gardant la liberté SQL. Tailwind + shadcn/ui fournissent des blocs réutilisables pour le CMS, le site marketing et les projets générés.</p>
 <pre><code>nx serve nextblock
 nx run-many -t build --all
 supabase db push

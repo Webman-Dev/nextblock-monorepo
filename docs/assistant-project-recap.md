@@ -9,7 +9,7 @@ This note captures the current understanding of the **NextBlock monorepo** and t
 ## 1. Repository Overview
 
 - **Monorepo root**: `D:\Websites\nextblock-monorepo`
-- **Tooling**: Nx (workspace-managed), Vite for library builds, Next.js 15.x for apps.
+- **Tooling**: Nx (workspace-managed), Vite for library builds, Next.js 16.x for apps.
 - **Primary apps**
   - `apps/nextblock` - production Next.js application.
   - `apps/create-nextblock/templates/nextblock-template` - scaffold template kept out of the Nx graph via `.nxignore`; the sync script removes any `project.json` so it never registers as a project.
@@ -36,14 +36,7 @@ This note captures the current understanding of the **NextBlock monorepo** and t
   - `ensureClientProviders` imports `TranslationsProvider` from `@nextblock-cms/utils`.
   - `ensureTailwindConfig` writes `tailwind.config.js` with content globs that include local files and the published UI/editor packages:
     ```ts
-    content: [
-      './app/**/*.{js,ts,jsx,tsx,mdx}',
-      './components/**/*.{js,ts,jsx,tsx,mdx}',
-      './context/**/*.{js,ts,jsx,tsx,mdx}',
-      './lib/**/*.{js,ts,jsx,tsx,mdx}',
-      './node_modules/@nextblock-cms/ui/**/*.{js,ts,jsx,tsx}',
-      './node_modules/@nextblock-cms/editor/**/*.{js,ts,jsx,tsx}',
-    ];
+    content: ['./app/**/*.{js,ts,jsx,tsx,mdx}', './components/**/*.{js,ts,jsx,tsx,mdx}', './context/**/*.{js,ts,jsx,tsx,mdx}', './lib/**/*.{js,ts,jsx,tsx,mdx}', './node_modules/@nextblock-cms/ui/**/*.{js,ts,jsx,tsx}', './node_modules/@nextblock-cms/editor/**/*.{js,ts,jsx,tsx}'];
     ```
 - Template sync command: `npm run sync:create-nextblock` (copies the latest `apps/nextblock` files into the template and removes `project.json`).
 - Generated Tailwind config lives in the new project root (`tailwind.config.js`) and should match the snippet above.
@@ -53,45 +46,56 @@ This note captures the current understanding of the **NextBlock monorepo** and t
 ## 3. Recent Changes / Fixes
 
 ### 3.1 Utils Server Module
+
 - `libs/utils/src/server.ts` no longer starts with `"use server"`, avoiding Next.js server-action constraints when re-exporting helpers.
 
 ### 3.2 Dialog Centering
+
 - `libs/ui/src/lib/dialog.tsx` wraps content in a flex-centred overlay; generated projects retain the required Tailwind classes.
 
 ### 3.3 Translations Provider
+
 - Removed the legacy provider shim from template and CLI. All projects import from `@nextblock-cms/utils`.
 - Middleware still requires Supabase env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, etc.).
 
 ### 3.4 Nx Project Graph
+
 - Template `project.json` is deleted during sync and `apps/create-nextblock/templates/nextblock-template` sits in `.nxignore`, keeping it out of the graph.
 - Added `apps/create-nextblock/project.json` with a lint target (bin + scripts). Root build scripts exclude `create-nextblock` and the template.
 
 ### 3.5 Published Packages
+
 - `@nextblock-cms/utils@0.0.11` published with updated exports (`dist/libs/utils`).
 
 ### 3.6 Editor & UI Style Packaging
+
 - `@nextblock-cms/editor` exports `./styles/*` and ships every stylesheet from `libs/editor/src/styles`.
 - `@nextblock-cms/ui` mirrors the packaging strategy, exposing `./styles/globals.css` and future CSS files via wildcard exports.
 - Generated projects import styles straight from the packages; template-level CSS shims were removed.
 
 ### 3.7 CLI Improvements
+
 - `sanitizeLayout` rewrites generated `app/layout.tsx` to import package styles and drops stale `./globals.css` / `./editor.css` imports.
 - `ensureGlobalStyles` and `ensureEditorStyles` remove placeholder files to align scaffolds with package styles.
 - `ensureGitignore` merges the root `.gitignore` (normalising `apps/nextblock/` prefixes) with a default Next.js ignore list.
 
 ### 3.8 Editor Runtime Fixes
+
 - `libs/editor/src/lib/NotionEditor.tsx` uses static imports for `mediaPicker`, preventing runtime resolution errors once bundled.
 - Tailwind content globs are baked into the scaffolded `tailwind.config.js`, preserving utilities needed for dialogs and editors.
 
 ### 3.9 Template Lint Stability
+
 - Synced files now mirror template lint expectations: metadata helpers drop unused `parent` arguments, renderer props consumed client-side are explicit, and shared helpers avoid unused tuple placeholders.
 - Both the main app and template `next-env.d.ts` import `./.next/types/routes`, satisfying the updated TypeScript lint rule (`@typescript-eslint/triple-slash-reference`).
 
 ### 3.10 Editor/UI Client Bundles
+
 - Vite builds for `libs/ui` and `libs/editor` now prepend `'use client';` to generated `index.js` / `index.mjs`. This fixes runtime crashes in scaffolded apps where Next.js previously treated the packages as server modules.
 - Remember to publish new versions of the packages so the fix reaches npm consumers, then bump the CLI.
 
 ### 3.11 TypeScript Config Shims
+
 - Added `apps/create-nextblock/tsconfig.base.json` plus `apps/create-nextblock/libs/**/tsconfig*.json` passthrough files that defer to the workspace configs. These live only to resolve VS Code complaints.
 
 ---
@@ -142,4 +146,4 @@ This note captures the current understanding of the **NextBlock monorepo** and t
 
 ---
 
-_Keep this doc updated when any core behaviour changes (CLI, libs, Next app)._ 
+_Keep this doc updated when any core behaviour changes (CLI, libs, Next app)._

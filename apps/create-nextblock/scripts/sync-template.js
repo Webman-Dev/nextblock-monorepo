@@ -47,6 +47,7 @@ const IGNORED_SEGMENTS = new Set([
   'backups',
 ]);
 
+
 async function ensureTemplateSync() {
   const sourceExists = await fs.pathExists(SOURCE_DIR);
   if (!sourceExists) {
@@ -64,7 +65,7 @@ async function ensureTemplateSync() {
   );
 
   await fs.ensureDir(TARGET_DIR);
-  await fs.emptyDir(TARGET_DIR);
+  await emptyDirWithRetry(TARGET_DIR);
 
   await fs.copy(SOURCE_DIR, TARGET_DIR, {
     dereference: true,
@@ -312,3 +313,20 @@ ensureTemplateSync().catch((error) => {
   console.error(chalk.red(error instanceof Error ? error.message : String(error)));
   process.exit(1);
 });
+
+async function emptyDirWithRetry(dir, retries = 5, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await fs.emptyDir(dir);
+      return;
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      if (err.code === 'EBUSY' || err.code === 'EPERM') {
+        console.log(chalk.yellow(`Locked file encountered. Retrying in ${delay}ms... (${i + 1}/${retries})`));
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
