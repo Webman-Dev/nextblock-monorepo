@@ -323,7 +323,7 @@ export function AdvancedFontSizeMenu({ editor, className }: AdvancedFontSizeMenu
             placeholder={placeholder}
             value={draftValue}
             onFocus={() => setFocused("value")}
-            onChange={(e) => handleInputChange(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange(e.target.value)}
             onBlur={() => setFocused(null)}
             className={cn("h-9", invalid && "border-destructive focus-visible:ring-destructive")}
             spellCheck={false}

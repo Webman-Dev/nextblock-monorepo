@@ -199,7 +199,7 @@ export const Editor: React.FC<EditorProps> = ({
               <Input
                 placeholder="Search..."
                 value={searchReplace.searchTerm}
-                onChange={(e) => {
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                   const term = e.target.value;
                   setSearchReplace(prev => ({ ...prev, searchTerm: term }));
                   performSearch(term);
@@ -227,7 +227,7 @@ export const Editor: React.FC<EditorProps> = ({
             <Input
               placeholder="Replace with..."
               value={searchReplace.replaceTerm}
-              onChange={(e) => setSearchReplace(prev => ({ ...prev, replaceTerm: e.target.value }))}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchReplace(prev => ({ ...prev, replaceTerm: e.target.value }))}
               className="h-8 flex-1"
             />
             <Button

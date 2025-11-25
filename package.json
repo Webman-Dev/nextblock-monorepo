@@ -1,6 +1,6 @@
 {
   "name": "@nextblock/source",
-  "version": "0.2.35",
+  "version": "0.2.37",
   "license": "MIT",
   "scripts": {
     "build:utils": "node tools/scripts/release-lib.js utils",
@@ -48,6 +48,8 @@
     "@eslint/compat": "^1.1.1",
     "@eslint/eslintrc": "^2.1.1",
     "@eslint/js": "^9.8.0",
+    "@microsoft/api-extractor": "^7.55.1",
+    "@microsoft/api-extractor-model": "^7.32.1",
     "@next/eslint-plugin-next": "^16.0.1",
     "@nx/esbuild": "22.1.0",
     "@nx/eslint": "22.1.0",

@@ -460,7 +460,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
             <Input
               value={hexDraft}
               onFocus={() => setFocusedInput("hex")}
-              onChange={(event) => {
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
                 const value = event.target.value;
                 setHexDraft(value);
                 if (HEX_INPUT_PATTERN.test(value)) {
@@ -489,7 +489,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
             <Input
               value={rgbDraft}
               onFocus={() => setFocusedInput("rgb")}
-              onChange={(event) => {
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
                 const value = event.target.value;
                 setRgbDraft(value);
                 if (RGB_PATTERN.test(value)) {
@@ -518,7 +518,7 @@ export function AdvancedColorMenu({ editor, className, initialMode = "text" }: A
             <Input
               value={hslDraft}
               onFocus={() => setFocusedInput("hsl")}
-              onChange={(event) => {
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
                 const value = event.target.value;
                 setHslDraft(value);
                 if (HSL_PATTERN.test(value)) {

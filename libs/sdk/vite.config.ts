@@ -25,6 +25,13 @@ export default defineConfig(() => ({
           main: 'index.js',
           module: 'index.js',
           types: 'index.d.ts',
+          exports: {
+            '.': {
+              types: './index.d.ts',
+              import: './index.js',
+              require: './index.js'
+            }
+          },
         };
 
         fs.writeFileSync(

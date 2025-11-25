@@ -252,8 +252,8 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
             </button>
           </PopoverTrigger>
           <PopoverContent
-            onFocusOutside={(e) => e.preventDefault()}
-            onMouseDown={(e) => e.stopPropagation()}
+            onFocusOutside={(e: Event) => e.preventDefault()}
+            onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
             className="w-[360px] p-0"
             side="top"
             align="start"
@@ -288,8 +288,8 @@ export const EditorBubbleMenu: FC<BubbleMenuComponentProps> = ({ editor }) => {
             </button>
           </PopoverTrigger>
           <PopoverContent
-            onFocusOutside={(e) => e.preventDefault()}
-            onMouseDown={(e) => e.stopPropagation()}
+            onFocusOutside={(e: Event) => e.preventDefault()}
+            onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
             className="w-auto p-0"
             side="top"
             align="start"

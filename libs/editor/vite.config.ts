@@ -13,15 +13,23 @@ export default defineConfig({
   plugins: [
     dts({
       entryRoot: 'src',
-      tsconfigPath: './tsconfig.json',
+      tsconfigPath: './tsconfig.lib.json',
       outDir: '../../dist/libs/editor',
       afterBuild: () => {
         const packageJson = {
           name: '@nextblock-cms/editor',
           version,
-          main: 'index.cjs.js',
-          module: 'index.es.js',
-          types: 'index.d.ts'
+          main: 'index.js',
+          module: 'index.mjs',
+          types: 'index.d.ts',
+          exports: {
+            '.': {
+              types: './index.d.ts',
+              import: './index.mjs',
+              require: './index.js'
+            },
+            './styles/*': './styles/*'
+          },
         };
 
         fs.writeFileSync(

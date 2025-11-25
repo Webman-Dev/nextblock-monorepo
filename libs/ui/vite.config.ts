@@ -25,12 +25,13 @@ export default defineConfig({
           types: 'index.d.ts',
           exports: {
             '.': {
+              types: './index.d.ts',
               import: './index.mjs',
               require: './index.js',
             },
             './styles/*': './styles/*',
           },
-          files: ['index.mjs', 'index.js', 'index.d.ts', 'styles'],
+          files: ['index.mjs', 'index.js', 'index.d.ts', 'styles', 'lib'],
         };
 
         fs.writeFileSync(

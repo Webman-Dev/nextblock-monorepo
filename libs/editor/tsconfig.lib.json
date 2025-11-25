@@ -29,13 +29,5 @@
     "../ui/src/**/*.tsx",
     "../utils/src/**/*.ts",
     "../utils/src/**/*.tsx"
-  ],
-  "references": [
-    {
-      "path": "../ui/tsconfig.lib.json"
-    },
-    {
-      "path": "../utils/tsconfig.lib.json"
-    }
   ]
 }

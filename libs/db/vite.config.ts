@@ -34,6 +34,17 @@ export default defineConfig({
             },
             './package.json': './package.json',
           },
+          files: [
+            'dist',
+            'supabase',
+            'supabase/**',
+            'lib',
+            '*.js',
+            '*.cjs.js',
+            '*.es.js',
+            '*.mjs',
+            '*.d.ts'
+          ],
         };
 
         fs.writeFileSync(

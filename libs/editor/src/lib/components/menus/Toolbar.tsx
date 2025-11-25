@@ -74,7 +74,7 @@ const FontSizePicker: React.FC<{ editor: Editor }> = ({ editor }) => {
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        onFocusOutside={(e) => e.preventDefault()}
+        onFocusOutside={(e: Event) => e.preventDefault()}
         className="w-[360px] p-0"
         side="bottom"
         align="start"
@@ -100,7 +100,7 @@ const ColorPicker: React.FC<{ editor: Editor }> = ({ editor }) => {
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        onFocusOutside={(e) => e.preventDefault()}
+        onFocusOutside={(e: Event) => e.preventDefault()}
         className="w-[380px] p-0"
         side="bottom"
         align="start"
