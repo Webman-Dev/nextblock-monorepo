@@ -1,0 +1,18 @@
+/* Image alignment preserved from editor output */
+@layer components {
+  img[data-align='left'] {
+    display: block;
+    margin-left: 0;
+    margin-right: auto;
+  }
+  img[data-align='right'] {
+    display: block;
+    margin-left: auto;
+    margin-right: 0;
+  }
+  img[data-align='center'] {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}

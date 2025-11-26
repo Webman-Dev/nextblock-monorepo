@@ -86,13 +86,14 @@
 
 
 /* Custom text selection style */
+/* Custom text selection style */
 ::selection {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(59, 130, 246, 0.3); /* blue-500 with opacity */
   color: inherit;
 }
 
 ::-moz-selection {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(59, 130, 246, 0.3);
   color: inherit;
 }
 

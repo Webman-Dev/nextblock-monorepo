@@ -147,13 +147,10 @@ export default async function RootLayout({
         <title>{metadata.title as string}</title>
         <meta name="description" content={metadata.description as string} />
         <link rel="preconnect" href="https://ppcppwsfnrptznvbxnsz.supabase.co" />
-        <link rel="preconnect" href="https://pub-a31e3f1a87d144898aeb489a8221f92e.r2.dev" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://ppcppwsfnrptznvbxnsz.supabase.co" />
-        <link rel="dns-prefetch" href="https://pub-a31e3f1a87d144898aeb489a8221f92e.r2.dev" />
         <link rel="dns-prefetch" href="https://aws-0-us-east-1.pooler.supabase.com" />
         <link rel="dns-prefetch" href="https://db.ppcppwsfnrptznvbxnsz.supabase.co" />
         <link rel="dns-prefetch" href="https://realtime.supabase.com" />
-        <link rel="preload" as="image" href="https://pub-a31e3f1a87d144898aeb489a8221f92e.r2.dev/hero-bg.jpg" fetchPriority="high" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="bg-background text-foreground min-h-screen flex flex-col">

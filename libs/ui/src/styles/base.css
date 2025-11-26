@@ -1,0 +1,306 @@
+/*─────────────────────────────────────────────────────────────────────────────
+  1. Critical CSS Resets (formerly in <style id="critical-css">)
+─────────────────────────────────────────────────────────────────────────────*/
+@layer base {
+  *,
+  ::before,
+  ::after {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+    border-color: hsl(var(--border));
+  }
+  ::before,
+  ::after {
+    --tw-content: '';
+  }
+
+  html,
+  :host {
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    -moz-tab-size: 4;
+    tab-size: 4;
+    font-family:
+      ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+      'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    font-feature-settings: normal;
+    font-variation-settings: normal;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    margin: 0;
+    line-height: inherit;
+  }
+
+  hr {
+    height: 0;
+    color: inherit;
+    border-top-width: 1px;
+  }
+
+  abbr:where([title]) {
+    -webkit-text-decoration: underline dotted;
+    text-decoration: underline dotted;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-size: inherit;
+    font-weight: inherit;
+    margin: 0;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: inherit;
+  }
+
+  b,
+  strong {
+    font-weight: bolder;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+      'Courier New', monospace;
+    font-feature-settings: normal;
+    font-variation-settings: normal;
+    font-size: 1em;
+  }
+
+  small {
+    font-size: 80%;
+  }
+
+  sub,
+  sup {
+    font-size: 75%;
+    line-height: 0;
+    position: relative;
+    vertical-align: baseline;
+  }
+  sub {
+    bottom: -0.25em;
+  }
+  sup {
+    top: -0.5em;
+  }
+
+  table {
+    text-indent: 0;
+    border-color: inherit;
+    border-collapse: collapse;
+  }
+
+  button,
+  input,
+  optgroup,
+  select,
+  textarea {
+    font-family: inherit;
+    font-feature-settings: inherit;
+    font-variation-settings: inherit;
+    font-size: 100%;
+    font-weight: inherit;
+    line-height: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    margin: 0;
+    padding: 0;
+  }
+  button,
+  select {
+    text-transform: none;
+  }
+  button,
+  input[type='button'],
+  input[type='reset'],
+  input[type='submit'] {
+    -webkit-appearance: button;
+    appearance: button;
+    background-color: transparent;
+    background-image: none;
+  }
+
+  :-moz-focusring {
+    outline: auto;
+  }
+  :-moz-ui-invalid {
+    box-shadow: none;
+  }
+  progress {
+    vertical-align: baseline;
+  }
+  ::-webkit-inner-spin-button,
+  ::-webkit-outer-spin-button {
+    height: auto;
+  }
+  [type='search'] {
+    -webkit-appearance: textfield;
+    appearance: textfield;
+    outline-offset: -2px;
+  }
+  ::-webkit-search-decoration {
+    -webkit-appearance: none;
+  }
+  ::-webkit-file-upload-button {
+    -webkit-appearance: button;
+    font: inherit;
+  }
+
+  summary {
+    display: list-item;
+  }
+  blockquote,
+  dd,
+  dl,
+  figure,
+  p,
+  pre {
+    margin: 0;
+  }
+  fieldset {
+    margin: 0;
+    padding: 0;
+  }
+  legend {
+    padding: 0;
+  }
+  menu,
+  ol,
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  dialog {
+    padding: 0;
+  }
+  textarea {
+    resize: vertical;
+  }
+
+  input::-moz-placeholder,
+  textarea::-moz-placeholder {
+    opacity: 1;
+    color: hsl(var(--muted-foreground));
+  }
+  input::placeholder,
+  textarea::placeholder {
+    opacity: 1;
+    color: hsl(var(--muted-foreground));
+  }
+
+  [role='button'],
+  button {
+    cursor: pointer;
+  }
+  :disabled {
+    cursor: default;
+  }
+
+  audio,
+  canvas,
+  embed,
+  iframe,
+  img,
+  object,
+  svg,
+  video {
+    display: block;
+  }
+  img,
+  video {
+    max-width: 100%;
+    height: auto;
+  }
+  [hidden] {
+    display: none;
+  }
+
+  /*───────────────────────────────────────────────────────────────────────────
+    2. Project-specific base styles (Tailwind-powered)
+  ───────────────────────────────────────────────────────────────────────────*/
+  /* Apply your border color everywhere */
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  /* Body background & text */
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+
+  /* Semantic headings */
+  ul,
+  ol {
+    padding-left: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  li {
+    margin-bottom: 0.25rem;
+  }
+  blockquote {
+    padding: 1rem;
+    font-style: italic;
+    border-left-width: 4px;
+    border-left-style: solid;
+    border-left-color: hsl(var(--border));
+    background-color: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    margin-bottom: 1rem;
+  }
+  code {
+    background-color: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    padding: 0.25rem 0.25rem;
+    padding-top: 0.125rem;
+    padding-bottom: 0.125rem;
+    border-radius: 0.125rem;
+    font-family:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+      'Courier New', monospace;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+  pre {
+    background-color: hsl(var(--muted));
+    padding: 1rem;
+    border-radius: 0.375rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+  thead {
+    background-color: hsl(var(--muted));
+  }
+  th,
+  td {
+    border: 1px solid hsl(var(--border));
+    padding: 0.5rem;
+    text-align: left;
+  }
+  th {
+    font-weight: 600;
+  }
+  hr {
+    border-top: 1px solid hsl(var(--border));
+    margin: 2rem 0;
+  }
+}

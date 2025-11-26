@@ -1,0 +1,39 @@
+/*─────────────────────────────────────────────────────────────────────────────
+  4. Explicit heading sizes & spacing
+─────────────────────────────────────────────────────────────────────────────*/
+h1 {
+  font-size: 3.5rem;
+  line-height: 1;
+  font-weight: 700;
+  margin: 1.5rem 0 1rem;
+}
+h2 {
+  font-size: 2.5rem;
+  line-height: 1;
+  font-weight: 700;
+  margin: 1.25rem 0 0.75rem;
+}
+h3 {
+  font-size: 2.25rem;
+  line-height: 2.5rem;
+  font-weight: 700;
+  margin: 1rem 0 0.75rem;
+}
+h4 {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 700;
+  margin: 0.75rem 0 0.5rem;
+}
+h5 {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0.5rem;
+}
+h6 {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0.5rem;
+}

@@ -52,6 +52,7 @@ export default function SectionBlockEditor({
       responsive_columns: { mobile: 1, tablet: 2, desktop: 3 },
       column_gap: "md",
       padding: { top: "md", bottom: "md" },
+      vertical_alignment: "start",
       column_blocks: [],
     };
 
@@ -62,6 +63,7 @@ export default function SectionBlockEditor({
         content.responsive_columns ?? defaults.responsive_columns,
       column_gap: content.column_gap ?? defaults.column_gap,
       padding: content.padding ?? defaults.padding,
+      vertical_alignment: content.vertical_alignment ?? defaults.vertical_alignment,
       column_blocks: content.column_blocks ?? defaults.column_blocks,
     };
   }, [content]);

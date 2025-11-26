@@ -261,7 +261,11 @@ export default function ResponsiveNav({
           >
             {logo && logo.media ? (
               <Image
-                src={`${R2_BASE_URL}/${logo.media.object_key}`}
+                src={
+                  logo.media.object_key.startsWith('/') || logo.media.object_key.startsWith('http')
+                    ? logo.media.object_key
+                    : `${R2_BASE_URL}/${logo.media.object_key}`
+                }
                 alt={logo.media.alt_text || siteTitle || 'Nextblock'}
                 width={logo.media.width || 100}
                 height={logo.media.height || 32}

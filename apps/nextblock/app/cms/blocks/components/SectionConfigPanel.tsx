@@ -1,4 +1,3 @@
-// app/cms/blocks/components/SectionConfigPanel.tsx
 "use client";
 
 import React from 'react';
@@ -109,6 +108,25 @@ export default function SectionConfigPanel({ content, onChange }: SectionConfigP
                 <SelectItem value="md">Medium</SelectItem>
                 <SelectItem value="lg">Large</SelectItem>
                 <SelectItem value="xl">Extra Large</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Vertical Alignment */}
+          <div className="space-y-2">
+            <Label htmlFor="vertical-alignment">Vertical Alignment</Label>
+            <Select 
+              value={content.vertical_alignment || 'start'} 
+              onValueChange={(value: any) => onChange({ ...content, vertical_alignment: value })}
+            >
+              <SelectTrigger id="vertical-alignment">
+                <SelectValue placeholder="Select alignment" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="start">Top</SelectItem>
+                <SelectItem value="center">Center</SelectItem>
+                <SelectItem value="end">Bottom</SelectItem>
+                <SelectItem value="stretch">Stretch</SelectItem>
               </SelectContent>
             </Select>
           </div>

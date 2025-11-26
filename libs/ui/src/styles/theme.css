@@ -1,0 +1,78 @@
+/*─────────────────────────────────────────────────────────────────────────────
+  3. Theme color variables
+─────────────────────────────────────────────────────────────────────────────*/
+:root {
+  /* Light Mode - Clean, Technical, Stark */
+  --background: 0 0% 100%;       /* White */
+  --foreground: 222 47% 11%;     /* Slate 900 */
+
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+
+  --primary: 221 83% 53%;        /* Blue 600 - Tech Blue */
+  --primary-foreground: 210 40% 98%;
+
+  --secondary: 210 40% 96.1%;    /* Slate 100 */
+  --secondary-foreground: 222 47% 11%;
+
+  --muted: 210 40% 96.1%;        /* Slate 100 */
+  --muted-foreground: 215 16% 47%; /* Slate 500 */
+
+  --accent: 210 40% 96.1%;       /* Slate 100 */
+  --accent-foreground: 222 47% 11%;
+
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 214.3 31.8% 91.4%;   /* Slate 200 */
+  --input: 214.3 31.8% 91.4%;
+  --ring: 221 83% 53%;           /* Blue 600 */
+
+  --radius: 0.75rem;
+
+  --chart-1: 221 83% 53%;
+  --chart-2: 215 16% 47%;
+  --chart-3: 215 25% 27%;
+  --chart-4: 210 40% 96%;
+  --chart-5: 214 32% 91%;
+}
+
+.dark {
+  /* Dark Mode - Midnight / Neon Tech */
+  --background: 222 47% 2%;      /* Slate 950 - Deepest Navy (Almost Black) */
+  --foreground: 210 40% 98%;     /* Slate 50 */
+
+  --card: 222 47% 11%;           /* Match background for seamless look */
+  --card-foreground: 210 40% 98%;
+
+  --popover: 222 47% 11%;
+  --popover-foreground: 210 40% 98%;
+
+  --primary: 217 91% 60%;        /* Blue 500 - Electric Blue Glow */
+  --primary-foreground: 222 47% 11%;
+
+  --secondary: 217.2 32.6% 17.5%; /* Slate 800 */
+  --secondary-foreground: 210 40% 98%;
+
+  --muted: 217.2 32.6% 17.5%;    /* Slate 800 */
+  --muted-foreground: 215 20.2% 65.1%; /* Slate 400 */
+
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 217.2 32.6% 17.5%;   /* Slate 800 - Subtle borders */
+  --input: 217.2 32.6% 17.5%;
+  --ring: 224 76% 48%;           /* Blue 600 */
+
+  --chart-1: 220 70% 50%;
+  --chart-2: 160 60% 45%;
+  --chart-3: 30 80% 55%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 340 75% 55%;
+}
