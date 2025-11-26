@@ -146,6 +146,8 @@ export interface SectionBlockContent {
     top: 'none' | 'sm' | 'md' | 'lg' | 'xl';
     bottom: 'none' | 'sm' | 'md' | 'lg' | 'xl';
   };
+  /** Vertical alignment of columns */
+  vertical_alignment?: 'start' | 'center' | 'end' | 'stretch';
   /** Array of blocks within columns - 2D array where each index represents a column */
   column_blocks: Array<Array<{
     block_type: BlockType;
@@ -621,6 +623,7 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
       background: { type: "none" },
       responsive_columns: { mobile: 1, tablet: 2, desktop: 3 },
       column_gap: "md",
+      vertical_alignment: "start",
       padding: { top: "md", bottom: "md" },
       column_blocks: [
         [{ block_type: "text", content: { html_content: "<p>Column 1</p>" } }],
@@ -668,6 +671,16 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
         required: true,
         description: 'Section padding configuration',
         default: { top: 'md', bottom: 'md' },
+      },
+      vertical_alignment: {
+        type: 'union',
+        required: false,
+        description: 'Vertical alignment of columns',
+        default: 'start',
+        unionValues: ['start', 'center', 'end', 'stretch'] as const,
+        constraints: {
+          enum: ['start', 'center', 'end', 'stretch'] as const,
+        },
       },
       column_blocks: {
         type: 'array',

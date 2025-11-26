@@ -14,7 +14,7 @@ module.exports = {
     const libsDir = join(__dirname, '../../libs');
     if (existsSync(libsDir)) {
       projectGlobs.push(
-        join(libsDir, '**/*.{ts,tsx,js,jsx,md,mdx,html}')
+        join(libsDir, '**/*.{ts,tsx,js,jsx,md,mdx,html,sql}')
       );
     }
     return projectGlobs;

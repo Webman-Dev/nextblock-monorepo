@@ -46,6 +46,14 @@ const paddingClasses = {
   xl: 'py-12'
 };
 
+// Vertical alignment classes
+const verticalAlignmentClasses = {
+  start: 'items-start',
+  center: 'items-center',
+  end: 'items-end',
+  stretch: 'items-stretch'
+};
+
 // Background style generator
 function generateBackgroundStyles(background: SectionBlockContent['background']) {
   const styles: React.CSSProperties = {};
@@ -161,6 +169,7 @@ const SectionBlockRenderer: React.FC<SectionBlockRendererProps> = ({
   const gapClass = gapClasses[content.column_gap] || gapClasses.md;
   const paddingTopClass = paddingClasses[content.padding.top] || paddingClasses.md;
   const paddingBottomClass = paddingClasses[content.padding.bottom] || paddingClasses.md;
+  const alignmentClass = content.vertical_alignment ? verticalAlignmentClasses[content.vertical_alignment] : 'items-start';
 
   return (
     <section
@@ -168,7 +177,7 @@ const SectionBlockRenderer: React.FC<SectionBlockRendererProps> = ({
       style={styles}
     >
       <div className={containerClass}>
-        <div className={`grid ${gridClass} ${gapClass}`}>
+        <div className={`grid ${gridClass} ${gapClass} ${alignmentClass}`}>
           {content.column_blocks.map((columnBlocks, columnIndex) => (
             <div key={`column-${columnIndex}`} className="min-h-0 space-y-4">
               {(Array.isArray(columnBlocks) ? columnBlocks : []).map((block, blockIndex) => (

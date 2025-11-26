@@ -104,7 +104,7 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
       lastSavedBlocks.current = blocks;
     } else {
       // On failure, revert the UI to the last known good state
-      alert("Failed to save changes. Reverting.");
+      alert(`Failed to save changes: ${result.error}. Reverting.`);
       setBlocks(lastSavedBlocks.current);
     }
   }, [parentId, parentType, blocks]);
