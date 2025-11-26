@@ -40,18 +40,6 @@ BEGIN
   VALUES (fr_lang_id, admin_user_id, 'Accueil', 'accueil', 'published', 'Page d''accueil', 'Ceci est la page d''accueil.', home_page_translation_group)
   RETURNING id INTO fr_home_page_id;
 
-  -- Seed initial content block for English Homepage (optional)
-  IF en_home_page_id IS NOT NULL THEN
-    INSERT INTO public.blocks (page_id, language_id, block_type, content, "order")
-    VALUES (en_home_page_id, en_lang_id, 'text', '{"html_content": "<p>Welcome to the English homepage!</p><p>This content is dynamically managed by the CMS.</p>"}', 0);
-  END IF;
-
-  -- Seed initial content block for French Homepage (optional)
-  IF fr_home_page_id IS NOT NULL THEN
-    INSERT INTO public.blocks (page_id, language_id, block_type, content, "order")
-    VALUES (fr_home_page_id, fr_lang_id, 'text', '{"html_content": "<p>Bienvenue sur la page d''accueil en français !</p><p>Ce contenu est géré dynamiquement par le CMS.</p>"}', 0);
-  END IF;
-
   -- Seed English Navigation Item for Homepage (linked to the English page, but URL is root)
   INSERT INTO public.navigation_items (language_id, menu_key, label, url, "order", page_id, translation_group_id)
   VALUES (en_lang_id, 'HEADER', 'Home', '/', 0, en_home_page_id, home_nav_translation_group);

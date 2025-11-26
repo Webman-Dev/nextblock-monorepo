@@ -85,7 +85,7 @@ BEGIN
               "block_type": "button",
               "content": {
                 "text": "Get Started",
-                "url": "/docs/get-started",
+                "url": "/article/how-nextblock-works",
                 "variant": "default",
                 "size": "lg"
               }
@@ -487,7 +487,7 @@ BEGIN
           [
             { "block_type": "text", "content": { "html_content": "<h1 class='text-4xl md:text-5xl font-semibold tracking-tight text-white text-center'>Créez des sites modernes ultra-rapides. Visuellement.</h1>" } },
             { "block_type": "text", "content": { "html_content": "<p class='text-xl text-muted-foreground text-center max-w-3xl mx-auto'>NextBlock est un CMS Next.js open-source et orienté développeurs, alliant scores Lighthouse parfaits et éditeur visuel puissant.</p>" } },
-            { "block_type": "button", "content": { "text": "Commencer", "url": "/docs/get-started", "variant": "default", "size": "lg" } },
+            { "block_type": "button", "content": { "text": "Commencer", "url": "/article/comment-nextblock-fonctionne", "variant": "default", "size": "lg" } },
             { "block_type": "button", "content": { "text": "Voir sur GitHub", "url": "https://github.com/Webman-Dev/nextblock-monorepo", "variant": "outline", "size": "lg" } },
             { "block_type": "text", "content": { "html_content": "<div class='flex flex-wrap justify-center gap-6 text-sm uppercase tracking-wide text-muted-foreground mt-6'><a href='https://github.com/Webman-Dev' target='_blank' rel='noopener noreferrer'>GitHub</a><a href='https://x.com/NextBlockCMS' target='_blank' rel='noopener noreferrer'>X</a><a href='https://www.linkedin.com/in/nextblock/' target='_blank' rel='noopener noreferrer'>LinkedIn</a><a href='https://dev.to/nextblockcms' target='_blank' rel='noopener noreferrer'>Dev.to</a><a href='https://www.npmjs.com/~nextblockcms' target='_blank' rel='noopener noreferrer'>npm</a></div>" } }
           ],
