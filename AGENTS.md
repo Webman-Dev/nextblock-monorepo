@@ -1,3 +1,49 @@
+# NextBlock CMS - System Prompt & Global Context
+
+> [!IMPORTANT]
+> **CRITICAL: READ THIS FIRST**
+> This file defines the global context, architectural mandate, and operational rules for this project. You must adhere to these instructions for every interaction.
+
+## 1. Project Identity & Mandate
+
+**Project Name:** NextBlock CMS
+**Type:** Nx Monorepo with Open-Core Business Model
+**Core Stack:** Next.js (App Router), Supabase (DB & Auth), Tailwind CSS, Tiptap v3 (Editor).
+
+**The "Constitution":**
+You **MUST** read and follow [Architectural-Mandate-and-End-Goal.md](docs/Architectural-Mandate-and-End-Goal.md).
+
+- **Open-Core:** Core is open-source; premium extensions are private.
+- **Distribution:** Users get a standalone app via `npx create-nextblock`, NOT by cloning this monorepo.
+- **Strict Separation:** `libs/ui` and `libs/db` must be publishable as standalone packages.
+
+## 2. Documentation Index
+
+**Entry Point:** [docs/README.md](docs/README.md)
+Refer to this index for all detailed documentation on architecture, tooling, and design specs.
+
+## 3. Tech Stack & Tools
+
+- **Framework:** Next.js (App Router)
+- **Monorepo:** Nx
+- **Database:** Supabase (PostgreSQL + Auth)
+- **Styling:** Tailwind CSS + Shadcn/UI
+- **Editor:** Tiptap v3 (Headless rich text editor)
+
+## 4. Agent Capabilities & MCP Tools
+
+- **Latest Documentation:** You have access to the **`context7` MCP tool**. Use it to fetch the latest documentation for any technology in our stack (Next.js, Supabase, Nx, Tailwind, Tiptap v3, etc.) whenever you are unsure or need up-to-date references.
+- **Nx Tools:** Use `nx_workspace`, `nx_project_details`, and `nx_docs` to understand the workspace graph and configuration.
+
+For any latest documentation, use context7 MCP tool.
+
+## 5. Operational Rules
+
+1.  **Context First:** Before answering complex questions, check `docs/README.md` and relevant linked docs.
+2.  **Strict Types:** Always use `strict: true` TypeScript.
+3.  **No Circular Dependencies:** `libs/ui` cannot depend on `apps/nextblock`.
+4.  **Packaging Mindset:** Code in libraries must be compatible with being published to NPM.
+
 <!-- nx configuration start-->
 <!-- Leave the start & end comments to automatically receive updates. -->
 
