@@ -63,20 +63,33 @@ on conflict (language_id, slug) do update
       status = excluded.status,
       translation_group_id = excluded.translation_group_id;
 
-  -- seed the flagship How It Works blog post in EN + FR
-  insert into public.posts (language_id, title, slug, status, translation_group_id)
-  values (v_en_lang_id, 'How NextBlock Works: A Look Under the Hood', 'how-nextblock-works', 'published', v_how_it_works_post_group_id)
-  on conflict (language_id, slug) do update
-    set title = excluded.title,
-        status = excluded.status,
-        translation_group_id = excluded.translation_group_id;
+  -- Seed the featured image media record
+  v_feature_media_id := gen_random_uuid();
+  
+  insert into public.media (id, file_name, object_key, file_type, size_bytes)
+  values (v_feature_media_id, 'programmer-upscaled.webp', '/images/programmer-upscaled.webp', 'image/webp', 100000)
+  on conflict (object_key) do update
+    set file_name = excluded.file_name,
+        file_type = excluded.file_type,
+        size_bytes = excluded.size_bytes
+  returning id into v_feature_media_id;
 
-  insert into public.posts (language_id, title, slug, status, translation_group_id)
-  values (v_fr_lang_id, 'Comment NextBlock Fonctionne : Regard Sous le Capot', 'comment-nextblock-fonctionne', 'published', v_how_it_works_post_group_id)
+  -- seed the flagship How It Works blog post in EN + FR
+  insert into public.posts (language_id, title, slug, status, translation_group_id, feature_image_id)
+  values (v_en_lang_id, 'How NextBlock Works: A Look Under the Hood', 'how-nextblock-works', 'published', v_how_it_works_post_group_id, v_feature_media_id)
   on conflict (language_id, slug) do update
     set title = excluded.title,
         status = excluded.status,
-        translation_group_id = excluded.translation_group_id;
+        translation_group_id = excluded.translation_group_id,
+        feature_image_id = excluded.feature_image_id;
+
+  insert into public.posts (language_id, title, slug, status, translation_group_id, feature_image_id)
+  values (v_fr_lang_id, 'Comment NextBlock Fonctionne : Regard Sous le Capot', 'comment-nextblock-fonctionne', 'published', v_how_it_works_post_group_id, v_feature_media_id)
+  on conflict (language_id, slug) do update
+    set title = excluded.title,
+        status = excluded.status,
+        translation_group_id = excluded.translation_group_id,
+        feature_image_id = excluded.feature_image_id;
 
   -- Feature image for the flagship post can be set later via CMS; no seed insert for static asset.
 end;
