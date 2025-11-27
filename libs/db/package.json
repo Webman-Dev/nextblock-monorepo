@@ -1,6 +1,6 @@
 {
   "name": "@nextblock-cms/db",
-  "version": "0.2.20",
+  "version": "0.2.22",
   "files": [
     "dist",
     "supabase"
