@@ -348,7 +348,8 @@ async function runSetupWizard(projectDir, projectName) {
       const supabaseBin = await getSupabaseBinary(projectPath);
       const command = supabaseBin === 'npx' ? 'npx' : supabaseBin;
 
-      // 1. Link the project explicitly (matches monorepo behavior)
+      // 1. Link the project explicitly
+      dbPushSpinner.message('Linking to Supabase project...');
       const linkArgs = supabaseBin === 'npx' ? ['supabase', 'link'] : ['link'];
       linkArgs.push('--project-ref', projectId);
       linkArgs.push('--password', dbPassword);
@@ -359,12 +360,14 @@ async function runSetupWizard(projectDir, projectName) {
       });
 
       // 2. Push the schema using the linked state
+      dbPushSpinner.message('Pushing database schema...');
       const pushArgs = supabaseBin === 'npx' ? ['supabase', 'db', 'push'] : ['db', 'push'];
       pushArgs.push('--include-all');
 
       await execa(command, pushArgs, {
-        stdio: 'inherit',
+        stdio: ['pipe', 'inherit', 'inherit'],
         cwd: projectPath,
+        input: 'y\n', // Auto-confirm the push prompt
         env: {
           ...process.env,
           SUPABASE_DB_PASSWORD: dbPassword,
