@@ -17,7 +17,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const TEMPLATE_DIR = resolve(__dirname, '../templates/nextblock-template');
 const REPO_ROOT = resolve(__dirname, '../../..');
-const require = createRequire(import.meta.url);
 const EDITOR_UTILS_SOURCE_DIR = resolve(REPO_ROOT, 'libs/editor/src/lib/utils');
 const IS_WINDOWS = process.platform === 'win32';
 
@@ -199,7 +198,7 @@ async function runSetupWizard(projectDir, projectName) {
   if (process.stdin.isTTY) {
     try {
       process.stdin.setRawMode(false);
-    } catch (_) {
+    } catch {
       // ignore
     }
     process.stdin.setEncoding('utf8');
@@ -235,11 +234,12 @@ async function runSetupWizard(projectDir, projectName) {
   clack.note('Please go to your Supabase project dashboard to get the following secrets.');
   const supabaseKeys = await clack.group(
     {
-      dbPassword: () =>
-        clack.password({
+      postgresUrl: () =>
+        clack.text({
           message:
-            'What is your Database Password? (Supabase: Database > Database Settings > Reset database password | Vercel: POSTGRES_PASSWORD)',
-          validate: (val) => (!val ? 'Password is required' : undefined),
+            'What is your Connection String? (Supabase: Project Dashboard > Connect (Top Left) > Connection String > URI | Vercel: POSTGRES_URL)',
+          placeholder: 'postgresql://...',
+          validate: (val) => (!val ? 'Connection string is required' : undefined),
         }),
       anonKey: () =>
         clack.password({
@@ -261,12 +261,25 @@ async function runSetupWizard(projectDir, projectName) {
   const revalidationToken = crypto.randomBytes(32).toString('hex');
   const supabaseUrl = `https://${projectId}.supabase.co`;
 
-  const dbHost = `db.${projectId}.supabase.co`;
-  const dbUser = 'postgres';
-  const dbPassword = supabaseKeys.dbPassword;
-  const dbName = 'postgres';
+  const postgresUrl = supabaseKeys.postgresUrl;
+  let dbPassword = '';
+  try {
+    const parsedUrl = new URL(postgresUrl);
+    dbPassword = parsedUrl.password;
+  } catch {
+    // Fallback if URL parsing fails, though validation above checks for non-empty
+  }
 
-  const postgresUrl = `postgresql://${dbUser}:${dbPassword}@${dbHost}:5432/${dbName}`;
+  if (!dbPassword) {
+    const passwordPrompt = await clack.password({
+      message: 'Could not extract password from URL. What is your Database Password?',
+      validate: (val) => (!val ? 'Password is required' : undefined),
+    });
+    if (clack.isCancel(passwordPrompt)) {
+      handleWizardCancel('Setup cancelled.');
+    }
+    dbPassword = passwordPrompt;
+  }
 
   const envPath = resolve(projectPath, '.env');
   const appendEnvBlock = async (label, lines) => {
@@ -313,8 +326,9 @@ async function runSetupWizard(projectDir, projectName) {
   }
 
   clack.note('Setting up your database...');
+
   const dbPushSpinner = clack.spinner();
-  dbPushSpinner.start('Pushing database schema... (~10-15 minutes, please keep this terminal open)');
+  dbPushSpinner.start('Pushing database schema...');
   try {
     process.env.POSTGRES_URL = postgresUrl;
     const migrationsDir = resolve(projectPath, 'supabase', 'migrations');
@@ -331,7 +345,31 @@ async function runSetupWizard(projectDir, projectName) {
         `No migrations found in ${migrationsDir}; skipping db push. Ensure @nextblock-cms/db includes supabase/migrations.`,
       );
     } else {
-      await execa('npx', ['supabase', 'db', 'push'], { stdio: 'inherit', cwd: projectPath });
+      const supabaseBin = await getSupabaseBinary(projectPath);
+      const command = supabaseBin === 'npx' ? 'npx' : supabaseBin;
+
+      // 1. Link the project explicitly (matches monorepo behavior)
+      const linkArgs = supabaseBin === 'npx' ? ['supabase', 'link'] : ['link'];
+      linkArgs.push('--project-ref', projectId);
+      linkArgs.push('--password', dbPassword);
+      
+      await execa(command, linkArgs, {
+        stdio: 'inherit',
+        cwd: projectPath,
+      });
+
+      // 2. Push the schema using the linked state
+      const pushArgs = supabaseBin === 'npx' ? ['supabase', 'db', 'push'] : ['db', 'push'];
+      pushArgs.push('--include-all');
+
+      await execa(command, pushArgs, {
+        stdio: 'inherit',
+        cwd: projectPath,
+        env: {
+          ...process.env,
+          SUPABASE_DB_PASSWORD: dbPassword,
+        },
+      });
       dbPushSpinner.stop('Database schema pushed successfully!');
     }
   } catch (error) {
@@ -1350,8 +1388,12 @@ function runCommand(command, args, options = {}) {
 
 async function runSupabaseCli(args, options = {}) {
   const { cwd } = options;
+  const supabaseBin = await getSupabaseBinary(cwd);
+  const command = supabaseBin === 'npx' ? 'npx' : supabaseBin;
+  const cmdArgs = supabaseBin === 'npx' ? ['supabase', ...args] : args;
+
   return new Promise((resolve, reject) => {
-    const child = spawn('npx', ['supabase', ...args], {
+    const child = spawn(command, cmdArgs, {
       cwd,
       shell: IS_WINDOWS,
       stdio: 'inherit',
@@ -1369,6 +1411,16 @@ async function runSupabaseCli(args, options = {}) {
       }
     });
   });
+}
+
+async function getSupabaseBinary(projectDir) {
+  const binDir = resolve(projectDir, 'node_modules', '.bin');
+  const ext = IS_WINDOWS ? '.cmd' : '';
+  const binaryPath = resolve(binDir, `supabase${ext}`);
+  if (await fs.pathExists(binaryPath)) {
+    return binaryPath;
+  }
+  return 'npx';
 }
 
 function buildNextConfigContent(editorUtilNames) {
