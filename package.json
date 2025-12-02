@@ -1,6 +1,6 @@
 {
   "name": "@nextblock/source",
-  "version": "0.2.40",
+  "version": "0.2.41",
   "license": "MIT",
   "scripts": {
     "build:utils": "node tools/scripts/release-lib.js utils",
