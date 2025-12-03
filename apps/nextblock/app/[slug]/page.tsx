@@ -6,7 +6,6 @@ import type { Metadata } from 'next';
 import PageClientContent from "./PageClientContent";
 import { getPageDataBySlug } from "./page.utils";
 import BlockRenderer from "../../components/BlockRenderer";
-import type { HeroBlockContent } from '../../lib/blocks/blockRegistry';
 import { cookies, headers } from "next/headers";
 
 export const dynamicParams = true;
@@ -147,31 +146,13 @@ export default async function DynamicPage({ params: paramsPromise }: PageProps) 
     }
   }
 
-  let lcpImageUrl: string | null = null;
-  const r2BaseUrl = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 
-  if (pageData && pageData.blocks && r2BaseUrl) {
-    const heroBlock = pageData.blocks.find(block => block.block_type === 'hero');
-    if (heroBlock) {
-      const heroContent = heroBlock.content as unknown as HeroBlockContent;
-      if (
-        heroContent.background &&
-        heroContent.background.type === "image" &&
-        heroContent.background.image &&
-        heroContent.background.image.object_key
-      ) {
-        lcpImageUrl = `${r2BaseUrl}/${heroContent.background.image.object_key}`;
-      }
-    }
-  }
 
   const pageBlocks = pageData ? <BlockRenderer blocks={pageData.blocks} languageId={pageData.language_id} /> : null;
 
   return (
     <>
-      {lcpImageUrl && (
-        <link rel="preload" as="image" href={lcpImageUrl} />
-      )}
+
       <PageClientContent initialPageData={pageData} currentSlug={params.slug} translatedSlugs={translatedSlugs}>
         {pageBlocks}
       </PageClientContent>

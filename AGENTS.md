@@ -43,6 +43,7 @@ For any latest documentation, use context7 MCP tool.
 2.  **Strict Types:** Always use `strict: true` TypeScript.
 3.  **No Circular Dependencies:** `libs/ui` cannot depend on `apps/nextblock`.
 4.  **Packaging Mindset:** Code in libraries must be compatible with being published to NPM.
+5.  **Target the App, Not the Template:** NEVER edit files in `apps/create-nextblock/templates/nextblock-template` directly. Always make changes in `apps/nextblock` (the core app). The template is synced from the core app via scripts.
 
 <!-- nx configuration start-->
 <!-- Leave the start & end comments to automatically receive updates. -->
