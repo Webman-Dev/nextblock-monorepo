@@ -38,7 +38,7 @@
     "next-env.d.ts",
     ".next/types/**/*.ts",
     "../../dist/apps/nextblock/.next/types/**/*.ts",
-    "../../tailwind.config.js"
+    "../../libs/ui/tailwind.config.js"
   ],
   "exclude": [
     "node_modules",

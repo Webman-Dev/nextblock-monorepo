@@ -16,6 +16,11 @@ const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({ conte
   const options: HTMLReactParserOptions = {
     replace: (domNode) => {
       if (domNode instanceof Element && domNode.attribs) {
+        if (domNode.attribs['fetchpriority']) {
+          domNode.attribs['fetchPriority'] = domNode.attribs['fetchpriority'];
+          delete domNode.attribs['fetchpriority'];
+        }
+
         if (domNode.attribs['data-alert-widget'] !== undefined) {
           const {
             'data-type': type,

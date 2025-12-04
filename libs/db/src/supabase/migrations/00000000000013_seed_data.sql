@@ -26,7 +26,12 @@ INSERT INTO public.translations (key, translations) VALUES
 ('mobile_navigation_menu', '{"en": "Mobile navigation menu", "fr": "Menu de navigation mobile"}'),
 ('cms_dashboard', '{"en": "CMS Dashboard", "fr": "Tableau de bord CMS"}'),
 ('update_env_file_warning', '{"en": "Please update .env.local file with anon key and url", "fr": "Veuillez mettre à jour .env.local avec l''anon key et l''URL"}'),
-('greeting', '{"en": "Hey, {username}!", "fr": "Salut, {username} !"}')
+('greeting', '{"en": "Hey, {username}!", "fr": "Salut, {username} !"}'),
+('theme_switcher', '{"en": "Theme Switcher", "fr": "Sélecteur de thème"}'),
+('theme_light', '{"en": "Light", "fr": "Clair"}'),
+('theme_dark', '{"en": "Dark", "fr": "Sombre"}'),
+('theme_system', '{"en": "System", "fr": "Système"}'),
+('theme_vibrant', '{"en": "Vibrant", "fr": "Vibrant"}')
 ON CONFLICT (key) DO UPDATE
 SET translations = EXCLUDED.translations;
 

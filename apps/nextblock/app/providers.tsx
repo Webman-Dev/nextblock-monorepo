@@ -32,6 +32,7 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
               enableSystem
               disableTransitionOnChange
               nonce={nonce}
+              themes={['light', 'dark', 'vibrant']}
             >
               {children}
             </ThemeProvider>
