@@ -144,10 +144,10 @@
     "vite": "^7.2.6",
     "vite-plugin-dts": "~4.5.0",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "3.2.4",
-    "zod": "^3.25.76"
+    "vitest": "3.2.4"
   },
   "dependencies": {
+    "zod": "^3.25.76",
     "@floating-ui/dom": "^1.7.4",
     "@floating-ui/react": "^0.27.16",
     "@next/bundle-analyzer": "^16.0.1",
