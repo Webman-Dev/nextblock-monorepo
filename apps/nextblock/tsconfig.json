@@ -58,6 +58,9 @@
     },
     {
       "path": "../../libs/utils/tsconfig.json"
+    },
+    {
+      "path": "../../libs/sdk/tsconfig.lib.json"
     }
   ]
 }

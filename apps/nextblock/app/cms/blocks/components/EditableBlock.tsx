@@ -34,7 +34,7 @@ export default function EditableBlock({
   // Move all hooks to the top before any conditional returns
   const [isConfigPanelOpen, setIsConfigPanelOpen] = useState(false);
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
-  const [LazyEditor, setLazyEditor] = useState<LazyExoticComponent<ComponentType<any>> | null>(null);
+  const [LazyEditor, setLazyEditor] = useState<LazyExoticComponent<ComponentType<any>> | ComponentType<any> | null>(null);
 
   const SectionEditor = useMemo(() => {
     if (block?.block_type === 'section' || block?.block_type === 'hero') {
@@ -58,14 +58,21 @@ export default function EditableBlock({
     if (block.block_type === 'section' || block.block_type === 'hero') {
       setIsConfigPanelOpen(prev => !prev);
     } else {
-      const editorFilename = blockRegistry[block.block_type as BlockType]?.editorComponentFilename;
+      const blockDef = getBlockDefinition(block.block_type as BlockType);
+      
       if (block.block_type === 'posts_grid') {
         const LazifiedPostsGridEditor = lazy(() => Promise.resolve({ default: PostsGridBlockEditor }));
         setLazyEditor(LazifiedPostsGridEditor);
         setEditingBlock(block);
       }
-      else if (editorFilename) {
-        const Editor = lazy(() => import(`../editors/${editorFilename}`));
+      else if (blockDef?.EditorComponent) {
+        const Component = blockDef.EditorComponent;
+        setLazyEditor(() => Component);
+        setEditingBlock(block);
+      }
+      else if (blockDef?.editorComponentFilename) {
+        const filename = blockDef.editorComponentFilename;
+        const Editor = lazy(() => import(`../editors/${filename.replace(/\.tsx$/, '')}`));
         setLazyEditor(Editor);
         setEditingBlock(block);
       }

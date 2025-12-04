@@ -121,7 +121,7 @@ type EditingBlock = ColumnBlock & { index: number };
 export default function ColumnEditor({ columnIndex, blocks, onBlocksChange, blockType }: ColumnEditorProps) {
   const [editingBlock, setEditingBlock] = useState<EditingBlock | null>(null);
   const [isBlockSelectorOpen, setIsBlockSelectorOpen] = useState(false);
-  const [LazyEditor, setLazyEditor] = useState<React.LazyExoticComponent<React.ComponentType<any>> | null>(null);
+  const [LazyEditor, setLazyEditor] = useState<React.LazyExoticComponent<React.ComponentType<any>> | React.ComponentType<any> | null>(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [blockToDeleteIndex, setBlockToDeleteIndex] = useState<number | null>(null);
 
@@ -169,8 +169,18 @@ export default function ColumnEditor({ columnIndex, blocks, onBlocksChange, bloc
 
   const handleStartEdit = (block: ColumnBlock, index: number) => {
     const blockDef = getBlockDefinition(block.block_type);
-    if (blockDef && blockDef.editorComponentFilename) {
-      const Editor = lazy(() => import(`../editors/${blockDef.editorComponentFilename.replace(/\.tsx$/, '')}`));
+    if (!blockDef) {
+      console.error(`No definition found for block type: ${block.block_type}`);
+      return;
+    }
+
+    if (blockDef.EditorComponent) {
+      const Component = blockDef.EditorComponent;
+      setLazyEditor(() => Component);
+      setEditingBlock({ ...block, index });
+    } else if (blockDef.editorComponentFilename) {
+      const filename = blockDef.editorComponentFilename;
+      const Editor = lazy(() => import(`../editors/${filename.replace(/\.tsx$/, '')}`));
       setLazyEditor(Editor);
       setEditingBlock({ ...block, index });
     } else {

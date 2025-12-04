@@ -20,6 +20,16 @@ export interface BlockProps<TSchema extends BlockContentSchema> {
   // Future props can be added here (e.g., custom hooks for event handlers)
 }
 
+// 3.5 The Block Editor Props Contract
+export interface BlockEditorProps<TSchema extends BlockContentSchema> {
+  /** The strongly-typed content data for this block instance. */
+  content: BlockData<TSchema>;
+  /** The block instance itself (metadata like ID, type, etc.) */
+  block: { type: string; [key: string]: any };
+  /** Callback to update the block's content. */
+  onChange: (newContent: BlockData<TSchema>) => void;
+}
+
 // 4. The Block Definition/Config for Registration
 // This is the object the developer exports to register their block.
 export interface BlockConfig<TSchema extends BlockContentSchema> {
@@ -36,7 +46,7 @@ export interface BlockConfig<TSchema extends BlockContentSchema> {
     /** The React component used to render the block in the public site. */
     RendererComponent: React.ComponentType<BlockProps<TSchema>>;
     /** The React component used for editing the block in the CMS sidebar. */
-    EditorComponent: React.ComponentType<BlockProps<TSchema>>; 
+    EditorComponent: React.ComponentType<BlockEditorProps<TSchema>>; 
     // Note: The CMS will handle the `initialContent` and the runtime content data derivation.
 }
 

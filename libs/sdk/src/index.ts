@@ -1,1 +1,1 @@
-export * from './lib/sdk.js';
+export * from './lib/sdk';

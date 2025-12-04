@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TestimonialBlockConfig, TestimonialBlockContent } from '../../components/blocks/TestimonialBlock';
 
 /**
  * Block Registry System
@@ -11,7 +12,7 @@ import { z } from 'zod';
 /**
  * Available block types - defined here as the source of truth
  */
-export const availableBlockTypes = ["text", "heading", "image", "button", "posts_grid", "video_embed", "section", "hero", "form"] as const;
+export const availableBlockTypes = ["text", "heading", "image", "button", "posts_grid", "video_embed", "section", "hero", "form", "testimonial"] as const;
 export type BlockType = (typeof availableBlockTypes)[number];
 
 // --- Zod Schemas & Inferred Types ---
@@ -155,14 +156,18 @@ export interface BlockDefinition<T = any> {
   type: BlockType;
   /** User-friendly display name for the block */
   label: string;
-  /** Optional icon for the block, using lucide-react icon names */
-  icon?: string;
+  /** Optional icon for the block, using lucide-react icon names or component */
+  icon?: string | any;
   /** Default content structure for new blocks of this type */
   initialContent: T;
   /** Filename of the editor component (assumed to be in app/cms/blocks/editors/) */
-  editorComponentFilename: string;
+  editorComponentFilename?: string;
   /** Filename of the renderer component (assumed to be in components/blocks/renderers/) */
-  rendererComponentFilename: string;
+  rendererComponentFilename?: string;
+  /** Direct React component for rendering (overrides filename if present) */
+  RendererComponent?: React.ComponentType<any>;
+  /** Direct React component for editing (overrides filename if present) */
+  EditorComponent?: React.ComponentType<any>;
   /** Optional filename for specific preview components */
   previewComponentFilename?: string;
   /**
@@ -456,6 +461,17 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
       ],
     },
   },
+  
+  "testimonial": {
+    ...TestimonialBlockConfig,
+    // Adapt SDK config to BlockDefinition requirements
+    editorComponentFilename: 'TestimonialBlockEditor', // Placeholder, not used if EditorComponent is present
+    rendererComponentFilename: 'TestimonialBlockRenderer', // Placeholder
+    documentation: {
+      description: 'Display a user testimonial with a quote, author, and optional image.',
+      useCases: ['Social proof', 'Customer reviews'],
+    }
+  } as BlockDefinition<TestimonialBlockContent>,
 };
 
 
@@ -534,7 +550,8 @@ export type AllBlockContent =
   | ({ type: "section" } & SectionBlockContent)
   | ({ type: "hero" } & HeroBlockContent)
   | ({ type: "video_embed" } & VideoEmbedBlockContent)
-  | ({ type: "form" } & FormBlockContent);
+  | ({ type: "form" } & FormBlockContent)
+  | ({ type: "testimonial" } & TestimonialBlockContent);
 
 /**
 * Validate block content against its schema

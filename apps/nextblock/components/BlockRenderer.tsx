@@ -1,4 +1,4 @@
-// components/BlockRenderer.tsx
+ // components/BlockRenderer.tsx
 import React from "react";
 import dynamic from "next/dynamic";
 import type { Database } from "@nextblock-cms/db";
@@ -44,6 +44,19 @@ const DynamicBlockRenderer: React.FC<DynamicBlockRendererProps> = ({
   // Handle the text block type by rendering the client component wrapper
   if (block.block_type === 'text') {
     return <ClientTextBlockRenderer content={block.content as any} languageId={languageId} />;
+  }
+
+  // Check if the block definition provides a direct component (e.g., from SDK plugins)
+  if (blockDefinition.RendererComponent) {
+    const RendererComponent = blockDefinition.RendererComponent;
+    return (
+      <RendererComponent
+        content={block.content}
+        languageId={languageId}
+        isInEditor={false} // Assuming public view
+        className="my-4"
+      />
+    );
   }
 
   // Create dynamic component with proper SSR handling for other blocks
