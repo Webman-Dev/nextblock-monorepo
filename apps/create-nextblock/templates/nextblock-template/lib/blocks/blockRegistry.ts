@@ -1,231 +1,151 @@
+import { z } from 'zod';
+import { TestimonialBlockConfig, TestimonialBlockContent } from '../../components/blocks/TestimonialBlock';
+
 /**
  * Block Registry System
  *
  * This module provides the central registry for all block types in the CMS.
  * It serves as the single source of truth for block definitions, including
- * their initial content, editor components, renderer components, and TypeScript
- * interface definitions. This eliminates the need to modify utils/supabase/types.ts
- * when adding new block types.
+ * their initial content, editor components, renderer components, and Zod schemas.
  */
-
-/**
- * Content interface definitions for all block types
- * These provide proper TypeScript support with IDE IntelliSense and compile-time checking
- */
-
-/**
- * Content interface for text blocks
- * Supports rich HTML content with WYSIWYG editing
- */
-export interface TextBlockContent {
-  /** Raw HTML content for the text block */
-  html_content: string;
-}
-
-/**
- * Content interface for heading blocks
- * Provides semantic heading structure with configurable hierarchy levels
- */
-export interface HeadingBlockContent {
-  /** Heading level (1-6, corresponding to h1-h6 tags) */
-  level: 1 | 2 | 3 | 4 | 5 | 6;
-  /** The text content of the heading */
-  text_content: string;
-  /** Text alignment of the heading */
-  textAlign?: 'left' | 'center' | 'right' | 'justify';
-  /** Color of the heading text, based on theme colors */
-  textColor?: 'primary' | 'secondary' | 'accent' | 'muted' | 'destructive' | 'background';
-}
-
-/**
- * Content interface for image blocks
- * Supports images with captions, alt text, and responsive sizing
- */
-export interface ImageBlockContent {
-  /** UUID of the media item from the 'media' table */
-  media_id: string | null;
-  /** The actual R2 object key (e.g., "uploads/image.png") */
-  object_key?: string | null;
-  /** Alternative text for accessibility */
-  alt_text?: string;
-  /** Optional caption displayed below the image */
-  caption?: string;
-  /** Image width in pixels */
-  width?: number | null;
-  /** Image height in pixels */
-  height?: number | null;
-}
-
-/**
- * Content interface for button blocks
- * Customizable button/link component with multiple style variants
- */
-export interface ButtonBlockContent {
-  /** The text displayed on the button */
-  text: string;
-  /** The URL the button links to */
-  url: string;
-  /** Visual style variant of the button */
-  variant?: 'default' | 'outline' | 'secondary' | 'ghost' | 'link';
-  /** Size of the button */
-  size?: 'default' | 'sm' | 'lg';
-}
-
-/**
- * Content interface for posts grid blocks
- * Responsive grid layout for displaying blog posts with pagination
- */
-export interface PostsGridBlockContent {
-  /** Number of posts to display per page */
-  postsPerPage: number;
-  /** Number of columns in the grid layout */
-  columns: number;
-  /** Whether to show pagination controls */
-  showPagination: boolean;
-  /** Optional title displayed above the posts grid */
-  title?: string;
-}
-
-export interface VideoEmbedBlockContent {
-  /** The video URL (YouTube, Vimeo, etc.) */
-  url: string;
-  /** Optional title for the video */
-  title?: string;
-  /** Whether the video should autoplay */
-  autoplay?: boolean;
-  /** Whether to show video controls */
-  controls?: boolean;
-}
-
-/**
- * Content interface for section blocks
- * Provides flexible column layouts with responsive breakpoints and background options
- */
-export interface Gradient {
-  type: 'linear' | 'radial';
-  direction?: string;
-  stops: Array<{ color: string; position: number }>;
-}
-
-export interface SectionBlockContent {
-  /** Container width type */
-  container_type: 'full-width' | 'container' | 'container-sm' | 'container-lg' | 'container-xl';
-  /** Background configuration */
-  background: {
-    type: 'none' | 'theme' | 'solid' | 'gradient' | 'image';
-    theme?: 'primary' | 'secondary' | 'muted' | 'accent' | 'destructive';
-    solid_color?: string;
-    min_height?: string;
-    gradient?: Gradient;
-    image?: {
-      media_id: string;
-      object_key: string;
-      alt_text?: string;
-      width?: number;
-      height?: number;
-      blur_data_url?: string;
-      size: 'cover' | 'contain';
-      position: 'center' | 'top' | 'bottom' | 'left' | 'right';
-      quality?: number | null;
-      overlay?: {
-        type: 'gradient';
-        gradient: Gradient;
-      };
-    };
-  };
-  /** Responsive column configuration */
-  responsive_columns: {
-    mobile: 1 | 2;
-    tablet: 1 | 2 | 3;
-    desktop: 1 | 2 | 3 | 4;
-  };
-  /** Gap between columns */
-  column_gap: 'none' | 'sm' | 'md' | 'lg' | 'xl';
-  /** Section padding */
-  padding: {
-    top: 'none' | 'sm' | 'md' | 'lg' | 'xl';
-    bottom: 'none' | 'sm' | 'md' | 'lg' | 'xl';
-  };
-  /** Vertical alignment of columns */
-  vertical_alignment?: 'start' | 'center' | 'end' | 'stretch';
-  /** Array of blocks within columns - 2D array where each index represents a column */
-  column_blocks: Array<Array<{
-    block_type: BlockType;
-    content: Record<string, any>;
-    temp_id?: string; // For client-side management before save
-  }>>;
-}
-
-/**
- * Content interface for hero blocks
- * A specialized version of the section block for page headers
- */
-export type HeroBlockContent = SectionBlockContent;
-
-/**
- * Represents a single option for select, radio, or checkbox group fields.
- */
-export interface FormFieldOption {
-  label: string;
-  value: string;
-}
-
-/**
- * Represents a single field within the form block.
- */
-export interface FormField {
-  temp_id: string; // For client-side keying and reordering
-  field_type: 'text' | 'email' | 'textarea' | 'select' | 'radio' | 'checkbox';
-  label: string;
-  placeholder?: string;
-  is_required: boolean;
-  options?: FormFieldOption[];
-}
-
-/**
- * Content interface for the main form block.
- */
-export interface FormBlockContent {
-  /** The email address where form submissions will be sent. */
-  recipient_email: string;
-  /** The text to display on the submit button. */
-  submit_button_text: string;
-  /** The message to show after a successful submission. */
-  success_message: string;
-  /** An array of form field configurations. */
-  fields: FormField[];
-}
 
 /**
  * Available block types - defined here as the source of truth
  */
-export const availableBlockTypes = ["text", "heading", "image", "button", "posts_grid", "video_embed", "section", "hero", "form"] as const;
+export const availableBlockTypes = ["text", "heading", "image", "button", "posts_grid", "video_embed", "section", "hero", "form", "testimonial"] as const;
 export type BlockType = (typeof availableBlockTypes)[number];
 
-/**
- * Property definition for content schema
- */
-export interface ContentPropertyDefinition {
-  /** The TypeScript type of the property */
-  type: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'union';
-  /** Whether this property is required */
-  required?: boolean;
-  /** Human-readable description of the property */
-  description?: string;
-  /** Default value for the property */
-  default?: any;
-  /** For union types, the possible values */
-  unionValues?: readonly string[];
-  /** For array types, the type of array elements */
-  arrayElementType?: string;
-  /** Additional constraints or validation info */
-  constraints?: {
-    min?: number;
-    max?: number;
-    pattern?: string;
-    enum?: readonly any[];
-  };
-}
+// --- Zod Schemas & Inferred Types ---
+
+export const TextBlockSchema = z.object({
+  html_content: z.string().describe('Raw HTML content for the text block'),
+});
+export type TextBlockContent = z.infer<typeof TextBlockSchema>;
+
+export const HeadingBlockSchema = z.object({
+  level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]).describe('Heading level (1-6)'),
+  text_content: z.string().describe('The text content of the heading'),
+  textAlign: z.enum(['left', 'center', 'right', 'justify']).optional().describe('Text alignment'),
+  textColor: z.enum(['primary', 'secondary', 'accent', 'muted', 'destructive', 'background']).optional().describe('Color of the heading text'),
+});
+export type HeadingBlockContent = z.infer<typeof HeadingBlockSchema>;
+
+export const ImageBlockSchema = z.object({
+  media_id: z.string().nullable().describe('UUID of the media item'),
+  object_key: z.string().nullable().optional().describe('The actual R2 object key'),
+  alt_text: z.string().optional().describe('Alternative text'),
+  caption: z.string().optional().describe('Optional caption'),
+  width: z.number().nullable().optional().describe('Image width'),
+  height: z.number().nullable().optional().describe('Image height'),
+});
+export type ImageBlockContent = z.infer<typeof ImageBlockSchema>;
+
+export const ButtonBlockSchema = z.object({
+  text: z.string().describe('The text displayed on the button'),
+  url: z.string().describe('The URL the button links to'),
+  variant: z.enum(['default', 'outline', 'secondary', 'ghost', 'link']).optional().describe('Visual style variant'),
+  size: z.enum(['default', 'sm', 'lg']).optional().describe('Size of the button'),
+});
+export type ButtonBlockContent = z.infer<typeof ButtonBlockSchema>;
+
+export const PostsGridBlockSchema = z.object({
+  postsPerPage: z.number().min(1).max(50).describe('Number of posts per page'),
+  columns: z.number().min(1).max(6).describe('Number of columns'),
+  showPagination: z.boolean().describe('Whether to show pagination'),
+  title: z.string().optional().describe('Optional title'),
+});
+export type PostsGridBlockContent = z.infer<typeof PostsGridBlockSchema>;
+
+export const VideoEmbedBlockSchema = z.object({
+  url: z.string().describe('The video URL'),
+  title: z.string().optional().describe('Optional title'),
+  autoplay: z.boolean().optional().describe('Autoplay'),
+  controls: z.boolean().optional().describe('Show controls'),
+});
+export type VideoEmbedBlockContent = z.infer<typeof VideoEmbedBlockSchema>;
+
+// Section helpers
+const GradientSchema = z.object({
+  type: z.enum(['linear', 'radial']),
+  direction: z.string().optional(),
+  stops: z.array(z.object({ color: z.string(), position: z.number() })),
+});
+export type Gradient = z.infer<typeof GradientSchema>;
+
+const BackgroundSchema = z.object({
+  type: z.enum(['none', 'theme', 'solid', 'gradient', 'image']),
+  theme: z.enum(['primary', 'secondary', 'muted', 'accent', 'destructive']).optional(),
+  solid_color: z.string().optional(),
+  min_height: z.string().optional(),
+  gradient: GradientSchema.optional(),
+  image: z.object({
+    media_id: z.string(),
+    object_key: z.string(),
+    alt_text: z.string().optional(),
+    width: z.number().optional(),
+    height: z.number().optional(),
+    blur_data_url: z.string().optional(),
+    size: z.enum(['cover', 'contain']),
+    position: z.enum(['center', 'top', 'bottom', 'left', 'right']),
+    quality: z.number().nullable().optional(),
+    overlay: z.object({
+      type: z.literal('gradient'),
+      gradient: GradientSchema,
+    }).optional(),
+  }).optional(),
+});
+
+const BlockInColumnSchema = z.object({
+  block_type: z.enum(availableBlockTypes),
+  content: z.record(z.any()),
+  temp_id: z.string().optional(),
+});
+
+export const SectionBlockSchema = z.object({
+  container_type: z.enum(['full-width', 'container', 'container-sm', 'container-lg', 'container-xl']),
+  background: BackgroundSchema,
+  responsive_columns: z.object({
+    mobile: z.union([z.literal(1), z.literal(2)]),
+    tablet: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    desktop: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+  }),
+  column_gap: z.enum(['none', 'sm', 'md', 'lg', 'xl']),
+  padding: z.object({
+    top: z.enum(['none', 'sm', 'md', 'lg', 'xl']),
+    bottom: z.enum(['none', 'sm', 'md', 'lg', 'xl']),
+  }),
+  vertical_alignment: z.enum(['start', 'center', 'end', 'stretch']).optional(),
+  column_blocks: z.array(z.array(BlockInColumnSchema)),
+});
+export type SectionBlockContent = z.infer<typeof SectionBlockSchema>;
+
+export const HeroBlockSchema = SectionBlockSchema;
+export type HeroBlockContent = z.infer<typeof HeroBlockSchema>;
+
+// Form helpers
+export const FormFieldOptionSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+});
+export type FormFieldOption = z.infer<typeof FormFieldOptionSchema>;
+
+export const FormFieldSchema = z.object({
+  temp_id: z.string(),
+  field_type: z.enum(['text', 'email', 'textarea', 'select', 'radio', 'checkbox']),
+  label: z.string(),
+  placeholder: z.string().optional(),
+  is_required: z.boolean(),
+  options: z.array(FormFieldOptionSchema).optional(),
+});
+export type FormField = z.infer<typeof FormFieldSchema>;
+
+export const FormBlockSchema = z.object({
+  recipient_email: z.string().email(),
+  submit_button_text: z.string(),
+  success_message: z.string(),
+  fields: z.array(FormFieldSchema),
+});
+export type FormBlockContent = z.infer<typeof FormBlockSchema>;
 
 /**
  * Enhanced block definition interface with generic type parameter
@@ -236,21 +156,25 @@ export interface BlockDefinition<T = any> {
   type: BlockType;
   /** User-friendly display name for the block */
   label: string;
-  /** Optional icon for the block, using lucide-react icon names */
-  icon?: string;
+  /** Optional icon for the block, using lucide-react icon names or component */
+  icon?: string | any;
   /** Default content structure for new blocks of this type */
   initialContent: T;
   /** Filename of the editor component (assumed to be in app/cms/blocks/editors/) */
-  editorComponentFilename: string;
+  editorComponentFilename?: string;
   /** Filename of the renderer component (assumed to be in components/blocks/renderers/) */
-  rendererComponentFilename: string;
+  rendererComponentFilename?: string;
+  /** Direct React component for rendering (overrides filename if present) */
+  RendererComponent?: React.ComponentType<any>;
+  /** Direct React component for editing (overrides filename if present) */
+  EditorComponent?: React.ComponentType<any>;
   /** Optional filename for specific preview components */
   previewComponentFilename?: string;
   /**
-   * Structured schema defining the content properties, types, and constraints.
+   * Zod schema defining the content properties, types, and constraints.
    * Used for validation, documentation, and potential runtime type checking.
    */
-  contentSchema: Record<string, ContentPropertyDefinition>;
+  schema: z.ZodType<T>;
   /**
    * JSDoc-style comments providing additional context about the block type,
    * its use cases, and any special considerations.
@@ -279,14 +203,7 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
     initialContent: { html_content: "" } as TextBlockContent,
     editorComponentFilename: "TextBlockEditor.tsx",
     rendererComponentFilename: "TextBlockRenderer.tsx",
-    contentSchema: {
-      html_content: {
-        type: 'string',
-        required: true,
-        description: 'Rich text content for the text block',
-        default: '',
-      },
-    },
+    schema: TextBlockSchema,
     documentation: {
       description: 'A rich text block that supports HTML content with WYSIWYG editing',
       examples: [
@@ -313,46 +230,7 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
     initialContent: { level: 1, text_content: "New Heading", textAlign: 'left', textColor: undefined } as HeadingBlockContent,
     editorComponentFilename: "HeadingBlockEditor.tsx",
     rendererComponentFilename: "HeadingBlockRenderer.tsx",
-    contentSchema: {
-      level: {
-        type: 'union',
-        required: true,
-        description: 'Heading level (1-6, corresponding to h1-h6 tags)',
-        default: 1,
-        unionValues: ['1', '2', '3', '4', '5', '6'] as const,
-        constraints: {
-          min: 1,
-          max: 6,
-          enum: [1, 2, 3, 4, 5, 6] as const,
-        },
-      },
-      text_content: {
-        type: 'string',
-        required: true,
-        description: 'The text content of the heading',
-        default: 'New Heading',
-      },
-      textAlign: {
-        type: 'union',
-        required: false,
-        description: 'Text alignment of the heading',
-        default: 'left',
-        unionValues: ['left', 'center', 'right', 'justify'] as const,
-        constraints: {
-          enum: ['left', 'center', 'right', 'justify'] as const,
-        },
-      },
-      textColor: {
-        type: 'union',
-        required: false,
-        description: 'Color of the heading text, based on theme colors',
-        default: undefined, // Or a specific default like 'primary' if desired
-        unionValues: ['primary', 'secondary', 'accent', 'muted', 'destructive'] as const,
-        constraints: {
-          enum: ['primary', 'secondary', 'accent', 'muted', 'destructive'] as const,
-        },
-      },
-    },
+    schema: HeadingBlockSchema,
     documentation: {
       description: 'A semantic heading block with configurable hierarchy levels',
       examples: [
@@ -379,44 +257,7 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
     initialContent: { media_id: null, alt_text: "", caption: "" } as ImageBlockContent,
     editorComponentFilename: "ImageBlockEditor.tsx",
     rendererComponentFilename: "ImageBlockRenderer.tsx",
-    contentSchema: {
-      media_id: {
-        type: 'string',
-        required: false,
-        description: 'UUID of the media item from the media table',
-        default: null,
-      },
-      object_key: {
-        type: 'string',
-        required: false,
-        description: 'The actual R2 object key (e.g., "uploads/image.png")',
-        default: null,
-      },
-      alt_text: {
-        type: 'string',
-        required: false,
-        description: 'Alternative text for accessibility',
-        default: '',
-      },
-      caption: {
-        type: 'string',
-        required: false,
-        description: 'Optional caption displayed below the image',
-        default: '',
-      },
-      width: {
-        type: 'number',
-        required: false,
-        description: 'Image width in pixels',
-        default: null,
-      },
-      height: {
-        type: 'number',
-        required: false,
-        description: 'Image height in pixels',
-        default: null,
-      },
-    },
+    schema: ImageBlockSchema,
     documentation: {
       description: 'An image block with support for captions, alt text, and responsive sizing',
       examples: [
@@ -443,40 +284,7 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
     initialContent: { text: "Click Me", url: "#", variant: "default", size: "default" } as ButtonBlockContent,
     editorComponentFilename: "ButtonBlockEditor.tsx",
     rendererComponentFilename: "ButtonBlockRenderer.tsx",
-    contentSchema: {
-      text: {
-        type: 'string',
-        required: true,
-        description: 'The text displayed on the button',
-        default: 'Click Me',
-      },
-      url: {
-        type: 'string',
-        required: true,
-        description: 'The URL the button links to',
-        default: '#',
-      },
-      variant: {
-        type: 'union',
-        required: false,
-        description: 'Visual style variant of the button',
-        default: 'default',
-        unionValues: ['default', 'outline', 'secondary', 'ghost', 'link'] as const,
-        constraints: {
-          enum: ['default', 'outline', 'secondary', 'ghost', 'link'] as const,
-        },
-      },
-      size: {
-        type: 'union',
-        required: false,
-        description: 'Size of the button',
-        default: 'default',
-        unionValues: ['default', 'sm', 'lg'] as const,
-        constraints: {
-          enum: ['default', 'sm', 'lg'] as const,
-        },
-      },
-    },
+    schema: ButtonBlockSchema,
     documentation: {
       description: 'A customizable button/link component with multiple style variants',
       examples: [
@@ -504,40 +312,7 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
     initialContent: { postsPerPage: 12, columns: 3, showPagination: true, title: "Recent Posts" } as PostsGridBlockContent,
     editorComponentFilename: "PostsGridBlockEditor.tsx",
     rendererComponentFilename: "PostsGridBlockRenderer.tsx",
-    contentSchema: {
-      postsPerPage: {
-        type: 'number',
-        required: true,
-        description: 'Number of posts to display per page',
-        default: 12,
-        constraints: {
-          min: 1,
-          max: 50,
-        },
-      },
-      columns: {
-        type: 'number',
-        required: true,
-        description: 'Number of columns in the grid layout',
-        default: 3,
-        constraints: {
-          min: 1,
-          max: 6,
-        },
-      },
-      showPagination: {
-        type: 'boolean',
-        required: true,
-        description: 'Whether to show pagination controls',
-        default: true,
-      },
-      title: {
-        type: 'string',
-        required: false,
-        description: 'Optional title displayed above the posts grid',
-        default: 'Recent Posts',
-      },
-    },
+    schema: PostsGridBlockSchema,
     documentation: {
       description: 'A responsive grid layout for displaying blog posts with pagination',
       examples: [
@@ -569,32 +344,7 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
     } as VideoEmbedBlockContent,
     editorComponentFilename: "VideoEmbedBlockEditor.tsx",
     rendererComponentFilename: "VideoEmbedBlockRenderer.tsx",
-    contentSchema: {
-      url: {
-        type: 'string',
-        required: true,
-        description: 'The video URL (YouTube, Vimeo, etc.)',
-        default: '',
-      },
-      title: {
-        type: 'string',
-        required: false,
-        description: 'Optional title for the video',
-        default: '',
-      },
-      autoplay: {
-        type: 'boolean',
-        required: false,
-        description: 'Whether the video should autoplay',
-        default: false,
-      },
-      controls: {
-        type: 'boolean',
-        required: false,
-        description: 'Whether to show video controls',
-        default: true,
-      },
-    },
+    schema: VideoEmbedBlockSchema,
     documentation: {
       description: 'Embeds videos from popular platforms with customizable playback options',
       examples: [
@@ -633,63 +383,7 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
     } as SectionBlockContent,
     editorComponentFilename: "SectionBlockEditor.tsx",
     rendererComponentFilename: "SectionBlockRenderer.tsx",
-    contentSchema: {
-      container_type: {
-        type: 'union',
-        required: true,
-        description: 'Container width type',
-        default: 'container',
-        unionValues: ['full-width', 'container', 'container-sm', 'container-lg', 'container-xl'] as const,
-        constraints: {
-          enum: ['full-width', 'container', 'container-sm', 'container-lg', 'container-xl'] as const,
-        },
-      },
-      background: {
-        type: 'object',
-        required: true,
-        description: 'Background configuration',
-        default: { type: 'none' },
-      },
-      responsive_columns: {
-        type: 'object',
-        required: true,
-        description: 'Responsive column configuration',
-        default: { mobile: 1, tablet: 2, desktop: 3 },
-      },
-      column_gap: {
-        type: 'union',
-        required: true,
-        description: 'Gap between columns',
-        default: 'md',
-        unionValues: ['none', 'sm', 'md', 'lg', 'xl'] as const,
-        constraints: {
-          enum: ['none', 'sm', 'md', 'lg', 'xl'] as const,
-        },
-      },
-      padding: {
-        type: 'object',
-        required: true,
-        description: 'Section padding configuration',
-        default: { top: 'md', bottom: 'md' },
-      },
-      vertical_alignment: {
-        type: 'union',
-        required: false,
-        description: 'Vertical alignment of columns',
-        default: 'start',
-        unionValues: ['start', 'center', 'end', 'stretch'] as const,
-        constraints: {
-          enum: ['start', 'center', 'end', 'stretch'] as const,
-        },
-      },
-      column_blocks: {
-        type: 'array',
-        required: true,
-        description: 'Array of blocks within columns',
-        default: [],
-        arrayElementType: 'object',
-      },
-    },
+    schema: SectionBlockSchema,
     documentation: {
       description: 'A flexible section layout with responsive columns and background options',
       examples: [
@@ -711,7 +405,8 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
       ],
     },
   },
-hero: {
+
+  hero: {
     type: "hero",
     label: "Hero Section",
     icon: "LayoutTemplate",
@@ -732,16 +427,14 @@ hero: {
     } as HeroBlockContent,
     editorComponentFilename: "SectionBlockEditor.tsx", // Reusing section editor
     rendererComponentFilename: "HeroBlockRenderer.tsx", // Specific renderer for hero
-    contentSchema: {
-      // The content schema is inherited from SectionBlockContent, so we don't need to redefine it here.
-      // We could add specific validation for the hero block if needed in the future.
-    },
+    schema: HeroBlockSchema,
     documentation: {
       description: 'A specialized hero section for the top of a page, with prioritized images and pre-populated content.',
       useCases: ['Main page hero/banner', 'Introductory section with a strong call to action'],
       notes: ['This block reuses the Section editor but has a different renderer for optimized image loading.'],
     },
   },
+  
   form: {
     type: "form",
     label: "Form",
@@ -754,33 +447,7 @@ hero: {
     } as FormBlockContent,
     editorComponentFilename: "FormBlockEditor.tsx",
     rendererComponentFilename: "FormBlockRenderer.tsx",
-    contentSchema: {
-      recipient_email: {
-        type: 'string',
-        required: true,
-        description: 'The email address where form submissions will be sent.',
-        default: 'your-email@example.com',
-      },
-      submit_button_text: {
-          type: 'string',
-          required: true,
-          description: 'The text to display on the submit button.',
-          default: 'Submit',
-      },
-      success_message: {
-          type: 'string',
-          required: true,
-          description: 'The message shown to the user after successful submission.',
-          default: 'Thank you for your submission!',
-      },
-      fields: {
-        type: 'array',
-        required: true,
-        description: 'The fields that make up the form.',
-        default: [],
-        arrayElementType: 'object',
-      },
-    },
+    schema: FormBlockSchema,
     documentation: {
       description: 'Creates an interactive form that can be submitted to a specified email address.',
       useCases: [
@@ -794,7 +461,19 @@ hero: {
       ],
     },
   },
+  
+  "testimonial": {
+    ...TestimonialBlockConfig,
+    // Adapt SDK config to BlockDefinition requirements
+    editorComponentFilename: 'TestimonialBlockEditor', // Placeholder, not used if EditorComponent is present
+    rendererComponentFilename: 'TestimonialBlockRenderer', // Placeholder
+    documentation: {
+      description: 'Display a user testimonial with a quote, author, and optional image.',
+      useCases: ['Social proof', 'Customer reviews'],
+    }
+  } as BlockDefinition<TestimonialBlockContent>,
 };
+
 
 /**
  * Get the block definition for a specific block type
@@ -837,13 +516,13 @@ export function isValidBlockType(blockType: string): blockType is BlockType {
 }
 
 /**
- * Get the content schema for a specific block type
+ * Get the Zod schema for a specific block type
  * 
  * @param blockType - The type of block to get the schema for
- * @returns The content schema object or undefined if not found
+ * @returns The Zod schema object or undefined if not found
  */
-export function getContentSchema(blockType: BlockType): Record<string, ContentPropertyDefinition> | undefined {
-  return blockRegistry[blockType]?.contentSchema;
+export function getBlockSchema(blockType: BlockType): z.ZodType<any> | undefined {
+  return blockRegistry[blockType]?.schema;
 }
 
 /**
@@ -871,11 +550,12 @@ export type AllBlockContent =
   | ({ type: "section" } & SectionBlockContent)
   | ({ type: "hero" } & HeroBlockContent)
   | ({ type: "video_embed" } & VideoEmbedBlockContent)
-  | ({ type: "form" } & FormBlockContent);
+  | ({ type: "form" } & FormBlockContent)
+  | ({ type: "testimonial" } & TestimonialBlockContent);
 
 /**
 * Validate block content against its schema
- * Performs runtime validation based on the content schema definitions
+ * Performs runtime validation based on the Zod schema definitions
  * 
  * @param blockType - The type of block to validate
  * @param content - The content to validate
@@ -889,105 +569,23 @@ export function validateBlockContent(
   errors: string[]; 
   warnings: string[]; 
 } {
-  const schema = getContentSchema(blockType);
+  const schema = getBlockSchema(blockType);
   if (!schema) {
     return { isValid: false, errors: ['Block type not found in registry'], warnings: [] };
   }
 
-  const errors: string[] = [];
-  const warnings: string[] = [];
+  const result = schema.safeParse(content);
 
-  // Check required properties
-  for (const [propertyName, propertyDef] of Object.entries(schema)) {
-    if (propertyDef.required && (content[propertyName] === undefined || content[propertyName] === null)) {
-      errors.push(`Required property '${propertyName}' is missing`);
-    }
+  if (result.success) {
+    return { isValid: true, errors: [], warnings: [] };
+  } else {
+    // Format Zod errors
+    const errors = result.error.errors.map(e => {
+      const path = e.path.join('.');
+      return path ? `${path}: ${e.message}` : e.message;
+    });
+    return { isValid: false, errors, warnings: [] };
   }
-
-  // Check property types and constraints
-  for (const [propertyName, value] of Object.entries(content)) {
-    const propertyDef = schema[propertyName];
-    if (!propertyDef) {
-      warnings.push(`Property '${propertyName}' is not defined in schema`);
-      continue;
-    }
-
-    // Type checking
-    const actualType = typeof value;
-    if (propertyDef.type === 'string' && actualType !== 'string') {
-      errors.push(`Property '${propertyName}' should be a string, got ${actualType}`);
-    } else if (propertyDef.type === 'number' && actualType !== 'number') {
-      errors.push(`Property '${propertyName}' should be a number, got ${actualType}`);
-    } else if (propertyDef.type === 'boolean' && actualType !== 'boolean') {
-      errors.push(`Property '${propertyName}' should be a boolean, got ${actualType}`);
-    }
-
-    // Constraint checking
-    if (propertyDef.constraints) {
-      const constraints = propertyDef.constraints;
-      
-      if (typeof value === 'number') {
-        if (constraints.min !== undefined && value < constraints.min) {
-          errors.push(`Property '${propertyName}' should be at least ${constraints.min}, got ${value}`);
-        }
-        if (constraints.max !== undefined && value > constraints.max) {
-          errors.push(`Property '${propertyName}' should be at most ${constraints.max}, got ${value}`);
-        }
-      }
-
-      if (constraints.enum && !constraints.enum.includes(value)) {
-        errors.push(`Property '${propertyName}' should be one of [${constraints.enum.join(', ')}], got ${value}`);
-      }
-    }
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-    warnings,
-  };
-}
-
-/**
- * Get property information for a specific block type and property
- * Useful for building dynamic forms or documentation
- * 
- * @param blockType - The type of block
- * @param propertyName - The name of the property
- * @returns Property definition or undefined if not found
- */
-export function getPropertyDefinition(
-  blockType: BlockType, 
-  propertyName: string
-): ContentPropertyDefinition | undefined {
-  const schema = getContentSchema(blockType);
-  return schema?.[propertyName];
-}
-
-/**
- * Get all property names for a specific block type
- * 
- * @param blockType - The type of block
- * @returns Array of property names
- */
-export function getPropertyNames(blockType: BlockType): string[] {
-  const schema = getContentSchema(blockType);
-  return schema ? Object.keys(schema) : [];
-}
-
-/**
- * Get required property names for a specific block type
- * 
- * @param blockType - The type of block
- * @returns Array of required property names
- */
-export function getRequiredProperties(blockType: BlockType): string[] {
-  const schema = getContentSchema(blockType);
-  if (!schema) return [];
-  
-  return Object.entries(schema)
-    .filter(([, def]) => def.required)
-    .map(([name]) => name);
 }
 
 /**
@@ -998,18 +596,13 @@ export function getRequiredProperties(blockType: BlockType): string[] {
  * @returns Complete default content object
  */
 export function generateDefaultContent(blockType: BlockType): Record<string, any> {
-  const schema = getContentSchema(blockType);
-  const initialContent = getInitialContent(blockType) || {};
-  
-  if (!schema) return initialContent;
-
-  const defaultContent: Record<string, any> = { ...initialContent };
-
-  for (const [propertyName, propertyDef] of Object.entries(schema)) {
-    if (defaultContent[propertyName] === undefined && propertyDef.default !== undefined) {
-      defaultContent[propertyName] = propertyDef.default;
-    }
-  }
-
-  return defaultContent;
+  // For Zod, initialContent is the best source of defaults as defined in the registry.
+  // Zod schemas don't easily expose default values without parsing.
+  // We return initialContent which is required to be valid against the schema.
+  return getInitialContent(blockType) as Record<string, any> || {};
 }
+
+
+
+
+

@@ -33,7 +33,7 @@ type BlockEditorModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onSave: (updatedContent: unknown) => void;
-  EditorComponent: LazyExoticComponent<ComponentType<BlockEditorProps<unknown>>>;
+  EditorComponent: LazyExoticComponent<ComponentType<BlockEditorProps<unknown>>> | ComponentType<BlockEditorProps<unknown>>;
 };
 
 export function BlockEditorModal({

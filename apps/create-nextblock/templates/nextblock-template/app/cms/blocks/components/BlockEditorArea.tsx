@@ -143,33 +143,51 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
       let SelectedEditor: React.ComponentType<any> | null = null;
 
       try {
-        switch (blockType) {
-          case 'text':
-            SelectedEditor = DynamicTextBlockEditor;
-            break;
-          case 'heading':
-            SelectedEditor = DynamicHeadingBlockEditor;
-            break;
-          case 'image':
-            SelectedEditor = DynamicImageBlockEditor;
-            break;
-          case 'button':
-            SelectedEditor = DynamicButtonBlockEditor;
-            break;
-          case 'posts_grid':
-            SelectedEditor = DynamicPostsGridBlockEditor;
-            break;
-          case 'video_embed':
-            SelectedEditor = DynamicVideoEmbedBlockEditor;
-            break;
-          case 'section':
-            SelectedEditor = DynamicSectionBlockEditor;
-            break;
-          default:
-            console.warn(`No dynamic editor configured for nested block type: ${blockType}`);
-            alert(`Error: Editor not configured for ${blockType}.`);
-            setEditingNestedBlockInfo(null);
-            return;
+        // Check block registry for editor component
+        const blockDef = getBlockDefinition(blockType);
+        
+        if (blockDef?.EditorComponent) {
+           SelectedEditor = blockDef.EditorComponent;
+        } else if (blockDef?.editorComponentFilename) {
+           // We can't easily do dynamic imports with variable paths inside this useEffect 
+           // without potentially breaking webpack analysis or needing a different strategy.
+           // However, for the core blocks, we have the pre-defined dynamic imports below.
+           
+           switch (blockType) {
+            case 'text':
+              SelectedEditor = DynamicTextBlockEditor;
+              break;
+            case 'heading':
+              SelectedEditor = DynamicHeadingBlockEditor;
+              break;
+            case 'image':
+              SelectedEditor = DynamicImageBlockEditor;
+              break;
+            case 'button':
+              SelectedEditor = DynamicButtonBlockEditor;
+              break;
+            case 'posts_grid':
+              SelectedEditor = DynamicPostsGridBlockEditor;
+              break;
+            case 'video_embed':
+              SelectedEditor = DynamicVideoEmbedBlockEditor;
+              break;
+            case 'section':
+              SelectedEditor = DynamicSectionBlockEditor;
+              break;
+            default:
+               // Fallback for custom blocks that might use file-based routing but aren't in the switch
+               // This might still fail if webpack hasn't bundled them, but it's worth a try or we need to explicitly add them.
+               // For the PoC Testimonial block, it has EditorComponent so it hits the first if.
+               console.warn(`No dynamic editor configured for nested block type: ${blockType}`);
+               alert(`Error: Editor not configured for ${blockType}.`);
+               setEditingNestedBlockInfo(null);
+               return;
+          }
+        } else {
+             console.warn(`No definition found for nested block type: ${blockType}`);
+             setEditingNestedBlockInfo(null);
+             return;
         }
         setNestedBlockEditorComponent(() => SelectedEditor);
         setTempNestedBlockContent(JSON.parse(JSON.stringify(editingNestedBlockInfo.blockData.content)));
