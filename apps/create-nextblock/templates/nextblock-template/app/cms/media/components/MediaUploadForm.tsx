@@ -4,6 +4,7 @@
 import React, { useState, useRef, useTransition, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@nextblock-cms/ui";
+import { Spinner, Alert, AlertDescription } from "@nextblock-cms/ui";
 import { Input } from "@nextblock-cms/ui";
 import { Label } from "@nextblock-cms/ui";
 import { Progress } from "@nextblock-cms/ui"; // Assuming you have this shadcn/ui component
@@ -329,19 +330,21 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData, defau
           <Progress value={uploadProgress} className="w-full h-2" />
         )}
         {uploadStatus === "success" && (
-          <div className="flex items-center text-green-600">
-            <CheckCircle2 className="h-5 w-5 mr-2" />
-            <p>Upload successful!</p>
-          </div>
+         <Alert variant="success" className="mb-4">
+            <CheckCircle2 className="h-4 w-4" />
+            <AlertDescription>Upload successful!</AlertDescription>
+         </Alert>
         )}
         {uploadStatus === "error" && errorMessage && (
-          <div className="flex items-center text-red-600">
-            <XCircle className="h-5 w-5 mr-2" />
-            <p>Error: {errorMessage}</p>
-          </div>
+          <Alert variant="destructive" className="mb-4">
+            <XCircle className="h-4 w-4" />
+            <AlertDescription>Error: {errorMessage}</AlertDescription>
+          </Alert>
         )}
         {processingStatus === "processing" && (
-          <p className="text-sm text-blue-600 animate-pulse">Processing image variants...</p>
+          <div className="flex items-center text-sm text-blue-600 animate-pulse">
+             <Spinner className="mr-2 h-4 w-4" /> Processing image variants...
+          </div>
         )}
         {/* Message for when original uploads but variants fail, errorMessage will be set */}
 
@@ -352,9 +355,17 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData, defau
           disabled={isPending || uploadStatus === "uploading" || processingStatus === "processing" || !file}
           className="w-full sm:w-auto"
         >
-          {uploadStatus === "uploading" ? `Uploading ${uploadProgress}%...`
-           : processingStatus === "processing" ? "Processing..."
-           : "Upload File"}
+          {uploadStatus === "uploading" ? (
+             <>
+               <Spinner className="mr-2 h-4 w-4" /> Uploading {uploadProgress}%...
+             </>
+           ) : processingStatus === "processing" ? (
+             <>
+               <Spinner className="mr-2 h-4 w-4" /> Processing...
+             </>
+           ) : (
+             "Upload File"
+           )}
         </Button>
       </form>
     </div>

@@ -6,11 +6,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@nextblock-cms/ui';
 import { Input } from '@nextblock-cms/ui';
 import { Label } from '@nextblock-cms/ui';
-import { Checkbox } from '@nextblock-cms/ui'; // Assuming shadcn/ui Checkbox
+import { Checkbox } from '@nextblock-cms/ui';
+import { Alert, AlertTitle, AlertDescription, Spinner, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@nextblock-cms/ui';
+import { Info } from 'lucide-react';
 import type { Database } from "@nextblock-cms/db";
 
 type Language = Database["public"]["Tables"]["languages"]["Row"];
 import { useAuth } from '@/context/AuthContext';
+import { useHotkeys } from '@/hooks/use-hotkeys';
 
 interface LanguageFormProps {
   language?: Language | null;
@@ -77,22 +80,31 @@ export default function LanguageForm({
 
   const isTheOnlyDefaultLanguage = isEditing && language?.is_default && allLanguages.filter(l => l.is_default).length === 1;
 
+  const formRef = React.useRef<HTMLFormElement>(null);
+  useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       {formMessage && (
-        <div
-          className={`p-3 rounded-md text-sm ${
-            formMessage.type === 'success'
-              ? 'bg-green-100 text-green-700 border border-green-200'
-              : 'bg-red-100 text-red-700 border border-red-200'
-          }`}
-        >
-          {formMessage.text}
-        </div>
+        <Alert variant={formMessage.type === 'success' ? 'success' : 'destructive'}>
+          <AlertTitle>{formMessage.type === 'success' ? 'Success' : 'Error'}</AlertTitle>
+          <AlertDescription>{formMessage.text}</AlertDescription>
+        </Alert>
       )}
       <div>
-        <Label htmlFor="code">Language Code (e.g., en, fr-CA)</Label>
+        <div className="flex items-center gap-2 mb-2">
+          <Label htmlFor="code">Language Code</Label>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="h-4 w-4 text-muted-foreground opacity-70 cursor-pointer" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>ISO 639-1 code (e.g., 'en' for English, 'fr' for French).</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
         <Input
           id="code"
           name="code"
@@ -130,6 +142,16 @@ export default function LanguageForm({
         <Label htmlFor="is_default" className="font-normal leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
           Set as Default Language
         </Label>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Info className="h-4 w-4 text-muted-foreground opacity-70 cursor-pointer" />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>The default language for the site. Only one language can be default.</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
        {isTheOnlyDefaultLanguage && isDefault && (
           <p className="text-xs text-amber-600">This is the only default language. To change, set another language as default.</p>
@@ -159,7 +181,13 @@ export default function LanguageForm({
           Cancel
         </Button>
         <Button type="submit" disabled={isPending || authLoading}>
-          {isPending ? "Saving..." : actionButtonText}
+          {isPending ? (
+            <>
+              <Spinner className="mr-2 h-4 w-4" /> Saving...
+            </>
+          ) : (
+            actionButtonText
+          )}
         </Button>
       </div>
     </form>

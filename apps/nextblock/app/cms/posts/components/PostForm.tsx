@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@nextblock-cms/ui";
+import { Spinner, Alert, AlertDescription } from "@nextblock-cms/ui";
 import { Textarea } from "@nextblock-cms/ui";
 import {
   Dialog,
@@ -36,6 +37,8 @@ import MediaImage from "@/app/cms/media/components/MediaImage"; // For displayin
 import { getMediaItems } from "@/app/cms/media/actions";
 import MediaUploadForm from "@/app/cms/media/components/MediaUploadForm";
 import { Separator } from "@nextblock-cms/ui";
+import { useRef } from "react";
+import { useHotkeys } from "@/hooks/use-hotkeys";
 
 
 interface PostFormProps {
@@ -219,18 +222,15 @@ export default function PostForm({
     return <div>Please log in to manage posts.</div>;
   }
 
+  const formRef = useRef<HTMLFormElement>(null);
+  useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 w-full mx-auto px-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6 w-full mx-auto px-6">
       {formMessage && (
-        <div
-          className={`p-3 rounded-md text-sm ${
-            formMessage.type === 'success'
-              ? 'bg-green-100 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700'
-              : 'bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700'
-          }`}
-        >
-          {formMessage.text}
-        </div>
+        <Alert variant={formMessage.type === 'success' ? 'success' : 'destructive'} className="mb-4">
+           <AlertDescription>{formMessage.text}</AlertDescription>
+        </Alert>
       )}
       <div>
         <Label htmlFor="title">Title</Label>
@@ -393,7 +393,7 @@ export default function PostForm({
                 {!mediaLoading && hasMoreMedia && mediaItems.length > 0 && (
                   <div className="text-center mt-6">
                     <Button onClick={() => loadMedia(mediaPage + 1, true)} variant="outline" disabled={mediaLoading}>
-                      {mediaLoading ? "Loading..." : "Load More"}
+                      {mediaLoading ? <><Spinner className="mr-2 h-4 w-4" /> Loading...</> : "Load More"}
                     </Button>
                   </div>
                 )}
@@ -411,7 +411,13 @@ export default function PostForm({
       <div className="flex justify-end space-x-3 pt-6"> {/* Increased pt for spacing */}
         <Button type="button" variant="outline" onClick={() => router.push("/cms/posts")} disabled={isPending}>Cancel</Button>
         <Button type="submit" disabled={isPending || authLoading || availableLanguages.length === 0}>
-          {isPending ? "Saving..." : actionButtonText}
+          {isPending ? (
+            <>
+              <Spinner className="mr-2 h-4 w-4" /> Saving...
+            </>
+          ) : (
+            actionButtonText
+          )}
         </Button>
       </div>
     </form>

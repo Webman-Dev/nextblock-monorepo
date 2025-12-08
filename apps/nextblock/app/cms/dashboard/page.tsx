@@ -1,7 +1,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@nextblock-cms/ui"
-import { Calendar, FileText, PenTool, Users, ArrowUpRight, ArrowDownRight, Eye } from "lucide-react"
+import { Calendar, FileText, PenTool, Users, Eye } from "lucide-react"
+import { getDashboardStats } from "./actions"
 
-export default function CmsDashboardPage() {
+export default async function CmsDashboardPage() {
+  const stats = await getDashboardStats();
+
   return (
     <div className="w-full space-y-6">
       <div>
@@ -17,13 +20,10 @@ export default function CmsDashboardPage() {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">24</div>
+            <div className="text-2xl font-bold">{stats.totalPages}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              <span className="text-emerald-500 font-medium inline-flex items-center">
-                <ArrowUpRight className="h-3 w-3 mr-1" />
-                12%
-              </span>{" "}
-              from last month
+              {/* Trend data would require historical data, keeping static or hiding for now */}
+              <span className="text-muted-foreground opacity-50">Total pages on site</span>
             </p>
           </CardContent>
         </Card>
@@ -34,13 +34,9 @@ export default function CmsDashboardPage() {
             <PenTool className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">142</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              <span className="text-emerald-500 font-medium inline-flex items-center">
-                <ArrowUpRight className="h-3 w-3 mr-1" />
-                8%
-              </span>{" "}
-              from last month
+            <div className="text-2xl font-bold">{stats.totalPosts}</div>
+             <p className="text-xs text-muted-foreground mt-1">
+              <span className="text-muted-foreground opacity-50">Total blog posts</span>
             </p>
           </CardContent>
         </Card>
@@ -51,30 +47,22 @@ export default function CmsDashboardPage() {
             <Eye className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">8,623</div>
+            <div className="text-2xl font-bold">--</div> {/* Placeholder */}
             <p className="text-xs text-muted-foreground mt-1">
-              <span className="text-emerald-500 font-medium inline-flex items-center">
-                <ArrowUpRight className="h-3 w-3 mr-1" />
-                24%
-              </span>{" "}
-              from last month
+               Analytics Integration Coming Soon
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Active Users</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">573</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              <span className="text-red-500 font-medium inline-flex items-center">
-                <ArrowDownRight className="h-3 w-3 mr-1" />
-                3%
-              </span>{" "}
-              from last month
+            <div className="text-2xl font-bold">{stats.totalUsers}</div>
+             <p className="text-xs text-muted-foreground mt-1">
+              <span className="text-muted-foreground opacity-50">Registered profiles</span>
             </p>
           </CardContent>
         </Card>
@@ -89,30 +77,34 @@ export default function CmsDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentContent.map((item, index) => (
-                <div key={index} className="flex items-start gap-4 pb-4 border-b last:border-0 last:pb-0">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center ${item.type === "page" ? "bg-blue-100 text-blue-600" : "bg-amber-100 text-amber-600"} dark:bg-opacity-20`}
-                  >
-                    {item.type === "page" ? <FileText className="h-4 w-4" /> : <PenTool className="h-4 w-4" />}
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="text-sm font-medium">{item.title}</h4>
-                    <div className="flex items-center gap-2 mt-1">
-                      <p className="text-xs text-muted-foreground">{item.author}</p>
-                      <span className="text-xs text-muted-foreground">•</span>
-                      <p className="text-xs text-muted-foreground">{item.date}</p>
+              {stats.recentContent.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No recent content found.</p>
+              ) : (
+                stats.recentContent.map((item, index) => (
+                  <div key={index} className="flex items-start gap-4 pb-4 border-b last:border-0 last:pb-0">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center ${item.type === "page" ? "bg-blue-100 text-blue-600" : "bg-amber-100 text-amber-600"} dark:bg-opacity-20`}
+                    >
+                      {item.type === "page" ? <FileText className="h-4 w-4" /> : <PenTool className="h-4 w-4" />}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-medium">{item.title}</h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-xs text-muted-foreground">{item.author}</p>
+                        <span className="text-xs text-muted-foreground">•</span>
+                        <p className="text-xs text-muted-foreground">{item.date}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center">
+                      <span
+                        className={`text-xs px-2 py-1 rounded-full ${item.status === "published" ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-700"} dark:bg-opacity-20 uppercase`}
+                      >
+                        {item.status}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center">
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full ${item.status === "Published" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"} dark:bg-opacity-20`}
-                    >
-                      {item.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -124,26 +116,31 @@ export default function CmsDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {scheduledContent.map((item, index) => (
-                <div key={index} className="flex items-start gap-4 pb-4 border-b last:border-0 last:pb-0">
-                  <div className="w-10 h-10 rounded bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center text-center">
-                    <span className="text-xs font-medium">{item.month}</span>
-                    <span className="text-sm font-bold">{item.day}</span>
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="text-sm font-medium">{item.title}</h4>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Calendar className="h-3 w-3 text-muted-foreground" />
-                      <p className="text-xs text-muted-foreground">{item.time}</p>
+              {stats.scheduledContent.length === 0 ? (
+                 <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                    <Calendar className="h-8 w-8 mb-2 opacity-20" />
+                    <p>No content scheduled.</p>
+                 </div>
+              ) : (
+                stats.scheduledContent.map((item, index) => (
+                  <div key={index} className="flex items-start gap-4 pb-4 border-b last:border-0 last:pb-0">
+                    <div className="w-10 h-10 rounded bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center text-center">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-medium">{item.title}</h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-xs text-muted-foreground">{item.date}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        {item.type}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center">
-                    <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                      {item.type}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -153,95 +150,21 @@ export default function CmsDashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>Traffic Overview</CardTitle>
-          <CardDescription>Page views over the last 30 days</CardDescription>
+          <CardDescription>Page views over the last 30 days (Mock Data)</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-[200px] flex items-end gap-2">
-            {analyticsData.map((item, index) => (
-              <div key={index} className="flex-1 flex flex-col items-center">
-                <div
-                  className="w-full bg-primary/10 dark:bg-primary/20 rounded-sm"
-                  style={{ height: `${item.value}%` }}
-                ></div>
-                <span className="text-xs text-muted-foreground mt-2">{item.label}</span>
-              </div>
-            ))}
+          <div className="h-[200px] flex items-end gap-2 align-bottom">
+             {/* Mock chart bars */}
+             {[20, 45, 30, 80, 55, 40, 60, 30, 70, 45, 25, 65, 50, 40].map((h, i) => (
+                <div key={i} className="flex-1 bg-primary/20 hover:bg-primary/40 transition-colors rounded-t-sm relative group" style={{ height: `${h}%` }}>
+                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                        {h * 10} views
+                    </div>
+                </div>
+             ))}
           </div>
         </CardContent>
       </Card>
     </div>
   )
 }
-
-// Sample data
-const recentContent = [
-  {
-    title: "Homepage Redesign",
-    type: "page",
-    author: "John Smith",
-    date: "Today, 2:30 PM",
-    status: "Published",
-  },
-  {
-    title: "New Product Launch",
-    type: "post",
-    author: "Sarah Johnson",
-    date: "Yesterday, 10:15 AM",
-    status: "Published",
-  },
-  {
-    title: "Q2 Marketing Strategy",
-    type: "post",
-    author: "Michael Brown",
-    date: "May 12, 2023",
-    status: "Draft",
-  },
-  {
-    title: "About Us Page",
-    type: "page",
-    author: "John Smith",
-    date: "May 10, 2023",
-    status: "Published",
-  },
-]
-
-const scheduledContent = [
-  {
-    title: "Summer Sale Announcement",
-    month: "May",
-    day: "20",
-    time: "9:00 AM",
-    type: "Post",
-  },
-  {
-    title: "New Feature Release",
-    month: "May",
-    day: "22",
-    time: "12:00 PM",
-    type: "Page",
-  },
-  {
-    title: "Customer Testimonials",
-    month: "May",
-    day: "25",
-    time: "3:30 PM",
-    type: "Post",
-  },
-  {
-    title: "Team Page Update",
-    month: "May",
-    day: "28",
-    time: "10:00 AM",
-    type: "Page",
-  },
-]
-
-const analyticsData = [
-  { label: "1", value: 20 },
-  { label: "5", value: 40 },
-  { label: "10", value: 35 },
-  { label: "15", value: 50 },
-  { label: "20", value: 30 },
-  { label: "25", value: 80 },
-  { label: "30", value: 60 },
-]

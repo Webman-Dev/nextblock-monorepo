@@ -6,9 +6,11 @@ import Image from 'next/image'
 import { Input } from '@nextblock-cms/ui'
 import { Label } from '@nextblock-cms/ui'
 import { Button } from '@nextblock-cms/ui'
+import { Alert, AlertDescription, Spinner } from '@nextblock-cms/ui'
 import type { Database } from '@nextblock-cms/db'
 import { ImageIcon, X as XIcon } from 'lucide-react'
 import MediaPickerDialog from '@/app/cms/media/components/MediaPickerDialog'
+import { useHotkeys } from '@/hooks/use-hotkeys'
 type Media = Database['public']['Tables']['media']['Row'];
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || ''
 
@@ -96,6 +98,8 @@ export default function LogoForm({ logo, action }: LogoFormProps) {
     })
   }
 
+  useHotkeys('ctrl+s', handleSave, [handleSave]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -162,10 +166,18 @@ export default function LogoForm({ logo, action }: LogoFormProps) {
           onClick={handleSave}
           disabled={isPending || !logoDetails.name || !logoDetails.media_id}
         >
-          {isPending ? 'Saving...' : `${logo ? 'Update' : 'Create'} Logo`}
+          {isPending ? (
+            <>
+              <Spinner className="mr-2 h-4 w-4" /> Saving...
+            </>
+          ) : (
+            `${logo ? 'Update' : 'Create'} Logo`
+          )}
         </Button>
         {formError && (
-          <div className="text-red-500 text-sm">{formError}</div>
+          <Alert variant="destructive" className="py-2 px-4 w-auto inline-flex items-center">
+             <AlertDescription>{formError}</AlertDescription>
+          </Alert>
         )}
       </div>
     </div>

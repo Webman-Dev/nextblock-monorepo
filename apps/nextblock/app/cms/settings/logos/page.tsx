@@ -17,8 +17,9 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@nextblock-cms/ui'
-import { deleteLogo, getLogos } from './actions'
+import { getLogos } from './actions'
 import MediaImage from '@/app/cms/media/components/MediaImage'
+import DeleteLogoButton from './components/DeleteLogoButton'
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || ''
 
@@ -99,11 +100,7 @@ export default async function CmsLogosListPage() {
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <form action={deleteLogo.bind(null, logo.id)}>
-                          <button type="submit" className="w-full text-left px-2 py-1.5 text-sm text-red-500">
-                            Delete
-                          </button>
-                        </form>
+                        <DeleteLogoButton logoId={logo.id} />
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

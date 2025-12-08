@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import { Button } from "@nextblock-cms/ui";
+import { Spinner, Alert, AlertDescription } from "@nextblock-cms/ui";
 import {
   Dialog,
   DialogContent,
@@ -139,9 +140,21 @@ export default function RevisionHistoryButton({ parentType, parentId }: Revision
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          {loading && <div className="text-sm text-muted-foreground">Loading revisions…</div>}
-          {error && <div className="text-sm text-red-600">{error}</div>}
-          {message && <div className="text-sm text-green-600">{message}</div>}
+          {loading && (
+             <div className="flex items-center justify-center py-4">
+                <Spinner size="lg" />
+             </div>
+          )}
+          {error && (
+            <Alert variant="destructive">
+               <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          {message && (
+            <Alert variant="success">
+               <AlertDescription>{message}</AlertDescription>
+            </Alert>
+          )}
 
           {(!loading && revisions && revisions.length === 0) && (
             <div className="text-sm text-muted-foreground">No revisions yet.</div>
@@ -166,10 +179,10 @@ export default function RevisionHistoryButton({ parentType, parentId }: Revision
                     </div>
                     <div className="flex gap-2">
                       <Button variant="secondary" size="sm" onClick={() => handleCompare(rev.version)} disabled={compareLoading && activeCompareVersion === rev.version}>
-                        {compareLoading && activeCompareVersion === rev.version ? 'Loading…' : 'Compare'}
+                        {compareLoading && activeCompareVersion === rev.version ? <><Spinner className="mr-2 h-3 w-3" /> Loading</> : 'Compare'}
                       </Button>
                       <Button size="sm" onClick={() => handleRestore(rev.version)} disabled={isPending}>
-                        {isPending ? 'Restoring…' : 'Restore'}
+                        {isPending ? <><Spinner className="mr-2 h-3 w-3" /> Restoring</> : 'Restore'}
                       </Button>
                     </div>
                   </div>

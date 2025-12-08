@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useState, useTransition, useRef } from 'react';
 import { useActionState } from 'react';
+import { useHotkeys } from '@/hooks/use-hotkeys';
 import { getTranslations, createTranslation, updateTranslation } from './actions';
 import { getLanguages } from '@/app/cms/settings/languages/actions';
 import { Button } from '@nextblock-cms/ui';
@@ -23,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from '@nextblock-cms/ui';
+import { Spinner, Alert, AlertDescription } from '@nextblock-cms/ui';
 import { SubmitButton } from '@/components/submit-button';
 
 type Translation = Awaited<ReturnType<typeof getTranslations>>[number];
@@ -49,7 +51,11 @@ export default function ExtraTranslationsPage() {
   }, []);
 
   if (isPending && translations.length === 0) {
-    return <div>Loading...</div>;
+    return (
+        <div className="flex justify-center items-center p-12">
+            <Spinner size="lg" />
+        </div>
+    );
   }
 
   return (
@@ -74,6 +80,9 @@ function CreateTranslationForm({ onSuccess }: { onSuccess: () => void }) {
     }
   }, [state, onSuccess]);
 
+  const formRef = useRef<HTMLFormElement>(null);
+  useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -83,7 +92,7 @@ function CreateTranslationForm({ onSuccess }: { onSuccess: () => void }) {
         <DialogHeader>
           <DialogTitle>Create New Translation</DialogTitle>
         </DialogHeader>
-        <form action={formAction} className="space-y-4">
+        <form ref={formRef} action={formAction} className="space-y-4">
           <div>
             <Label htmlFor="key">Key</Label>
             <Input id="key" name="key" placeholder="e.g., sign_in_button" required />
@@ -94,7 +103,11 @@ function CreateTranslationForm({ onSuccess }: { onSuccess: () => void }) {
             <Input id="en" name="en" placeholder="e.g., Sign In" required />
             {state?.errors?.en && <p className="text-red-500 text-sm mt-1">{state.errors.en[0]}</p>}
           </div>
-          {state?.error && <p className="text-red-500 text-sm">{state.error}</p>}
+          {state?.error && (
+            <Alert variant="destructive">
+                <AlertDescription>{state.error}</AlertDescription>
+            </Alert>
+          )}
           <DialogFooter>
             <SubmitButton>Create</SubmitButton>
           </DialogFooter>
@@ -190,6 +203,9 @@ function EditableTranslationRow({ translation, languages, onSuccess }: EditableR
     }
   };
 
+  const formRef = useRef<HTMLFormElement>(null);
+  useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
+
   return (
     <TableRow>
       <TableCell className="font-medium">{translation.key}</TableCell>
@@ -204,11 +220,21 @@ function EditableTranslationRow({ translation, languages, onSuccess }: EditableR
         </TableCell>
       ))}
       <TableCell className="text-right">
-        <form onSubmit={handleSubmit}>
+        <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col items-end gap-2">
           <Button type="submit" disabled={!isDirty || isSubmitting}>
-            {isSubmitting ? 'Saving...' : 'Save'}
+            {isSubmitting ? (
+              <>
+                <Spinner className="mr-2 h-4 w-4" /> Saving...
+              </>
+            ) : (
+              'Save'
+            )}
           </Button>
-          {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+          {error && (
+             <Alert variant="destructive" className="py-1 px-2 text-xs w-auto">
+                <AlertDescription>{error}</AlertDescription>
+             </Alert>
+          )}
         </form>
       </TableCell>
     </TableRow>

@@ -4,6 +4,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@nextblock-cms/ui";
+import { Spinner, Alert, AlertDescription } from "@nextblock-cms/ui";
 import { Input } from "@nextblock-cms/ui";
 import { Label } from "@nextblock-cms/ui";
 import {
@@ -16,6 +17,8 @@ import {
 import { Textarea } from "@nextblock-cms/ui";
 import type { Database } from "@nextblock-cms/db";
 import { useAuth } from "@/context/AuthContext";
+import { useRef } from "react";
+import { useHotkeys } from "@/hooks/use-hotkeys";
 
 type Page = Database['public']['Tables']['pages']['Row'];
 type PageStatus = Database['public']['Enums']['page_status'];
@@ -124,19 +127,16 @@ export default function PageForm({
     return <div>Please log in to manage pages.</div>;
   }
 
+  const formRef = useRef<HTMLFormElement>(null);
+  useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 w-full mx-auto px-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6 w-full mx-auto px-6">
       {/* ... (rest of the form remains the same, but `availableLanguages` is now populated by the prop) ... */}
       {formMessage && (
-        <div
-          className={`p-3 rounded-md text-sm ${
-            formMessage.type === 'success'
-              ? 'bg-green-100 text-green-700 border border-green-200'
-              : 'bg-red-100 text-red-700 border border-red-200'
-          }`}
-        >
-          {formMessage.text}
-        </div>
+        <Alert variant={formMessage.type === 'success' ? 'success' : 'destructive'} className="mb-4">
+           <AlertDescription>{formMessage.text}</AlertDescription>
+        </Alert>
       )}
       {translationGroupId && (
         <input type="hidden" name="translation_group_id" value={translationGroupId} />
@@ -245,7 +245,13 @@ export default function PageForm({
         </Button>
         {/* Ensure button is not disabled due to removed languagesLoading */}
         <Button type="submit" disabled={isPending || authLoading || availableLanguages.length === 0}>
-          {isPending ? "Saving..." : actionButtonText}
+          {isPending ? (
+            <>
+              <Spinner className="mr-2 h-4 w-4" /> Saving...
+            </>
+          ) : (
+            actionButtonText
+          )}
         </Button>
       </div>
     </form>

@@ -8,7 +8,10 @@ import { CopyrightSettings, updateCopyrightSettings } from '../actions';
 import { Label } from '@nextblock-cms/ui';
 import { Input } from '@nextblock-cms/ui';
 import { Button } from '@nextblock-cms/ui';
-import { FormMessage, type Message } from '@/components/form-message';
+import { Alert, AlertDescription, Spinner } from '@nextblock-cms/ui';
+import { type Message } from '@/components/form-message';
+import { useRef } from 'react';
+import { useHotkeys } from '@/hooks/use-hotkeys';
 
 interface CopyrightFormProps {
   languages: Language[];
@@ -48,8 +51,11 @@ export default function CopyrightForm({ languages, initialSettings }: CopyrightF
     });
   };
 
+  const formRef = useRef<HTMLFormElement>(null);
+  useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-4">
         {languages.map(lang => (
           <div key={lang.id} className="space-y-2">
@@ -69,9 +75,19 @@ export default function CopyrightForm({ languages, initialSettings }: CopyrightF
 
       <div className="flex items-center gap-4">
         <Button type="submit" disabled={isPending}>
-          {isPending ? 'Saving...' : 'Save Settings'}
+          {isPending ? (
+            <>
+              <Spinner className="mr-2 h-4 w-4" /> Saving...
+            </>
+          ) : (
+            'Save Settings'
+          )}
         </Button>
-        {message && <FormMessage message={message} />}
+        {message && (
+          <Alert variant={'success' in message ? 'success' : 'destructive'} className="py-2 px-4 w-auto inline-flex items-center">
+             <AlertDescription>{'success' in message ? (message as any).success : (message as any).error}</AlertDescription>
+          </Alert>
+        )}
       </div>
     </form>
   );

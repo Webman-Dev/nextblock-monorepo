@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@nextblock-cms/ui";
 import { Badge } from "@nextblock-cms/ui";
+import { Alert, AlertDescription } from "@nextblock-cms/ui";
 import { MoreHorizontal, PlusCircle, Edit3, PenTool } from "lucide-react"; // Removed Trash2 as it's in the client component
 import {
   DropdownMenu,
@@ -95,9 +96,11 @@ export default async function CmsPostsListPage(props: CmsPostsListPageProps) {
       </div>
 
       {successMessage && (
-        <div className="mb-4 p-3 rounded-md text-sm bg-green-100 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700">
-          {decodeURIComponent(successMessage)}
-        </div>
+        <Alert variant="success" className="mb-4">
+          <AlertDescription>
+            {decodeURIComponent(successMessage)}
+          </AlertDescription>
+        </Alert>
       )}
 
       {postsWithDetails.length === 0 ? (

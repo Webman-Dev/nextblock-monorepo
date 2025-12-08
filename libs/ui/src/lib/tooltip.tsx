@@ -5,7 +5,11 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 
 import { cn } from "@nextblock-cms/utils"
 
-const TooltipProvider = TooltipPrimitive.Provider
+const TooltipProvider = ({ children, ...props }: TooltipPrimitive.TooltipProviderProps) => (
+  <TooltipPrimitive.Provider delayDuration={200} {...props}>
+    {children}
+  </TooltipPrimitive.Provider>
+)
 
 const Tooltip = TooltipPrimitive.Root
 

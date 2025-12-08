@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { DropdownMenuItem } from "@nextblock-cms/ui";
+import { toast } from "react-hot-toast";
 import { Trash2 } from "lucide-react";
 import { deleteNavigationItem } from "../actions";
 import { ConfirmationModal } from "../../components/ConfirmationModal";
@@ -17,12 +18,15 @@ export default function DeleteNavItemButton({ itemId }: DeleteNavItemButtonProps
     try {
       const result = await deleteNavigationItem(itemId);
       if (result.success) {
+        toast.success("Item deleted");
         window.location.reload();
       } else {
         console.error("Delete operation failed:", result.error);
+        toast.error(`Delete failed: ${result.error}`);
       }
     } catch (error) {
       console.error("Exception during delete action:", error);
+      toast.error("An unexpected error occurred.");
     } finally {
       setIsModalOpen(false);
     }

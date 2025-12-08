@@ -5,11 +5,13 @@ import React, { useState, useTransition, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { Button } from '@nextblock-cms/ui';
+import { Spinner, Alert, AlertDescription } from '@nextblock-cms/ui';
 import { Input } from '@nextblock-cms/ui';
 import { Label } from '@nextblock-cms/ui';
 import { Textarea } from '@nextblock-cms/ui';
 import type { Database } from '@nextblock-cms/db';
 import { useAuth } from '@/context/AuthContext';
+import { useHotkeys } from '@/hooks/use-hotkeys';
 
 type Media = Database['public']['Tables']['media']['Row'];
 import { FileText } from 'lucide-react';
@@ -74,6 +76,9 @@ export default function MediaEditForm({ mediaItem, formAction }: MediaEditFormPr
     return <div>Access Denied. You do not have permission to edit media.</div>;
   }
 
+  const formRef = React.useRef<HTMLFormElement>(null);
+  useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       <div className="md:col-span-1 space-y-4">
@@ -101,17 +106,11 @@ export default function MediaEditForm({ mediaItem, formAction }: MediaEditFormPr
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="md:col-span-2 space-y-6">
+      <form ref={formRef} onSubmit={handleSubmit} className="md:col-span-2 space-y-6">
         {formMessage && (
-          <div
-            className={`p-3 rounded-md text-sm ${
-              formMessage.type === 'success'
-                ? 'bg-green-100 text-green-700 border border-green-200'
-                : 'bg-red-100 text-red-700 border border-red-200'
-            }`}
-          >
-            {formMessage.text}
-          </div>
+          <Alert variant={formMessage.type === 'success' ? 'success' : 'destructive'} className="mb-4">
+             <AlertDescription>{formMessage.text}</AlertDescription>
+          </Alert>
         )}
         <div>
           <Label htmlFor="file_name">Display Name</Label>
@@ -148,7 +147,13 @@ export default function MediaEditForm({ mediaItem, formAction }: MediaEditFormPr
             Cancel
           </Button>
           <Button type="submit" disabled={isPending || authLoading}>
-            {isPending ? "Saving..." : "Update Media Info"}
+            {isPending ? (
+            <>
+              <Spinner className="mr-2 h-4 w-4" /> Saving...
+            </>
+          ) : (
+            "Update Media Info"
+          )}
           </Button>
         </div>
       </form>

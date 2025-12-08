@@ -51,12 +51,11 @@ export async function deleteLogo(id: string) {
 
   if (error) {
     console.error('Error deleting logo:', error)
-    // Optionally, handle the error more gracefully
-    // redirect('/error?message=Could not delete logo')
-    return
+    return { success: false, error: error.message }
   }
 
   revalidatePath('/cms/settings/logos')
+  return { success: true }
 }
 
 export async function getLogos() {

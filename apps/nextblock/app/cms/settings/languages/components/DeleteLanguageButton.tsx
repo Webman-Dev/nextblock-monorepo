@@ -6,6 +6,7 @@ import { deleteLanguage } from "../actions"; // Server action
 import type { Database } from "@nextblock-cms/db";
 import { useTransition, useState } from 'react';
 import { ConfirmationModal } from "@/app/cms/components/ConfirmationModal";
+import { toast } from 'react-hot-toast';
 
 type Language = Database['public']['Tables']['languages']['Row'];
 
@@ -28,7 +29,7 @@ export default function DeleteLanguageClientButton({ language }: DeleteLanguageC
     if (isDefaultLanguage) {
       // The server action has a more robust check for "only default"
       // For now, a simple alert for any default language.
-       alert("Cannot delete the default language. Please set another language as default first, or ensure this is not the only language.");
+       toast.error("Cannot delete the default language. Please set another language as default first, or ensure this is not the only language.");
        setIsModalOpen(false);
        return;
     }
@@ -36,8 +37,7 @@ export default function DeleteLanguageClientButton({ language }: DeleteLanguageC
     startTransition(async () => {
       const result = await deleteLanguage(language.id); // Call the server action
       if (result?.error) {
-        alert(`Error: ${result.error}`);
-        // In a real app, use a toast or a more integrated notification system
+        toast.error(`Error: ${result.error}`);
       }
       // Revalidation and redirection are handled by the server action itself.
       setIsModalOpen(false);

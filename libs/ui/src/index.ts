@@ -19,3 +19,5 @@ export * from './lib/table';
 export * from './lib/textarea';
 export * from './lib/tooltip';
 export * from './lib/ui';
+export * from './lib/spinner';
+export * from './lib/alert';

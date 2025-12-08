@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@nextblock-cms/ui";
 import { Badge } from "@nextblock-cms/ui";
+import { Alert, AlertTitle, AlertDescription } from "@nextblock-cms/ui";
 import { MoreHorizontal, PlusCircle, Edit3, Languages as LanguagesIcon, ShieldAlert } from "lucide-react";
 import {
   DropdownMenu,
@@ -66,9 +67,12 @@ export default async function CmsLanguagesListPage() {
       </div>
 
        {successMessage && (
-        <div className="mb-4 p-3 rounded-md text-sm bg-green-100 text-green-700 border border-green-200">
-          {decodeURIComponent(successMessage)}
-        </div>
+        <Alert variant="success" className="mb-4">
+          <AlertTitle>Success</AlertTitle>
+          <AlertDescription>
+            {decodeURIComponent(successMessage)}
+          </AlertDescription>
+        </Alert>
       )}
 
       {languages.length === 0 ? (
@@ -140,16 +144,14 @@ export default async function CmsLanguagesListPage() {
           </Table>
         </div>
       )}
-      <div className="mt-6 p-4 border border-amber-300 bg-amber-50 dark:bg-amber-900/30 rounded-lg">
-        <div className="flex items-start">
-            <ShieldAlert className="h-5 w-5 text-amber-600 dark:text-amber-400 mr-3 flex-shrink-0 mt-0.5" />
-            <div>
-                <h4 className="text-sm font-semibold text-amber-700 dark:text-amber-300">Important Note on Deleting Languages</h4>
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                Deleting a language is a destructive action. All content (pages, posts, blocks, navigation items) specifically associated with that language will be permanently deleted due to database cascade rules. Please ensure this is intended before proceeding. You cannot delete the current default language if it is the only one.
-                </p>
-            </div>
-        </div>
+      <div className="mt-6">
+        <Alert variant="warning">
+          <ShieldAlert className="h-4 w-4" />
+          <AlertTitle>Important Note on Deleting Languages</AlertTitle>
+          <AlertDescription>
+            Deleting a language is a destructive action. All content (pages, posts, blocks, navigation items) specifically associated with that language will be permanently deleted due to database cascade rules. Please ensure this is intended before proceeding. You cannot delete the current default language if it is the only one.
+          </AlertDescription>
+        </Alert>
       </div>
     </div>
   );

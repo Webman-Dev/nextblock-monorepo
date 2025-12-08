@@ -1,9 +1,12 @@
 // app/cms/users/components/UserForm.tsx
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, useRef } from "react";
+import { useHotkeys } from "@/hooks/use-hotkeys";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@nextblock-cms/ui";
+import { Spinner, Alert, AlertDescription, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@nextblock-cms/ui";
+import { Info } from "lucide-react";
 import { Input } from "@nextblock-cms/ui";
 import { Label } from "@nextblock-cms/ui";
 import {
@@ -85,18 +88,15 @@ export default function UserForm({
 
   const userRoles: UserRole[] = ['USER', 'WRITER', 'ADMIN'];
 
+  const formRef = useRef<HTMLFormElement>(null);
+  useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       {formMessage && (
-        <div
-          className={`p-3 rounded-md text-sm ${
-            formMessage.type === 'success'
-              ? 'bg-green-100 text-green-700 border border-green-200'
-              : 'bg-red-100 text-red-700 border border-red-200'
-          }`}
-        >
-          {formMessage.text}
-        </div>
+        <Alert variant={formMessage.type === 'success' ? 'success' : 'destructive'}>
+           <AlertDescription>{formMessage.text}</AlertDescription>
+        </Alert>
       )}
       <div>
         <Label htmlFor="email">Email (Read-only)</Label>
@@ -114,7 +114,21 @@ export default function UserForm({
       </div>
 
       <div>
-        <Label htmlFor="role">Role</Label>
+        <div className="flex items-center gap-2 mb-2">
+          <Label htmlFor="role">Role</Label>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="h-4 w-4 text-muted-foreground opacity-70 cursor-pointer" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <p><strong>ADMIN:</strong> Full access to settings and content.</p>
+                <p><strong>WRITER:</strong> Can create/edit content, no settings access.</p>
+                <p><strong>USER:</strong> Read-only access.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
         <Select name="role" value={role} onValueChange={(value) => setRole(value as UserRole)} required>
           <SelectTrigger className="mt-1"><SelectValue placeholder="Select role" /></SelectTrigger>
           <SelectContent>
@@ -130,7 +144,13 @@ export default function UserForm({
           Cancel
         </Button>
         <Button type="submit" disabled={isPending || authLoading}>
-          {isPending ? "Saving..." : actionButtonText}
+          {isPending ? (
+            <>
+              <Spinner className="mr-2 h-4 w-4" /> Saving...
+            </>
+          ) : (
+            actionButtonText
+          )}
         </Button>
       </div>
     </form>

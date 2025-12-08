@@ -4,6 +4,8 @@
 import React, { useEffect, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@nextblock-cms/ui";
+import { Spinner, Alert, AlertDescription, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@nextblock-cms/ui";
+import { Info } from "lucide-react";
 import { Input } from "@nextblock-cms/ui";
 import { Label } from "@nextblock-cms/ui";
 import {
@@ -15,6 +17,7 @@ import {
 } from "@nextblock-cms/ui";
 import type { Database } from "@nextblock-cms/db";
 import { useAuth } from "@/context/AuthContext";
+import { useHotkeys } from "@/hooks/use-hotkeys";
 
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
 type MenuLocation = Database['public']['Enums']['menu_location'];
@@ -135,12 +138,15 @@ export default function NavigationItemForm({
 
   const menuLocations: MenuLocation[] = ['HEADER', 'FOOTER', 'SIDEBAR'];
 
+  const formRef = React.useRef<HTMLFormElement>(null);
+  useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       {formMessage && (
-        <div className={`p-3 rounded-md text-sm ${formMessage.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
-          {formMessage.text}
-        </div>
+        <Alert variant={formMessage.type === 'success' ? 'success' : 'destructive'}>
+           <AlertDescription>{formMessage.text}</AlertDescription>
+        </Alert>
       )}
 
       {/* Hidden input for from_translation_group_id if present in URL params and not editing */}
@@ -198,7 +204,19 @@ export default function NavigationItemForm({
         </Select>
       </div>
       <div>
-        <Label htmlFor="menu_key">Menu Location</Label>
+        <div className="flex items-center gap-2 mb-2">
+            <Label htmlFor="menu_key">Menu Location</Label>
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-muted-foreground opacity-70 cursor-pointer" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Where this item will appear in the site layout.</p>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        </div>
         <Select
             name="menu_key"
             value={menuKey}
@@ -240,7 +258,13 @@ export default function NavigationItemForm({
       <div className="flex justify-end space-x-3">
         <Button type="button" variant="outline" onClick={() => router.push("/cms/navigation")} disabled={isPending}>Cancel</Button>
         <Button type="submit" disabled={isPending || dataLoading || !languageId || !menuKey}>
-          {isPending ? "Saving..." : actionButtonText}
+          {isPending ? (
+             <>
+               <Spinner className="mr-2 h-4 w-4" /> Saving...
+             </>
+           ) : (
+             actionButtonText
+           )}
         </Button>
       </div>
     </form>
