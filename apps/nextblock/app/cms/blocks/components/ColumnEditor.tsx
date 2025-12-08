@@ -233,6 +233,28 @@ function SortableColumnBlock({ block, index, columnIndex, onEdit, onDelete, bloc
                     </div>
                 </div>
             );
+       case 'testimonial':
+           return (
+               <div className="flex flex-col gap-2">
+                   <div className={cn("italic text-xs line-clamp-2", isDarkBackground ? "text-white/80" : "text-muted-foreground")}>
+                       "{block.content.quote || 'No quote'}"
+                   </div>
+                   <div className="flex items-center gap-2">
+                       {block.content.image_url ? (
+                           /* eslint-disable-next-line @next/next/no-img-element */
+                           <img src={block.content.image_url} alt={block.content.author_name} className="w-5 h-5 rounded-full object-cover border border-white/10" />
+                       ) : (
+                           <div className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border border-white/10", isDarkBackground ? "bg-white/20 text-white" : "bg-muted text-foreground")}>
+                               {(block.content.author_name || 'A').charAt(0)}
+                           </div>
+                       )}
+                       <div className="flex flex-col leading-none">
+                           <span className={cn("text-[10px] font-semibold", isDarkBackground ? "text-white" : "text-foreground")}>{block.content.author_name || 'Author Name'}</span>
+                           {block.content.author_title && <span className={cn("text-[9px]", isDarkBackground ? "text-white/60" : "text-muted-foreground")}>{block.content.author_title}</span>}
+                       </div>
+                   </div>
+               </div>
+           );
       default:
         // For fallback blocks, we might still want the label if we can't render a preview
         // But user asked to remove it. Let's show a generic "configured" message or similar.

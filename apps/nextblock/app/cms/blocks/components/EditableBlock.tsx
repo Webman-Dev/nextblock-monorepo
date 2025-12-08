@@ -6,8 +6,8 @@ import type { Database } from "@nextblock-cms/db";
 import PostsGridBlockEditor from '../editors/PostsGridBlockEditor';
 
 type Block = Database['public']['Tables']['blocks']['Row'];
-import { Button } from "@nextblock-cms/ui";
-import { GripVertical, Edit2, Image as ImageIcon } from "lucide-react";
+import { Button, Card, CardContent, Avatar, AvatarImage, AvatarFallback } from "@nextblock-cms/ui";
+import { GripVertical, Edit2, Image as ImageIcon, MessageSquareQuote } from "lucide-react";
 import { getBlockDefinition, blockRegistry, BlockType } from "@/lib/blocks/blockRegistry";
 import { BlockEditorModal } from './BlockEditorModal';
 import { DeleteBlockButtonClient } from './DeleteBlockButtonClient';
@@ -224,6 +224,36 @@ export default function EditableBlock({
                  </div>
              );
        }
+       case 'testimonial': {
+            const content = (block.content || {}) as any;
+            return (
+                <div className="py-2">
+                    <Card className="h-full border-none shadow-none bg-transparent">
+                      <CardContent className="pt-2 flex flex-col gap-4 h-full p-4">
+                        <MessageSquareQuote className="w-8 h-8 text-primary/40" />
+                        
+                        <blockquote className="flex-grow text-lg italic text-muted-foreground leading-relaxed">
+                          "{content.quote || 'No quote provided'}"
+                        </blockquote>
+
+                        <div className="flex items-center gap-3 mt-2">
+                          <Avatar>
+                            {content.image_url && <AvatarImage src={content.image_url} alt={content.author_name} />}
+                            <AvatarFallback>{(content.author_name || 'A').slice(0, 2).toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          
+                          <div>
+                            <div className="font-semibold">{content.author_name || 'Author Name'}</div>
+                            {content.author_title && (
+                              <div className="text-sm text-muted-foreground">{content.author_title}</div>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                </div>
+            );
+       }
        default: {
         const blockDefinition = getBlockDefinition(currentBlockType as BlockType);
         const blockLabel = blockDefinition?.label || currentBlockType;
@@ -247,8 +277,10 @@ export default function EditableBlock({
 
   return (
     <div
+      onClick={handleCardClick}
       className={cn(
         "p-4 border rounded-lg bg-card shadow",
+        !isSection && "cursor-pointer hover:border-primary transition-colors",
         className
       )}
     >
