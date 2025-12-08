@@ -27,6 +27,7 @@ export type TextBlockContent = {
 export default function TextBlockEditor({
   content,
   onChange,
+  className,
 }: BlockEditorProps<Partial<TextBlockContent>>) {
   const labelId = useId();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -50,6 +51,7 @@ export default function TextBlockEditor({
           content={content?.html_content ?? ''}
           onChange={(html) => onChange({ html_content: html })}
           openImagePicker={openImagePicker}
+          className={className}
         />
 
         {/* Hidden controlled MediaPickerDialog for image selection */}

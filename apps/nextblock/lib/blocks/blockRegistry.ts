@@ -44,7 +44,8 @@ export const ButtonBlockSchema = z.object({
   text: z.string().describe('The text displayed on the button'),
   url: z.string().describe('The URL the button links to'),
   variant: z.enum(['default', 'outline', 'secondary', 'ghost', 'link']).optional().describe('Visual style variant'),
-  size: z.enum(['default', 'sm', 'lg']).optional().describe('Size of the button'),
+  size: z.enum(['default', 'sm', 'lg', 'full']).optional().describe('Size of the button'),
+  position: z.enum(['left', 'center', 'right']).optional().describe('Button alignment'),
 });
 export type ButtonBlockContent = z.infer<typeof ButtonBlockSchema>;
 
@@ -281,7 +282,7 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
     type: "button",
     label: "Button",
     icon: "SquareMousePointer",
-    initialContent: { text: "Click Me", url: "#", variant: "default", size: "default" } as ButtonBlockContent,
+    initialContent: { text: "Click Me", url: "#", variant: "default", size: "default", position: "left" } as ButtonBlockContent,
     editorComponentFilename: "ButtonBlockEditor.tsx",
     rendererComponentFilename: "ButtonBlockRenderer.tsx",
     schema: ButtonBlockSchema,

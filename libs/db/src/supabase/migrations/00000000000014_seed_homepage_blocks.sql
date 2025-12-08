@@ -250,7 +250,7 @@ BEGIN
             {
               "block_type": "text",
               "content": {
-                "html_content": "<p class='text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto'>NextBlock is being built in the open. Star the repo, share feedback, and help define the future of performance-first content management.</p>"
+                "html_content": "<p class='text-slate-600 dark:text-slate-400 text-center mx-auto'>NextBlock is being built in the open. Star the repo, share feedback, and help define the future of performance-first content management.</p>"
               }
             },
             {
@@ -295,7 +295,7 @@ BEGIN
             {
               "block_type": "text",
               "content": {
-                "html_content": "<p class='text-center text-lg text-slate-300 max-w-2xl mx-auto mb-8'>NextBlock partners with early adopters to co-build features, sponsor modules, and shape the product direction.</p>"
+                "html_content": "<p class='text-center text-lg text-slate-300 mx-auto mb-8'>NextBlock partners with early adopters to co-build features, sponsor modules, and shape the product direction.</p>"
               }
             },
             {

@@ -7,11 +7,13 @@ import PostsGridBlockEditor from '../editors/PostsGridBlockEditor';
 
 type Block = Database['public']['Tables']['blocks']['Row'];
 import { Button } from "@nextblock-cms/ui";
-import { GripVertical, Edit2 } from "lucide-react";
+import { GripVertical, Edit2, Image as ImageIcon } from "lucide-react";
 import { getBlockDefinition, blockRegistry, BlockType } from "@/lib/blocks/blockRegistry";
 import { BlockEditorModal } from './BlockEditorModal';
 import { DeleteBlockButtonClient } from './DeleteBlockButtonClient';
 import { cn } from '@nextblock-cms/utils';
+
+const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 
 export interface EditableBlockProps {
   block: Block;
@@ -100,28 +102,144 @@ export default function EditableBlock({
       return <div className="text-red-500">Error: Block type missing for preview.</div>;
     }
 
-    const blockDefinition = getBlockDefinition(currentBlockType as BlockType);
-    const blockLabel = blockDefinition?.label || currentBlockType;
+    switch (currentBlockType) {
+       case 'text': {
+         const content = (block.content || {}) as any;
+         const htmlContent = String(content.html_content || '');
+         const isCentered = htmlContent.includes('text-align: center') || htmlContent.includes('class="text-center"');
+         const isRight = htmlContent.includes('text-align: right') || htmlContent.includes('class="text-right"');
+         const alignmentClass = isCentered ? 'text-center' : isRight ? 'text-right' : 'text-left';
 
-    // Default preview for other block types
-    return (
-      <div
-        className="py-4 flex flex-col items-center justify-center space-y-2 min-h-[80px] border border-dashed rounded-md bg-muted/20 cursor-pointer hover:border-primary"
-        onClick={handleCardClick}
-      >
-        <div className="text-center">
-          <p className="text-sm font-medium text-muted-foreground">{blockLabel}</p>
-          <p className="text-xs text-muted-foreground">Click edit to modify content</p>
-        </div>
-        {/* This button is for non-section blocks which are not yet implemented for inline editing */}
-        <Button variant="outline" size="sm" onClick={(e) => {
-          e.stopPropagation();
-          handleEditClick();
-        }}>
-          Edit Block
-        </Button>
-      </div>
-    );
+         return (
+             <div className="py-2">
+                 <div className={cn("text-xs w-full", alignmentClass)}>
+                     {htmlContent ? (
+                          <div 
+                            dangerouslySetInnerHTML={{ __html: htmlContent }} 
+                            className={cn(
+                              "prose prose-sm max-w-none [&>p]:my-0 [&>h1]:my-0 [&>h2]:my-0 [&>h3]:my-0 dark:prose-invert",
+                              isCentered && "[&_*]:text-center",
+                              isRight && "[&_*]:text-right"
+                            )} 
+                          />
+                     ) : <span className="text-muted-foreground italic">Empty text block</span>}
+                 </div>
+             </div>
+         );
+       }
+       case 'heading': {
+          const content = (block.content || {}) as any;
+          const level = content.level || 1;
+          const headingAlign = content.textAlign || 'left';
+          const textColor = content.textColor || 'foreground';
+          
+          const sizeClasses: Record<number, string> = {
+            1: "text-4xl font-extrabold",
+            2: "text-3xl font-bold",
+            3: "text-2xl font-semibold",
+            4: "text-xl font-semibold",
+            5: "text-lg font-semibold",
+            6: "text-base font-semibold",
+          };
+
+          const colorClasses: Record<string, string> = {
+             primary: "text-primary",
+             secondary: "text-secondary",
+             accent: "text-accent",
+             destructive: "text-destructive",
+             muted: "text-muted-foreground",
+             background: "text-background",
+             foreground: "text-foreground"
+          };
+
+          return (
+             <div className="py-2">
+                  <div className={cn(
+                     "w-full leading-tight",
+                     sizeClasses[level] || sizeClasses[1],
+                     colorClasses[textColor] || "text-foreground",
+                     headingAlign === 'center' && 'text-center',
+                     headingAlign === 'right' && 'text-right'
+                  )}>
+                     {content.text_content || <span className="text-muted-foreground italic text-sm font-normal">Empty heading</span>}
+                  </div>
+             </div>
+          );
+       }
+       case 'image': {
+         const content = (block.content || {}) as any;
+         const imageUrl = content.object_key ? `${R2_BASE_URL}/${content.object_key}` : content.src;
+         return (
+              <div className="flex gap-4 py-2">
+                 <div className="flex-shrink-0 h-16 w-16 bg-muted rounded overflow-hidden flex items-center justify-center border">
+                     {imageUrl ? (
+                         /* eslint-disable-next-line @next/next/no-img-element */
+                         <img src={imageUrl} alt={content.alt_text || 'Block image'} className="h-full w-full object-cover" />
+                     ) : (
+                         <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                     )}
+                 </div>
+                 <div className="flex flex-col justify-center">
+                     <span className="text-sm font-medium truncate max-w-[200px]">{content.alt_text || 'No description'}</span>
+                     <span className="text-xs text-muted-foreground truncate max-w-[200px]">{imageUrl ? 'Image set' : 'No image selected'}</span>
+                 </div>
+              </div>
+         );
+       }
+       case 'button': {
+           const content = (block.content || {}) as any;
+           return (
+               <div className={cn("py-2 flex", 
+                   content.position === 'center' ? 'justify-center' : 
+                   content.position === 'right' ? 'justify-end' : 'justify-start'
+               )}>
+                   <Button 
+                     variant={content.variant || 'default'} 
+                     size={content.size || 'default'}
+                     className={cn("pointer-events-none", content.variant === 'outline' && "text-foreground")}
+                     tabIndex={-1}
+                   >
+                       {content.text || 'Button'}
+                   </Button>
+               </div>
+           );
+       }
+       case 'video_embed': {
+            const content = (block.content || {}) as any;
+            return (
+                <div className="py-2">
+                    <div className="text-sm text-muted-foreground truncate">
+                        📹 {content.title || content.url || 'No Video configured'}
+                    </div>
+                </div>
+            );
+       }
+       case 'posts_grid': {
+             const content = (block.content || {}) as any;
+             return (
+                 <div className="py-2">
+                     <div className="text-sm text-muted-foreground">
+                         Posts Grid: {content.columns || 3} cols, {content.postsPerPage || 12} items
+                     </div>
+                 </div>
+             );
+       }
+       default: {
+        const blockDefinition = getBlockDefinition(currentBlockType as BlockType);
+        const blockLabel = blockDefinition?.label || currentBlockType;
+        return (
+          <div
+            className="py-4 flex flex-col items-center justify-center space-y-2 min-h-[80px] border border-dashed rounded-md bg-muted/20 cursor-pointer hover:border-primary"
+            onClick={handleCardClick}
+          >
+            <div className="text-center">
+              <p className="text-sm font-medium text-muted-foreground">{blockLabel}</p>
+              <p className="text-xs text-muted-foreground">Click edit to modify content</p>
+            </div>
+          </div>
+        );
+       }
+    }
   };
 
   const isSection = block?.block_type === 'section' || block?.block_type === 'hero';
@@ -139,7 +257,7 @@ export default function EditableBlock({
           <button {...dragHandleProps} className="p-1 rounded-md hover:bg-muted cursor-grab" aria-label="Drag to reorder">
             <GripVertical className="h-5 w-5" />
           </button>
-          <h3 className="font-semibold">{blockDefinition?.label || block.block_type}</h3>
+          <h4 className="font-semibold p-0 m-0 mb-1">{blockDefinition?.label || block.block_type}</h4>
         </div>
         <div className="flex items-center gap-1">
             <Button

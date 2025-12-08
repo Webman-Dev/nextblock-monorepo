@@ -181,8 +181,11 @@ export const Editor: React.FC<EditorProps> = ({
     <div 
       ref={wrapperRef} 
       className={cn(
-        "relative w-full rounded-lg border bg-background shadow-sm",
+        "relative w-full rounded-lg border shadow-sm",
         "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+        // Default to bg-background if no background class is provided, or rely on caller to set it.
+        // For backwards compatibility, we add bg-background by default, but allow override.
+        "bg-background", 
         className
       )}
     >

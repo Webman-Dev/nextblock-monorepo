@@ -45,6 +45,8 @@ import { StyleTagNode } from './extensions/StyleTagNode'
 import { DivNode } from './extensions/DivNode'
 import { PreserveAllAttributesExtension } from './extensions/PreserveAllAttributesExtension'
 import { ScriptTagNode } from './extensions/ScriptTagNode'
+import { SvgNode } from './extensions/SvgNode'
+import { SpanNode } from './extensions/SpanNode'
 
 // bring lowlight into scope with more languages
 const lowlight = createLowlight({ html, css, js, ts, python, json, bash, sql })
@@ -121,6 +123,8 @@ export const editorExtensions: Extensions = [
   DivNode,
   StyleTagNode,
   ScriptTagNode,
+  SvgNode,
+  SpanNode,
   PreserveAllAttributesExtension,
 
   ImageExtended.configure({
@@ -188,7 +192,44 @@ export const editorExtensions: Extensions = [
   }),
   Subscript,
   Superscript,
-  TextAlign.configure({
+  TextAlign.extend({
+    addGlobalAttributes() {
+      return [
+        {
+          types: this.options.types,
+          attributes: {
+            textAlign: {
+              default: this.options.defaultAlignment,
+              parseHTML: (element: HTMLElement) => {
+                // 1. Inline style (highest priority)
+                if (element.style.textAlign) {
+                  return element.style.textAlign
+                }
+                // 2. Deprecated 'align' attribute
+                if (element.getAttribute('align')) {
+                  return element.getAttribute('align')
+                }
+                // 3. Tailwind classes parsing
+                const className = element.getAttribute('class') || ''
+                if (/(?:^|\s)text-center(?:\s|$)/.test(className)) return 'center'
+                if (/(?:^|\s)text-right(?:\s|$)/.test(className)) return 'right'
+                if (/(?:^|\s)text-justify(?:\s|$)/.test(className)) return 'justify'
+                if (/(?:^|\s)text-left(?:\s|$)/.test(className)) return 'left'
+                
+                return null
+              },
+              renderHTML: (attributes: Record<string, any>) => {
+                if (attributes.textAlign === this.options.defaultAlignment) {
+                  return {}
+                }
+                return { style: `text-align: ${attributes.textAlign} !important` }
+              },
+            },
+          },
+        },
+      ]
+    },
+  }).configure({
     types: ['heading', 'paragraph', 'div'],
     alignments: ['left', 'center', 'right', 'justify'],
     defaultAlignment: 'left',

@@ -5,10 +5,8 @@ import { cn } from "@nextblock-cms/utils";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
-  DialogFooter,
-  DialogDescription,
+  DialogClose,
 } from "@nextblock-cms/ui";
 import { Button } from "@nextblock-cms/ui";
 import { blockRegistry, type BlockType } from "@/lib/blocks/blockRegistry";
@@ -26,6 +24,8 @@ export type BlockEditorProps<T = unknown> = {
   block: Block<T>;
   content: T;
   onChange: (newContent: T) => void;
+  className?: string; // Added for editor component styling
+  sectionBackground?: import("@/lib/blocks/blockRegistry").SectionBlockContent['background'];
 };
 
 type BlockEditorModalProps = {
@@ -34,6 +34,7 @@ type BlockEditorModalProps = {
   onClose: () => void;
   onSave: (updatedContent: unknown) => void;
   EditorComponent: LazyExoticComponent<ComponentType<BlockEditorProps<unknown>>> | ComponentType<BlockEditorProps<unknown>>;
+  sectionBackground?: import("@/lib/blocks/blockRegistry").SectionBlockContent['background'];
 };
 
 export function BlockEditorModal({
@@ -42,8 +43,10 @@ export function BlockEditorModal({
   onClose,
   onSave,
   EditorComponent,
+  sectionBackground,
 }: BlockEditorModalProps) {
   const [tempContent, setTempContent] = useState(block.content);
+  const isValid = true; // Placeholder for future validation logic
 
   useEffect(() => {
     // When the modal is opened with a new block, reset the temp content
@@ -56,42 +59,78 @@ export function BlockEditorModal({
     onSave(tempContent);
   };
 
+  const handleContentChange = (newContent: unknown) => {
+    setTempContent(newContent);
+    // Potentially add validation here and set isValid
+  };
+
   const blockInfo = blockRegistry[block.type];
+  const displayText = blockInfo?.label || "Block";
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
-        className={cn(
-          "w-[90%] max-w-7xl max-h-[90vh]",
-          {
-            // For rich text editor, use fixed height and internal scroll so footer stays visible
-            "h-[90vh] flex flex-col": block.type === "text",
-            // For other blocks, allow the modal itself to scroll if content exceeds viewport
-            "overflow-y-auto": block.type !== "text",
-          }
-        )}
+      <DialogContent 
+        className="max-w-6xl h-[90vh] flex flex-col p-0 gap-0 overflow-hidden"
+        onInteractOutside={(e) => {
+          // Prevent closing when interacting with Tiptap bubbles outside the dialog portal (rare but possible)
+        }}
       >
-        <DialogHeader>
-          <DialogTitle>Editing {blockInfo?.label || "Block"}</DialogTitle>
-          <DialogDescription>
-            Make changes to your block here. Click save when you&apos;re done.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="py-4 flex-grow flex flex-col min-h-0">
-          <Suspense fallback={<div className="flex justify-center items-center h-32">Loading editor...</div>}>
-            <EditorComponent
-              block={block}
-              content={tempContent}
-              onChange={setTempContent}
-            />
-          </Suspense>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave}>Save</Button>
-        </DialogFooter>
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b bg-background/95 backdrop-blur z-10">
+              <div className="flex items-center gap-2">
+                 <DialogTitle className="text-lg font-semibold">Edit {displayText}</DialogTitle>
+              </div>
+               <div className="flex items-center gap-2">
+                  <DialogClose asChild>
+                    <Button variant="ghost" size="sm">Cancel</Button>
+                  </DialogClose>
+                  <Button onClick={handleSave} disabled={!isValid} size="sm">
+                    Save (CMD+S)
+                  </Button>
+               </div>
+          </div>
+
+          {/* Editor Area with Contextual Background */}
+          <div 
+            className={cn(
+                "flex-1 overflow-y-auto p-6",
+                // Conditional Background Logic:
+                // Only apply specific section background to 'text' and 'heading' blocks to allow "Live Preview" of copy.
+                // For complex blocks like Forms, Buttons, etc., keep a neutral background to ensure input field contrast.
+                (block.type === 'text' || block.type === 'heading') ? (
+                   // If no specific background, use white/dark default
+                   (!sectionBackground || sectionBackground.type === 'none') && "bg-muted/10"
+                ) : "bg-muted/10", // Default for non-text blocks
+
+                // Apply theme classes if present (ONLY for text/heading)
+                (block.type === 'text' || block.type === 'heading') && sectionBackground?.type === 'theme' && sectionBackground.theme === 'primary' && 'bg-primary text-primary-foreground',
+                (block.type === 'text' || block.type === 'heading') && sectionBackground?.type === 'theme' && sectionBackground.theme === 'secondary' && 'bg-secondary text-secondary-foreground',
+                (block.type === 'text' || block.type === 'heading') && sectionBackground?.type === 'theme' && sectionBackground.theme === 'muted' && 'bg-muted text-muted-foreground',
+                
+                 // Dark mode prose invert if dark background (approximate check for solid color)
+                (block.type === 'text' || block.type === 'heading') && (sectionBackground?.type === 'solid' && sectionBackground.solid_color && ['#000', '#111', '#0f172a', 'black'].some(c => sectionBackground.solid_color?.includes(c))) && "[&_.prose]:prose-invert"
+            )}
+            style={{
+                // Only apply custom color/gradient styles for text/heading
+                backgroundColor: (block.type === 'text' || block.type === 'heading') && sectionBackground?.type === 'solid' ? sectionBackground.solid_color : undefined,
+                backgroundImage: (block.type === 'text' || block.type === 'heading') && sectionBackground?.type === 'gradient' && sectionBackground.gradient ? 
+                  `${sectionBackground.gradient.type}-gradient(${sectionBackground.gradient.direction}, ${sectionBackground.gradient.stops.map(s => `${s.color} ${s.position}%`).join(', ')})` 
+                  : undefined
+            }}
+          >
+             <div className="max-w-6xl mx-auto">
+                <Suspense fallback={<div className="flex justify-center items-center h-32">Loading editor...</div>}>
+                  <EditorComponent 
+                      block={block}
+                      content={tempContent} 
+                      onChange={handleContentChange} 
+                      className="bg-transparent border-none shadow-none focus-within:ring-0 min-h-[60vh]" // Make editor transparent
+                      sectionBackground={sectionBackground} // Pass down if editor supports it
+                  />
+                </Suspense>
+             </div>
+          </div>
+          
       </DialogContent>
     </Dialog>
   );
