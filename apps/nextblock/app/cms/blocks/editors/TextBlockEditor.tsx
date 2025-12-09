@@ -12,6 +12,7 @@ type NotionEditorProps = {
   content: string;
   onChange: (html: string) => void;
   openImagePicker?: () => Promise<{ src: string; alt?: string; width?: number | null; height?: number | null; blurDataURL?: string | null } | null>;
+  className?: string;
 };
 
 // Use the alias that resolves in your repo; if you mapped @nextblock-cms/editor, swap it here.

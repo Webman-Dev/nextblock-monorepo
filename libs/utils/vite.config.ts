@@ -34,6 +34,10 @@ export default defineConfig({
             },
             './package.json': './package.json',
           },
+          dependencies: {
+            'clsx': '^2.1.1',
+            'tailwind-merge': '^3.0.0',
+          },
         };
 
         const outputDir = path.resolve(__dirname, '../../dist/libs/utils');
@@ -75,8 +79,10 @@ export default defineConfig({
           fs.writeFileSync(filePath, `${directive}${contents}`);
         };
 
-        ensureClientDirective('index.es.js');
-        ensureClientDirective('index.cjs.js');
+        ensureClientDirective('libs/utils/src/lib/translations-context.es.js');
+        ensureClientDirective('libs/utils/src/lib/translations-context.cjs.js');
+        ensureClientDirective('libs/utils/src/lib/client-utils.es.js');
+        ensureClientDirective('libs/utils/src/lib/client-utils.cjs.js');
 
         const serverSharedHelper = `
 const missingEnvMessage = 'R2 client environment variables are missing. File uploads will not work. Needed: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_S3_ENDPOINT (or construct from R2_ACCOUNT_ID)';
@@ -237,8 +243,15 @@ export declare function hasEnvVars(): Promise<boolean>;
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
+      output: {
+        preserveModules: true,
+        preserveModulesRoot: 'src',
+      },
       external: (id) => {
-        if (id === 'react' || id === 'react-dom') {
+        if (id === 'react' || id === 'react-dom' || id === 'react/jsx-runtime') {
+          return true;
+        }
+        if (id === 'clsx' || id === 'tailwind-merge') {
           return true;
         }
         if (id.startsWith('next/')) {

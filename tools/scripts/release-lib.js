@@ -7,12 +7,16 @@ const path = require('node:path');
 const args = process.argv.slice(2);
 
 if (args.length === 0) {
-  console.error('Usage: node tools/scripts/release-lib.js <library> [patch|minor|major] [--dry-run]');
+  console.error(
+    'Usage: node tools/scripts/release-lib.js <library> [patch|minor|major] [--dry-run]',
+  );
   process.exit(1);
 }
 
 const library = args[0];
-const releaseType = ['major', 'minor', 'patch'].includes(args[1]) ? args[1] : 'patch';
+const releaseType = ['major', 'minor', 'patch'].includes(args[1])
+  ? args[1]
+  : 'patch';
 const dryRun = args.includes('--dry-run');
 
 const workspaceRoot = process.cwd();
@@ -41,11 +45,19 @@ try {
   packageName = pkg.name;
 
   console.log(`\n🚀 Releasing ${packageName} (${library})`);
+
+  if (fs.existsSync(distDir)) {
+    console.log(`→ Cleaning dist directory: ${distDir}`);
+    fs.rmSync(distDir, { recursive: true, force: true });
+  }
+
   console.log(`→ Bumping version (${releaseType})`);
   const versionCommand = `npm version ${releaseType} --no-git-tag-version`;
   run(versionCommand, { cwd: libDir });
 
-  const updatedPackageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  const updatedPackageJson = JSON.parse(
+    fs.readFileSync(packageJsonPath, 'utf8'),
+  );
   version = updatedPackageJson.version;
   console.log(`✓ Version bumped to ${version}`);
 
@@ -64,7 +76,9 @@ try {
   }
   run(publishArgs.join(' '), { cwd: distDir });
 
-  console.log(`\n✅ Published ${packageName}@${version}${dryRun ? ' (dry run)' : ''}\n`);
+  console.log(
+    `\n✅ Published ${packageName}@${version}${dryRun ? ' (dry run)' : ''}\n`,
+  );
 
   if (!hadLockfile && fs.existsSync(lockfilePath)) {
     fs.rmSync(lockfilePath);

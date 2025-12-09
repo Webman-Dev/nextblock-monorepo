@@ -1,3 +1,3 @@
 export * from './lib/client-utils';
 export * from './lib/translations-context';
-export * from './lib/utils';
+export { cn, utils } from './lib/utils';

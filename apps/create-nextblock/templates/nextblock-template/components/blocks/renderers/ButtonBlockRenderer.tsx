@@ -1,10 +1,14 @@
 import React from "react";
 import Link from "next/link";
+import { Button } from "@nextblock-cms/ui";
+import { cn } from "@nextblock-cms/utils";
+
 export type ButtonBlockContent = {
     text?: string;
     url?: string;
     variant?: 'default' | 'outline' | 'secondary' | 'ghost' | 'link';
-    size?: 'default' | 'sm' | 'lg';
+    size?: 'default' | 'sm' | 'lg' | 'full';
+    position?: 'left' | 'center' | 'right';
 };
 
 interface ButtonBlockRendererProps {
@@ -14,25 +18,7 @@ interface ButtonBlockRendererProps {
 
 const ButtonBlockRenderer: React.FC<ButtonBlockRendererProps> = ({
   content,
-  // languageId, // Unused
 }) => {
-  const baseClasses =
-    "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
-  const variantClasses: Record<string, string> = {
-    default: "bg-primary text-primary-foreground shadow hover:bg-primary/90",
-    outline:
-      "border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
-    secondary:
-      "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
-    ghost: "hover:bg-accent hover:text-accent-foreground",
-    link: "text-primary underline-offset-4 hover:underline",
-  };
-  const sizeClasses: Record<string, string> = {
-    default: "h-10 px-4 py-2",
-    sm: "h-9 rounded-md px-3",
-    lg: "h-11 rounded-md px-8",
-  };
-
   const isExternal =
     content.url?.startsWith("http") ||
     content.url?.startsWith("mailto:") ||
@@ -42,48 +28,54 @@ const ButtonBlockRenderer: React.FC<ButtonBlockRendererProps> = ({
   const buttonText = content.text || "Button";
   const buttonVariant = content.variant || "default";
   const buttonSize = content.size || "default";
+  const buttonPosition = content.position || "left";
+
+  const alignmentClasses = {
+      left: "justify-start text-left",
+      center: "justify-center text-center",
+      right: "justify-end text-right",
+  };
 
   return (
-    <div className="my-6 text-center">
+    <div className={cn("my-6 flex w-full", alignmentClasses[buttonPosition])}>
       {/* Case 1: Internal link (not external, not anchor, has URL) */}
       {!isExternal && !isAnchor && !!content.url ? (
-        <Link
-          href={content.url}
-          className={[
-            baseClasses,
-            variantClasses[buttonVariant],
-            sizeClasses[buttonSize],
-          ].join(" ")}
+        <Button
+            asChild
+            variant={buttonVariant}
+            size={buttonSize}
+            className={cn(content.variant === 'outline' && "text-foreground")}
         >
-          {buttonText}
-        </Link>
+            <Link href={content.url}>
+                {buttonText}
+            </Link>
+        </Button>
       ) : /* Case 2: External or Anchor link (has URL) */
       (isExternal || isAnchor) && !!content.url ? (
-        <a
-          href={content.url} // content.url is guaranteed by the condition
-          target={isExternal ? "_blank" : undefined}
-          rel={isExternal ? "noopener noreferrer" : undefined}
-          className={[
-            baseClasses,
-            variantClasses[buttonVariant],
-            sizeClasses[buttonSize],
-          ].join(" ")}
+        <Button
+            asChild
+            variant={buttonVariant}
+            size={buttonSize}
+            className={cn(content.variant === 'outline' && "text-foreground")}
         >
-          {buttonText}
-        </a>
+            <a
+            href={content.url}
+            target={isExternal ? "_blank" : undefined}
+            rel={isExternal ? "noopener noreferrer" : undefined}
+            >
+            {buttonText}
+            </a>
+        </Button>
       ) : (
         /* Case 3: No URL or other edge cases - render a plain or disabled button */
-        <button
-          type="button"
-          className={[
-            baseClasses,
-            variantClasses[buttonVariant],
-            sizeClasses[buttonSize],
-          ].join(" ")}
-          disabled={!content.url}
+        <Button
+            variant={buttonVariant}
+            size={buttonSize}
+            disabled={!content.url}
+            className={cn(content.variant === 'outline' && "text-foreground")}
         >
           {buttonText}
-        </button>
+        </Button>
       )}
     </div>
   );

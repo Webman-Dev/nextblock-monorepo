@@ -11,18 +11,18 @@ export type ButtonBlockContent = {
     text?: string;
     url?: string;
     variant?: 'default' | 'outline' | 'secondary' | 'ghost' | 'link';
-    size?: 'default' | 'sm' | 'lg';
+    size?: 'default' | 'sm' | 'lg' | 'full';
+    position?: 'left' | 'center' | 'right';
 };
 
 const buttonVariants: ButtonBlockContent['variant'][] = ['default', 'outline', 'secondary', 'ghost', 'link'];
-const buttonSizes: ButtonBlockContent['size'][] = ['default', 'sm', 'lg'];
+const buttonSizes: ButtonBlockContent['size'][] = ['default', 'sm', 'lg', 'full'];
+const buttonPositions: ButtonBlockContent['position'][] = ['left', 'center', 'right'];
 
 
 export default function ButtonBlockEditor({ content, onChange }: BlockEditorProps<Partial<ButtonBlockContent>>) {
 
   const handleChange = (field: keyof ButtonBlockContent, value: string) => {
-    // Ensure that when variant or size is cleared, it's set to undefined or a valid default, not an empty string if your type doesn't allow it.
-    // However, the Select component's onValueChange will provide valid values from the list or an empty string if placeholder is re-selected (which shouldn't happen here).
     onChange({ ...content, [field]: value });
   };
 
@@ -48,34 +48,52 @@ export default function ButtonBlockEditor({ content, onChange }: BlockEditorProp
           className="mt-1"
         />
       </div>
-      <div>
-        <Label htmlFor="btn-variant">Variant</Label>
-        <Select
-          value={content.variant || "default"}
-          onValueChange={(val: string) => handleChange('variant', val)}
-        >
-          <SelectTrigger id="btn-variant" className="mt-1">
-            <SelectValue placeholder="Select variant" />
-          </SelectTrigger>
-          <SelectContent>
-            {buttonVariants.filter((v): v is Exclude<ButtonBlockContent['variant'], undefined> => v !== undefined).map(v => (
-              <SelectItem key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="btn-variant">Variant</Label>
+            <Select
+              value={content.variant || "default"}
+              onValueChange={(val: string) => handleChange('variant', val)}
+            >
+              <SelectTrigger id="btn-variant" className="mt-1">
+                <SelectValue placeholder="Select variant" />
+              </SelectTrigger>
+              <SelectContent>
+                {buttonVariants.filter((v): v is Exclude<ButtonBlockContent['variant'], undefined> => v !== undefined).map(v => (
+                  <SelectItem key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="btn-size">Size</Label>
+            <Select
+              value={content.size || "default"}
+              onValueChange={(val: string) => handleChange('size', val)}
+            >
+              <SelectTrigger id="btn-size" className="mt-1">
+                <SelectValue placeholder="Select size" />
+              </SelectTrigger>
+              <SelectContent>
+                {buttonSizes.filter((s): s is Exclude<ButtonBlockContent['size'], undefined> => s !== undefined).map(s => (
+                  <SelectItem key={s} value={s}>{s.toUpperCase()}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
       </div>
       <div>
-        <Label htmlFor="btn-size">Size</Label>
+        <Label htmlFor="btn-position">Alignment</Label>
         <Select
-          value={content.size || "default"}
-          onValueChange={(val: string) => handleChange('size', val)}
+          value={content.position || "left"}
+          onValueChange={(val: string) => handleChange('position', val)}
         >
-          <SelectTrigger id="btn-size" className="mt-1">
-            <SelectValue placeholder="Select size" />
+          <SelectTrigger id="btn-position" className="mt-1">
+            <SelectValue placeholder="Select alignment" />
           </SelectTrigger>
           <SelectContent>
-            {buttonSizes.filter((s): s is Exclude<ButtonBlockContent['size'], undefined> => s !== undefined).map(s => (
-              <SelectItem key={s} value={s}>{s.toUpperCase()}</SelectItem>
+            {buttonPositions.filter((p): p is Exclude<ButtonBlockContent['position'], undefined> => p !== undefined).map(p => (
+              <SelectItem key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</SelectItem>
             ))}
           </SelectContent>
         </Select>

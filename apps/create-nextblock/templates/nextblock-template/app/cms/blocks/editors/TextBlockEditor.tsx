@@ -12,6 +12,7 @@ type NotionEditorProps = {
   content: string;
   onChange: (html: string) => void;
   openImagePicker?: () => Promise<{ src: string; alt?: string; width?: number | null; height?: number | null; blurDataURL?: string | null } | null>;
+  className?: string;
 };
 
 // Use the alias that resolves in your repo; if you mapped @nextblock-cms/editor, swap it here.
@@ -27,6 +28,7 @@ export type TextBlockContent = {
 export default function TextBlockEditor({
   content,
   onChange,
+  className,
 }: BlockEditorProps<Partial<TextBlockContent>>) {
   const labelId = useId();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -50,6 +52,7 @@ export default function TextBlockEditor({
           content={content?.html_content ?? ''}
           onChange={(html) => onChange({ html_content: html })}
           openImagePicker={openImagePicker}
+          className={className}
         />
 
         {/* Hidden controlled MediaPickerDialog for image selection */}

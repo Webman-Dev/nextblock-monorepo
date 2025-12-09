@@ -38,6 +38,67 @@ interface SectionBlockEditorProps {
   blockType: 'section' | 'hero';
 }
 
+// Background style generator (Mirrors SectionBlockRenderer logic)
+function generateBackgroundStyles(background: SectionBlockContent['background']) {
+  const styles: React.CSSProperties = {};
+  let className = '';
+  const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
+
+  switch (background?.type) {
+    case 'theme': {
+      // Theme-based backgrounds using CSS classes
+      const themeClasses: Record<string, string> = {
+        primary: 'bg-primary text-primary-foreground',
+        secondary: 'bg-secondary text-secondary-foreground',
+        muted: 'bg-muted text-muted-foreground',
+        accent: 'bg-accent text-accent-foreground',
+        destructive: 'bg-destructive text-destructive-foreground'
+      };
+      className = background.theme ? themeClasses[background.theme] || '' : '';
+      break;
+    }
+    
+    case 'solid':
+      if (background.solid_color) {
+          styles.backgroundColor = background.solid_color;
+      }
+      break;
+    
+    case 'gradient':
+      if (background.gradient) {
+        const { type, direction, stops } = background.gradient;
+        const gradientStops = stops.map(stop => `${stop.color} ${stop.position}%`).join(', ');
+        styles.background = `${type}-gradient(${direction || 'to right'}, ${gradientStops})`;
+      }
+      break;
+    
+    case 'image':
+      if (background.image) {
+        const imageUrl = `${R2_BASE_URL}/${background.image.object_key}`;
+        styles.backgroundSize = background.image.size || 'cover';
+        styles.backgroundPosition = background.image.position || 'center';
+
+        let finalBackgroundImage = `url(${imageUrl})`;
+
+        if (background.image.overlay && background.image.overlay.gradient) {
+          const { type, direction, stops } = background.image.overlay.gradient;
+          const gradientStops = stops.map(stop => `${stop.color} ${stop.position}%`).join(', ');
+          const gradient = `${type}-gradient(${direction || 'to right'}, ${gradientStops})`;
+          finalBackgroundImage = `${gradient}, ${finalBackgroundImage}`;
+        }
+        
+        styles.backgroundImage = finalBackgroundImage;
+      }
+      break;
+    
+    default:
+      // No background
+      break;
+  }
+
+  return { styles, className };
+}
+
 export default function SectionBlockEditor({
   content,
   onChange,
@@ -72,6 +133,9 @@ export default function SectionBlockEditor({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draggedBlock, setDraggedBlock] = useState<any>(null);
 
+  // Generate background styles
+  const { styles: backgroundStyles, className: backgroundClassName } = generateBackgroundStyles(processedContent.background);
+  
   // DND sensors for cross-column dragging
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -236,13 +300,6 @@ return (
         )}
 
         {/* Column Content Management */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-              Column Content
-            </h3>
-          </div>
-
           <SortableContext
             items={(processedContent.column_blocks || [])
               .flatMap((columnBlocks, columnIndex) =>
@@ -260,14 +317,15 @@ return (
             strategy={verticalListSortingStrategy}
           >
             <div
-              className={
-                (processedContent.column_blocks || []).length === 1
-                  ? "block"
-                  : `grid gap-4
-                    grid-cols-${processedContent.responsive_columns.mobile}
-                    md:grid-cols-${processedContent.responsive_columns.tablet}
-                    lg:grid-cols-${processedContent.responsive_columns.desktop}`
-              }
+              className={`grid gap-4 rounded-lg border transition-colors ${backgroundClassName} ${
+                 (processedContent.column_blocks || []).length === 1
+                   ? "grid-cols-1"
+                   : `grid-cols-${processedContent.responsive_columns.mobile} md:grid-cols-${processedContent.responsive_columns.tablet} lg:grid-cols-${processedContent.responsive_columns.desktop}`
+              }`}
+              style={{
+                ...backgroundStyles,
+                minHeight: '200px'
+              }}
             >
               {Array.from({ length: (processedContent.column_blocks || []).length }, (_, columnIndex) => (
                 <ColumnEditor
@@ -278,6 +336,7 @@ return (
                     handleColumnBlocksChange(columnIndex, newBlocks)
                   }
                   blockType={blockType}
+                  sectionBackground={processedContent.background}
                 />
               ))}
             </div>
@@ -332,7 +391,6 @@ return (
               </div>
             ) : null}
           </DragOverlay>
-        </div>
       </div>
     </DndContext>
   );
