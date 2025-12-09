@@ -88,7 +88,8 @@ BEGIN
                 "text": "Get Started",
                 "url": "/article/how-nextblock-works",
                 "variant": "default",
-                "size": "lg"
+                "size": "lg",
+                "position": "center"
               }
             },
             {
@@ -97,7 +98,8 @@ BEGIN
                 "text": "View on GitHub",
                 "url": "https://github.com/Webman-Dev/nextblock-monorepo",
                 "variant": "outline",
-                "size": "lg"
+                "size": "lg",
+                "position": "center"
               }
             },
             {
@@ -304,7 +306,8 @@ BEGIN
                 "text": "Get in Touch",
                 "url": "mailto:hello@nextblockcms.com",
                 "variant": "default",
-                "size": "lg"
+                "size": "lg",
+                "position": "center"
               }
             }
           ]
@@ -482,8 +485,8 @@ BEGIN
           [
             { "block_type": "text", "content": { "html_content": "<h1 class='text-5xl md:text-6xl font-bold tracking-tight text-white text-center drop-shadow-lg'>Créez des sites <span class='relative inline-block mx-1 group'><span class='absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-400 translate-y-1 md:translate-y-2 transform -skew-x-12 rounded-sm shadow-lg group-hover:skew-x-0 transition-transform duration-300 ease-out'></span><span class='relative text-white italic px-1'>Ultra-Rapides</span></span><br class='md:hidden' />.</h1>" } },
             { "block_type": "text", "content": { "html_content": "<p class='text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4 leading-relaxed'>NextBlock est le CMS Next.js open-source alliant scores Lighthouse parfaits et éditeur visuel puissant.</p>" } },
-            { "block_type": "button", "content": { "text": "Commencer", "url": "/article/comment-nextblock-fonctionne", "variant": "default", "size": "lg" } },
-            { "block_type": "button", "content": { "text": "Voir sur GitHub", "url": "https://github.com/Webman-Dev/nextblock-monorepo", "variant": "outline", "size": "lg" } },
+            { "block_type": "button", "content": { "text": "Commencer", "url": "/article/comment-nextblock-fonctionne", "variant": "default", "size": "lg", "position": "center" } },
+            { "block_type": "button", "content": { "text": "Voir sur GitHub", "url": "https://github.com/Webman-Dev/nextblock-monorepo", "variant": "outline", "size": "lg", "position": "center" } },
             { "block_type": "text", "content": { "html_content": "<div class='flex flex-wrap justify-center gap-6 text-sm uppercase tracking-wide text-slate-400 mt-8'><a href='https://github.com/Webman-Dev' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>GitHub</a><a href='https://x.com/NextBlockCMS' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>X</a><a href='https://www.linkedin.com/in/nextblock/' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>LinkedIn</a><a href='https://dev.to/nextblockcms' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>Dev.to</a><a href='https://www.npmjs.com/~nextblockcms' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>npm</a></div>" } }
           ],
           [
@@ -535,7 +538,12 @@ BEGIN
         "padding": { "top": "xl", "bottom": "xl" },
         "column_blocks": [
           [
-            { "block_type": "heading", "content": { "level": 2, "text_content": "Conçu avec les meilleurs outils.", "textAlign": "center" } },
+            {
+              "block_type": "text",
+              "content": {
+                "html_content": "<h2 class='text-3xl md:text-4xl font-bold text-white text-center mb-6'>Conçu avec les meilleurs outils.</h2>"
+              }
+            },
             { "block_type": "text", "content": { "html_content": "<p class='text-slate-400 text-center max-w-2xl mx-auto'>Chaque couche de NextBlock repose sur des technologies éprouvées pour offrir une expérience familière, performante et fiable.</p><div class='grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 mt-10 text-sm font-semibold text-center text-white'><div class='p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors'>Next.js</div><div class='p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors'>React</div><div class='p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors'>Supabase</div><div class='p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors'>Tailwind</div><div class='p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors'>shadcn/ui</div><div class='p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors'>Tiptap</div><div class='p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors'>Vercel</div><div class='p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors'>Nx</div></div>" } },
             { "block_type": "text", "content": { "html_content": "<h2 class='text-3xl md:text-4xl font-bold text-white text-center mb-6 mt-16'>Puissant pour les développeurs. Intuitif pour les éditeurs.</h2>" } },
             { "block_type": "text", "content": { "html_content": "<div class='grid md:grid-cols-2 gap-8 mt-10 text-white'><div class='p-8 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm'><h3 class='text-xl font-bold mb-6 text-blue-400'>Pour les créateurs</h3><ul class='space-y-4 text-sm text-slate-300'><li><strong class='text-white block mb-1'>Éditeur de blocs</strong>Glisser-déposer façon Notion.</li><li><strong class='text-white block mb-1'>Blocs riches</strong>Héros, galeries, témoignages.</li><li><strong class='text-white block mb-1'>Médiathèque</strong>Dossiers, tags et actions groupées.</li><li><strong class='text-white block mb-1'>Versions sécurisées</strong>Historique et restauration instantanée.</li></ul></div><div class='p-8 rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-sm'><h3 class='text-xl font-bold mb-6 text-purple-400'>Pour les développeurs</h3><ul class='space-y-4 text-sm text-slate-300'><li><strong class='text-white block mb-1'>Next.js 16</strong>Server Components, ISR et Edge prêts à l'emploi.</li><li><strong class='text-white block mb-1'>Supabase</strong>Postgres, auth, stockage, temps réel.</li><li><strong class='text-white block mb-1'>Monorepo Nx</strong>Dépendances lisibles et centrales.</li><li><strong class='text-white block mb-1'>SDK de blocs</strong>Widgets typés et extensibles.</li></ul></div></div>" } }
@@ -589,9 +597,14 @@ BEGIN
         "padding": { "top": "xl", "bottom": "xl" },
         "column_blocks": [
           [
-            { "block_type": "heading", "content": { "level": 2, "text_content": "Des questions ?", "textAlign": "center" } },
+            {
+              "block_type": "text",
+              "content": {
+                "html_content": "<h2 class='text-3xl md:text-4xl font-bold text-center text-white mb-4'>Des questions ?</h2>"
+              }
+            },
             { "block_type": "text", "content": { "html_content": "<p class='text-center text-base text-slate-300 max-w-2xl mx-auto'>NextBlock co-construit avec des partenaires : fonctionnalités, modules sponsorisés et direction produit.</p>" } },
-            { "block_type": "button", "content": { "text": "Nous contacter", "url": "mailto:hello@nextblockcms.com", "variant": "default", "size": "lg" } }
+            { "block_type": "button", "content": { "text": "Nous contacter", "url": "mailto:hello@nextblockcms.com", "variant": "default", "size": "lg", "position": "center" } }
           ]
         ]
       }$$::jsonb,
