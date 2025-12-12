@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
 import { cn } from "@nextblock-cms/utils"
 import { signOutAction } from "@/app/actions";
 import Image from "next/image";
+import { FeedbackModal } from "./components/FeedbackModal";
 
 const LoadingSpinner = () => (
   <div className="flex justify-center items-center h-full w-full py-20">
@@ -279,6 +280,11 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
               )}
             </ul>
           </nav>
+
+
+          <div className="p-3 pb-0">
+             <FeedbackModal />
+          </div>
 
           <div className="mt-auto p-3 border-t border-slate-200 dark:border-slate-700/60 shrink-0">
             <div className="flex items-center gap-3">
