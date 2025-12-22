@@ -55,13 +55,18 @@ const PACKAGE_VERSION_SOURCES = {
 program
   .name('create-nextblock')
   .description('Bootstrap a NextBlock CMS project')
-  .argument('[project-directory]', 'The name of the project directory to create')
+  .argument(
+    '[project-directory]',
+    'The name of the project directory to create',
+  )
   .option('--skip-install', 'Skip installing dependencies')
   .option('-y, --yes', 'Skip all interactive prompts and use defaults')
   .action(handleCommand);
 
 await program.parseAsync(process.argv).catch((error) => {
-  console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+  console.error(
+    chalk.red(error instanceof Error ? error.message : String(error)),
+  );
   process.exit(1);
 });
 
@@ -74,12 +79,17 @@ async function handleCommand(projectDirectory, options) {
     if (!projectName) {
       if (yes) {
         projectName = DEFAULT_PROJECT_NAME;
-        console.log(chalk.blue(`Using default project name because --yes was provided: ${projectName}`));
+        console.log(
+          chalk.blue(
+            `Using default project name because --yes was provided: ${projectName}`,
+          ),
+        );
       } else {
         const projectPrompt = await clack.text({
           message: 'What is your project named?',
           initialValue: DEFAULT_PROJECT_NAME,
-          validate: (value) => (!value ? 'Project name is required' : undefined),
+          validate: (value) =>
+            !value ? 'Project name is required' : undefined,
         });
         if (clack.isCancel(projectPrompt)) {
           handleWizardCancel('Setup cancelled.');
@@ -156,17 +166,27 @@ async function handleCommand(projectDirectory, options) {
     if (!yes) {
       await runSetupWizard(projectDir, projectName);
     } else {
-      console.log(chalk.yellow('Skipping interactive setup wizard because --yes was provided.'));
+      console.log(
+        chalk.yellow(
+          'Skipping interactive setup wizard because --yes was provided.',
+        ),
+      );
     }
 
     await initializeGit(projectDir);
 
-    console.log(chalk.green(`\nSuccess! Your NextBlock CMS project "${projectName}" is ready.\n`));
+    console.log(
+      chalk.green(
+        `\nSuccess! Your NextBlock CMS project "${projectName}" is ready.\n`,
+      ),
+    );
     console.log(chalk.cyan('Next step:'));
     console.log(chalk.cyan(`  cd ${projectName} && npm run dev`));
   } catch (error) {
     console.error(
-      chalk.red(error instanceof Error ? error.message : 'An unexpected error occurred'),
+      chalk.red(
+        error instanceof Error ? error.message : 'An unexpected error occurred',
+      ),
     );
     process.exit(1);
   }
@@ -183,10 +203,10 @@ async function runSetupWizard(projectDir, projectName) {
   await resetSupabaseProjectRef(projectPath);
 
   clack.note(
-    "Before proceeding, ensure you have a Supabase project ready.\n\n" +
-    "1. Supabase Cloud: Create a project at https://supabase.com/dashboard\n" +
-    "2. Vercel Storage: If created via Vercel > Storage, check your .env.local snippet on Vercel for keys.",
-    "Supabase Prerequisites"
+    'Before proceeding, ensure you have a Supabase project ready.\n\n' +
+      '1. Supabase Cloud: Create a project at https://supabase.com/dashboard\n' +
+      '2. Vercel Storage: If created via Vercel > Storage, check your .env.local snippet on Vercel for keys.',
+    'Supabase Prerequisites',
   );
 
   clack.note('Connecting to Supabase...');
@@ -231,7 +251,9 @@ async function runSetupWizard(projectDir, projectName) {
   }
   const siteUrl = siteUrlPrompt.trim();
 
-  clack.note('Please go to your Supabase project dashboard to get the following secrets.');
+  clack.note(
+    'Please go to your Supabase project dashboard to get the following secrets.',
+  );
   const supabaseKeys = await clack.group(
     {
       postgresUrl: () =>
@@ -239,7 +261,8 @@ async function runSetupWizard(projectDir, projectName) {
           message:
             'What is your Connection String? (Supabase: Project Dashboard > Connect (Top Left) > Connection String > URI | Vercel: POSTGRES_URL)',
           placeholder: 'postgresql://...',
-          validate: (val) => (!val ? 'Connection string is required' : undefined),
+          validate: (val) =>
+            !val ? 'Connection string is required' : undefined,
         }),
       anonKey: () =>
         clack.password({
@@ -251,7 +274,8 @@ async function runSetupWizard(projectDir, projectName) {
         clack.password({
           message:
             'What is your Service Role Key (service_role key)? (Supabase: Project Settings > API Keys > Project Legacy API Keys | Vercel: SUPABASE_SERVICE_ROLE_KEY)',
-          validate: (val) => (!val ? 'Service Role Key is required' : undefined),
+          validate: (val) =>
+            !val ? 'Service Role Key is required' : undefined,
         }),
     },
     { onCancel: () => handleWizardCancel('Setup cancelled.') },
@@ -272,7 +296,8 @@ async function runSetupWizard(projectDir, projectName) {
 
   if (!dbPassword) {
     const passwordPrompt = await clack.password({
-      message: 'Could not extract password from URL. What is your Database Password?',
+      message:
+        'Could not extract password from URL. What is your Database Password?',
       validate: (val) => (!val ? 'Password is required' : undefined),
     });
     if (clack.isCancel(passwordPrompt)) {
@@ -284,11 +309,15 @@ async function runSetupWizard(projectDir, projectName) {
   const envPath = resolve(projectPath, '.env');
   const appendEnvBlock = async (label, lines) => {
     const normalized = lines.join('\n');
-    const blockContent = normalized.endsWith('\n') ? normalized : `${normalized}\n`;
+    const blockContent = normalized.endsWith('\n')
+      ? normalized
+      : `${normalized}\n`;
     if (canWriteEnv) {
       await fs.appendFile(envPath, blockContent);
     } else {
-      clack.note(`Add the following ${label} values to your existing .env:\n${blockContent}`);
+      clack.note(
+        `Add the following ${label} values to your existing .env:\n${blockContent}`,
+      );
     }
   };
   const envLines = [
@@ -316,7 +345,9 @@ async function runSetupWizard(projectDir, projectName) {
     }
     if (!overwrite) {
       canWriteEnv = false;
-      clack.note('Keeping existing .env. Add/merge the generated values manually.');
+      clack.note(
+        'Keeping existing .env. Add/merge the generated values manually.',
+      );
     }
   }
 
@@ -353,7 +384,7 @@ async function runSetupWizard(projectDir, projectName) {
       const linkArgs = supabaseBin === 'npx' ? ['supabase', 'link'] : ['link'];
       linkArgs.push('--project-ref', projectId);
       linkArgs.push('--password', dbPassword);
-      
+
       await execa(command, linkArgs, {
         stdio: 'inherit',
         cwd: projectPath,
@@ -361,7 +392,8 @@ async function runSetupWizard(projectDir, projectName) {
 
       // 2. Push the schema using the linked state
       dbPushSpinner.message('Pushing database schema...');
-      const pushArgs = supabaseBin === 'npx' ? ['supabase', 'db', 'push'] : ['db', 'push'];
+      const pushArgs =
+        supabaseBin === 'npx' ? ['supabase', 'db', 'push'] : ['db', 'push'];
       pushArgs.push('--include-all');
 
       await execa(command, pushArgs, {
@@ -373,10 +405,31 @@ async function runSetupWizard(projectDir, projectName) {
           SUPABASE_DB_PASSWORD: dbPassword,
         },
       });
-      dbPushSpinner.stop('Database schema pushed successfully!');
+
+      // 3. Push the config (for Auth settings like site_url)
+      dbPushSpinner.message('Pushing Supabase config (auth settings)...');
+      const configPushArgs =
+        supabaseBin === 'npx'
+          ? ['supabase', 'config', 'push']
+          : ['config', 'push'];
+
+      await execa(command, configPushArgs, {
+        stdio: ['pipe', 'inherit', 'inherit'],
+        cwd: projectPath,
+        env: {
+          ...process.env,
+          SUPABASE_DB_PASSWORD: dbPassword,
+          // Ensure NEXT_PUBLIC_URL is available for env() substitution in config.toml
+          NEXT_PUBLIC_URL: siteUrl,
+        },
+      });
+
+      dbPushSpinner.stop('Database schema and config pushed successfully!');
     }
   } catch (error) {
-    dbPushSpinner.stop('Database push failed. Please run `npx supabase db push` manually.');
+    dbPushSpinner.stop(
+      'Database push failed. Please run `npx supabase db push` manually.',
+    );
     if (error instanceof Error) {
       clack.note(error.message);
     }
@@ -386,7 +439,8 @@ async function runSetupWizard(projectDir, projectName) {
     'Optional Cloudflare R2 Setup:\nHave your Account ID, API token (Access + Secret), bucket name, and public bucket URL handy if you want media storage ready now.',
   );
   const setupR2 = await clack.confirm({
-    message: 'Do you want to set up Cloudflare R2 for media storage now? (Optional > populate .env keys)',
+    message:
+      'Do you want to set up Cloudflare R2 for media storage now? (Optional > populate .env keys)',
   });
   if (clack.isCancel(setupR2)) {
     handleWizardCancel('Setup cancelled.');
@@ -401,14 +455,17 @@ async function runSetupWizard(projectDir, projectName) {
   };
 
   if (setupR2) {
-    clack.note('I will open your browser to the R2 dashboard.\nYou need to create a bucket and an R2 API Token.');
+    clack.note(
+      'I will open your browser to the R2 dashboard.\nYou need to create a bucket and an R2 API Token.',
+    );
     await open('https://dash.cloudflare.com/?to=/:account/r2', { wait: false });
 
     const r2Keys = await clack.group(
       {
         accountId: () =>
           clack.text({
-            message: 'R2: Paste your Cloudflare Account ID (Overview > Account Details - Bottom right):',
+            message:
+              'R2: Paste your Cloudflare Account ID (Overview > Account Details - Bottom right):',
             validate: (val) => (!val ? 'Account ID is required' : undefined),
           }),
         bucketName: () =>
@@ -424,13 +481,15 @@ async function runSetupWizard(projectDir, projectName) {
         secretKey: () =>
           clack.password({
             message: 'R2: Paste your Secret Access Key:',
-            validate: (val) => (!val ? 'Secret Access Key is required' : undefined),
+            validate: (val) =>
+              !val ? 'Secret Access Key is required' : undefined,
           }),
         publicBaseUrl: () =>
           clack.text({
             message:
               'R2: Public Base URL (Bucket > Settings > Public Development URL-Enable: e.g., https://pub-xxx.r2.dev)',
-            validate: (val) => (!val ? 'Public base URL is required' : undefined),
+            validate: (val) =>
+              !val ? 'Public base URL is required' : undefined,
           }),
       },
       { onCancel: () => handleWizardCancel('Setup cancelled.') },
@@ -458,7 +517,9 @@ async function runSetupWizard(projectDir, projectName) {
   if (setupR2) {
     clack.note('Cloudflare R2 configuration saved!');
   } else if (canWriteEnv) {
-    clack.note('Cloudflare R2 placeholders added to .env. Configure them later when ready.');
+    clack.note(
+      'Cloudflare R2 placeholders added to .env. Configure them later when ready.',
+    );
   }
 
   clack.note(
@@ -541,10 +602,14 @@ async function runSetupWizard(projectDir, projectName) {
   if (setupSMTP) {
     clack.note('SMTP configuration saved!');
   } else if (canWriteEnv) {
-    clack.note('SMTP placeholders added to .env. Configure them later when ready.');
+    clack.note(
+      'SMTP placeholders added to .env. Configure them later when ready.',
+    );
   }
 
-  clack.outro(`🎉 Your NextBlock project ${projectName ? `"${projectName}" ` : ''}is ready!`);
+  clack.outro(
+    `🎉 Your NextBlock project ${projectName ? `"${projectName}" ` : ''}is ready!`,
+  );
 }
 
 function handleWizardCancel(message) {
@@ -560,7 +625,9 @@ async function ensureEmptyDirectory(projectDir) {
 
   const contents = await fs.readdir(projectDir);
   if (contents.length > 0) {
-    throw new Error(`Directory "${projectDir}" already exists and is not empty.`);
+    throw new Error(
+      `Directory "${projectDir}" already exists and is not empty.`,
+    );
   }
 }
 
@@ -776,11 +843,14 @@ async function ensureSupabaseAssets(projectDir, options = {}) {
   const destSupabaseDir = resolve(projectDir, 'supabase');
   await fs.ensureDir(destSupabaseDir);
 
-  const { dir: packageSupabaseDir, triedPaths } = await resolvePackageSupabaseDir(projectDir);
+  const { dir: packageSupabaseDir, triedPaths } =
+    await resolvePackageSupabaseDir(projectDir);
   if (!packageSupabaseDir) {
     const message =
       'Unable to locate supabase assets in @nextblock-cms/db. Please ensure dependencies are installed.' +
-      (triedPaths.length > 0 ? `\nChecked:\n - ${triedPaths.join('\n - ')}` : '');
+      (triedPaths.length > 0
+        ? `\nChecked:\n - ${triedPaths.join('\n - ')}`
+        : '');
     if (required) {
       throw new Error(message);
     } else {
@@ -795,14 +865,20 @@ async function ensureSupabaseAssets(projectDir, options = {}) {
   const sourceConfigPath = resolve(packageSupabaseDir, 'config.toml');
   const destinationConfigPath = resolve(destSupabaseDir, 'config.toml');
   if (await fs.pathExists(sourceConfigPath)) {
-    await fs.copy(sourceConfigPath, destinationConfigPath, { overwrite: true, errorOnExist: false });
+    await fs.copy(sourceConfigPath, destinationConfigPath, {
+      overwrite: true,
+      errorOnExist: false,
+    });
     configCopied = true;
   }
 
   const sourceMigrations = resolve(packageSupabaseDir, 'migrations');
   const destMigrations = resolve(destSupabaseDir, 'migrations');
   if (await fs.pathExists(sourceMigrations)) {
-    await fs.copy(sourceMigrations, destMigrations, { overwrite: true, errorOnExist: false });
+    await fs.copy(sourceMigrations, destMigrations, {
+      overwrite: true,
+      errorOnExist: false,
+    });
     migrationsCopied = true;
   }
 
@@ -826,7 +902,12 @@ async function resolvePackageSupabaseDir(projectDir) {
   const triedPaths = [];
   const candidateBases = new Set();
 
-  const installDir = resolve(projectDir, 'node_modules', '@nextblock-cms', 'db');
+  const installDir = resolve(
+    projectDir,
+    'node_modules',
+    '@nextblock-cms',
+    'db',
+  );
   candidateBases.add(installDir);
 
   const tryResolveFrom = (fromPath) => {
@@ -880,7 +961,12 @@ async function resolvePackageSupabaseDir(projectDir) {
 }
 
 async function readSupabaseProjectRef(projectDir) {
-  const projectRefPath = resolve(projectDir, 'supabase', '.temp', 'project-ref');
+  const projectRefPath = resolve(
+    projectDir,
+    'supabase',
+    '.temp',
+    'project-ref',
+  );
   if (await fs.pathExists(projectRefPath)) {
     const value = (await fs.readFile(projectRefPath, 'utf8')).trim();
     if (/^[a-z0-9]{20,}$/i.test(value)) {
@@ -937,31 +1023,32 @@ async function ensureClientProviders(projectDir) {
   }
 
   let content = await fs.readFile(providersPath, 'utf8');
-    const wrapperImportStatement = "import { TranslationsProvider } from '@nextblock-cms/utils';";
-    const existingImportRegex =
-      /import\s+\{\s*TranslationsProvider\s*\}\s*from\s*['"]@nextblock-cms\/utils['"];?/;
-    const legacyImportRegex =
-      /import\s+\{\s*TranslationsProvider\s*\}\s*from\s*['"]@\/lib\/client-translations['"];?/;
+  const wrapperImportStatement =
+    "import { TranslationsProvider } from '@nextblock-cms/utils';";
+  const existingImportRegex =
+    /import\s+\{\s*TranslationsProvider\s*\}\s*from\s*['"]@nextblock-cms\/utils['"];?/;
+  const legacyImportRegex =
+    /import\s+\{\s*TranslationsProvider\s*\}\s*from\s*['"]@\/lib\/client-translations['"];?/;
 
-    if (existingImportRegex.test(content) || legacyImportRegex.test(content)) {
-      content = content
-        .replace(existingImportRegex, wrapperImportStatement)
-        .replace(legacyImportRegex, wrapperImportStatement);
-    } else if (!content.includes(wrapperImportStatement)) {
-      const lines = content.split(/\r?\n/);
-      const firstImport = lines.findIndex((line) => line.startsWith('import'));
-      const insertIndex = firstImport === -1 ? 0 : firstImport + 1;
-      lines.splice(insertIndex, 0, wrapperImportStatement);
-      content = lines.join('\n');
+  if (existingImportRegex.test(content) || legacyImportRegex.test(content)) {
+    content = content
+      .replace(existingImportRegex, wrapperImportStatement)
+      .replace(legacyImportRegex, wrapperImportStatement);
+  } else if (!content.includes(wrapperImportStatement)) {
+    const lines = content.split(/\r?\n/);
+    const firstImport = lines.findIndex((line) => line.startsWith('import'));
+    const insertIndex = firstImport === -1 ? 0 : firstImport + 1;
+    lines.splice(insertIndex, 0, wrapperImportStatement);
+    content = lines.join('\n');
   }
 
-    await fs.writeFile(providersPath, content);
+  await fs.writeFile(providersPath, content);
 
-    const wrapperPath = resolve(projectDir, 'lib/client-translations.tsx');
-    if (await fs.pathExists(wrapperPath)) {
-      await fs.remove(wrapperPath);
-    }
+  const wrapperPath = resolve(projectDir, 'lib/client-translations.tsx');
+  if (await fs.pathExists(wrapperPath)) {
+    await fs.remove(wrapperPath);
   }
+}
 
 async function ensureEditorUtils(projectDir) {
   const exists = await fs.pathExists(EDITOR_UTILS_SOURCE_DIR);
@@ -970,7 +1057,9 @@ async function ensureEditorUtils(projectDir) {
   }
 
   const entries = await fs.readdir(EDITOR_UTILS_SOURCE_DIR);
-  const utilNames = entries.filter((name) => name.endsWith('.ts')).map((name) => name.replace(/\.ts$/, ''));
+  const utilNames = entries
+    .filter((name) => name.endsWith('.ts'))
+    .map((name) => name.replace(/\.ts$/, ''));
 
   if (utilNames.length === 0) {
     return [];
@@ -989,7 +1078,10 @@ async function ensureEditorUtils(projectDir) {
 }
 
 async function sanitizeBlockEditorImports(projectDir) {
-  const blockEditorPath = resolve(projectDir, 'app/cms/blocks/components/BlockEditorArea.tsx');
+  const blockEditorPath = resolve(
+    projectDir,
+    'app/cms/blocks/components/BlockEditorArea.tsx',
+  );
   if (!(await fs.pathExists(blockEditorPath))) {
     return;
   }
@@ -1001,7 +1093,8 @@ async function sanitizeBlockEditorImports(projectDir) {
   ];
 
   const updated = replacements.reduce(
-    (current, { pattern, replacement }) => current.replace(pattern, replacement),
+    (current, { pattern, replacement }) =>
+      current.replace(pattern, replacement),
     content,
   );
 
@@ -1024,7 +1117,10 @@ async function sanitizeUiImports(projectDir) {
 
   for (const filePath of files) {
     const original = await fs.readFile(filePath, 'utf8');
-    const updated = original.replace(/@nextblock-cms\/ui\/(?!styles\/)[A-Za-z0-9/_-]+/g, '@nextblock-cms/ui');
+    const updated = original.replace(
+      /@nextblock-cms\/ui\/(?!styles\/)[A-Za-z0-9/_-]+/g,
+      '@nextblock-cms/ui',
+    );
     if (updated !== original) {
       await fs.writeFile(filePath, updated);
     }
@@ -1078,16 +1174,12 @@ async function sanitizeLayout(projectDir) {
   ];
 
   const content = await fs.readFile(layoutPath, 'utf8');
-  let updated = content.replace(
-    /import\s+['"]\.\/globals\.css['"];?\s*/g,
-    '',
-  );
-  updated = updated.replace(
-    /import\s+['"]\.\/editor\.css['"];?\s*/g,
-    '',
-  );
+  let updated = content.replace(/import\s+['"]\.\/globals\.css['"];?\s*/g, '');
+  updated = updated.replace(/import\s+['"]\.\/editor\.css['"];?\s*/g, '');
 
-  const missingImports = requiredImports.filter((statement) => !updated.includes(statement));
+  const missingImports = requiredImports.filter(
+    (statement) => !updated.includes(statement),
+  );
   if (missingImports.length > 0) {
     updated = `${missingImports.join('\n')}\n${updated}`;
   }
@@ -1125,7 +1217,7 @@ async function ensureEditorStyles(projectDir) {
       if (
         content === '' ||
         content.startsWith('/* Editor styles placeholder') ||
-        content.includes("@nextblock-cms/editor/styles")
+        content.includes('@nextblock-cms/editor/styles')
       ) {
         await fs.remove(filePath);
       }
@@ -1319,7 +1411,9 @@ async function transformPackageJson(projectDir) {
 
   packageJson.dependencies = packageJson.dependencies ?? {};
 
-  for (const [pkgName, manifestPath] of Object.entries(PACKAGE_VERSION_SOURCES)) {
+  for (const [pkgName, manifestPath] of Object.entries(
+    PACKAGE_VERSION_SOURCES,
+  )) {
     if (pkgName in packageJson.dependencies) {
       const current = packageJson.dependencies[pkgName];
       if (typeof current === 'string' && current.startsWith('workspace:')) {
@@ -1410,7 +1504,9 @@ async function runSupabaseCli(args, options = {}) {
       if (code === 0) {
         resolve();
       } else {
-        reject(new Error(`supabase ${args.join(' ')} exited with code ${code}`));
+        reject(
+          new Error(`supabase ${args.join(' ')} exited with code ${code}`),
+        );
       }
     });
   });
@@ -1431,7 +1527,11 @@ function buildNextConfigContent(editorUtilNames) {
 
   for (const moduleName of UI_PROXY_MODULES) {
     aliasLines.push(
-      "      '@nextblock-cms/ui/" + moduleName + "': path.join(process.cwd(), 'lib/ui/" + moduleName + "'),",
+      "      '@nextblock-cms/ui/" +
+        moduleName +
+        "': path.join(process.cwd(), 'lib/ui/" +
+        moduleName +
+        "'),",
     );
   }
 
@@ -1455,17 +1555,17 @@ function buildNextConfigContent(editorUtilNames) {
     " * @type {import('next').NextConfig}",
     ' **/',
     'const nextConfig = {',
-    "  outputFileTracingRoot: path.join(__dirname),",
+    '  outputFileTracingRoot: path.join(__dirname),',
     '  env: {',
-    "    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,",
-    "    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,",
+    '    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,',
+    '    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,',
     '  },',
     '  images: {',
     "    formats: ['image/avif', 'image/webp'],",
     '    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384, 512],',
     '    deviceSizes: [320, 480, 640, 750, 828, 1080, 1200, 1440, 1920, 2048, 2560],',
     '    minimumCacheTTL: 31536000,',
-    "    dangerouslyAllowSVG: false,",
+    '    dangerouslyAllowSVG: false,',
     "    contentSecurityPolicy: \"default-src 'self'; script-src 'none'; sandbox;\",",
     '    remotePatterns: [',
     "      { protocol: 'https', hostname: 'pub-a31e3f1a87d144898aeb489a8221f92e.r2.dev' },",
@@ -1474,14 +1574,14 @@ function buildNextConfigContent(editorUtilNames) {
     '        ? [',
     '            {',
     "              protocol: /** @type {'http' | 'https'} */ (new URL(process.env.NEXT_PUBLIC_URL).protocol.slice(0, -1)),",
-    "              hostname: new URL(process.env.NEXT_PUBLIC_URL).hostname,",
+    '              hostname: new URL(process.env.NEXT_PUBLIC_URL).hostname,',
     '            },',
     '          ]',
     '        : []),',
     '    ],',
     '  },',
     '  experimental: {',
-    "    optimizeCss: true,",
+    '    optimizeCss: true,',
     "    cssChunking: 'strict',",
     '  },',
     "  transpilePackages: ['@nextblock-cms/utils', '@nextblock-cms/ui', '@nextblock-cms/editor'],",
@@ -1519,8 +1619,8 @@ function buildNextConfigContent(editorUtilNames) {
     '      config.module = config.module || {};',
     '      config.module.rules = config.module.rules || [];',
     '      config.module.rules.push({',
-    "        test: /\\.svg$/i,",
-    "        issuer: /\\.[jt]sx?$/,",
+    '        test: /\\.svg$/i,',
+    '        issuer: /\\.[jt]sx?$/,',
     "        use: ['@svgr/webpack'],",
     '      });',
     '',
@@ -1531,14 +1631,14 @@ function buildNextConfigContent(editorUtilNames) {
     '          cacheGroups: {',
     '            ...(((config.optimization ?? {}).splitChunks ?? {}).cacheGroups ?? {}),',
     '            tiptap: {',
-    "              test: /[\\\\/]node_modules[\\\\/](@tiptap|prosemirror)[\\\\/]/,",
+    '              test: /[\\\\/]node_modules[\\\\/](@tiptap|prosemirror)[\\\\/]/,',
     "              name: 'tiptap',",
     "              chunks: 'async',",
     '              priority: 30,',
     '              reuseExistingChunk: true,',
     '            },',
     '            tiptapExtensions: {',
-    "              test: /[\\\\/](tiptap-extensions|RichTextEditor|MenuBar|MediaLibraryModal)[\\\\/]/,",
+    '              test: /[\\\\/](tiptap-extensions|RichTextEditor|MenuBar|MediaLibraryModal)[\\\\/]/,',
     "              name: 'tiptap-extensions',",
     "              chunks: 'async',",
     '              priority: 25,',

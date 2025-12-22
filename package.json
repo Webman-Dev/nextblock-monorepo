@@ -29,9 +29,10 @@
     "db:restore": "node apps/nextblock/scripts/restore.js",
     "db:types": "node tools/scripts/gen-db-types.js",
     "db:link": "dotenv -e .env.local -- node tools/scripts/supabase-link.js",
-    "db:push": "dotenv -e .env.local -- npx supabase db push --workdir libs/db/src --include-all",
+    "db:push": "dotenv -e .env.local -- npx supabase db push --workdir libs/db/src --include-all && dotenv -e .env.local -- npx supabase config push --workdir libs/db/src",
     "sync:create-nextblock": "npm --prefix apps/create-nextblock run sync-template",
-    "test-create": "node apps/create-nextblock/bin/create-nextblock.js"
+    "test-create": "node apps/create-nextblock/bin/create-nextblock.js",
+    "deploy:supabase": "node tools/scripts/deploy-supabase.js"
   },
   "private": true,
   "devDependencies": {
