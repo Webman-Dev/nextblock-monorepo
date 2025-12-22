@@ -106,6 +106,28 @@ export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
   title: 'Nextblock CMS',
   description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
+  openGraph: {
+    title: 'Nextblock CMS',
+    description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
+    url: defaultUrl,
+    siteName: 'Nextblock CMS',
+    images: [
+      {
+        url: '/images/metadata_image.webp',
+        width: 1200,
+        height: 630,
+        alt: 'Nextblock CMS',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Nextblock CMS',
+    description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
+    images: ['/images/metadata_image.webp'],
+  },
   icons: {
     icon: [
       { url: '/favicon/favicon.ico' },
