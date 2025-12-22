@@ -37,7 +37,6 @@
     "**/*.jsx",
     "next-env.d.ts",
     ".next/types/**/*.ts",
-    "../../dist/apps/nextblock/.next/types/**/*.ts",
     "../../libs/ui/tailwind.config.js"
   ],
   "exclude": [

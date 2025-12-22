@@ -17,9 +17,7 @@ import { getTranslations } from '@/app/cms/settings/extra-translations/actions';
 import type { Database } from '@nextblock-cms/db';
 import { headers, cookies } from 'next/headers';
 
-const defaultUrl = process.env.NEXT_PUBLIC_URL
-  ? `https://${process.env.NEXT_PUBLIC_URL}`
-  : "http://localhost:3000";
+const defaultUrl = process.env.NEXT_PUBLIC_URL || "http://localhost:3000";
 
 const DEFAULT_LOCALE_FOR_LAYOUT = 'en';
 
@@ -106,6 +104,28 @@ export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
   title: 'Nextblock CMS',
   description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
+  openGraph: {
+    title: 'Nextblock CMS',
+    description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
+    url: defaultUrl,
+    siteName: 'Nextblock CMS',
+    images: [
+      {
+        url: '/images/metadata_image.webp',
+        width: 1200,
+        height: 630,
+        alt: 'Nextblock CMS',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Nextblock CMS',
+    description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
+    images: ['/images/metadata_image.webp'],
+  },
   icons: {
     icon: [
       { url: '/favicon/favicon.ico' },
