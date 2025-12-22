@@ -18,7 +18,9 @@ import type { Database } from '@nextblock-cms/db';
 import { headers, cookies } from 'next/headers';
 
 const defaultUrl = process.env.NEXT_PUBLIC_URL
-  ? `https://${process.env.NEXT_PUBLIC_URL}`
+  ? (process.env.NEXT_PUBLIC_URL.startsWith('http')
+    ? process.env.NEXT_PUBLIC_URL
+    : `https://${process.env.NEXT_PUBLIC_URL}`)
   : "http://localhost:3000";
 
 const DEFAULT_LOCALE_FOR_LAYOUT = 'en';
