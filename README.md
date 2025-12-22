@@ -73,6 +73,32 @@ This workspace uses [Nx](https://nx.dev) to manage applications and libraries.
     nx serve nextblock
     ```
 
+### 🚀 Deployment (Vercel)
+
+To deploy this monorepo to Vercel with automatic Supabase migration syncing:
+
+1.  **Configure Environment Variables**:
+    In your Vercel Project Settings, add the following variables:
+    - `NEXT_PUBLIC_URL`: Your full domain (e.g., `https://cms.nextblock.ca`).
+    - `SUPABASE_PROJECT_ID`: Your Supabase Project Reference ID.
+    - `POSTGRES_URL`: Your database connection string (contains the password).
+    - **`SUPABASE_ACCESS_TOKEN`**: A Personal Access Token for the Supabase CLI.
+      - _Get this from: Supabase Dashboard > Account > Access Tokens > "Generate New Token"._
+      - _Required for `supabase link` and `config push` to work in CI._
+
+2.  **Configure Build Command**:
+    Override the default **Build Command** in Vercel settings with:
+
+    ```bash
+    npx nx build nextblock && npm run deploy:supabase
+    ```
+
+3.  **Deploy**:
+    Push to `main`. The build script will automatically:
+    - Link to your Supabase project.
+    - Push any new database migrations (`libs/db/migrations`).
+    - Update your Supabase Auth Config (`site_url`) to match your `NEXT_PUBLIC_URL`.
+
 ### Common Commands
 
 | Command              | Description                     |
