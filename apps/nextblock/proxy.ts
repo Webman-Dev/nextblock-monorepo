@@ -189,14 +189,37 @@ export default async function proxy(request: NextRequest) {
   if (process.env.NODE_ENV === 'production') {
     const nonceValue = requestHeaders.get('x-nonce');
     if (nonceValue) {
+      const supabaseHostname = new URL(supabaseUrl).hostname;
+      
+      const r2BaseUrl = process.env.NEXT_PUBLIC_R2_BASE_URL;
+      const r2PublicUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_URL;
+      const r2BucketName = process.env.R2_BUCKET_NAME;
+
+      let r2Hostnames = '';
+      if (r2BaseUrl) {
+         try {
+           r2Hostnames += ` https://${new URL(r2BaseUrl).hostname}`;
+         } catch (e) {
+           console.error('Invalid NEXT_PUBLIC_R2_BASE_URL', e);
+         }
+      }
+      if (r2PublicUrl && r2BucketName) {
+         try {
+           const publicHostname = new URL(r2PublicUrl).hostname;
+           r2Hostnames += ` https://${r2BucketName}.${publicHostname}`;
+         } catch (e) {
+            console.error('Invalid NEXT_PUBLIC_R2_PUBLIC_URL', e);
+         }
+      }
+
       const csp = [
         "default-src 'self'",
         `script-src 'self' blob: data: 'nonce-${nonceValue}'`,
         "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data: blob: https://nrh-next-cms.e260676f72b0b18314b868f136ed72ae.r2.cloudflarestorage.com https://pub-a31e3f1a87d144898aeb489a8221f92e.r2.dev",
+        `img-src 'self' data: blob:${r2Hostnames}`,
         "font-src 'self'",
         "object-src 'none'",
-        "connect-src 'self' https://ppcppwsfnrptznvbxnsz.supabase.co wss://ppcppwsfnrptznvbxnsz.supabase.co https://nrh-next-cms.e260676f72b0b18314b868f136ed72ae.r2.cloudflarestorage.com https://pub-a31e3f1a87d144898aeb489a8221f92e.r2.dev",
+        `connect-src 'self' https://${supabaseHostname} wss://${supabaseHostname}${r2Hostnames}`,
         "frame-src 'self' blob: data: https://www.youtube.com",
         "form-action 'self'",
         "base-uri 'self'",

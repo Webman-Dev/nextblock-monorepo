@@ -11,6 +11,21 @@
       "options": {}
     },
     "build": {
+      "executor": "nx:run-commands",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "commands": [
+          "nx run nextblock:build-base",
+          "node tools/scripts/copy-next-build.js nextblock dist/apps/nextblock"
+        ],
+        "parallel": false,
+        "forwardAllArgs": true,
+        "outputPath": "dist/apps/nextblock"
+      }
+    },
+    "build-base": {
       "executor": "@nx/next:build",
       "outputs": [
         "{options.outputPath}"
@@ -30,16 +45,16 @@
       "executor": "@nx/next:server",
       "defaultConfiguration": "development",
       "options": {
-        "buildTarget": "nextblock:build",
+          "buildTarget": "nextblock:build-base",
         "dev": true
       },
       "configurations": {
         "development": {
-          "buildTarget": "nextblock:build:development",
+          "buildTarget": "nextblock:build-base:development",
           "dev": true
         },
         "production": {
-          "buildTarget": "nextblock:build:production",
+          "buildTarget": "nextblock:build-base:production",
           "dev": false
         }
       }
@@ -47,7 +62,7 @@
     "start": {
       "executor": "@nx/next:server",
       "options": {
-        "buildTarget": "nextblock:build:production",
+        "buildTarget": "nextblock:build-base:production",
         "dev": false
       }
     }
