@@ -17,8 +17,8 @@ import { getTranslations } from '@/app/cms/settings/extra-translations/actions';
 import type { Database } from '@nextblock-cms/db';
 import { headers, cookies } from 'next/headers';
 
-const defaultUrl = process.env.VERCEL_URL
-  ? `https://${process.env.VERCEL_URL}`
+const defaultUrl = process.env.NEXT_PUBLIC_URL
+  ? `https://${process.env.NEXT_PUBLIC_URL}`
   : "http://localhost:3000";
 
 const DEFAULT_LOCALE_FOR_LAYOUT = 'en';
