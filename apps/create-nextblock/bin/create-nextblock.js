@@ -252,7 +252,8 @@ async function runSetupWizard(projectDir, projectName) {
   const siteUrl = siteUrlPrompt.trim();
 
   clack.note(
-    'Please go to your Supabase project dashboard to get the following secrets.',
+    'Please go to your Supabase project dashboard to get the following secrets.\n' +
+      'Note: For "Access Token", go to Account > Access Tokens > Generate New Token.',
   );
   const supabaseKeys = await clack.group(
     {
@@ -276,6 +277,13 @@ async function runSetupWizard(projectDir, projectName) {
             'What is your Service Role Key (service_role key)? (Supabase: Project Settings > API Keys > Project Legacy API Keys | Vercel: SUPABASE_SERVICE_ROLE_KEY)',
           validate: (val) =>
             !val ? 'Service Role Key is required' : undefined,
+        }),
+      accessToken: () =>
+        clack.password({
+          message:
+            'What is your Personal Access Token? (Supabase: Account > Access Tokens). Required for deployment.',
+          validate: (val) =>
+            !val ? 'Access Token is required for deployment' : undefined,
         }),
     },
     { onCancel: () => handleWizardCancel('Setup cancelled.') },
@@ -327,6 +335,7 @@ async function runSetupWizard(projectDir, projectName) {
     `NEXT_PUBLIC_SUPABASE_URL=${supabaseUrl}`,
     `NEXT_PUBLIC_SUPABASE_ANON_KEY=${supabaseKeys.anonKey}`,
     `SUPABASE_SERVICE_ROLE_KEY=${supabaseKeys.serviceKey}`,
+    `SUPABASE_ACCESS_TOKEN=${supabaseKeys.accessToken}`,
     `POSTGRES_URL=${postgresUrl}`,
     '',
     '# Revalidation',
