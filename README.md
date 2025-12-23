@@ -78,10 +78,12 @@ Everything you need to know about the architecture is in the `docs/` folder.
 
 ### 📖 Guides & Tutorials
 
-| **I want to...**    | **Read This**                                                       |
-| :------------------ | :------------------------------------------------------------------ |
-| **Build a Website** | [👉 **User Quickstart Guide**](./docs/tutorial-user-quickstart.md)  |
-| **Modify the Core** | [🛠️ **Contributor Guide**](./docs/tutorial-contributor-monorepo.md) |
+Choose your path based on what you want to achieve.
+
+| **I want to...**    | **Read This**                                                  | **Description**                                                                                                                   |
+| :------------------ | :------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------- |
+| **Build a Website** | [👉 **User Quickstart Guide**](./tutorial-user-quickstart.md)  | **Recommended.** Use the CLI (`npm create nextblock`) to launch a production-ready site with Supabase & Cloudflare R2 in minutes. |
+| **Modify the Core** | [🛠️ **Contributor Guide**](./tutorial-contributor-monorepo.md) | For advanced developers who want to clone the Monorepo, contribute to the open-source core, or understand the Nx architecture.    |
 
 ---
 
