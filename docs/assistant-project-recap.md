@@ -14,7 +14,7 @@ This note captures the current understanding of the **NextBlock monorepo** and t
   - `apps/nextblock` - production Next.js application.
   - `apps/create-nextblock/templates/nextblock-template` - scaffold template kept out of the Nx graph via `.nxignore`; the sync script removes any `project.json` so it never registers as a project.
 - **CLI runtime**
-  - `apps/create-nextblock` now has a minimal `project.json`, enabling `npx nx lint create-nextblock --skip-nx-cache` while aggregate build scripts skip the CLI.
+  - `apps/create-nextblock` now has a minimal `project.json`, enabling `npm nx lint create-nextblock --skip-nx-cache` while aggregate build scripts skip the CLI.
 - **Key libraries**
   - `libs/ui` - shared UI components.
   - `libs/utils` - translations provider, Supabase helpers, etc.
@@ -126,11 +126,11 @@ This note captures the current understanding of the **NextBlock monorepo** and t
 
 - `nx serve nextblock` - run the monorepo app.
 - `npm run sync:create-nextblock` - refresh the template from `apps/nextblock`.
-- `npx nx lint create-nextblock --skip-nx-cache` - lint the CLI after syncing the template.
+- `npm nx lint create-nextblock --skip-nx-cache` - lint the CLI after syncing the template.
 - `npm run test-create -- <name>` - scaffold a project (uses published package versions).
 - `npm run dev` (generated project) - start Next.js dev server.
-- `npx vite build --config libs/ui/vite.config.ts` - rebuild UI library bundle.
-- `npx vite build --config libs/editor/vite.config.ts` - rebuild editor library bundle.
+- `npm vite build --config libs/ui/vite.config.ts` - rebuild UI library bundle.
+- `npm vite build --config libs/editor/vite.config.ts` - rebuild editor library bundle.
 
 ---
 

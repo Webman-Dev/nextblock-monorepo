@@ -14,7 +14,7 @@
 You **MUST** read and follow [Architectural-Mandate-and-End-Goal.md](docs/Architectural-Mandate-and-End-Goal.md).
 
 - **Open-Core:** Core is open-source; premium extensions are private.
-- **Distribution:** Users get a standalone app via `npx create-nextblock`, NOT by cloning this monorepo.
+- **Distribution:** Users get a standalone app via `npm create nextblock`, NOT by cloning this monorepo.
 - **Strict Separation:** `libs/ui` and `libs/db` must be publishable as standalone packages.
 
 ## 2. Documentation Index

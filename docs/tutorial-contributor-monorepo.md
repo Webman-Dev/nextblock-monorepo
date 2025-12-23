@@ -34,14 +34,14 @@ npm install
 Copy the example environment file:
 
 ```bash
-cp .env.exemple apps/nextblock/.env.local
+cp .env.exemple .env.local
 ```
 
 You need a **Supabase Project** for local development.
 
-> **Note:** You can technically run Supabase locally via Docker (`npx supabase start`), but we recommend connecting to a cloud "Dev" project to save resources and easily share data with the team.
+> **Note:** You can technically run Supabase locally via Docker (`npm supabase start`), but we recommend connecting to a cloud "Dev" project to save resources and easily share data with the team.
 
-Fill in `apps/nextblock/.env.local` with your Dev project keys (same process as the User Tutorial).
+Fill in `.env.local` with your Dev project keys (same process as the User Tutorial).
 
 ---
 
@@ -63,19 +63,19 @@ We use Supabase migrations to manage the schema.
 
 ```bash
 # Creates a new SQL file in libs/db/src/supabase/migrations
-npx supabase migration new my_new_feature
+npm supabase migration new my_new_feature
 ```
 
 **To apply migrations to your remote Dev database:**
 
 ```bash
-npx supabase db push
+npm run db:push
 ```
 
 **To generate TypeScript definitions:**
 
 ```bash
-npx supabase gen types typescript --project-id "your-project-id" > libs/db/src/types/supabase.ts
+npm run db:types
 ```
 
 ---

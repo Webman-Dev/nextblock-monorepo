@@ -13,7 +13,7 @@ The `create-nextblock` package is the primary onboarding surface for developers.
 - CLI app root: `apps/create-nextblock`
 - Executable entry: `apps/create-nextblock/bin/create-nextblock.js`
 - Template source: `apps/create-nextblock/templates/nextblock-template`
-- Nx config: minimal `project.json` with a lint target (bin + scripts). The project is excluded from aggregate builds but linted via `npx nx lint create-nextblock --skip-nx-cache`.
+- Nx config: minimal `project.json` with a lint target (bin + scripts). The project is excluded from aggregate builds but linted via `npm nx lint create-nextblock --skip-nx-cache`.
 - Template is **not** part of the Nx graph. `docs/.nxignore` excludes the path, and the sync script deletes any stray `project.json` in the template after copying.
 
 ## Template Sync Workflow
@@ -38,8 +38,10 @@ When a developer runs `npm create nextblock@latest`:
 2. Template files are copied into a new directory.
 3. `package.json` is rewritten:
    - Name is updated.
-  - `@nextblock-cms/*` dependencies are converted from `workspace:*` to published versions.
-  - Nx-specific scripts are replaced with standard Next.js scripts (`dev`, `build`, `start`, `lint`).
+
+- `@nextblock-cms/*` dependencies are converted from `workspace:*` to published versions.
+- Nx-specific scripts are replaced with standard Next.js scripts (`dev`, `build`, `start`, `lint`).
+
 4. `.env.example` is copied to `.env.local` with guidance for required variables (Supabase, R2, SMTP).
 5. Dependency installation runs via the chosen package manager.
 6. Success message highlights next steps (`cd`, `npm run dev`, configure env keys).
@@ -56,7 +58,7 @@ When a developer runs `npm create nextblock@latest`:
 
 - **Missing `'use client'` in packages:** Rebuild `libs/ui` and `libs/editor`; the Vite configs inject the directive into `index.js`/`index.mjs`.
 - **Template shows in Nx graph:** Re-run `npm run sync:create-nextblock` to remove `project.json`, and confirm `.nxignore` lists the template path.
-- **CLI linting fails:** Run `npx nx lint create-nextblock --skip-nx-cache` and fix issues in `bin/` or `scripts/`.
+- **CLI linting fails:** Run `npm nx lint create-nextblock --skip-nx-cache` and fix issues in `bin/` or `scripts/`.
 - **Generated project fails to resolve packages:** Verify published versions exist on npm and that `package.json` no longer contains `workspace:*` specifiers.
 
 ## Related References

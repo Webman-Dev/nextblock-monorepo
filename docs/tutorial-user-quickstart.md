@@ -123,7 +123,7 @@ Now let's put it on the internet.
 
 - **Database Password**: If the CLI fails to push migrations, verify your database password in the connection string.
 - **Images not loading**: Check your R2 Public URL in the `.env` file. It must start with `https://`.
-- **"Relation not found"**: This means the migrations didn't run. Run `npx supabase db push` locally to fix it.
+- **"Relation not found"**: This means the migrations didn't run. Run `npm supabase db push` locally to fix it.
 
 ---
 
