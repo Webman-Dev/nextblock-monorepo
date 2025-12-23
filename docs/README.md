@@ -16,7 +16,7 @@ Choose your path based on what you want to achieve.
 
 | **I want to...**    | **Read This**                                                  | **Description**                                                                                                                   |
 | :------------------ | :------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------- |
-| **Build a Website** | [👉 **User Quickstart Guide**](./tutorial-user-quickstart.md)  | **Recommended.** Use the CLI (`npx create-nextblock`) to launch a production-ready site with Supabase & Cloudflare R2 in minutes. |
+| **Build a Website** | [👉 **User Quickstart Guide**](./tutorial-user-quickstart.md)  | **Recommended.** Use the CLI (`npm create nextblock`) to launch a production-ready site with Supabase & Cloudflare R2 in minutes. |
 | **Modify the Core** | [🛠️ **Contributor Guide**](./tutorial-contributor-monorepo.md) | For advanced developers who want to clone the Monorepo, contribute to the open-source core, or understand the Nx architecture.    |
 
 ---
@@ -44,7 +44,7 @@ Deep dives into the internal workings of the key systems.
 
 ### 🛠️ Tooling
 
-- [**CLI Internals**](./create-nextblock-cli.md): How `create-nextblock` works under the hood.
+- [**CLI Internals**](./create-nextblock-cli.md): How `create nextblock` works under the hood.
 
 ---
 
