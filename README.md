@@ -76,21 +76,12 @@ Everything you need to know about the architecture is in the `docs/` folder.
 
 👉 **[Read the Documentation Index](./docs/README.md)**
 
-### Local Development Setup
+### 📖 Guides & Tutorials
 
-1.  **Clone the Monorepo**
-    ```bash
-    git clone https://github.com/Webman-Dev/nextblock-monorepo.git
-    cd nextblock-monorepo
-    ```
-2.  **Install Dependencies**
-    ```bash
-    npm install
-    ```
-3.  **Run the Dev Server**
-    ```bash
-    nx serve nextblock
-    ```
+| **I want to...**    | **Read This**                                                       |
+| :------------------ | :------------------------------------------------------------------ |
+| **Build a Website** | [👉 **User Quickstart Guide**](./docs/tutorial-user-quickstart.md)  |
+| **Modify the Core** | [🛠️ **Contributor Guide**](./docs/tutorial-contributor-monorepo.md) |
 
 ---
 
