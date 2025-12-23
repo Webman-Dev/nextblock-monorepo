@@ -1,115 +1,111 @@
-<table style="border:2px solid #dc2626;border-radius:6px;background:#fee2e2;padding:12px;">
-  <tr>
-    <td>
-      <strong>Warning:</strong> This project is not ready to be tested locally. I'm still working on a database seed to help people start with a basic template.
-    </td>
-  </tr>
-</table>
+<div align="center">
+ <img src="https://www.nextblock.ca/_next/image?url=%2Fimages%2Fnextblock-logo-small.webp&w=64&q=75" alt="NextBlock CMS Logo" width="200"/>
 
-# NextBlock CMS Monorepo
+# NextBlock CMS
 
-This is the **factory** for NextBlock CMS, an Open-Core, block-based content management system built with Next.js 16 and Supabase.
+**The AI-Native, Open-Core CMS for Next.js 16**
 
-**Note:** If you just want to **build a website** with NextBlock, you do not need this repo. Instead, run:
+  <p align="center">
+    <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js" alt="Next.js 16"></a>
+    <a href="https://supabase.com"><img src="https://img.shields.io/badge/Supabase-Database-3ecf8e?style=for-the-badge&logo=supabase" alt="Supabase"></a>
+    <a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/Tailwind-CSS-38bdf8?style=for-the-badge&logo=tailwindcss" alt="Tailwind CSS"></a>
+    <a href="https://nx.dev"><img src="https://img.shields.io/badge/Nx-Monorepo-blue?style=for-the-badge&logo=nx" alt="Nx"></a>
+  </p>
+
+  <p>
+    <strong>Speed. Scalability. AI-Readiness.</strong>
+    <br/>
+    Build premium, high-performance websites in minutes, not months.
+  </p>
+  
+  <br/>
+
+</div>
+
+---
+
+## 🚀 Why NextBlock?
+
+Tired of slow WordPress sites? Finding other headless CMSs too complex? **NextBlock** is the sweet spot.
+
+We combined the **flexibility of a Block Editor** with the **raw power of Next.js 16 Server Components**. The result is a CMS that feels like a static site but manages like a dynamic platform.
+
+### ✨ Key Features
+
+- **⚡ 100% Lighthouse Performance**: Built-in edge caching, image optimization, and zero layout shift. Speed is not a plugin; it's the default.
+- **🤖 Built for AI Agents**: Our codebase is documented and structured specifically to be easily read and extended by AI coding assistants.
+- **🛍️ E-Commerce Ready**: (Coming Soon) seamless integration with Stripe for premium digital products.
+- **🧱 Visual Block Editor**: A Tiptap-powered Notion-style editor that your clients will actually enjoy using.
+- **🔓 Open-Core Model**: The core is 100% Free & Open Source (AGPL). You only pay for premium enterprise modules if you need them.
+
+## 🆚 The NextBlock Advantage
+
+| Feature         | NextBlock CMS                  | WordPress                 | Payload / Strapi        |
+| :-------------- | :----------------------------- | :------------------------ | :---------------------- |
+| **Tech Stack**  | Next.js 16 + Supabase          | PHP + MySQL               | React / Node.js         |
+| **Performance** | 🟢 **100/100 (Default)**       | 🔴 Bloated (Plugins)      | 🟡 Spec-dependent       |
+| **Security**    | 🔒 Static/Edge First           | 🔓 Plugin vulnerabilities | 🔒 Secure               |
+| **DX**          | 💎 **React Server Components** | 📜 Legacy PHP Hooks       | 🧩 Config Heavy         |
+| **AI Ready**    | ✅ **Native**                  | ❌ No                     | 🟡 Integration required |
+
+## 🏁 Get Started in 30 Seconds
+
+Stop cloning heavy repos. Start with our CLI and get a production-ready app instantly.
 
 ```bash
 npx create-nextblock my-app
 ```
 
-This repository is for **contributing to the core platform**, developing premium extensions, or understanding the internal architecture.
+This will:
 
-## 📚 Documentation
+1.  Set up a fresh **Next.js 16** application.
+2.  Install the **NextBlock Core** libraries.
+3.  Connect to your **Supabase** backend.
 
-The primary documentation for this monorepo is located in the [`docs/`](./docs) directory.
+---
 
-👉 **[Start Here: Documentation Index](./docs/README.md)**
+## 🏗️ For Contributors: The Factory
 
-The index will guide you through:
+> **Note:** You are currently looking at the **Monorepo** (The Factory), not the product template.
 
-- **[Architectural Mandate](./docs/Architectural-Mandate-and-End-Goal.md)**: The "Constitution" of the project (Open-Core model, licensing, etc.).
-- **[Onboarding Guide](./docs/AI-Dev-Onboarding-Guide.md)**: Mission, strategy, and roadmap.
-- **[Monorepo Architecture](./docs/monorepo-architecture.md)**: How the Nx workspace is organized.
+If you want to contribute to the core platform, develop premium extensions, or audit the code, you are in the right place!
 
-## 🏗️ Monorepo Structure
+### 📚 Documentation
 
-This workspace uses [Nx](https://nx.dev) to manage applications and libraries.
+Everything you need to know about the architecture is in the `docs/` folder.
 
-| Path                    | Type | Description                                                                                                        |
-| :---------------------- | :--- | :----------------------------------------------------------------------------------------------------------------- |
-| `apps/nextblock`        | App  | The "Dev" instance of the CMS. Used for developing and testing libraries locally.                                  |
-| `apps/create-nextblock` | CLI  | The CLI tool (`npx create-nextblock`). Contains the **actual product template** in `templates/nextblock-template`. |
-| `libs/ui`               | Lib  | Shared `shadcn/ui` components and design system (`@nextblock-monorepo/ui`).                                        |
-| `libs/db`               | Lib  | Supabase client, migrations, and types (`@nextblock-monorepo/db`).                                                 |
-| `libs/editor`           | Lib  | The Tiptap-based rich text editor (`@nextblock-monorepo/editor`).                                                  |
+👉 **[Read the Documentation Index](./docs/README.md)**
 
-## 🛠️ Development
+### Local Development Setup
 
-### Prerequisites
-
-- Node.js 18+
-- Supabase CLI
-- Docker (optional, for local Supabase)
-
-### Quick Start (Contributors)
-
-1.  **Clone the repo:**
-
+1.  **Clone the Monorepo**
     ```bash
     git clone https://github.com/Webman-Dev/nextblock-monorepo.git
     cd nextblock-monorepo
     ```
-
-2.  **Install dependencies:**
-
+2.  **Install Dependencies**
     ```bash
     npm install
     ```
-
-3.  **Setup Environment:**
-    Copy `.env.exemple` to `apps/nextblock/.env.local` and fill in your Supabase/R2 credentials.
-
-4.  **Run the Dev Server:**
+3.  **Run the Dev Server**
     ```bash
     nx serve nextblock
     ```
 
-### 🚀 Deployment (Vercel)
+---
 
-To deploy this monorepo to Vercel with automatic Supabase migration syncing:
+## 🌐 Connect With Us
 
-1.  **Configure Environment Variables**:
-    In your Vercel Project Settings, add the following variables:
-    - `NEXT_PUBLIC_URL`: Your full domain (e.g., `https://cms.nextblock.ca`).
-    - `SUPABASE_PROJECT_ID`: Your Supabase Project Reference ID.
-    - `POSTGRES_URL`: Your database connection string (contains the password).
-    - **`SUPABASE_ACCESS_TOKEN`**: A Personal Access Token for the Supabase CLI.
-      - _Get this from: Supabase Dashboard > Account > Access Tokens > "Generate New Token"._
-      - _Required for `supabase link` and `config push` to work in CI._
+Join the community and stay updated on the latest features.
 
-2.  **Configure Build Command**:
-    Override the default **Build Command** in Vercel settings with:
-
-    ```bash
-    npx nx build nextblock && npm run deploy:supabase
-    ```
-
-3.  **Deploy**:
-    Push to `main`. The build script will automatically:
-    - Link to your Supabase project.
-    - Push any new database migrations (`libs/db/migrations`).
-    - Update your Supabase Auth Config (`site_url`) to match your `NEXT_PUBLIC_URL`.
-
-### Common Commands
-
-| Command              | Description                     |
-| :------------------- | :------------------------------ |
-| `nx serve nextblock` | Run the dev app.                |
-| `nx build nextblock` | Build the dev app.              |
-| `nx lint`            | Lint all projects.              |
-| `nx graph`           | Visualize the dependency graph. |
+- **X (Twitter):** [@NextBlockCMS](https://x.com/NextBlockCMS)
+- **LinkedIn:** [NextBlock](https://www.linkedin.com/in/nextblock/)
+- **GitHub:** [Webman-Dev/nextblock-monorepo](https://github.com/Webman-Dev/nextblock-monorepo)
+- **Medium:** [@nextblockcms](https://medium.com/@nextblockcms)
+- **Dev.to:** [nextblockcms](https://dev.to/nextblockcms)
 
 ---
 
-## 🤝 Contributing
-
-Please read the **[Architectural Mandate](./docs/Architectural-Mandate-and-End-Goal.md)** before submitting a PR. We enforce strict separation between the Open-Source Core and Premium Extensions.
+<p align="center">
+  <sub>Built with ❤️ by the NextBlock Team. Licensed under AGPLv3.</sub>
+</p>
