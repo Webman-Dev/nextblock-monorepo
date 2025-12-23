@@ -1,5 +1,5 @@
 <div align="center">
- <img src="https://www.nextblock.ca/_next/image?url=%2Fimages%2Fnextblock-logo-small.webp&w=64&q=75" alt="NextBlock CMS Logo" width="200"/>
+ <img src="https://cms.nextblock.ca/_next/image?url=%2Fimages%2Fnextblock-logo-small.webp&w=128&q=75" alt="NextBlock CMS Logo" width="200"/>
 
 # NextBlock CMS
 
