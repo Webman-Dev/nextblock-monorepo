@@ -115,9 +115,18 @@ Now let's put it on the internet.
 2.  **Deploy to Vercel**:
     - Go to [Vercel Dashboard](https://vercel.com/dashboard) > **Add New...** > **Project**.
     - Import your GitHub repository.
-    - **Environment Variables**: Vercel should automatically detect most of them if you linked Supabase, OR you can copy the contents of your local `.env` file into the Vercel Environment Variables section.
-    - **IMPORTANT**: Ensure `NEXT_PUBLIC_URL` is set to your Vercel domain (e.g., `https://my-website.vercel.app`).
+    - **Environment Variables**:
+      - Copy the **ENTIRE content** of your local `.env` file.
+      - Paste it into the Vercel Environment Variables configuration.
+      - **Verify**: Ensure `SUPABASE_ACCESS_TOKEN` is included (required for auto-configuration).
+      - **Update**: Change `NEXT_PUBLIC_URL` to your actual Vercel domain (e.g., `https://my-website.vercel.app`).
+    - **Build Command**:
+      - Expand "Build & Development Settings".
+      - Override **Build Command** to: `npm run build && npm run deploy:supabase`
     - Click **Deploy**.
+
+    > **Why the custom build command?**
+    > It syncs your Supabase "Site URL" to your production domain. **This is critical for Auth Verification Emails** (Sign Up / Forgot Password) to redirect users back to your live site instead of `localhost`. This step is not needed for local development.
 
 ## Troubleshooting
 

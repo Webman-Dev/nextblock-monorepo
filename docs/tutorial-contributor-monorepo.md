@@ -112,4 +112,23 @@ If you are changing the `create-nextblock` CLI or the `nextblock-template`:
     ```
 3.  Push your branch and open a PR.
 
+## Step 5: Deploying Your Fork (Optional)
+
+If you want to deploy your own instance of the monorepo to Vercel:
+
+1.  **Vercel Settings**:
+    - Add all required Environment Variables (including `SUPABASE_ACCESS_TOKEN`).
+    - Set `NEXT_PUBLIC_URL` to your Vercel domain.
+
+2.  **Build Command**:
+    Override the default build command to sync Supabase config:
+
+    ```bash
+    npx nx build nextblock && npm run deploy:supabase
+    ```
+
+    > **Note:** This step ensures **Auth Verification Emails** redirect to your live URL. It is strictly for production; local development handles this automatically.
+
+---
+
 **Thank you for building the future of web content!**
