@@ -28,11 +28,30 @@ export async function createPageRevision(
     .single();
   if (pageError || !page) return { error: 'Page not found' } as const;
 
-  const nextVersion = (page.version ?? 1) + 1;
-  const makeSnapshot = shouldCreateSnapshot(page.version ?? 1) || nextVersion === 2; // ensure early snapshot cadence
+  const currentVersion = page.version ?? 1;
+  const nextVersion = currentVersion + 1;
+
+  // If we are moving to version 2, it means Version 1 was never saved (it was the initial state).
+  // We should save Version 1 now so we have a history base.
+  if (nextVersion === 2) {
+    await supabase.from('page_revisions').insert({
+      page_id: pageId,
+      author_id: authorId, // Can be current author or null
+      version: 1,
+      revision_type: 'snapshot',
+      content: previousContent as unknown as Json,
+    });
+  }
+
+  const makeSnapshot = shouldCreateSnapshot(currentVersion) || nextVersion === 2; // ensure early snapshot cadence
 
   const revisionType: 'snapshot' | 'diff' = makeSnapshot ? 'snapshot' : 'diff';
   const content: Json = makeSnapshot ? (newContent as unknown as Json) : (compare(previousContent, newContent) as unknown as Json);
+
+  // If it's a diff and there are no changes, skip creating revision
+  if (revisionType === 'diff' && Array.isArray(content) && content.length === 0) {
+    return { success: true as const, version: currentVersion }; // Return current version as we didn't bump
+  }
 
   const { error: insertError } = await supabase.from('page_revisions').insert({
     page_id: pageId,
@@ -67,11 +86,27 @@ export async function createPostRevision(
     .single();
   if (postError || !post) return { error: 'Post not found' } as const;
 
-  const nextVersion = (post.version ?? 1) + 1;
-  const makeSnapshot = shouldCreateSnapshot(post.version ?? 1) || nextVersion === 2;
+  const currentVersion = post.version ?? 1;
+  const nextVersion = currentVersion + 1;
+
+  if (nextVersion === 2) {
+    await supabase.from('post_revisions').insert({
+      post_id: postId,
+      author_id: authorId,
+      version: 1,
+      revision_type: 'snapshot',
+      content: previousContent as unknown as Json,
+    });
+  }
+
+  const makeSnapshot = shouldCreateSnapshot(currentVersion) || nextVersion === 2;
 
   const revisionType: 'snapshot' | 'diff' = makeSnapshot ? 'snapshot' : 'diff';
   const content: Json = makeSnapshot ? (newContent as unknown as Json) : (compare(previousContent, newContent) as unknown as Json);
+
+  if (revisionType === 'diff' && Array.isArray(content) && content.length === 0) {
+    return { success: true as const, version: currentVersion };
+  }
 
   const { error: insertError } = await supabase.from('post_revisions').insert({
     post_id: postId,
@@ -104,27 +139,50 @@ export async function restorePageToVersion(pageId: number, targetVersion: number
     .order('version', { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (snapshotError || !snapshot) return { error: 'No snapshot found at or before target version.' } as const;
 
-  let content = snapshot.content as unknown as FullPageContent;
+  let content: FullPageContent;
+  let baseVersion = 0;
 
-  // 2. Fetch diffs up to target and apply
-  const { data: diffs, error: diffsError } = await supabase
-    .from('page_revisions')
-    .select('version, content, revision_type')
-    .eq('page_id', pageId)
-    .gt('version', snapshot.version)
-    .lte('version', targetVersion)
-    .order('version', { ascending: true });
-  if (diffsError) return { error: `Failed to fetch diffs: ${diffsError.message}` } as const;
+  if (snapshot) {
+    content = snapshot.content as unknown as FullPageContent;
+    baseVersion = snapshot.version;
+  } else if (targetVersion === 1) {
+    // Fallback for missing Version 1: use empty content with current meta
+    const { data: pageMeta } = await supabase
+      .from('pages')
+      .select('title, slug, language_id, status, meta_title, meta_description')
+      .eq('id', pageId)
+      .single();
+    if (!pageMeta) return { error: 'Page not found.' } as const;
+    content = {
+      meta: pageMeta,
+      blocks: [],
+    };
+    baseVersion = 1;
+  } else {
+    if (snapshotError) return { error: `Snapshot error: ${snapshotError.message}` } as const;
+    return { error: 'No snapshot found at or before target version.' } as const;
+  }
 
-  for (const r of diffs || []) {
-    if (r.revision_type === 'diff') {
-      const ops = r.content as any[];
-      const result = applyPatch(content as any, ops, /*validate*/ false, /*mutateDocument*/ true);
-      content = result.newDocument as unknown as FullPageContent;
-    } else {
-      content = r.content as unknown as FullPageContent;
+  // 2. Fetch diffs up to target and apply (only if we are not already at target)
+  if (baseVersion < targetVersion) {
+    const { data: diffs, error: diffsError } = await supabase
+      .from('page_revisions')
+      .select('version, content, revision_type')
+      .eq('page_id', pageId)
+      .gt('version', baseVersion)
+      .lte('version', targetVersion)
+      .order('version', { ascending: true });
+    if (diffsError) return { error: `Failed to fetch diffs: ${diffsError.message}` } as const;
+
+    for (const r of diffs || []) {
+      if (r.revision_type === 'diff') {
+        const ops = r.content as any[];
+        const result = applyPatch(content as any, ops, /*validate*/ false, /*mutateDocument*/ true);
+        content = result.newDocument as unknown as FullPageContent;
+      } else {
+        content = r.content as unknown as FullPageContent;
+      }
     }
   }
 
@@ -193,17 +251,38 @@ export async function restorePostToVersion(postId: number, targetVersion: number
     .order('version', { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (snapshotError || !snapshot) return { error: 'No snapshot found at or before target version.' } as const;
 
-  let content = snapshot.content as unknown as FullPostContent;
+  let content: FullPostContent;
+  let baseVersion = 0;
 
-  const { data: diffs, error: diffsError } = await supabase
-    .from('post_revisions')
-    .select('version, content, revision_type')
-    .eq('post_id', postId)
-    .gt('version', snapshot.version)
-    .lte('version', targetVersion)
-    .order('version', { ascending: true });
+  if (snapshot) {
+    content = snapshot.content as unknown as FullPostContent;
+    baseVersion = snapshot.version;
+  } else if (targetVersion === 1) {
+    const { data: postMeta } = await supabase
+      .from('posts')
+      .select('title, slug, language_id, status, meta_title, meta_description, excerpt, published_at, feature_image_id')
+      .eq('id', postId)
+      .single();
+    if (!postMeta) return { error: 'Post not found.' } as const;
+    content = {
+      meta: postMeta,
+      blocks: [],
+    };
+    baseVersion = 1;
+  } else {
+    if (snapshotError) return { error: `Snapshot error: ${snapshotError.message}` } as const;
+    return { error: 'No snapshot found at or before target version.' } as const;
+  }
+
+  if (baseVersion < targetVersion) {
+    const { data: diffs, error: diffsError } = await supabase
+      .from('post_revisions')
+      .select('version, content, revision_type')
+      .eq('post_id', postId)
+      .gt('version', baseVersion)
+      .lte('version', targetVersion)
+      .order('version', { ascending: true });
   if (diffsError) return { error: `Failed to fetch diffs: ${diffsError.message}` } as const;
 
   for (const r of diffs || []) {
@@ -213,6 +292,7 @@ export async function restorePostToVersion(postId: number, targetVersion: number
       content = result.newDocument as unknown as FullPostContent;
     } else {
       content = r.content as unknown as FullPostContent;
+    }
     }
   }
 
@@ -281,17 +361,38 @@ export async function reconstructPageVersionContent(pageId: number, targetVersio
     .order('version', { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (snapshotError || !snapshot) return { error: 'No snapshot found at or before target version.' } as const;
 
-  let content = snapshot.content as unknown as FullPageContent;
+  let content: FullPageContent;
+  let baseVersion = 0;
 
-  const { data: diffs, error: diffsError } = await supabase
-    .from('page_revisions')
-    .select('version, content, revision_type')
-    .eq('page_id', pageId)
-    .gt('version', snapshot.version)
-    .lte('version', targetVersion)
-    .order('version', { ascending: true });
+  if (snapshot) {
+    content = snapshot.content as unknown as FullPageContent;
+    baseVersion = snapshot.version;
+  } else if (targetVersion === 1) {
+    const { data: pageMeta } = await supabase
+      .from('pages')
+      .select('title, slug, language_id, status, meta_title, meta_description')
+      .eq('id', pageId)
+      .single();
+    if (!pageMeta) return { error: 'Page not found.' } as const;
+    content = {
+      meta: pageMeta,
+      blocks: [],
+    };
+    baseVersion = 1;
+  } else {
+    if (snapshotError) return { error: `Snapshot error: ${snapshotError.message}` } as const;
+    return { error: 'No snapshot found at or before target version.' } as const;
+  }
+
+  if (baseVersion < targetVersion) {
+    const { data: diffs, error: diffsError } = await supabase
+      .from('page_revisions')
+      .select('version, content, revision_type')
+      .eq('page_id', pageId)
+      .gt('version', baseVersion)
+      .lte('version', targetVersion)
+      .order('version', { ascending: true });
   if (diffsError) return { error: `Failed to fetch diffs: ${diffsError.message}` } as const;
 
   for (const r of diffs || []) {
@@ -302,6 +403,7 @@ export async function reconstructPageVersionContent(pageId: number, targetVersio
     } else {
       content = r.content as unknown as FullPageContent;
     }
+  }
   }
   return { success: true as const, content };
 }
@@ -318,17 +420,38 @@ export async function reconstructPostVersionContent(postId: number, targetVersio
     .order('version', { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (snapshotError || !snapshot) return { error: 'No snapshot found at or before target version.' } as const;
 
-  let content = snapshot.content as unknown as FullPostContent;
+  let content: FullPostContent;
+  let baseVersion = 0;
 
-  const { data: diffs, error: diffsError } = await supabase
-    .from('post_revisions')
-    .select('version, content, revision_type')
-    .eq('post_id', postId)
-    .gt('version', snapshot.version)
-    .lte('version', targetVersion)
-    .order('version', { ascending: true });
+  if (snapshot) {
+    content = snapshot.content as unknown as FullPostContent;
+    baseVersion = snapshot.version;
+  } else if (targetVersion === 1) {
+    const { data: postMeta } = await supabase
+      .from('posts')
+      .select('title, slug, language_id, status, meta_title, meta_description, excerpt, published_at, feature_image_id')
+      .eq('id', postId)
+      .single();
+    if (!postMeta) return { error: 'Post not found.' } as const;
+    content = {
+      meta: postMeta,
+      blocks: [],
+    };
+    baseVersion = 1;
+  } else {
+    if (snapshotError) return { error: `Snapshot error: ${snapshotError.message}` } as const;
+    return { error: 'No snapshot found at or before target version.' } as const;
+  }
+
+  if (baseVersion < targetVersion) {
+    const { data: diffs, error: diffsError } = await supabase
+      .from('post_revisions')
+      .select('version, content, revision_type')
+      .eq('post_id', postId)
+      .gt('version', baseVersion)
+      .lte('version', targetVersion)
+      .order('version', { ascending: true });
   if (diffsError) return { error: `Failed to fetch diffs: ${diffsError.message}` } as const;
 
   for (const r of diffs || []) {
@@ -339,6 +462,7 @@ export async function reconstructPostVersionContent(postId: number, targetVersio
     } else {
       content = r.content as unknown as FullPostContent;
     }
+  }
   }
   return { success: true as const, content };
 }
