@@ -19,7 +19,7 @@
   </p>
 
   <p>
-    <a href="https://cms.nextblock.ca/"><strong>👉 View Live Demo</strong></a><br />
+    <a href="https://cms.nextblock.ca/" target="_blank"><strong>👉 View Live Demo</strong></a><br />
     (Soon to be sandbox for admin dashboard)
   </p>
   
