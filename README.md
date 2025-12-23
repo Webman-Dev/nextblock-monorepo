@@ -17,6 +17,10 @@
     <br/>
     Build premium, high-performance websites in minutes, not months.
   </p>
+
+  <p>
+    <a href="https://cms.nextblock.ca/"><strong>👉 View Live Demo (Soon to be sandbox for admin dashboard)</strong></a>
+  </p>
   
   <br/>
 
