@@ -53,7 +53,7 @@ We combined the **flexibility of a Block Editor** with the **raw power of Next.j
 Stop cloning heavy repos. Start with our CLI and get a production-ready app instantly.
 
 ```bash
-npx create-nextblock my-app
+npm create nextblock
 ```
 
 This will:
