@@ -19,7 +19,8 @@
   </p>
 
   <p>
-    <a href="https://cms.nextblock.ca/"><strong>👉 View Live Demo (Soon to be sandbox for admin dashboard)</strong></a>
+    <a href="https://cms.nextblock.ca/"><strong>👉 View Live Demo (Soon to be sandbox for admin dashboard)</strong></a><br />
+    (Soon to be sandbox for admin dashboard)
   </p>
   
   <br/>
