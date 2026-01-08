@@ -20,7 +20,8 @@
 
   <p>
     <a href="https://cms.nextblock.ca/" target="_blank"><strong>👉 View Live Demo</strong></a><br />
-    (Soon to be sandbox for admin dashboard)
+    Explore the admin dashboard in our public sandbox (resets every 15 minutes).<br/>
+    <strong>User:</strong> demo@nextblock.ca • <strong>Pass:</strong> password
   </p>
   
   <br/>
