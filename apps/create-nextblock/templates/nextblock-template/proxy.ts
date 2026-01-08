@@ -214,13 +214,13 @@ export default async function proxy(request: NextRequest) {
 
       const csp = [
         "default-src 'self'",
-        `script-src 'self' blob: data: 'nonce-${nonceValue}'`,
-        "style-src 'self' 'unsafe-inline'",
-        `img-src 'self' data: blob:${r2Hostnames}`,
-        "font-src 'self'",
+        `script-src 'self' blob: data: 'nonce-${nonceValue}' https://vercel.live https://vercel.com`,
+        "style-src 'self' 'unsafe-inline' https://vercel.live https://vercel.com",
+        `img-src 'self' data: blob:${r2Hostnames} https://vercel.live https://vercel.com`,
+        "font-src 'self' https://vercel.live https://assets.vercel.com",
         "object-src 'none'",
-        `connect-src 'self' https://${supabaseHostname} wss://${supabaseHostname}${r2Hostnames}`,
-        "frame-src 'self' blob: data: https://www.youtube.com",
+        `connect-src 'self' https://${supabaseHostname} wss://${supabaseHostname}${r2Hostnames} https://vercel.live https://vercel.com`,
+        "frame-src 'self' blob: data: https://www.youtube.com https://vercel.live https://vercel.com",
         "form-action 'self'",
         "base-uri 'self'",
       ].join('; ');

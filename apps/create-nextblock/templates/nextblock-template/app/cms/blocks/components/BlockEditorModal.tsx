@@ -114,6 +114,7 @@ export function BlockEditorModal({
 
             {/* Editor Area with Contextual Background */}
             <div 
+              onClick={(e) => e.stopPropagation()}
               className={cn(
                   "flex-1 overflow-y-auto p-6",
                   // Conditional Background Logic:

@@ -2,6 +2,8 @@ import '@nextblock-cms/ui/styles/globals.css';
 import '@nextblock-cms/editor/styles/editor.css';
 // app/layout.tsx
 import { EnvVarWarning } from "@/components/env-var-warning";
+import { SandboxBanner } from "@/components/SandboxBanner";
+import { Analytics } from "@vercel/analytics/next"
 import { ThemeSwitcher } from '@/components/theme-switcher';
 import type { Metadata } from 'next';
 import Header from "@/components/Header";
@@ -172,6 +174,7 @@ export default async function RootLayout({
         <link rel="dns-prefetch" href="https://db.ppcppwsfnrptznvbxnsz.supabase.co" />
         <link rel="dns-prefetch" href="https://realtime.supabase.com" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <Analytics/>
       </head>
       <body className="bg-background text-foreground min-h-screen flex flex-col">
         <Providers
@@ -183,6 +186,7 @@ export default async function RootLayout({
           translations={translations}
           nonce={nonce}
         >
+          {process.env.NEXT_PUBLIC_IS_SANDBOX === 'true' && <SandboxBanner />}
           <ToasterProvider />
           <div className="flex-1 w-full flex flex-col items-center">
             <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">

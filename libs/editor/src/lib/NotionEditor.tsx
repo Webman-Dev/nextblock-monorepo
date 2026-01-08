@@ -46,13 +46,6 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
     content,
     editable,
     immediatelyRender: false, // Next.js hydration safety
-    onUpdate: ({ editor }) => onChange(editor.getHTML()),
-    onFocus: () => {
-      onFocus?.();
-    },
-    onBlur: () => {
-      onBlur?.();
-    },
     editorProps: {
       attributes: {
         class: cn(
@@ -73,7 +66,32 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
         ),
       },
     },
-  });
+  }, []); // Stable dependency array to prevent re-initialization
+
+  // Register event listeners
+  useEffect(() => {
+    if (!editor) return;
+
+    const updateHandler = () => {
+       onChange(editor.getHTML());
+    };
+    const focusHandler = () => {
+       onFocus?.();
+    };
+    const blurHandler = () => {
+       onBlur?.();
+    };
+
+    editor.on('update', updateHandler);
+    editor.on('focus', focusHandler);
+    editor.on('blur', blurHandler);
+
+    return () => {
+      editor.off('update', updateHandler);
+      editor.off('focus', focusHandler);
+      editor.off('blur', blurHandler);
+    };
+  }, [editor, onChange, onFocus, onBlur]);
 
   // Bridge the openImagePicker into editor.storage so menus/extensions can access it
   useEffect(() => {
@@ -82,14 +100,51 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
     return () => setOpenImagePicker(editor, undefined);
   }, [editor, openImagePicker]);
 
+  // Sync editable state
+  useEffect(() => {
+    if (editor && editor.isEditable !== editable) {
+      editor.setEditable(editable);
+    }
+  }, [editor, editable]);
+
+  // Ref to track the content we've ostensibly "seen" or "generated"
+  // This prevents the "echo" effect where the parent passes back what we just sent
+  const lastContentRef = useRef(content);
+
+  // Keep ref in sync with editor state
+  useEffect(() => {
+    if (!editor) return;
+    const updateHandler = () => {
+      lastContentRef.current = editor.getHTML();
+    };
+    editor.on('update', updateHandler);
+    return () => {
+      editor.off('update', updateHandler);
+    };
+  }, [editor]);
+
   // Optional: keep editor in sync if content prop changes (e.g., loading a draft)
   useEffect(() => {
     if (!editor) return;
+
+    // 1. If content matches what we last knew about (either we typed it, or we just synced it),
+    // then ignore. This filters out the "parent echo" updates.
+    if (content === lastContentRef.current) return;
+
     const current = editor.getHTML();
+
+    // 2. Fallback for the empty string / <p></p> mismatch specifically (for extra safety)
+    // Tiptap represents empty content as <p></p>, which conflicts with an empty string ""
+    if (editor.isEmpty && (content === '' || content === '<p></p>')) {
+      lastContentRef.current = content;
+      return;
+    }
+
     if (content !== current) {
       const { from, to } = editor.state.selection;
       editor.commands.setContent(content, { emitUpdate: false });
       editor.commands.setTextSelection({ from, to });
+      lastContentRef.current = content;
     }
   }, [content, editor]);
 

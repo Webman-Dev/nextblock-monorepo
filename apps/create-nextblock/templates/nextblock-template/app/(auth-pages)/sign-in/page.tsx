@@ -9,6 +9,8 @@ import Link from "next/link";
 import { useTranslations } from "@nextblock-cms/utils";
 import { useSearchParams } from "next/navigation";
 
+import { SandboxCredentialsAlert } from "../../../components/SandboxCredentialsAlert";
+
 function getMessage(searchParams: URLSearchParams): Message | undefined {
     if (searchParams.has('error')) {
         const error = searchParams.get('error');
@@ -31,7 +33,8 @@ export default function Login() {
   const formMessage = getMessage(searchParams);
 
   return (
-    <form className="flex-1 flex flex-col min-w-64 mx-auto">
+    <form className="flex-1 flex flex-col w-full max-w-160 mx-auto">
+      <SandboxCredentialsAlert />
       <h1 className="text-2xl font-medium">{t('sign_in')}</h1>
       <p className="text-sm text-foreground">
         {t('dont_have_account')}{" "}
