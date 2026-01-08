@@ -31,7 +31,12 @@ INSERT INTO public.translations (key, translations) VALUES
 ('theme_light', '{"en": "Light", "fr": "Clair"}'),
 ('theme_dark', '{"en": "Dark", "fr": "Sombre"}'),
 ('theme_system', '{"en": "System", "fr": "Système"}'),
-('theme_vibrant', '{"en": "Vibrant", "fr": "Vibrant"}')
+('theme_vibrant', '{"en": "Vibrant", "fr": "Vibrant"}'),
+('sandbox_mode_banner', '{"en": "Sandbox Mode: Data is public and resets every 15 minutes.", "fr": "Mode Sandbox : Les données sont publiques et réinitialisées toutes les 15 minutes."}'),
+('demo_access_title', '{"en": "Demo Access", "fr": "Accès Démo"}'),
+('demo_access_desc', '{"en": "This is a demo site. You may use the following credentials to access the admin section:", "fr": "Ceci est un site de démonstration. Vous pouvez utiliser les identifiants suivants pour accéder à l''administration :"}'),
+('demo_user_label', '{"en": "User:", "fr": "Utilisateur :"}'),
+('demo_password_label', '{"en": "Password:", "fr": "Mot de passe :"}')
 ON CONFLICT (key) DO UPDATE
 SET translations = EXCLUDED.translations;
 

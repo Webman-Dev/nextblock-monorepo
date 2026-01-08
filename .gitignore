@@ -55,6 +55,5 @@ vitest.config.*.timestamp*
 
 # custom
 apps/nextblock/backups/
-new.env.local
 
 nextblock-cms
