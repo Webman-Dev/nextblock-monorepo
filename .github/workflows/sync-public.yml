@@ -44,14 +44,36 @@ jobs:
         env:
           SECRET: ${{ secrets.API_TOKEN_GITHUB }}
 
-      - name: Push to Public Mirror
-        uses: cpina/github-action-push-to-another-repository@v1.7.2
+      - name: Push to Public Mirror (Manual)
         env:
           API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
-        with:
-          source-directory: '.'
-          destination-github-username: 'Webman-Dev' # Replace with actual org if known, otherwise use placeholder
-          destination-repository-name: 'nextblock' # Replace with actual repo name
-          user-name: 'NextBlock'
-          user-email: 'dev@nextblock.ca'
-          target-branch: 'master'
+          TARGET_REPO: 'Webman-Dev/nextblock'
+          TARGET_BRANCH: 'master'
+        run: |
+          echo "⚙️ Configuring Git..."
+          git config --global user.name "NextBlock"
+          git config --global user.email "dev@nextblock.ca"
+
+          # 1. Create a temporary folder for the target repo
+          echo "📥 Cloning public mirror..."
+          # CRITICAL: We construct the URL manually with the token
+          git clone https://x-access-token:${API_TOKEN_GITHUB}@github.com/${TARGET_REPO}.git ../public_mirror
+
+          # 2. Copy the filtered files from current dir to the public mirror dir
+          # We use rsync to copy everything EXCEPT the .git folder itself
+          echo "📋 Syncing files..."
+          rsync -av --delete --exclude='.git' --exclude='.github' --exclude='node_modules' ./ ../public_mirror/
+
+          # 3. Commit and Push
+          echo "🚀 Pushing updates..."
+          cd ../public_mirror
+          git add .
+
+          # Only commit if there are changes
+          if git diff --staged --quiet; then
+            echo "✅ No changes to sync."
+          else
+            git commit -m "Sync from Private: ${GITHUB_SHA}"
+            git push origin ${TARGET_BRANCH}
+            echo "✅ Push successful!"
+          fi
