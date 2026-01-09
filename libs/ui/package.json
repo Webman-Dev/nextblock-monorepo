@@ -1,0 +1,23 @@
+{
+  "name": "@nextblock-cms/ui",
+  "version": "0.2.18",
+  "main": "./index.js",
+  "typings": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs",
+      "require": "./index.js"
+    },
+    "./styles/*": "./styles/*"
+  },
+  "files": [
+    "index.mjs",
+    "index.js",
+    "index.d.ts",
+    "styles"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

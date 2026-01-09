@@ -1,0 +1,46 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "es2022",
+    "lib": ["esnext", "dom"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "rootDir": ".",
+    "sourceMap": true,
+    "composite": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["apps/nextblock/*"],
+
+      // DB Library
+      "@nextblock-cms/db": ["libs/db/src/index.ts"],
+      "@nextblock-cms/db/server": ["libs/db/src/server.ts"],
+
+      // Editor Library
+      "@nextblock-cms/editor": ["libs/editor/src/index.ts"],
+      "@nextblock-cms/editor/*": ["libs/editor/src/*"],
+
+      // SDK Library
+      "@nextblock-cms/sdk": ["libs/sdk/src/index.ts"],
+
+      // UI Library (Corrected Section)
+      "@nextblock-cms/ui": ["libs/ui/src/index.ts"],
+      "@nextblock-cms/ui/styles/*": ["libs/ui/src/styles/*"],
+      "@nextblock-cms/ui/*": ["libs/ui/src/lib/*"],
+
+      // Utils Library
+      "@nextblock-cms/utils": ["libs/utils/src/index.ts"],
+      "@nextblock-cms/utils/server": ["libs/utils/src/server.ts"]
+    }
+  },
+  "exclude": ["node_modules", "tmp"]
+}

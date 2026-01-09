@@ -1,0 +1,11 @@
+{
+  "name": "@nextblock-cms/sdk",
+  "version": "0.2.8",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "dependencies": {},
+  "publishConfig": {
+    "access": "public"
+  }
+}

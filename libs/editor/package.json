@@ -1,0 +1,22 @@
+{
+  "name": "@nextblock-cms/editor",
+  "version": "0.2.23",
+  "main": "./index.js",
+  "typings": "./index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./index.mjs",
+      "require": "./index.js"
+    },
+    "./styles/*": "./styles/*"
+  },
+  "files": [
+    "index.mjs",
+    "index.js",
+    "index.d.ts",
+    "styles"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

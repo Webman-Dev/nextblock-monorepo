@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/reset-sandbox",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

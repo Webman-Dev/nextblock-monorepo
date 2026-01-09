@@ -1,0 +1,46 @@
+{
+  "name": "db",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/db/src",
+  "projectType": "library",
+  "tags": [],
+  "// targets": "to see all targets run: nx show project db --web",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": [
+        "{workspaceRoot}/dist/libs/db"
+      ],
+      "options": {
+        "commands": [
+          "nx run db:vite-build",
+          "node tools/scripts/copy-db-supabase.cjs libs/db/src/supabase dist/libs/db/supabase"
+        ],
+        "parallel": false
+      }
+    },
+    "vite-build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/libs/db",
+        "assets": [
+          "libs/db/package.json",
+          {
+            "input": "libs/db",
+            "glob": "*.md",
+            "output": "."
+          }
+        ]
+      }
+    },
+    "gen-types": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node tools/scripts/gen-db-types.js"
+      }
+    }
+  }
+}

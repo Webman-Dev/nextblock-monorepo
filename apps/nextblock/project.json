@@ -1,0 +1,70 @@
+{
+  "name": "nextblock",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/nextblock",
+  "projectType": "application",
+  "tags": ["app:nextblock", "scope:public"],
+  "// targets": "to see all targets run: nx show project nextblock --web",
+  "targets": {
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "options": {}
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "commands": [
+          "nx run nextblock:build-base",
+          "node tools/scripts/copy-next-build.js nextblock dist/apps/nextblock"
+        ],
+        "parallel": false,
+        "forwardAllArgs": true,
+        "outputPath": "dist/apps/nextblock"
+      }
+    },
+    "build-base": {
+      "executor": "@nx/next:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "defaultConfiguration": "production",
+      "options": {
+        "outputPath": "dist/apps/nextblock"
+      },
+      "configurations": {
+        "development": {
+          "outputPath": "apps/nextblock"
+        },
+        "production": {}
+      }
+    },
+    "serve": {
+      "executor": "@nx/next:server",
+      "defaultConfiguration": "development",
+      "options": {
+          "buildTarget": "nextblock:build-base",
+        "dev": true
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "nextblock:build-base:development",
+          "dev": true
+        },
+        "production": {
+          "buildTarget": "nextblock:build-base:production",
+          "dev": false
+        }
+      }
+    },
+    "start": {
+      "executor": "@nx/next:server",
+      "options": {
+        "buildTarget": "nextblock:build-base:production",
+        "dev": false
+      }
+    }
+  }
+}

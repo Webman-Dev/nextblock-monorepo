@@ -1,0 +1,3 @@
+{
+  "extends": "../../../../libs/db/tsconfig.lib.json"
+}

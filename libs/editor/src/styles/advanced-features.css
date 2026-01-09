@@ -1,0 +1,477 @@
+﻿/* Advanced Placeholder Styles */
+.is-editor-empty {
+  position: relative;
+}
+
+.is-empty {
+  position: relative;
+}
+
+.is-empty::before {
+  color: var(--muted-foreground);
+  content: attr(data-placeholder);
+  position: absolute;
+  left: 0;
+  float: none;
+  height: auto;
+  pointer-events: none;
+  font-style: italic;
+  opacity: 0.6;
+}
+
+/* Specific placeholder styles for different node types */
+.is-empty-paragraph::before {
+  content: attr(data-placeholder);
+}
+
+.is-empty-heading-1::before {
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.is-empty-heading-2::before {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.is-empty-heading-3::before {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.is-empty-list-item::before {
+  margin-left: 0.5rem;
+}
+
+.is-empty-task-item::before {
+  margin-left: 2rem;
+}
+
+.is-empty-blockquote::before {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.is-empty-code-block::before {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  opacity: 0.5;
+}
+
+/* Enhanced Focus Styles */
+.has-focus {
+  position: relative;
+  outline: none;
+}
+
+.focus-transitions .has-focus {
+  transition: all 0.2s ease-in-out;
+}
+
+.editor-focused .has-focus {
+  background-color: rgba(59, 130, 246, 0.05);
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.focus-ring {
+  position: absolute;
+  left: -2px;
+  top: -2px;
+  right: -2px;
+  bottom: -2px;
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.editor-focused .focus-ring {
+  opacity: 1;
+}
+
+.selection-highlight {
+  background-color: rgba(59, 130, 246, 0.15);
+  border-radius: 2px;
+}
+
+.dim-unfocused .ProseMirror > *:not(.has-focus) {
+  opacity: 0.6;
+  transition: opacity 0.2s ease-in-out;
+}
+
+/* Focus mode styles */
+.focus-mode {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.focus-mode .ProseMirror {
+  max-width: 65ch;
+  margin: 0 auto;
+  padding: 2rem;
+  line-height: 1.7;
+  font-size: 1.1rem;
+}
+
+.focus-mode .ProseMirror > *:not(.has-focus) {
+  opacity: 0.3;
+  transition: opacity 0.3s ease;
+}
+
+/* Writing mode styles */
+.writing-mode {
+  background: #1a1a1a;
+  color: #e5e5e5;
+}
+
+.writing-mode .ProseMirror {
+  background: #1a1a1a;
+  color: #e5e5e5;
+  max-width: 70ch;
+  margin: 0 auto;
+  padding: 3rem 2rem;
+  line-height: 1.8;
+  font-size: 1.125rem;
+  font-family: 'Georgia', 'Times New Roman', serif;
+}
+
+.writing-mode .floating-menu,
+.writing-mode .bubble-menu,
+.writing-mode .toolbar {
+  background: #2a2a2a;
+  border-color: #404040;
+  color: #e5e5e5;
+}
+
+/* Enhanced Floating Menu Styles */
+.enhanced-floating-menu {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(8px);
+  max-width: 400px;
+  overflow: hidden;
+}
+
+.enhanced-floating-menu .search-input {
+  background: var(--muted);
+  border: 1px solid var(--input);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.enhanced-floating-menu .search-input:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.enhanced-floating-menu .category-filter {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.enhanced-floating-menu .category-filter::-webkit-scrollbar {
+  display: none;
+}
+
+.enhanced-floating-menu .category-button {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.enhanced-floating-menu .category-button.active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.enhanced-floating-menu .menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.enhanced-floating-menu .menu-item:hover {
+  background: var(--accent);
+}
+
+.enhanced-floating-menu .menu-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--muted);
+  flex-shrink: 0;
+}
+
+.enhanced-floating-menu .menu-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.enhanced-floating-menu .menu-item-title {
+  font-weight: 500;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.enhanced-floating-menu .menu-item-description {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  line-height: 1.3;
+}
+
+.enhanced-floating-menu .category-section {
+  padding: 8px 0;
+}
+
+.enhanced-floating-menu .category-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+/* Mobile Toolbar Styles */
+.mobile-toolbar {
+  background: var(--background);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.mobile-toolbar .section-tabs {
+  display: flex;
+  background: var(--muted/50);
+  border-bottom: 1px solid var(--border);
+}
+
+.mobile-toolbar .section-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  transition: all 0.2s ease;
+}
+
+.mobile-toolbar .section-tab.active {
+  background: var(--background);
+  color: var(--foreground);
+  border-bottom: 2px solid var(--primary);
+}
+
+.mobile-toolbar .toolbar-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 16px;
+  justify-content: center;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.mobile-toolbar .toolbar-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px;
+  min-width: 60px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  background: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.mobile-toolbar .toolbar-item.active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.mobile-toolbar .toolbar-item:active {
+  transform: scale(0.95);
+}
+
+/* Safe area for mobile devices */
+.mobile-toolbar .safe-area {
+  height: env(safe-area-inset-bottom);
+  background: var(--background);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .enhanced-floating-menu {
+    max-width: calc(100vw - 32px);
+    margin: 0 16px;
+  }
+  
+  .focus-mode .ProseMirror,
+  .writing-mode .ProseMirror {
+    padding: 1.5rem 1rem;
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .enhanced-floating-menu .menu-item {
+    padding: 10px;
+  }
+  
+  .enhanced-floating-menu .menu-item-icon {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .mobile-toolbar .toolbar-items {
+    gap: 6px;
+    padding: 12px;
+  }
+  
+  .mobile-toolbar .toolbar-item {
+    min-width: 50px;
+    padding: 10px 6px;
+    font-size: 10px;
+  }
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .writing-mode {
+    background: #0a0a0a;
+    color: #f5f5f5;
+  }
+  
+  .writing-mode .ProseMirror {
+    background: #0a0a0a;
+    color: #f5f5f5;
+  }
+  
+  .enhanced-floating-menu {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  }
+  
+  .mobile-toolbar {
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Animation keyframes */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.enhanced-floating-menu {
+  animation: fadeInUp 0.2s ease-out;
+}
+
+.mobile-toolbar {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+  .focus-transitions *,
+  .enhanced-floating-menu,
+  .mobile-toolbar,
+  .toolbar-item,
+  .menu-item {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .has-focus {
+    outline: 2px solid currentColor;
+  }
+  
+  .focus-ring {
+    border-width: 3px;
+  }
+  
+  .enhanced-floating-menu,
+  .mobile-toolbar {
+    border-width: 2px;
+  }
+}
+
+/* Suppress placeholder rendering within table cells */
+.ProseMirror td .is-empty::before,
+.ProseMirror th .is-empty::before,
+.ProseMirror td.is-empty::before,
+.ProseMirror th.is-empty::before {
+  content: none;
+  display: none;
+}
+
+.ProseMirror table .is-empty::before {
+  content: none !important;
+  display: none !important;
+  float: none !important;
+  height: auto !important;
+}
+
+
+.ProseMirror table .is-empty {
+  position: static !important;
+}
+

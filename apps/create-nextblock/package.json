@@ -1,0 +1,30 @@
+{
+  "name": "create-nextblock",
+  "version": "0.2.64",
+  "description": "",
+  "main": "index.js",
+  "bin": {
+    "create-nextblock": "./bin/create-nextblock.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "sync-template": "node ./scripts/sync-template.js",
+    "prepack": "npm run sync-template"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@clack/prompts": "^0.8.1",
+    "@nextblock-cms/db": "latest",
+    "chalk": "^5.6.2",
+    "commander": "^14.0.1",
+    "execa": "^9.3.0",
+    "fs-extra": "^11.3.2",
+    "inquirer": "^12.10.0",
+    "open": "^10.1.0",
+    "ora": "^8.0.1",
+    "picocolors": "^1.1.1"
+  }
+}

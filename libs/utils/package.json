@@ -1,0 +1,7 @@
+{
+  "name": "@nextblock-cms/utils",
+  "version": "0.2.12",
+  "publishConfig": {
+    "access": "public"
+  }
+}

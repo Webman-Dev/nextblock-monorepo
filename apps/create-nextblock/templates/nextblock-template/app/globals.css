@@ -1,0 +1,14 @@
+@config "../../../../tailwind.config.js";
+@import 'tailwindcss/preflight';
+@import 'tailwindcss/theme';
+@import 'tailwindcss/utilities';
+
+/*─────────────────────────────────────────────────────────────────────────────
+  globals.css — modularized
+─────────────────────────────────────────────────────────────────────────────*/
+
+@import './base.css';
+@import './components.css';
+@import './theme.css';
+@import './typography.css';
+@import './animations.css';
