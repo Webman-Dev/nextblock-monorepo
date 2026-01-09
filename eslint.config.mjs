@@ -22,7 +22,23 @@ export default [
       },
     },
     rules: {
-      '@nx/enforce-module-boundaries': 'off',
+      '@nx/enforce-module-boundaries': [
+        'error',
+        {
+          enforceBuildableLibDependency: true,
+          allow: [],
+          depConstraints: [
+            {
+              sourceTag: 'scope:public',
+              onlyDependOnLibsWithTags: ['scope:public', 'scope:premium'],
+            },
+            {
+              sourceTag: 'scope:premium',
+              onlyDependOnLibsWithTags: ['scope:premium', 'scope:public'],
+            },
+          ],
+        },
+      ],
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },

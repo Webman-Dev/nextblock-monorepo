@@ -42,7 +42,7 @@ For any latest documentation, use context7 MCP tool.
 1.  **Context First:** Before answering complex questions, check `docs/README.md` and relevant linked docs.
 2.  **Strict Types:** Always use `strict: true` TypeScript.
 3.  **No Circular Dependencies:** `libs/ui` cannot depend on `apps/nextblock`.
-4.  **Packaging Mindset:** Code in libraries must be compatible with being published to NPM.
+4.  **MAINTENANCE RULE: 'Ghost Module Synchronization'.** Whenever you modify the exports of `libs/ecommerce` (the private library), you MUST immediately update `tools/stubs/libs/ecommerce/index.ts` to export the same names (as stubs). Failure to do this will break the public open-source build.
 5.  **Target the App, Not the Template:** NEVER edit files in `apps/create-nextblock/templates/nextblock-template` directly. Always make changes in `apps/nextblock` (the core app). The template is synced from the core app via scripts.
 
 <!-- nx configuration start-->

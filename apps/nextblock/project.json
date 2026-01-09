@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/nextblock",
   "projectType": "application",
-  "tags": ["app:nextblock"],
+  "tags": ["app:nextblock", "scope:public"],
   "// targets": "to see all targets run: nx show project nextblock --web",
   "targets": {
     "lint": {

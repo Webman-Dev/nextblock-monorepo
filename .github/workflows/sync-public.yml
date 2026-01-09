@@ -1,0 +1,45 @@
+name: Sync to Public Mirror
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Private Repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Swap Ghost Modules
+        run: |
+          # Remove the real private library
+          rm -rf libs/ecommerce
+
+          # Copy the stub version
+          cp -r tools/stubs/libs/ecommerce libs/ecommerce
+
+          echo "Ghost Module Swap Completed: libs/ecommerce replaced with stubs."
+
+      - name: Clean Private Configurations
+        run: |
+          # Remove private environment files
+          rm -f .env .env.local .env.*.local
+
+          # Remove any other sensitive files if needed
+          # rm -f config/private-key.pem
+
+      - name: Push to Public Mirror
+        uses: cpina/github-action-push-to-another-repository@v1.7.2
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+        with:
+          source-directory: '.'
+          destination-github-username: 'Webman-Dev' # Replace with actual org if known, otherwise use placeholder
+          destination-repository-name: 'nextblock' # Replace with actual repo name
+          user-name: 'NextBlock'
+          user-email: 'dev@nextblock.ca'
+          target-branch: 'master'

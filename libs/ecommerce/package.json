@@ -1,0 +1,9 @@
+{
+  "name": "@nextblock/ecommerce",
+  "version": "0.0.1",
+  "type": "module",
+  "nx": {
+    "tags": ["scope:premium"]
+  },
+  "dependencies": {}
+}
