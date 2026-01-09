@@ -32,6 +32,18 @@ jobs:
           # Remove any other sensitive files if needed
           # rm -f config/private-key.pem
 
+      - name: Debug Secret
+        run: |
+          echo "Checking secret existence..."
+          if [ -z "${{ secrets.API_TOKEN_GITHUB }}" ]; then
+            echo "❌ ERROR: The secret API_TOKEN_GITHUB is EMPTY!"
+          else
+            echo "✅ Secret found. Length: ${#SECRET}"
+            echo "First 4 chars: ${SECRET:0:4}..."
+          fi
+        env:
+          SECRET: ${{ secrets.API_TOKEN_GITHUB }}
+
       - name: Push to Public Mirror
         uses: cpina/github-action-push-to-another-repository@v1.7.2
         env:
