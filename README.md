@@ -13,7 +13,7 @@
   </p>
 
   <p>
-    <strong>Speed. Scalability. AI-Readiness. </strong>
+    <strong>Speed. Scalability. AI-Readiness.</strong>
     <br/>
     Build premium, high-performance websites in minutes, not months.
   </p>
