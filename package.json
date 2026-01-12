@@ -1,6 +1,6 @@
 {
   "name": "@nextblock/source",
-  "version": "0.2.64",
+  "version": "0.2.65",
   "license": "MIT",
   "scripts": {
     "build:utils": "node tools/scripts/release-lib.js utils",
@@ -8,6 +8,7 @@
     "build:db": "node tools/scripts/release-lib.js db",
     "build:editor": "node tools/scripts/release-lib.js editor",
     "build:sdk": "node tools/scripts/release-lib.js sdk",
+    "build:ecom": "node tools/scripts/release-lib.js ecommerce",
     "build:cli": "node tools/scripts/release-cli.js",
     "all-builds": "nx run-many --target=build --all --exclude nextblock-template,create-nextblock",
     "lib-builds": "nx run-many -t build -p ui -p utils -p db -p editor -p sdk",
