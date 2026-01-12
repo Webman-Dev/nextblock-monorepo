@@ -597,6 +597,49 @@ async function runSetupWizard(projectDir, projectName) {
     };
   }
 
+  clack.note(
+    'Optional Premium Module Setup:\nIf you have a nextblock license, you can install the premium modules now.',
+  );
+  const setupPremium = await clack.confirm({
+    message:
+      'Do you have a GitHub Personal Access Token (PAT) for premium modules?',
+    initialValue: false,
+  });
+
+  if (clack.isCancel(setupPremium)) {
+    handleWizardCancel('Setup cancelled.');
+  }
+
+  if (setupPremium) {
+    const patPrompt = await clack.text({
+      message: 'Your GitHub Personal Access Token (PAT):',
+      placeholder: 'ghp_ or github_pat_...',
+      validate: (val) => {
+        if (!val) return 'PAT is required';
+        if (!val.startsWith('ghp_') && !val.startsWith('github_pat_')) {
+          return 'Token must start with ghp_ or github_pat_';
+        }
+      },
+    });
+
+    if (clack.isCancel(patPrompt)) {
+      handleWizardCancel('Setup cancelled.');
+    }
+
+    const pat = patPrompt.trim();
+
+    // Configure .npmrc for the project
+    const npmrcPath = resolve(projectPath, '.npmrc');
+    const npmrcContent = [
+      '@nextblock-cms:registry=https://npm.pkg.github.com',
+      `//npm.pkg.github.com/:_authToken=${pat}`,
+      '',
+    ].join('\n');
+
+    await fs.appendFile(npmrcPath, npmrcContent);
+    clack.note('Premium modules configured in .npmrc!');
+  }
+
   await appendEnvBlock('SMTP', [
     '',
     '# Email SMTP Configuration',

@@ -1,6 +1,6 @@
 {
-  "name": "@nextblock/ecommerce",
-  "version": "0.0.1",
+  "name": "@nextblock-cms/ecom",
+  "version": "0.0.9",
   "type": "module",
   "dependencies": {}
 }
