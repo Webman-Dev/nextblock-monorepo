@@ -1,6 +1,13 @@
 {
   "name": "@nextblock-cms/ecom",
-  "version": "0.0.9",
+  "version": "0.0.10",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nextblock-cms/packages.git"
+  },
   "type": "module",
   "nx": {
     "tags": [

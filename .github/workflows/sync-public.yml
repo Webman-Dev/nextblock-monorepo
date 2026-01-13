@@ -47,7 +47,7 @@ jobs:
       - name: Push to Public Mirror (Manual)
         env:
           API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
-          TARGET_REPO: 'Webman-Dev/nextblock'
+          TARGET_REPO: 'nextblock-cms/nextblock'
           TARGET_BRANCH: 'master'
         run: |
           echo "⚙️ Configuring Git..."
