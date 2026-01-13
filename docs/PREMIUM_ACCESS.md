@@ -35,13 +35,23 @@ npx create-nextblock my-app
 
 Paste your PAT when prompted.
 
-**Option B: Manual Setup**
-Create an `.npmrc` file in the root of your project:
+**Option B: Manual Setup (For existing projects)**
 
-```ini
-@nextblock-cms:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=YOUR_GITHUB_PAT
-```
+1.  Create an `.npmrc` file in the root of your project:
+
+    ```ini
+    @nextblock-cms:registry=[https://npm.pkg.github.com](https://npm.pkg.github.com)
+    //[npm.pkg.github.com/:_authToken=YOUR_GITHUB_PAT](https://npm.pkg.github.com/:_authToken=YOUR_GITHUB_PAT)
+    ```
+
+2.  **Install the Package:**
+    Now that your project knows where to look, simply install the package. It will automatically pull the premium version from GitHub.
+
+    ```bash
+    npm install @nextblock-cms/ecom
+    ```
+
+    _Note: If you previously installed the free version, you may need to delete `node_modules` and `package-lock.json` first to ensure the new premium version is fetched._
 
 ---
 
