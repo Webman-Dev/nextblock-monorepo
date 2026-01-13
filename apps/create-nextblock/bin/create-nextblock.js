@@ -156,6 +156,9 @@ async function handleCommand(projectDirectory, options) {
     await transformPackageJson(projectDir);
     console.log(chalk.green('Dependencies updated for public packages.'));
 
+    await ensurePublicNpmrc(projectDir);
+    console.log(chalk.green('Enforced public registry for initial install.'));
+
     if (!skipInstall) {
       await installDependencies(projectDir);
     } else {
@@ -636,8 +639,14 @@ async function runSetupWizard(projectDir, projectName) {
       '',
     ].join('\n');
 
-    await fs.appendFile(npmrcPath, npmrcContent);
+    await fs.writeFile(npmrcPath, npmrcContent);
     clack.note('Premium modules configured in .npmrc!');
+
+    clack.note('Installing @nextblock-cms/ecom...');
+    await runCommand('npm', ['install', '@nextblock-cms/ecom'], {
+      cwd: projectPath,
+    });
+    clack.note('Premium module installed!');
   }
 
   await appendEnvBlock('SMTP', [
@@ -1443,6 +1452,15 @@ async function sanitizeNextConfig(projectDir, editorUtilNames = []) {
   const nextConfigPath = resolve(projectDir, 'next.config.js');
   const content = buildNextConfigContent(editorUtilNames);
   await fs.writeFile(nextConfigPath, content);
+}
+
+async function ensurePublicNpmrc(projectDir) {
+  const npmrcPath = resolve(projectDir, '.npmrc');
+  // Force the public registry for the @nextblock-cms scope for the initial install
+  // This ensures that even if the user has a global .npmrc pointing to GitHub,
+  // we use the public ghost modules (or full modules) from npmjs.org first.
+  const content = '@nextblock-cms:registry=https://registry.npmjs.org\n';
+  await fs.writeFile(npmrcPath, content);
 }
 
 async function transformPackageJson(projectDir) {
