@@ -1,7 +1,15 @@
 {
   "name": "@nextblock/source",
-  "version": "0.2.65",
+  "version": "0.2.66",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nextblock-cms/nextblock.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nextblock-cms/nextblock/issues"
+  },
+  "homepage": "https://github.com/nextblock-cms/nextblock#readme",
   "scripts": {
     "build:utils": "node tools/scripts/release-lib.js utils",
     "build:ui": "node tools/scripts/release-lib.js ui",

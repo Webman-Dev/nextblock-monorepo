@@ -49,5 +49,5 @@ Deep dives into the internal workings of the key systems.
 ---
 
 <p align="center">
-  <sub>Need help? Check the <a href="https://github.com/Webman-Dev/nextblock-monorepo/issues">GitHub Issues</a> or join the community.</sub>
+  <sub>Need help? Check the <a href="https://github.com/nextblock-cms/nextblock/issues">GitHub Issues</a> or join the community.</sub>
 </p>

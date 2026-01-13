@@ -41,8 +41,8 @@ If you are contributing to the core repo or prefer manual setup:
 1.  **Clone the repo:**
 
     ```bash
-    git clone https://github.com/Webman-Dev/nextblock-monorepo.git
-    cd nextblock-monorepo
+    git clone https://github.com/nextblock-cms/nextblock.git
+    cd nextblock
     ```
 
 2.  **Install dependencies:**

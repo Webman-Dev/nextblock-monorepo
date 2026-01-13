@@ -89,6 +89,7 @@ Choose your path based on what you want to achieve.
 | **I want to...**    | **Read This**                                                       | **Description**                                                                                                                   |
 | :------------------ | :------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------- |
 | **Build a Website** | [👉 **User Quickstart Guide**](./docs/tutorial-user-quickstart.md)  | **Recommended.** Use the CLI (`npm create nextblock`) to launch a production-ready site with Supabase & Cloudflare R2 in minutes. |
+| **Get Premium**     | [💎 **Premium Access Guide**](./docs/PREMIUM_ACCESS.md)             | **Coming Soon.** Learn how to license the E-Commerce module and other premium extensions using our Twin Package system.           |
 | **Modify the Core** | [🛠️ **Contributor Guide**](./docs/tutorial-contributor-monorepo.md) | For advanced developers who want to clone the Monorepo, contribute to the open-source core, or understand the Nx architecture.    |
 
 ---
@@ -99,7 +100,7 @@ Join the community and stay updated on the latest features.
 
 - **X (Twitter):** [@NextBlockCMS](https://x.com/NextBlockCMS)
 - **LinkedIn:** [NextBlock](https://www.linkedin.com/in/nextblock/)
-- **GitHub:** [Webman-Dev/nextblock-monorepo](https://github.com/Webman-Dev/nextblock-monorepo)
+- **GitHub:** [nextblock-cms/nextblock](https://github.com/nextblock-cms/nextblock)
 - **Medium:** [@nextblockcms](https://medium.com/@nextblockcms)
 - **Dev.to:** [nextblockcms](https://dev.to/nextblockcms)
 

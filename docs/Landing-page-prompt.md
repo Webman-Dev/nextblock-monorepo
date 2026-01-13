@@ -62,7 +62,7 @@ sub-headline.
    should target the core action for a developer audience.
    ■ Text: Star on GitHub
    ■ Icon: GitHub logo
-   ■ Link: https://github.com/Webman-Dev/nextblock
+   ■ Link: https://github.com/nextblock-cms/nextblock
 2. Secondary CTA: A ghost or outlined button style. This provides an alternative for
    users who want to evaluate the project's technical depth before committing. The
    developer documentation is a key early deliverable aimed at boosting developer
@@ -315,7 +315,7 @@ an early contributor to the future of content management.
 specific community channel. Each card should feature the platform's logo, its name, and
 a brief, action-oriented description.
 ○ GitHub: Star the Repo & Contribute (Link:
-https://github.com/Webman-Dev/nextblock)
+https://github.com/nextblock-cms/nextblock)
 ○ X (Twitter): Follow for Updates & Announcements (Link:
 
 https://x.com/NextBlockCMS)
