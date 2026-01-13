@@ -100,7 +100,7 @@ Join the community and stay updated on the latest features.
 
 - **X (Twitter):** [@NextBlockCMS](https://x.com/NextBlockCMS)
 - **LinkedIn:** [NextBlock](https://www.linkedin.com/in/nextblock/)
-- **GitHub:** [Webman-Dev/nextblock-monorepo](https://github.com/Webman-Dev/nextblock-monorepo)
+- **GitHub:** [nextblock-cms/nextblock](https://github.com/nextblock-cms/nextblock)
 - **Medium:** [@nextblockcms](https://medium.com/@nextblockcms)
 - **Dev.to:** [nextblockcms](https://dev.to/nextblockcms)
 

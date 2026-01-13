@@ -24,8 +24,8 @@ We use **Nx** to manage a monorepo that contains both the "Product" (what users 
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/Webman-Dev/nextblock-monorepo.git
-cd nextblock-monorepo
+git clone https://github.com/nextblock-cms/nextblock.git
+cd nextblock
 npm install
 ```
 
