@@ -12,7 +12,7 @@
       "fallbackCurrentVersionResolver": "disk"
     }
   },
-  "tags": [],
+  "tags": ["scope:public"],
   "targets": {
     "nx-release-publish": {
       "options": {
