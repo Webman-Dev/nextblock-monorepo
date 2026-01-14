@@ -36,9 +36,10 @@ type NavItemProps = {
   writerOnly?: boolean
   isAdmin?: boolean
   isWriter?: boolean
+  onClick?: () => void
 }
 
-const NavItem = ({ href, icon: Icon, children, isActive, adminOnly, writerOnly, isAdmin, isWriter }: NavItemProps) => {
+const NavItem = ({ href, icon: Icon, children, isActive, adminOnly, writerOnly, isAdmin, isWriter, onClick }: NavItemProps) => {
   if (adminOnly && !isAdmin) return null
   if (writerOnly && !isWriter && !isAdmin) return null
 
@@ -46,6 +47,7 @@ const NavItem = ({ href, icon: Icon, children, isActive, adminOnly, writerOnly, 
     <li>
       <Link
         href={href}
+        onClick={onClick}
         className={cn(
           "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all",
           isActive
@@ -139,6 +141,12 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const closeSidebarOnMobile = () => {
+    if (window.innerWidth < 768) {
+      setCmsSidebarOpen(false);
+    }
+  };
+
 
   // With server-side auth data, isLoading is initially false.
   // We show a spinner only if something client-side sets it to true (e.g., during logout).
@@ -230,16 +238,16 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
 
           <nav className="px-3 py-4 flex-1 overflow-y-auto">
             <ul className="space-y-1.5">
-              <NavItem href="/cms/dashboard" icon={LayoutDashboard} isActive={pathname === "/cms/dashboard"} isAdmin={isAdmin} isWriter={isWriter}>
+              <NavItem href="/cms/dashboard" icon={LayoutDashboard} isActive={pathname === "/cms/dashboard"} isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Dashboard
               </NavItem>
-              <NavItem href="/cms/pages" icon={FileText} isActive={pathname.startsWith("/cms/pages")} writerOnly isAdmin={isAdmin} isWriter={isWriter}>
+              <NavItem href="/cms/pages" icon={FileText} isActive={pathname.startsWith("/cms/pages")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Pages
               </NavItem>
-              <NavItem href="/cms/posts" icon={PenTool} isActive={pathname.startsWith("/cms/posts")} writerOnly isAdmin={isAdmin} isWriter={isWriter}>
+              <NavItem href="/cms/posts" icon={PenTool} isActive={pathname.startsWith("/cms/posts")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Posts
               </NavItem>
-              <NavItem href="/cms/media" icon={ImageIconLucide} isActive={pathname.startsWith("/cms/media")} writerOnly isAdmin={isAdmin} isWriter={isWriter}>
+              <NavItem href="/cms/media" icon={ImageIconLucide} isActive={pathname.startsWith("/cms/media")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Media
               </NavItem>
 
@@ -250,10 +258,10 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
                       Administration
                     </p>
                   </div>
-                  <NavItem href="/cms/navigation" icon={ListTree} isActive={pathname.startsWith("/cms/navigation")} adminOnly isAdmin={isAdmin}>
+                  <NavItem href="/cms/navigation" icon={ListTree} isActive={pathname.startsWith("/cms/navigation")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Navigation
                   </NavItem>
-                  <NavItem href="/cms/users" icon={Users} isActive={pathname.startsWith("/cms/users")} adminOnly isAdmin={isAdmin}>
+                  <NavItem href="/cms/users" icon={Users} isActive={pathname.startsWith("/cms/users")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Manage Users
                   </NavItem>
                   <CollapsibleNavItem
@@ -263,16 +271,16 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
                     adminOnly
                     isAdmin={isAdmin}
                   >
-                    <NavItem href="/cms/settings/languages" icon={LanguagesIconLucide} isActive={pathname.startsWith("/cms/settings/languages")} adminOnly isAdmin={isAdmin}>
+                    <NavItem href="/cms/settings/languages" icon={LanguagesIconLucide} isActive={pathname.startsWith("/cms/settings/languages")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Languages
                    </NavItem>
-                   <NavItem href="/cms/settings/logos" icon={ImageIconLucide} isActive={pathname.startsWith("/cms/settings/logos")} adminOnly isAdmin={isAdmin}>
+                   <NavItem href="/cms/settings/logos" icon={ImageIconLucide} isActive={pathname.startsWith("/cms/settings/logos")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                      Logos
                    </NavItem>
-                    <NavItem href="/cms/settings/copyright" icon={CopyrightIcon} isActive={pathname.startsWith("/cms/settings/copyright")} adminOnly isAdmin={isAdmin}>
+                    <NavItem href="/cms/settings/copyright" icon={CopyrightIcon} isActive={pathname.startsWith("/cms/settings/copyright")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Copyright
                     </NavItem>
-                    <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin}>
+                    <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Extra Translations
                     </NavItem>
                  </CollapsibleNavItem>
