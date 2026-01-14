@@ -184,14 +184,31 @@ try {
     // STANDARD STRATEGY (e.g. UI, Utils)
     // -------------------------------------------------------------------------
     console.log('\n→ Publishing to npm (Standard)');
+
+    // Create local .npmrc to FORCE public registry for this scope
+    const distNpmrcPath = path.join(distDir, '.npmrc');
+    const publicNpmrcContent = [
+      'registry=https://registry.npmjs.org',
+      '@nextblock-cms:registry=https://registry.npmjs.org',
+      'always-auth=true',
+    ].join('\n');
+
+    fs.writeFileSync(distNpmrcPath, publicNpmrcContent);
+    console.log(`✓ Created local .npmrc in dist to force npmjs.org registry`);
+
     const publishArgs = ['npm', 'publish', '--access', 'public'];
     if (dryRun) {
       publishArgs.push('--dry-run');
     }
-    run(publishArgs.join(' '), { cwd: distDir });
-    console.log(
-      `\n✅ Published ${packageName}@${version}${dryRun ? ' (dry run)' : ''}\n`,
-    );
+
+    try {
+      run(publishArgs.join(' '), { cwd: distDir });
+      console.log(
+        `\n✅ Published ${packageName}@${version}${dryRun ? ' (dry run)' : ''}\n`,
+      );
+    } finally {
+      if (fs.existsSync(distNpmrcPath)) fs.unlinkSync(distNpmrcPath);
+    }
   }
 
   if (!hadLockfile && fs.existsSync(lockfilePath)) {

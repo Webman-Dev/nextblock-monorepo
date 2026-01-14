@@ -5,6 +5,8 @@ import { createClient } from "@nextblock-cms/db/server";
 import { revalidatePath } from "next/cache";
 import type { Database } from "@nextblock-cms/db";
 import { encodedRedirect } from "@nextblock-cms/utils/server";
+import { DeleteObjectCommand, DeleteObjectsCommand, CopyObjectCommand, ListObjectsV2Command, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { getS3Client } from "@nextblock-cms/utils/server";
 
 type Media = Database['public']['Tables']['media']['Row'];
 
@@ -201,8 +203,6 @@ export async function deleteMediaItem(mediaId: string, objectKey: string) {
         return encodedRedirect("error", "/cms/media", "Forbidden: Insufficient permissions.");
     }
 
-    const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
-    const { getS3Client } = await import("@nextblock-cms/utils/server");
     const s3Client = await getS3Client();
     const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
@@ -255,8 +255,6 @@ export async function deleteMultipleMediaItems(items: Array<{ id: string; object
     return { error: "No items selected for deletion." };
   }
 
-  const { DeleteObjectsCommand } = await import("@aws-sdk/client-s3"); // Use DeleteObjects for batch
-  const { getS3Client } = await import("@nextblock-cms/utils/server");
   const s3Client = await getS3Client();
   const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
@@ -345,8 +343,6 @@ export async function moveMultipleMediaItems(
   };
   const folder = sanitizeFolder(destinationFolder);
 
-  const { CopyObjectCommand, DeleteObjectCommand, ListObjectsV2Command, HeadObjectCommand } = await import("@aws-sdk/client-s3");
-  const { getS3Client } = await import("@nextblock-cms/utils/server");
   const s3Client = await getS3Client();
   const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
   const R2_PUBLIC_URL_BASE = process.env.NEXT_PUBLIC_R2_BASE_URL || '';

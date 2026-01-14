@@ -2,7 +2,7 @@
 "use client"
 
 import React, { type ReactNode, useEffect } from "react"
-import { useAuth } from "@/context/AuthContext"
+import { useAuth } from "../../context/AuthContext"
 import { useRouter, usePathname } from "next/navigation" // Import usePathname
 import Link from "next/link"
 import {
@@ -12,7 +12,7 @@ import {
 import { Button } from "@nextblock-cms/ui"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
 import { cn } from "@nextblock-cms/utils"
-import { signOutAction } from "@/app/actions";
+import { signOutAction } from "../actions";
 import Image from "next/image";
 import { FeedbackModal } from "./components/FeedbackModal";
 

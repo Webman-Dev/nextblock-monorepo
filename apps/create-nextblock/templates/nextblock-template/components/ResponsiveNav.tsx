@@ -348,26 +348,31 @@ export default function ResponsiveNav({
         {/* Menu Content (this part slides with the container above) */}
         <div className="fixed top-16 left-0 h-[calc(100vh-4rem)] w-full max-w-sm bg-background text-foreground shadow-xl p-5 z-50 flex flex-col">
           <nav className="flex-grow flex flex-col space-y-1 overflow-y-auto pt-6"> 
-            {renderMobileNavItems(hierarchicalNavItems)}
-            {canAccessCms && editPathDetails && (
-              <Link
-                href={editPathDetails.href}
-                className="block px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-gray-100 dark:hover:bg-gray-700"
-                onClick={() => {
-                  toggleMobileMenu();
-                }}
-              >
-                {editPathDetails.label}
-              </Link>
-            )}
+            <div className="space-y-1">
+              {renderMobileNavItems(hierarchicalNavItems)}
+            </div>
+            
             {canAccessCms && (
-              <Link
-                href={cmsDashboardLinkHref}
-                className="block px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-gray-100 dark:hover:bg-gray-700"
-                onClick={toggleMobileMenu}
-              >
-                {t('cms_dashboard')}
-              </Link>
+              <div className="mt-auto space-y-1 border-t border-gray-200 dark:border-gray-800">
+                {editPathDetails && (
+                  <Link
+                    href={editPathDetails.href}
+                    className="block px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-gray-100 dark:hover:bg-gray-700"
+                    onClick={() => {
+                      toggleMobileMenu();
+                    }}
+                  >
+                    {editPathDetails.label}
+                  </Link>
+                )}
+                <Link
+                  href={cmsDashboardLinkHref}
+                  className="block px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-gray-100 dark:hover:bg-gray-700"
+                  onClick={toggleMobileMenu}
+                >
+                  {t('cms_dashboard')}
+                </Link>
+              </div>
             )}
           </nav>
 
