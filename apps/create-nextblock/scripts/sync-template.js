@@ -11,7 +11,11 @@ const PROJECT_ROOT = resolve(__dirname, '..');
 const SOURCE_DIR = resolve(PROJECT_ROOT, '../nextblock');
 const TARGET_DIR = resolve(PROJECT_ROOT, 'templates/nextblock-template');
 const REPO_ROOT = resolve(PROJECT_ROOT, '..', '..');
-const UI_GLOBALS_SOURCE = resolve(PROJECT_ROOT, '../../libs/ui/src/styles/globals.css');
+const ROOT_PACKAGE_JSON = resolve(REPO_ROOT, 'package.json');
+const UI_GLOBALS_SOURCE = resolve(
+  PROJECT_ROOT,
+  '../../libs/ui/src/styles/globals.css',
+);
 const UI_PROXY_MODULES = [
   'avatar',
   'badge',
@@ -46,7 +50,6 @@ const IGNORED_SEGMENTS = new Set([
   'backup',
   'backups',
 ]);
-
 
 async function ensureTemplateSync() {
   const sourceExists = await fs.pathExists(SOURCE_DIR);
@@ -88,6 +91,9 @@ async function ensureTemplateSync() {
   await sanitizeUiImports();
   await ensureUiProxies();
   await removeBackups();
+  await ensureUiProxies();
+  await removeBackups();
+  await syncPackageVersions();
   await removeTemplateProjectJson();
 
   console.log(chalk.green('Template sync complete.'));
@@ -195,7 +201,8 @@ async function ensureClientTranslations() {
       .replace(legacyImportRegex, wrapperImportStatement);
   } else if (!content.includes(wrapperImportStatement)) {
     const lines = content.split(/\r?\n/);
-    const insertIndex = lines.findIndex((line) => line.startsWith('import')) + 1;
+    const insertIndex =
+      lines.findIndex((line) => line.startsWith('import')) + 1;
     if (insertIndex > 0) {
       lines.splice(insertIndex, 0, wrapperImportStatement);
       content = lines.join('\n');
@@ -213,7 +220,10 @@ async function ensureClientTranslations() {
 }
 
 async function sanitizeBlockEditorImports() {
-  const blockEditorPath = resolve(TARGET_DIR, 'app/cms/blocks/components/BlockEditorArea.tsx');
+  const blockEditorPath = resolve(
+    TARGET_DIR,
+    'app/cms/blocks/components/BlockEditorArea.tsx',
+  );
   if (!(await fs.pathExists(blockEditorPath))) {
     return;
   }
@@ -249,7 +259,10 @@ async function sanitizeUiImports() {
 
   for (const filePath of filesToProcess) {
     const original = await fs.readFile(filePath, 'utf8');
-    const replaced = original.replace(/@nextblock-cms\/ui\/(?!styles\/)[A-Za-z0-9/_-]+/g, '@nextblock-cms/ui');
+    const replaced = original.replace(
+      /@nextblock-cms\/ui\/(?!styles\/)[A-Za-z0-9/_-]+/g,
+      '@nextblock-cms/ui',
+    );
 
     if (replaced !== original) {
       await fs.writeFile(filePath, replaced);
@@ -296,11 +309,7 @@ async function removeBackups() {
   ];
 
   await Promise.all(
-    targets.map((dir) =>
-      fs
-        .remove(dir)
-        .catch(() => undefined),
-    ),
+    targets.map((dir) => fs.remove(dir).catch(() => undefined)),
   );
 }
 
@@ -309,8 +318,93 @@ async function removeTemplateProjectJson() {
   await fs.remove(projectJsonPath).catch(() => undefined);
 }
 
+async function syncPackageVersions() {
+  const targetPackageJsonPath = resolve(TARGET_DIR, 'package.json');
+  const sourcePackageJsonPath = resolve(SOURCE_DIR, 'package.json');
+
+  if (!(await fs.pathExists(targetPackageJsonPath))) return;
+  if (!(await fs.pathExists(ROOT_PACKAGE_JSON))) return;
+  if (!(await fs.pathExists(sourcePackageJsonPath))) return;
+
+  const rootPkg = await fs.readJson(ROOT_PACKAGE_JSON);
+  const sourcePkg = await fs.readJson(sourcePackageJsonPath);
+  const targetPkg = await fs.readJson(targetPackageJsonPath);
+
+  let modified = false;
+
+  const getVersion = (pkgName, sourceVersion) => {
+    if (rootPkg.dependencies && rootPkg.dependencies[pkgName]) {
+      return rootPkg.dependencies[pkgName];
+    }
+    if (rootPkg.devDependencies && rootPkg.devDependencies[pkgName]) {
+      return rootPkg.devDependencies[pkgName];
+    }
+    return sourceVersion;
+  };
+
+  const processSection = (sectionName) => {
+    if (!sourcePkg[sectionName]) return;
+    targetPkg[sectionName] = targetPkg[sectionName] || {};
+
+    for (const [pkgName, sourceVersion] of Object.entries(
+      sourcePkg[sectionName],
+    )) {
+      if (sourceVersion.startsWith('workspace:')) {
+        targetPkg[sectionName][pkgName] = 'workspace:*';
+        continue;
+      }
+      const versionToUse = getVersion(pkgName, sourceVersion);
+      if (targetPkg[sectionName][pkgName] !== versionToUse) {
+        targetPkg[sectionName][pkgName] = versionToUse;
+        modified = true;
+      }
+    }
+  };
+
+  processSection('dependencies');
+  processSection('devDependencies');
+
+  const criticalDevDeps = [
+    'tailwindcss',
+    'postcss',
+    'autoprefixer',
+    'typescript',
+    '@tailwindcss/postcss',
+  ];
+
+  criticalDevDeps.forEach((pkg) => {
+    const ver = getVersion(pkg, null);
+    if (ver) {
+      targetPkg.devDependencies = targetPkg.devDependencies || {};
+      if (targetPkg.devDependencies[pkg] !== ver) {
+        targetPkg.devDependencies[pkg] = ver;
+        modified = true;
+      }
+    }
+  });
+
+  if (modified) {
+    console.log(
+      chalk.green(
+        'Synced all dependencies dynamically with root/source package.json',
+      ),
+    );
+    if (targetPkg.dependencies) {
+      targetPkg.dependencies = Object.keys(targetPkg.dependencies)
+        .sort()
+        .reduce((obj, key) => {
+          obj[key] = targetPkg.dependencies[key];
+          return obj;
+        }, {});
+    }
+    await fs.writeJson(targetPackageJsonPath, targetPkg, { spaces: 2 });
+  }
+}
+
 ensureTemplateSync().catch((error) => {
-  console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+  console.error(
+    chalk.red(error instanceof Error ? error.message : String(error)),
+  );
   process.exit(1);
 });
 
@@ -322,7 +416,11 @@ async function emptyDirWithRetry(dir, retries = 5, delay = 1000) {
     } catch (err) {
       if (i === retries - 1) throw err;
       if (err.code === 'EBUSY' || err.code === 'EPERM') {
-        console.log(chalk.yellow(`Locked file encountered. Retrying in ${delay}ms... (${i + 1}/${retries})`));
+        console.log(
+          chalk.yellow(
+            `Locked file encountered. Retrying in ${delay}ms... (${i + 1}/${retries})`,
+          ),
+        );
         await new Promise((resolve) => setTimeout(resolve, delay));
       } else {
         throw err;
