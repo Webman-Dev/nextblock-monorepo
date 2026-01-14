@@ -1,22 +1,24 @@
 import '@nextblock-cms/ui/styles/globals.css';
+// eslint-disable-next-line @nx/enforce-module-boundaries
 import '@nextblock-cms/editor/styles/editor.css';
 // app/layout.tsx
-import { EnvVarWarning } from "@/components/env-var-warning";
-import { SandboxBanner } from "@/components/SandboxBanner";
+import { EnvVarWarning } from "../components/env-var-warning";
+import { SandboxBanner } from "../components/SandboxBanner";
 import { SpeedInsights } from "@vercel/speed-insights/next"
+// eslint-disable-next-line @nx/enforce-module-boundaries
 import { GoogleTagManager } from '@next/third-parties/google'
-import { ThemeSwitcher } from '@/components/theme-switcher';
+import { ThemeSwitcher } from '../components/theme-switcher';
 import type { Metadata } from 'next';
-import Header from "@/components/Header";
-import FooterNavigation from "@/components/FooterNavigation";
+import Header from "../components/Header";
+import FooterNavigation from "../components/FooterNavigation";
 import { Providers } from './providers';
 import { ToasterProvider } from './ToasterProvider';
 import { createClient as createSupabaseServerClient, getProfileWithRoleServerSide } from '@nextblock-cms/db/server';
 import { getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
-import { getNavigationMenu } from '@/app/cms/navigation/actions';
-import { getActiveLogo } from '@/app/cms/settings/logos/actions';
-import { getCopyrightSettings } from '@/app/cms/settings/copyright/actions';
-import { getTranslations } from '@/app/cms/settings/extra-translations/actions';
+import { getNavigationMenu } from './cms/navigation/actions';
+import { getActiveLogo } from './cms/settings/logos/actions';
+import { getCopyrightSettings } from './cms/settings/copyright/actions';
+import { getTranslations } from './cms/settings/extra-translations/actions';
 import type { Database } from '@nextblock-cms/db';
 import { headers, cookies } from 'next/headers';
 

@@ -11,7 +11,7 @@ export default async function CmsDashboardPage() {
     <div className="w-full space-y-6">
       {showWarning && (
         <Alert variant="destructive">
-          <AlertTitle>Google Tag Manager Not Configured</AlertTitle>
+          <AlertTitle>Google Tag Manager Not Configured (Analytics)</AlertTitle>
           <AlertDescription>
             The <code>NEXT_PUBLIC_GTM_ID</code> environment variable is missing. Add your GTM Container ID
             (GTM-XXXXXX) to your .env file to enable tracking. To hide this warning without enabling analytics,
