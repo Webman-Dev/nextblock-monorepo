@@ -778,6 +778,12 @@ async function ensureGitignore(projectDir) {
 
   let content = '';
 
+  if (await fs.pathExists(resolve(projectDir, 'gitignore'))) {
+    await fs.move(resolve(projectDir, 'gitignore'), gitignorePath, {
+      overwrite: true,
+    });
+  }
+
   if (await fs.pathExists(gitignorePath)) {
     content = await fs.readFile(gitignorePath, 'utf8');
   } else if (await fs.pathExists(npmIgnorePath)) {
