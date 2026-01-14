@@ -4,6 +4,7 @@ import '@nextblock-cms/editor/styles/editor.css';
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { SandboxBanner } from "@/components/SandboxBanner";
 import { Analytics } from "@vercel/analytics/next"
+import { GoogleTagManager } from '@next/third-parties/google'
 import { ThemeSwitcher } from '@/components/theme-switcher';
 import type { Metadata } from 'next';
 import Header from "@/components/Header";
@@ -217,6 +218,7 @@ export default async function RootLayout({
             </footer>
           </div>
         </Providers>
+        <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID || ""} />
       </body>
     </html>
   );

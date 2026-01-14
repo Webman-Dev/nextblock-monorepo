@@ -1,12 +1,24 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@nextblock-cms/ui"
+import { Alert, AlertDescription, AlertTitle, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@nextblock-cms/ui"
 import { Calendar, FileText, PenTool, Users, Eye } from "lucide-react"
 import { getDashboardStats } from "./actions"
 
 export default async function CmsDashboardPage() {
   const stats = await getDashboardStats();
+  const gtmId = process.env.NEXT_PUBLIC_GTM_ID;
+  const showWarning = !gtmId && gtmId !== "false";
 
   return (
     <div className="w-full space-y-6">
+      {showWarning && (
+        <Alert variant="destructive">
+          <AlertTitle>Google Tag Manager Not Configured (Analytics)</AlertTitle>
+          <AlertDescription>
+            The <code>NEXT_PUBLIC_GTM_ID</code> environment variable is missing. Add your GTM Container ID
+            (GTM-XXXXXX) to your .env file to enable tracking. To hide this warning without enabling analytics,
+            set the variable to 'false'.
+          </AlertDescription>
+        </Alert>
+      )}
       <div>
         <h2 className="text-xl font-bold mb-2">Welcome to the CMS Dashboard</h2>
         <p className="text-muted-foreground">Manage your content and monitor site performance from one place.</p>
