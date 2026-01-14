@@ -128,7 +128,7 @@ NEXT_PUBLIC_URL=http://localhost:3000
 }
 
 async function ensureTemplateGitignore() {
-  const destination = resolve(TARGET_DIR, '.gitignore');
+  const destination = resolve(TARGET_DIR, 'gitignore'); // Rename to gitignore
   const content = `.DS_Store
 node_modules
 dist
