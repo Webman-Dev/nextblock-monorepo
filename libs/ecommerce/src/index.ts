@@ -1,19 +1,10 @@
 // Real implementation of the ecommerce library
 
-export const CartIcon = () => {
-  console.log("Real Cart Icon Implementation");
-  return "CartIcon";
-};
-
-export const addToCart = () => {
-  console.log("Real addToCart Implementation");
-  return "Added to cart";
-};
-
-export const CartDrawer = () => {
-  console.log("Real CartDrawer Implementation");
-  return "CartDrawer";
-};
+export * from './lib/components/CartDrawer';
+export * from './lib/components/CartIcon';
+export * from './lib/components/AddToCartButton';
+export * from './lib/cart-store';
+export * from './lib/use-cart';
 
 export * from './lib/product-schema';
 export * from './lib/product-actions';
