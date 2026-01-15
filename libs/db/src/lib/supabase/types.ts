@@ -257,6 +257,75 @@ export type Database = {
           },
         ]
       }
+      order_items: {
+        Row: {
+          id: string
+          order_id: string
+          price_at_purchase: number
+          product_id: string | null
+          quantity: number
+        }
+        Insert: {
+          id?: string
+          order_id: string
+          price_at_purchase: number
+          product_id?: string | null
+          quantity: number
+        }
+        Update: {
+          id?: string
+          order_id?: string
+          price_at_purchase?: number
+          product_id?: string | null
+          quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          created_at: string
+          customer_details: Json | null
+          id: string
+          status: string
+          stripe_session_id: string | null
+          total: number
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_details?: Json | null
+          id?: string
+          status?: string
+          stripe_session_id?: string | null
+          total: number
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_details?: Json | null
+          id?: string
+          status?: string
+          stripe_session_id?: string | null
+          total?: number
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       page_revisions: {
         Row: {
           author_id: string | null
@@ -482,6 +551,87 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      product_media: {
+        Row: {
+          media_id: string
+          product_id: string
+          sort_order: number | null
+        }
+        Insert: {
+          media_id: string
+          product_id: string
+          sort_order?: number | null
+        }
+        Update: {
+          media_id?: string
+          product_id?: string
+          sort_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_media_media_id_fkey"
+            columns: ["media_id"]
+            isOneToOne: false
+            referencedRelation: "media"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_media_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          created_at: string
+          description_json: Json | null
+          id: string
+          metadata: Json | null
+          price: number
+          sale_price: number | null
+          short_description: string | null
+          sku: string
+          slug: string
+          status: string
+          stock: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description_json?: Json | null
+          id?: string
+          metadata?: Json | null
+          price: number
+          sale_price?: number | null
+          short_description?: string | null
+          sku: string
+          slug: string
+          status?: string
+          stock?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description_json?: Json | null
+          id?: string
+          metadata?: Json | null
+          price?: number
+          sale_price?: number | null
+          short_description?: string | null
+          sku?: string
+          slug?: string
+          status?: string
+          stock?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {

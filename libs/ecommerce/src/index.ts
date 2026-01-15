@@ -14,3 +14,6 @@ export const CartDrawer = () => {
   console.log("Real CartDrawer Implementation");
   return "CartDrawer";
 };
+
+export * from './lib/product-schema';
+export * from './lib/product-actions';

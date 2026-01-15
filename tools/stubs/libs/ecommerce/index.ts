@@ -10,3 +10,13 @@ export const CartIcon = () => null;
 export const addToCart = () => null;
 
 export const CartDrawer = () => null;
+
+// Product Stubs
+import { z } from 'zod';
+export const productSchema = z.object({});
+export type ProductFormValues = any;
+
+export const getProducts = async () => ({ data: [], error: null, count: 0 });
+export const getProduct = async () => ({ data: null, error: null });
+export const createProduct = async () => ({ data: null, error: null });
+export const updateProduct = async () => ({ data: null, error: null });

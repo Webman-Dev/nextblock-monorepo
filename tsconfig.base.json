@@ -25,6 +25,9 @@
       "@nextblock-cms/db": ["libs/db/src/index.ts"],
       "@nextblock-cms/db/server": ["libs/db/src/server.ts"],
 
+      // Ecommerce Library (Ghost Module)
+      "@nextblock-cms/ecommerce": ["libs/ecommerce/src/index.ts"],
+
       // Editor Library
       "@nextblock-cms/editor": ["libs/editor/src/index.ts"],
       "@nextblock-cms/editor/*": ["libs/editor/src/*"],
