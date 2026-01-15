@@ -14,7 +14,7 @@ export async function getProducts(
 
   let query = supabase
     .from('products')
-    .select('id, title, sku, price, stock, status, slug, product_media(media(file_path))', { count: 'exact' })
+    .select('id, title, sku, price, sale_price, short_description, stock, status, slug, product_media(media(file_path))', { count: 'exact' })
     .range(start, end)
     .order('created_at', { ascending: false });
 

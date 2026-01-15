@@ -1,14 +1,14 @@
 'use server';
 
 import { createClient } from '@nextblock-cms/db/server';
+import { ProductFormValues } from '@nextblock-cms/ecommerce';
 import {
   getProduct as getProductLib,
   getProducts as getProductsLib,
   createProduct as createProductLib,
   updateProduct as updateProductLib,
   deleteProduct as deleteProductLib,
-  ProductFormValues,
-} from '@nextblock-cms/ecommerce';
+} from '@nextblock-cms/ecommerce/server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 

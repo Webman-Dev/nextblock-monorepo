@@ -3,8 +3,15 @@
 export * from './lib/components/CartDrawer';
 export * from './lib/components/CartIcon';
 export * from './lib/components/AddToCartButton';
+export * from './lib/components/ProductCard';
+export * from './lib/components/ProductGrid';
+export * from './lib/components/ProductGallery';
+export * from './lib/components/FeaturedProduct';
+
 export * from './lib/cart-store';
 export * from './lib/use-cart';
+export * from './lib/types';
 
 export * from './lib/product-schema';
-export * from './lib/product-actions';
+// Server-side logic should be imported from @nextblock-cms/ecommerce/server or explicitly skipped here if using barelling limits.
+// We removed server exports from here in the previous step, so this is correct.

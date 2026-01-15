@@ -11,6 +11,8 @@ import { Minus, Plus, Trash2 } from 'lucide-react';
 import { useCartStore, useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
 
+import { useState } from 'react';
+
 export const CartDrawer = () => {
   const store = useCart((state) => state);
   const subtotal = useCartStore(useCartSubtotal);
@@ -18,6 +20,29 @@ export const CartDrawer = () => {
   if (!store) return null;
 
   const { isOpen, setIsOpen, items, updateQuantity, removeItem } = store;
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+
+  const handleCheckout = async () => {
+    setIsCheckingOut(true);
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: items }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert('Checkout failed: ' + (data.error || 'Unknown error'));
+        setIsCheckingOut(false);
+      }
+    } catch (error) {
+       console.error(error);
+       alert('An error occurred. Please try again.');
+       setIsCheckingOut(false);
+    }
+  };
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -106,8 +131,8 @@ export const CartDrawer = () => {
              <p className="mb-4 mt-1 text-xs text-muted-foreground">
                 Shipping and taxes calculated at checkout.
              </p>
-             <Button className="w-full" asChild>
-                <a href="/checkout">Checkout</a>
+             <Button className="w-full" onClick={handleCheckout} disabled={isCheckingOut}>
+                {isCheckingOut ? 'Processing...' : 'Checkout'}
              </Button>
           </div>
         )}
