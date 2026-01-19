@@ -17,6 +17,8 @@ export interface BillingAddress {
 
 export interface ProfileUpdateData {
   full_name?: string;
+  avatar_url?: string;
+  website?: string;
   github_username?: string;
   phone?: string;
   billing_address?: BillingAddress;

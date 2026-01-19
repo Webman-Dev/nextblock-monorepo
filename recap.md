@@ -71,3 +71,11 @@ We extensively debugged and fixed the `/api/checkout` flow in `libs/ecommerce/sr
 
 - **Username Removal**: Removed deprecated `username` field from codebase (Forms, Actions, Types) to rely on `email` or `full_name`.
 - **Translation Fixes**: Fixed SQL syntax errors in translation migrations.
+
+## 5. UI/UX Refinement & Admin Consolidation
+
+- **Admin Self-Editing**: Enabled admins to edit their own profile and role within the CMS user list.
+- **Form Consolidation**: Refactored `UserForm` to wrap the premium `CustomerProfileForm`, ensuring consistent UI/UX (2-column layout, Media Picker) across both Customer and Admin views.
+- **Admin Capabilities**: Extended `CustomerProfileForm` to conditionally render "Admin Settings" (Role selection) and handle custom admin actions while preserving a unified codebase.
+- **Enhanced Feedback**: Implemented success message handling by passing URL query parameters to the form state, giving users immediate feedback after server-side redirects.
+- **Robustness**: Fixed multiple edge cases including `NEXT_REDIRECT` error handling, avatar `src` issues, and role selector defaults.

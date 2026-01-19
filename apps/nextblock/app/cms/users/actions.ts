@@ -32,6 +32,8 @@ async function verifyAdmin(supabase: ReturnType<typeof createClient>): Promise<{
 type UpdateUserProfilePayload = {
   role: UserRole;
   full_name?: string | null;
+  avatar_url?: string | null;
+  website?: string | null;
   github_username?: string | null;
   phone?: string | null;
   billing_address?: any; // JSONB
@@ -57,6 +59,8 @@ export async function updateUserProfile(userIdToUpdate: string, formData: FormDa
   const rawFormData = {
     role: formData.get("role") as UserRole,
     full_name: formData.get("full_name") as string || null,
+    avatar_url: formData.get("avatar_url") as string || null,
+    website: formData.get("website") as string || null,
     github_username: formData.get("github_username") as string || null,
     phone: formData.get("phone") as string || null,
     billing_address: billingAddressJSON,
@@ -85,6 +89,8 @@ export async function updateUserProfile(userIdToUpdate: string, formData: FormDa
   const profileData: UpdateUserProfilePayload = {
     role: rawFormData.role,
     full_name: rawFormData.full_name,
+    avatar_url: rawFormData.avatar_url,
+    website: rawFormData.website,
     github_username: rawFormData.github_username,
     phone: rawFormData.phone,
     billing_address: rawFormData.billing_address,

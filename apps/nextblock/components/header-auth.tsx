@@ -1,8 +1,8 @@
 'use client';
 
-import { signOutAction } from "../app/actions";
 import { hasPublicEnvVars } from "@nextblock-cms/utils";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Badge } from "@nextblock-cms/ui";
 import { Button } from "@nextblock-cms/ui";
 import { useAuth } from "../context/AuthContext";
@@ -15,14 +15,25 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Avatar,
+  AvatarFallback,
+  AvatarImage
 } from "@nextblock-cms/ui";
 import { User, LogOut, LayoutDashboard } from "lucide-react";
 
 export default function AuthButton() {
-  const { user, profile, isAdmin, isWriter } = useAuth();
+  const { user, profile, isAdmin, isWriter, supabase } = useAuth();
   const { t } = useTranslations();
+  const router = useRouter();
   const displayName = profile?.full_name || profile?.github_username || user?.email || null;
   const showAdminLink = isAdmin || isWriter;
+
+  const handleSignOut = async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+      router.refresh();
+    }
+  };
 
   if (!hasPublicEnvVars) {
     return (
@@ -64,11 +75,13 @@ export default function AuthButton() {
     <div className="flex items-center gap-4">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-             {/* Avatar fallback or user icon */}
-             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+          <Button variant="ghost" className="relative h-8 w-8 rounded-full p-0">
+            <Avatar className="h-8 w-8 transition-all hover:ring-1 hover:ring-primary">
+              <AvatarImage src={profile?.avatar_url || undefined} alt={displayName || 'User'} />
+              <AvatarFallback className="bg-muted">
                 {displayName ? displayName.charAt(0).toUpperCase() : <User className="h-4 w-4" />}
-             </div>
+              </AvatarFallback>
+            </Avatar>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56" align="end" forceMount>
@@ -96,14 +109,10 @@ export default function AuthButton() {
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
-          <form action={signOutAction} className="w-full">
-            <DropdownMenuItem asChild>
-                <button type="submit" className="w-full flex items-center cursor-pointer">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>{t('sign_out')}</span>
-                </button>
-            </DropdownMenuItem>
-          </form>
+          <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>{t('sign_out')}</span>
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

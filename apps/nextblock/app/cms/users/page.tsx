@@ -161,7 +161,7 @@ export default async function CmsUsersListPage() {
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={authUser.id === currentAdmin.id}>
+                        <Button variant="ghost" size="icon">
                           <MoreHorizontal className="h-4 w-4" />
                           <span className="sr-only">User actions</span>
                         </Button>
