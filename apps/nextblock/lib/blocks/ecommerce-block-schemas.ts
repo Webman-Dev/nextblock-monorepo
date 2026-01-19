@@ -16,3 +16,11 @@ export const FeaturedProductBlockSchema = z.object({
   imagePosition: z.enum(['left', 'right']).default('left'),
 });
 export type FeaturedProductBlockContent = z.infer<typeof FeaturedProductBlockSchema>;
+
+// Cart Block Schema
+export const CartBlockSchema = z.object({});
+export type CartBlockContent = z.infer<typeof CartBlockSchema>;
+
+// Checkout Block Schema
+export const CheckoutBlockSchema = z.object({});
+export type CheckoutBlockContent = z.infer<typeof CheckoutBlockSchema>;

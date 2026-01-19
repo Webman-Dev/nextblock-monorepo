@@ -72,7 +72,7 @@ create policy "Admins can manage product media"
 -- Create orders table
 create table public.orders (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id),
+  user_id uuid references auth.users(id) on delete set null,
   status text not null check (status in ('pending', 'paid', 'shipped', 'cancelled', 'refunded')) default 'pending',
   total integer not null,
   stripe_session_id text unique,

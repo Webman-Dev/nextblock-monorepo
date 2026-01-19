@@ -8,19 +8,19 @@ import {
   Button
 } from '@nextblock-cms/ui';
 import { Minus, Plus, Trash2 } from 'lucide-react';
-import { useCartStore, useCartSubtotal } from '../cart-store';
+import { useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
 
 import { useState } from 'react';
 
 export const CartDrawer = () => {
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
   const store = useCart((state) => state);
-  const subtotal = useCartStore(useCartSubtotal);
+  const subtotal = useCartSubtotal();
 
   if (!store) return null;
 
   const { isOpen, setIsOpen, items, updateQuantity, removeItem } = store;
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
   const handleCheckout = async () => {
     setIsCheckingOut(true);
@@ -84,7 +84,7 @@ export const CartDrawer = () => {
                     <div className="flex items-center rounded-md border text-xs">
                       <button
                         onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        className="flex h-7 w-7 items-center justify-center border-r hover:bg-neutral-100"
+                        className="flex h-7 w-7 items-center justify-center border-r"
                         type="button"
                       >
                         <Minus className="h-3 w-3" />
@@ -94,7 +94,7 @@ export const CartDrawer = () => {
                       </span>
                       <button
                         onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        className="flex h-7 w-7 items-center justify-center border-l hover:bg-neutral-100"
+                        className="flex h-7 w-7 items-center justify-center border-l"
                         type="button"
                       >
                         <Plus className="h-3 w-3" />

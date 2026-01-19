@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TestimonialBlockConfig, TestimonialBlockContent } from '../../components/blocks/TestimonialBlock';
-import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSchema, FeaturedProductBlockContent } from './ecommerce-block-schemas';
+import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSchema, FeaturedProductBlockContent, CartBlockSchema, CartBlockContent, CheckoutBlockSchema, CheckoutBlockContent } from './ecommerce-block-schemas';
 
 /**
  * Block Registry System
@@ -13,7 +13,7 @@ import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSc
 /**
  * Available block types - defined here as the source of truth
  */
-export const availableBlockTypes = ["text", "heading", "image", "button", "posts_grid", "video_embed", "section", "hero", "form", "testimonial", "product_grid", "featured_product"] as const;
+export const availableBlockTypes = ["text", "heading", "image", "button", "posts_grid", "video_embed", "section", "hero", "form", "testimonial", "product_grid", "featured_product", "cart", "checkout"] as const;
 export type BlockType = (typeof availableBlockTypes)[number];
 
 // --- Zod Schemas & Inferred Types ---
@@ -502,6 +502,34 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
         useCases: ['Product spotlight', 'Special offers']
     }
   },
+
+  "cart": {
+    type: "cart",
+    label: "Cart",
+    icon: "ShoppingCart",
+    initialContent: {} as CartBlockContent,
+    editorComponentFilename: "CartBlockEditor.tsx",
+    rendererComponentFilename: "CartBlockRenderer.tsx",
+    schema: CartBlockSchema,
+    documentation: {
+        description: 'Displays the shopping cart.',
+        useCases: ['Cart page']
+    }
+  },
+
+  "checkout": {
+    type: "checkout",
+    label: "Checkout",
+    icon: "CreditCard",
+    initialContent: {} as CheckoutBlockContent,
+    editorComponentFilename: "CheckoutBlockEditor.tsx",
+    rendererComponentFilename: "CheckoutBlockRenderer.tsx",
+    schema: CheckoutBlockSchema,
+    documentation: {
+        description: 'Displays the checkout form.',
+        useCases: ['Checkout page']
+    }
+  },
 };
 
 
@@ -583,7 +611,9 @@ export type AllBlockContent =
   | ({ type: "form" } & FormBlockContent)
   | ({ type: "testimonial" } & TestimonialBlockContent)
   | ({ type: "product_grid" } & ProductGridBlockContent)
-  | ({ type: "featured_product" } & FeaturedProductBlockContent);
+  | ({ type: "featured_product" } & FeaturedProductBlockContent)
+  | ({ type: "cart" } & CartBlockContent)
+  | ({ type: "checkout" } & CheckoutBlockContent);
 
 /**
 * Validate block content against its schema

@@ -1,0 +1,73 @@
+# Milestone 3.6: E-commerce Store Integration (Shop, Cart, Checkout)
+
+## 1. Store Pages & Navigation
+
+- **Admin Navigation**: Added "Store" section (Products, Orders) to the CMS sidebar in `CmsClientLayout.tsx`.
+- **Frontend Navigation**: Integrated `CartIcon` into the Header and ResponsiveNav.
+- **Cart Drawer**: Added global `CartDrawer` in `layout.tsx` to manage cart state.
+
+## 2. New CMS Blocks
+
+We registered and implemented two new blocks to power the store pages:
+
+- **Cart Block**: (`cart`) Renders the full-page shopping cart with item management.
+- **Checkout Block**: (`checkout`) Renders the order review page with "Pay Now" functionality.
+
+Registered in `blockRegistry.ts` and implemented in `apps/nextblock/components/blocks/renderers/`.
+
+## 3. Database & Seeding
+
+- **Consolidated Activation Script**: Created a robust `activate-store.ts` script that:
+  - Creates Shop, Cart, and Checkout pages if missing.
+  - Automatically fixes legacy `product-grid` block types (hyphen vs underscore mismatch).
+  - Seeds the correct `cart` and `checkout` blocks.
+- **Corrections**: Fixed schema mismatches in `product_grid` block naming.
+
+## 4. Checkout API & Payment Flow Reliability
+
+We extensively debugged and fixed the `/api/checkout` flow in `libs/ecommerce/src/lib/stripe/checkout.ts`:
+
+- **RLS Bypass**: Switched to using `SUPABASE_SERVICE_ROLE_KEY` to correctly bypass Row-Level Security when creating orders on the backend.
+- **Schema Fixes**:
+  - Removed query for non-existent `products.image_url` column.
+  - Removed insert for non-existent `orders.currency` column.
+  - Mapped `total_amount` to `total` and `price` to `price_at_purchase` to match the actual DB schema.
+- **Price Calculation**: Fixed a critical bug where prices were incorrectly multiplied by 100 twice, resolving the $2,499.00 vs $24.99 issue.
+- **Linting**: Fixed TypeScript non-null assertion errors.
+
+## Current State
+
+- **Shop Page**: Functional, rendering Product Grid.
+- **Cart Page**: Functional, shows items and subtotal.
+- **Checkout Page**: Functional, successfully creates orders in Supabase and redirects to Stripe for payment.
+- **Admin**: "Store" links are present (pages pending implementation).
+
+# Milestone 3.7: Customer Identity, Profiles, and Database Integrity
+
+## 1. Customer Identity & Auth
+
+- **GitHub Auth**: Added "Continue with GitHub" to Sign In/Sign Up pages.
+- **Optional Fields**: Updated database schema to make `full_name` and `avatar_url` optional to support various auth providers.
+- **Profile Redirection**: Implemented logic to handle new user onboarding and profile creation.
+
+## 2. Customer Profile
+
+- **Profile Page**: Created `/profile` page with `CustomerProfileForm`.
+- **Navigation**: Added "Edit Profile" link to the user dropdown menu.
+- **Admin Edit**: Updated the Admin User Edit page to include new profile fields (GitHub username, billing address, phone).
+
+## 3. Critical Database Fixes
+
+- **Role Display**: Fixed `getUsersData` in CMS to use `supabaseAdmin` (Service Role), resolving the issue where user roles appeared as "N/A" due to RLS.
+- **Permission Denied (42501)**: Created explicit RLS policies (`profiles_service_role_policy`) and granted full privileges to `service_role` to ensure the Admin dashboard has full access.
+- **User Deletion**: Fixed "Database error deleting user" by changing the `orders` table foreign key to `ON DELETE SET NULL`. This allows deleting users without breaking order history.
+- **Migration Sync**: Resolved "Remote migration versions not found" by ensuring all local migrations are pushed and compatible.
+- **Tooling**: Added `npm run db:reset` script for easier local development.
+- **Profile Backfill & Robust Trigger**: Consolidated a fix into `setup_profiles.sql` to auto-create profiles for existing users and properly assign the ADMIN role to the first user.
+- **Service Role Policies**: Added global service role policies in `setup_rls_policies.sql` to prevent permission errors across all tables.
+- **Admin Visibility**: Updated CMS Users page to show the current admin in the list.
+
+## 4. Codebase Cleanup
+
+- **Username Removal**: Removed deprecated `username` field from codebase (Forms, Actions, Types) to rely on `email` or `full_name`.
+- **Translation Fixes**: Fixed SQL syntax errors in translation migrations.

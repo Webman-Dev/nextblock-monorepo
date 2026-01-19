@@ -37,12 +37,22 @@ GRANT SELECT ON TABLE public.translations TO anon;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 
+-- Grant ALL to service_role (Admin access)
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO service_role;
+
 
 -- 3. PROFILES
 -- Read: Public can read basic profile info (needed for author display).
 CREATE POLICY "profiles_read_policy" ON public.profiles
   FOR SELECT TO public
   USING (true);
+
+-- Create explicit policy for service_role to bypass RLS on profiles
+CREATE POLICY "profiles_service_role_policy" ON public.profiles
+  FOR ALL TO service_role
+  USING (true)
+  WITH CHECK (true);
 
 -- Update: Users can update own profile; Admins can update all.
 CREATE POLICY "profiles_update_policy" ON public.profiles
@@ -235,5 +245,38 @@ CREATE POLICY "post_revisions_manage_policy" ON public.post_revisions
   USING (public.get_current_user_role() IN ('ADMIN', 'WRITER'))
   WITH CHECK (public.get_current_user_role() IN ('ADMIN', 'WRITER'));
 
+
+-- Ensure Service Role has access to all tables via RLS
+DO $$
+DECLARE
+  tb record;
+BEGIN
+  FOR tb IN 
+    SELECT tablename 
+    FROM pg_tables 
+    WHERE schemaname = 'public' 
+      AND rowsecurity = true
+  LOOP
+    EXECUTE format('
+      DO $policy$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies WHERE policyname = %L AND tablename = %L
+        ) THEN
+          CREATE POLICY %I ON public.%I
+            FOR ALL TO service_role
+            USING (true)
+            WITH CHECK (true);
+        END IF;
+      END
+      $policy$;', 
+      tb.tablename || '_service_role_policy', 
+      tb.tablename, 
+      tb.tablename || '_service_role_policy', 
+      tb.tablename
+    );
+  END LOOP;
+END
+$$;
 
 COMMIT;

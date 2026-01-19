@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "12.2.3 (519615d)"
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -77,7 +77,7 @@ export type Database = {
           code: string
           created_at: string
           id: number
-          is_active: boolean
+          is_active: boolean | null
           is_default: boolean
           name: string
           updated_at: string
@@ -86,7 +86,7 @@ export type Database = {
           code: string
           created_at?: string
           id?: number
-          is_active?: boolean
+          is_active?: boolean | null
           is_default?: boolean
           name: string
           updated_at?: string
@@ -95,7 +95,7 @@ export type Database = {
           code?: string
           created_at?: string
           id?: number
-          is_active?: boolean
+          is_active?: boolean | null
           is_default?: boolean
           name?: string
           updated_at?: string
@@ -298,7 +298,7 @@ export type Database = {
       }
       orders: {
         Row: {
-          created_at: string
+          created_at: string | null
           customer_details: Json | null
           id: string
           status: string
@@ -307,7 +307,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           customer_details?: Json | null
           id?: string
           status?: string
@@ -316,7 +316,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           customer_details?: Json | null
           id?: string
           status?: string
@@ -530,17 +530,17 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "fk_feature_image"
-            columns: ["feature_image_id"]
-            isOneToOne: false
-            referencedRelation: "media"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "posts_author_id_fkey"
             columns: ["author_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "posts_feature_image_id_fkey"
+            columns: ["feature_image_id"]
+            isOneToOne: false
+            referencedRelation: "media"
             referencedColumns: ["id"]
           },
           {
@@ -587,7 +587,7 @@ export type Database = {
       }
       products: {
         Row: {
-          created_at: string
+          created_at: string | null
           description_json: Json | null
           id: string
           metadata: Json | null
@@ -597,12 +597,12 @@ export type Database = {
           sku: string
           slug: string
           status: string
-          stock: number
+          stock: number | null
           title: string
-          updated_at: string
+          updated_at: string | null
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           description_json?: Json | null
           id?: string
           metadata?: Json | null
@@ -612,12 +612,12 @@ export type Database = {
           sku: string
           slug: string
           status?: string
-          stock?: number
+          stock?: number | null
           title: string
-          updated_at?: string
+          updated_at?: string | null
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           description_json?: Json | null
           id?: string
           metadata?: Json | null
@@ -627,38 +627,44 @@ export type Database = {
           sku?: string
           slug?: string
           status?: string
-          stock?: number
+          stock?: number | null
           title?: string
-          updated_at?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
       profiles: {
         Row: {
           avatar_url: string | null
+          billing_address: Json | null
           full_name: string | null
+          github_username: string | null
           id: string
+          phone: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string | null
-          username: string | null
           website: string | null
         }
         Insert: {
           avatar_url?: string | null
+          billing_address?: Json | null
           full_name?: string | null
+          github_username?: string | null
           id: string
+          phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string | null
-          username?: string | null
           website?: string | null
         }
         Update: {
           avatar_url?: string | null
+          billing_address?: Json | null
           full_name?: string | null
+          github_username?: string | null
           id?: string
+          phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string | null
-          username?: string | null
           website?: string | null
         }
         Relationships: []
@@ -708,8 +714,9 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
-      get_my_claim: { Args: { claim: string }; Returns: string }
-      get_my_role: { Args: never; Returns: string }
+      get_my_claim: { Args: { claim: string }; Returns: Json }
+      is_admin: { Args: never; Returns: boolean }
+      reset_sandbox: { Args: never; Returns: undefined }
     }
     Enums: {
       menu_location: "HEADER" | "FOOTER" | "SIDEBAR"

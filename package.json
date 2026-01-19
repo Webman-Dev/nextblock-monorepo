@@ -38,6 +38,8 @@
     "db:restore": "node apps/nextblock/scripts/restore.js",
     "db:types": "node tools/scripts/gen-db-types.js",
     "db:link": "dotenv -e .env.local -- node tools/scripts/supabase-link.js",
+    "db:repair": "dotenv -e .env.local -- npx supabase migration repair --status reverted 20260115163000 --workdir libs/db/src",
+    "db:reset": "dotenv -e .env.local -- npx supabase db reset --workdir libs/db/src",
     "db:push": "dotenv -e .env.local -- npx supabase db push --workdir libs/db/src --include-all && dotenv -e .env.local -- npx supabase config push --workdir libs/db/src",
     "sync:create-nextblock": "npm --prefix apps/create-nextblock run sync-template",
     "test-create": "node apps/create-nextblock/bin/create-nextblock.js",

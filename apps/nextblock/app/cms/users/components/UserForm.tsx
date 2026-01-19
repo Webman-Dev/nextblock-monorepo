@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState, useTransition, useRef } from "react";
-import { useHotkeys } from "@/hooks/use-hotkeys";
+import { useHotkeys } from "../../../../hooks/use-hotkeys";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@nextblock-cms/ui";
 import { Spinner, Alert, AlertDescription, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@nextblock-cms/ui";
@@ -17,7 +17,8 @@ import {
   SelectValue,
 } from "@nextblock-cms/ui";
 import type { Database } from "@nextblock-cms/db";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "../../../../context/AuthContext";
+import { useTranslations } from "@nextblock-cms/utils";
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type UserRole = Database['public']['Enums']['user_role'];
@@ -47,14 +48,38 @@ export default function UserForm({
   const { isAdmin, isLoading: authLoading } = useAuth(); // For client-side guard
 
   const [role, setRole] = useState<UserRole>(userToEditProfile?.role || "USER");
-  const [username, setUsername] = useState(userToEditProfile?.username || "");
   const [fullName, setFullName] = useState(userToEditProfile?.full_name || "");
+  const [githubUsername, setGithubUsername] = useState(userToEditProfile?.github_username || "");
+  const [phone, setPhone] = useState(userToEditProfile?.phone || "");
+  // Using a simplified JSON check or just text for now as we don't have a JSON editor component in context
+  // Initialize useTranslations
+  const { t } = useTranslations();
+
+  // Address State
+  const initialAddress = userToEditProfile?.billing_address as any || {};
+  const [addressLine1, setAddressLine1] = useState(initialAddress.line1 || "");
+  const [addressLine2, setAddressLine2] = useState(initialAddress.line2 || "");
+  const [city, setCity] = useState(initialAddress.city || "");
+  const [state, setState] = useState(initialAddress.state || "");
+  const [postalCode, setPostalCode] = useState(initialAddress.postal_code || "");
+  const [country, setCountry] = useState(initialAddress.country || "");
+
+  // Computed JSON for the hidden input
+  const billingAddressJSON = JSON.stringify({
+    line1: addressLine1,
+    line2: addressLine2,
+    city: city,
+    state: state,
+    postal_code: postalCode,
+    country: country
+  });
+
   // Email is typically not changed here by an admin, it's part of auth.users managed by user or super-admin
   const email = userToEditAuth.email || "N/A";
 
   const [formMessage, setFormMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
- useEffect(() => {
+  useEffect(() => {
     const successMessage = searchParams.get('success');
     const errorMessage = searchParams.get('error');
     if (successMessage) {
@@ -73,6 +98,9 @@ export default function UserForm({
     const formData = new FormData(event.currentTarget);
     // Add user ID to form data if needed by action, or pass it directly
     // formData.append("userId", userToEditAuth.id);
+    
+    // Ensure billing address is set correctly (though the hidden input should handle it)
+    formData.set('billing_address', billingAddressJSON);
 
     startTransition(async () => {
       const result = await formAction(formData); // The action is already bound with userId
@@ -83,8 +111,8 @@ export default function UserForm({
     });
   };
 
-  if (authLoading) return <div>Loading...</div>;
-  if (!isAdmin) return <div>Access Denied. Admin role required.</div>;
+  if (authLoading) return <div>{t('loading') || 'Loading...'}</div>;
+  if (!isAdmin) return <div>{t('access_denied') || 'Access Denied.'}</div>;
 
   const userRoles: UserRole[] = ['USER', 'WRITER', 'ADMIN'];
 
@@ -93,24 +121,75 @@ export default function UserForm({
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+      <input type="hidden" name="billing_address" value={billingAddressJSON} />
       {formMessage && (
         <Alert variant={formMessage.type === 'success' ? 'success' : 'destructive'}>
            <AlertDescription>{formMessage.text}</AlertDescription>
         </Alert>
       )}
       <div>
-        <Label htmlFor="email">Email (Read-only)</Label>
+        <Label htmlFor="email">{t('email')} (Read-only)</Label>
         <Input id="email" name="email" value={email} readOnly disabled className="mt-1 bg-muted/50" />
       </div>
 
       <div>
-        <Label htmlFor="username">Username</Label>
-        <Input id="username" name="username" value={username} onChange={(e) => setUsername(e.target.value)} className="mt-1" />
+        <Label htmlFor="full_name">{t('full_name')}</Label>
+        <Input id="full_name" name="full_name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="mt-1" />
       </div>
 
-      <div>
-        <Label htmlFor="full_name">Full Name</Label>
-        <Input id="full_name" name="full_name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="mt-1" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="github_username">{t('github_username')} ({t('optional') || 'Optional'})</Label>
+          <Input 
+            id="github_username" 
+            name="github_username" 
+            value={githubUsername} 
+            onChange={(e) => setGithubUsername(e.target.value)} 
+            className="mt-1" 
+          />
+        </div>
+        <div>
+           <Label htmlFor="phone">{t('phone_number')} ({t('optional') || 'Optional'})</Label>
+           <Input 
+             id="phone" 
+             name="phone" 
+             value={phone} 
+             onChange={(e) => setPhone(e.target.value)} 
+             className="mt-1" 
+           />
+        </div>
+      </div>
+
+       <div className="space-y-4 border p-4 rounded-md">
+        <h3 className="text-sm font-medium">{t('billing_address')}</h3>
+        <div className="grid gap-2">
+            <Label htmlFor="line1">{t('address_line_1')}</Label>
+            <Input id="line1" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} className="mt-1" />
+        </div>
+        <div className="grid gap-2">
+            <Label htmlFor="line2">{t('address_line_2')}</Label>
+            <Input id="line2" value={addressLine2} onChange={(e) => setAddressLine2(e.target.value)} className="mt-1" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+                <Label htmlFor="city">{t('city')}</Label>
+                <Input id="city" value={city} onChange={(e) => setCity(e.target.value)} className="mt-1" />
+            </div>
+            <div className="grid gap-2">
+                <Label htmlFor="state">{t('state_province')}</Label>
+                <Input id="state" value={state} onChange={(e) => setState(e.target.value)} className="mt-1" />
+            </div>
+        </div>
+         <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+                <Label htmlFor="postal_code">{t('postal_zip_code')}</Label>
+                <Input id="postal_code" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} className="mt-1" />
+            </div>
+            <div className="grid gap-2">
+                <Label htmlFor="country">{t('country')}</Label>
+                <Input id="country" value={country} onChange={(e) => setCountry(e.target.value)} className="mt-1" />
+            </div>
+        </div>
       </div>
 
       <div>

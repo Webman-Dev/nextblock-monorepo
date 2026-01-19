@@ -68,6 +68,7 @@ interface ResponsiveNavProps {
   cmsDashboardLinkHref: string;
   headerAuthComponent: React.ReactNode;
   languageSwitcherComponent: React.ReactNode;
+  cartIconComponent?: React.ReactNode;
 }
 
 export default function ResponsiveNav({
@@ -79,6 +80,7 @@ export default function ResponsiveNav({
   languageSwitcherComponent,
   logo,
   siteTitle,
+  cartIconComponent,
 }: ResponsiveNavProps) {
   const { t } = useTranslations();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -302,6 +304,7 @@ export default function ResponsiveNav({
             </Link>
           )}
           {headerAuthComponent}
+          {cartIconComponent}
           {languageSwitcherComponent}
         </div>
 
@@ -378,6 +381,7 @@ export default function ResponsiveNav({
 
           <div className="mt-auto pt-6 border-t border-foreground/20 space-y-4">
             <div >{headerAuthComponent}</div>
+            <div >{cartIconComponent}</div>
             <div >{languageSwitcherComponent}</div>
           </div>
         </div>

@@ -1,11 +1,20 @@
 import { stripe } from './client';
-import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
+import { createClient } from '@supabase/supabase-js';
 import { type CartItem } from '../cart-store';
 
 export const createCheckoutSession = async (
   cartItems: CartItem[]
 ): Promise<{ url: string | null; error?: string }> => {
-  const supabase = getSsgSupabaseClient();
+  // Use Service Role Key to bypass RLS
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Missing Supabase credentials for checkout (Service Key required).');
+      return { error: 'Internal Server Error', url: null };
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:4200';
 
   if (!cartItems.length) {
@@ -18,13 +27,18 @@ export const createCheckoutSession = async (
   
   const { data: products, error: productsError } = await supabase
     .from('products')
-    .select('id, title, price, image_url')
+    .select('id, title, price')
     .in('id', productIds);
 
   if (productsError || !products) {
     console.error('Error fetching products for validation:', productsError);
     return { error: 'Failed to validate product prices', url: null };
   }
+
+  // Debug logging
+  console.log('Cart Items:', cartItems.length);
+  console.log('Product IDs to validate:', productIds);
+  console.log('Found products:', products.length);
 
   // Map for quick lookup
   const productMap = new Map(products.map((p) => [p.id, p]));
@@ -43,16 +57,16 @@ export const createCheckoutSession = async (
     }
 
     // Verify price
-    // Note: Stripe expects amount in cents for 'usd'. Assuming product.price is in dollars/base unit
-    // We should strictly use the DB price, IGNORING cartItem.price
-    const unitAmount = Math.round(product.price * 100); 
+    // Note: Stripe expects amount in cents for 'usd'. 
+    // The DB stores price in cents (integer), so we use it directly.
+    const unitAmount = product.price; 
 
     line_items.push({
       price_data: {
         currency: 'usd',
         product_data: {
           name: product.title,
-          images: product.image_url ? [product.image_url] : [],
+          images: [], // Images temporarily removed due to schema mismatch (requires relation join)
           metadata: {
               productId: product.id
           }
@@ -80,8 +94,8 @@ export const createCheckoutSession = async (
     .from('orders')
     .insert({
       status: 'pending',
-      total_amount: totalAmount,
-      currency: 'usd',
+      total: totalAmount,
+      // currency: 'usd', // Column missing in DB
       // user_id: userId // Optional: Add if we have auth context
     })
     .select('id')
@@ -89,7 +103,8 @@ export const createCheckoutSession = async (
 
   if (orderError || !order) {
     console.error('Failed to create pending order:', orderError);
-    return { error: 'Failed to initiate order', url: null };
+    console.error('Order Data attempted:', { status: 'pending', total: totalAmount });
+    return { error: `Failed to initiate order: ${orderError?.message || 'Unknown error'}`, url: null };
   }
   
   // 3.5 Insert Order Items (Optional for now but good practice, skipping for brevity/speed unless strictly required, but strongly recommended)
@@ -101,7 +116,7 @@ export const createCheckoutSession = async (
       order_id: order.id,
       product_id: item.product_id,
       quantity: item.quantity,
-      price: item.price_at_purchase
+      price_at_purchase: item.price_at_purchase
   }));
 
   const { error: itemsError } = await supabase

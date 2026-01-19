@@ -1,12 +1,15 @@
 // Real implementation of the ecommerce library
 
 export * from './lib/components/CartDrawer';
+export * from './lib/components/Cart';
+export * from './lib/components/Checkout';
 export * from './lib/components/CartIcon';
 export * from './lib/components/AddToCartButton';
 export * from './lib/components/ProductCard';
 export * from './lib/components/ProductGrid';
 export * from './lib/components/ProductGallery';
 export * from './lib/components/FeaturedProduct';
+export * from './lib/components/CustomerProfileForm';
 
 export * from './lib/cart-store';
 export * from './lib/use-cart';

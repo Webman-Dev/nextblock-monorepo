@@ -31,7 +31,7 @@ export async function getProfileWithRoleClientSide(
   // It no longer creates its own client. It uses the one passed to it.
   const { data: profileData, error: profileError } = await supabase
     .from('profiles')
-    .select('id, full_name, avatar_url, role, updated_at, username, website')
+    .select('id, full_name, avatar_url, role, updated_at, website')
     .eq('id', userId)
     .single();
 

@@ -11,7 +11,7 @@ export const CartIcon = () => {
   // Use selector to get count directly
   // We use useCart wrapper if we want to ensure we don't show "0" then flash to "5".
   // A common pattern is to show empty or loading until hydrated.
-  const totalItems = useCartStore(useCartTotalItems);
+  const totalItems = useCartTotalItems();
   const hydrated = useCart((state) => state.isOpen) !== undefined; // Check if hydrated via a property
 
   if (!hydrated) {

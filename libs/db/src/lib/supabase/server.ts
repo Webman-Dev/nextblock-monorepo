@@ -68,7 +68,7 @@ export async function getProfileWithRoleServerSide(userId: string): Promise<Prof
   const supabase = createClient(); // Uses the server client defined above
   const { data: profileData, error: profileError } = await supabase
     .from('profiles')
-    .select('id, full_name, avatar_url, role, updated_at, username, website')
+    .select('id, full_name, avatar_url, role, updated_at, website')
     .eq('id', userId)
     .single();
 

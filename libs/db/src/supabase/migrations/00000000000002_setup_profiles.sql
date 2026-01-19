@@ -5,13 +5,14 @@
 CREATE TABLE public.profiles (
   id uuid NOT NULL PRIMARY KEY, -- references auth.users(id)
   updated_at timestamp with time zone,
-  username text UNIQUE,
+  -- username text UNIQUE, -- REMOVED as per user request
   full_name text,
   avatar_url text,
   website text,
-  role public.user_role NOT NULL DEFAULT 'USER',
-
-  CONSTRAINT username_length CHECK (char_length(username) >= 3)
+  github_username text, -- Added from 20260116124500
+  phone text,           -- Added from 20260116124500
+  billing_address jsonb, -- Added from 20260116124500
+  role public.user_role NOT NULL DEFAULT 'USER'
 );
 
 -- Foreign key to auth.users
@@ -42,6 +43,7 @@ COMMENT ON FUNCTION public.get_current_user_role() IS 'Fetches the role of the c
 -- 3. Trigger: handle_new_user
 -- Automatically creates a profile when a new user signs up.
 -- Assigns 'ADMIN' to the first user, 'USER' to subsequent users.
+-- Extracts GitHub metadata if available.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -51,8 +53,12 @@ AS $$
 DECLARE
   admin_flag_set BOOLEAN := FALSE;
   user_role public.user_role;
+  v_full_name text;
+  v_avatar_url text;
+  v_github_username text;
+  v_provider text;
 BEGIN
-  -- Ensure the admin flag row exists (redundant if seeded, but safe)
+  -- 1. Role Assignment Logic
   INSERT INTO public.site_settings (key, value)
   VALUES ('is_admin_created', 'false'::jsonb)
   ON CONFLICT (key) DO NOTHING;
@@ -73,8 +79,43 @@ BEGIN
     user_role := 'USER'::public.user_role;
   END IF;
 
-  INSERT INTO public.profiles (id, role)
-  VALUES (NEW.id, user_role);
+  -- 2. Data Extraction
+  v_full_name := new.raw_user_meta_data->>'full_name';
+  v_avatar_url := new.raw_user_meta_data->>'avatar_url';
+  
+  -- Check provider (usually in app_metadata)
+  v_provider := new.raw_app_meta_data->>'provider';
+  
+  -- GitHub Username Extraction
+  IF v_provider = 'github' OR (new.raw_user_meta_data->>'iss') LIKE '%github%' THEN
+     v_github_username := COALESCE(
+       new.raw_user_meta_data->>'user_name',
+       new.raw_user_meta_data->>'preferred_username'
+     );
+  ELSE
+     v_github_username := NULL;
+  END IF;
+
+  -- 3. Insert into profiles
+  -- Use ON CONFLICT DO NOTHING to avoid duplicate key errors if the profile somehow exists
+  INSERT INTO public.profiles (
+    id, 
+    role, 
+    full_name, 
+    avatar_url, 
+    github_username
+  )
+  VALUES (
+    NEW.id, 
+    user_role, 
+    v_full_name, 
+    v_avatar_url, 
+    v_github_username
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    avatar_url = EXCLUDED.avatar_url,
+    github_username = EXCLUDED.github_username;
   
   RETURN NEW;
 END;
@@ -85,3 +126,62 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Translations are now handled in 00000000000010_setup_translations.sql
+
+-- 4. Backfill missing profiles for existing auth.users
+-- This ensures that if the public schema is reset but auth users persist, profiles are recreated.
+DO $$
+DECLARE
+    missing_user RECORD;
+    v_github_username text;
+    v_full_name text;
+    v_role public.user_role;
+    v_admin_exists boolean;
+BEGIN
+    -- Check if any admin profile already exists
+    SELECT EXISTS (SELECT 1 FROM public.profiles WHERE role = 'ADMIN') INTO v_admin_exists;
+
+    FOR missing_user IN 
+        SELECT * FROM auth.users 
+        WHERE id NOT IN (SELECT id FROM public.profiles)
+        ORDER BY created_at ASC -- Process oldest users first to preserve likely admin ownership
+    LOOP
+        -- Extract GitHub logic for backfill
+        IF missing_user.raw_app_meta_data->>'provider' = 'github' OR (missing_user.raw_user_meta_data->>'iss') LIKE '%github%' THEN
+            v_github_username := COALESCE(
+                missing_user.raw_user_meta_data->>'user_name',
+                missing_user.raw_user_meta_data->>'preferred_username'
+            );
+        ELSE
+            v_github_username := NULL;
+        END IF;
+
+        v_full_name := missing_user.raw_user_meta_data->>'full_name';
+
+        -- Determine Role: First user found (when no admin exists) becomes ADMIN
+        IF v_admin_exists = FALSE THEN
+            v_role := 'ADMIN';
+            v_admin_exists := TRUE; -- Mark as existing so subsequent users are USER
+            
+            -- Sync site_settings
+            INSERT INTO public.site_settings (key, value) VALUES ('is_admin_created', 'true'::jsonb)
+             ON CONFLICT (key) DO UPDATE SET value = 'true'::jsonb;
+        ELSE
+            v_role := 'USER';
+        END IF;
+        
+        INSERT INTO public.profiles (id, role, full_name, avatar_url, github_username)
+        VALUES (
+            missing_user.id,
+            v_role,
+            v_full_name,
+            missing_user.raw_user_meta_data->>'avatar_url',
+            v_github_username
+        )
+        ON CONFLICT (id) DO NOTHING;
+        
+        RAISE NOTICE 'Backfilled profile for user % as %', missing_user.id, v_role;
+    END LOOP;
+END;
+$$;
