@@ -56,8 +56,6 @@ export async function deleteMediaFiles(keys: string[]) {
 
   if (keys.length === 0) return;
 
-  console.log(`[deleteMediaFiles] Attempting to delete ${keys.length} files:`, keys);
-
   try {
     const output = await s3.send(
       new DeleteObjectsCommand({
@@ -70,10 +68,7 @@ export async function deleteMediaFiles(keys: string[]) {
 
     if (output.Errors && output.Errors.length > 0) {
         console.error("[deleteMediaFiles] Errors reported by R2:", output.Errors);
-    } else {
-        console.log(`[deleteMediaFiles] Successfully deleted ${output.Deleted?.length || 0} files.`);
     }
-
   } catch (error) {
     console.error("[deleteMediaFiles] Exception failed to delete files from R2:", error);
   }

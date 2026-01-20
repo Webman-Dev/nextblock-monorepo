@@ -166,3 +166,18 @@ We extensively debugged and fixed the `/api/checkout` flow in `libs/ecommerce/sr
 - **Fixes**:
   - **Force Styles**: Added all missing classes (both custom and Button component classes) to `apps/nextblock/app/force-styles.tsx` to force Generation.
   - **Client Boundary**: Refactored `ButtonBlockRenderer.tsx` to be a Client Component (`"use client"`) and direct `Link` wrapper, resolving the server-side execution error.
+
+# Milestone 4.2: Storage Optimization & Media Cleanup
+
+## 1. R2 Storage Optimization
+
+- **Orphan Cleanup Logic**: Implemented automated media deletion to prevent storage bloat (`libs/ecommerce/src/lib/product-actions.ts`).
+  - When media is removed from a product, the system checks if it is used by any other entity (products, posts, logos).
+  - If unused (orphaned), it is deleted from both the database and R2 storage.
+- **Variant Handling**: Updated `deleteMediaItem` to ensure **all** generated image variants (thumbnails, medium, large) are deleted along with the original file, preventing partial leftovers.
+- **Transient Uploads**: Fixed a critical edge case where images uploaded and removed within the same session (before saving) were not being cleaned up. Implemented tracking in `ProductForm.tsx` to explicitly flag these for deletion on save.
+
+## 2. Configuration & Organization
+
+- **Dynamic Remote Patterns**: Updated `next.config.js` to rely on `NEXT_PUBLIC_R2_USER_URL` environment variables instead of hardcoded patterns, making the configuration environment-agnostic.
+- **Product Folders**: Configured `ProductMediaManager` to upload new product images to the specific `/uploads/products/` directory by default, improving bucket organization.
