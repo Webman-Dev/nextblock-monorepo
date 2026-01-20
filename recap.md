@@ -112,3 +112,9 @@ We extensively debugged and fixed the `/api/checkout` flow in `libs/ecommerce/sr
 
 - **Navigation Order**: Fixed menu order to **Home -> Articles -> Shop** for a logical user flow.
 - **Consistency**: Verified `reset_sandbox` correctly recreates the navigation hierarchy on every reset.
+
+# Milestone 3.9: Final Polish & UX Improvements
+
+## 1. Store Experience
+
+- **Cart Drawer**: Added a "View Cart" button to the cart drawer, allowing users to access the full `/cart` page before proceeding to checkout. This improves the user flow for reviewing and managing cart items.

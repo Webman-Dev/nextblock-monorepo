@@ -7,6 +7,7 @@ import {
   SheetTitle,
   Button
 } from '@nextblock-cms/ui';
+import { useRouter } from 'next/navigation';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
@@ -15,12 +16,18 @@ import { useState } from 'react';
 
 export const CartDrawer = () => {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const router = useRouter();
   const store = useCart((state) => state);
   const subtotal = useCartSubtotal();
 
   if (!store) return null;
 
   const { isOpen, setIsOpen, items, updateQuantity, removeItem } = store;
+
+  const handleViewCart = () => {
+    setIsOpen(false);
+    router.push('/cart');
+  };
 
   const handleCheckout = async () => {
     setIsCheckingOut(true);
@@ -131,8 +138,11 @@ export const CartDrawer = () => {
              <p className="mb-4 mt-1 text-xs text-muted-foreground">
                 Shipping and taxes calculated at checkout.
              </p>
+             <Button variant="outline" className="w-full mb-3" onClick={handleViewCart}>
+                View Full Cart
+             </Button>
              <Button className="w-full" onClick={handleCheckout} disabled={isCheckingOut}>
-                {isCheckingOut ? 'Processing...' : 'Checkout'}
+                {isCheckingOut ? 'Processing...' : 'Ready to Checkout'}
              </Button>
           </div>
         )}
