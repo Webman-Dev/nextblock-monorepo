@@ -4,7 +4,7 @@ import { cn } from '@nextblock-cms/utils';
 import { useState } from 'react';
 
 interface ProductGalleryProps {
-  images?: { url: string; alt: string }[];
+  images?: { url: string; alt?: string }[];
   className?: string;
 }
 

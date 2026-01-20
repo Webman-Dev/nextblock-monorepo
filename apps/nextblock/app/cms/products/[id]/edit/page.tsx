@@ -18,14 +18,13 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
 
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold mb-6">Edit Product</h1>
       <ProductForm 
         initialData={{
            id: product.id,
            title: product.title,
            slug: product.slug,
            sku: product.sku,
-           stock: product.stock,
+           stock: product.stock || 0,
            price: product.price,
            status: product.status as 'draft' | 'active' | 'archived',
            short_description: product.short_description ?? undefined,

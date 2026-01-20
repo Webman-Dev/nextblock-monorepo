@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TestimonialBlockConfig, TestimonialBlockContent } from '../../components/blocks/TestimonialBlock';
-import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSchema, FeaturedProductBlockContent, CartBlockSchema, CartBlockContent, CheckoutBlockSchema, CheckoutBlockContent } from './ecommerce-block-schemas';
+import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSchema, FeaturedProductBlockContent, CartBlockSchema, CartBlockContent, CheckoutBlockSchema, CheckoutBlockContent, ProductDetailsBlockSchema, ProductDetailsBlockContent } from './ecommerce-block-schemas';
 
 /**
  * Block Registry System
@@ -13,7 +13,7 @@ import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSc
 /**
  * Available block types - defined here as the source of truth
  */
-export const availableBlockTypes = ["text", "heading", "image", "button", "posts_grid", "video_embed", "section", "hero", "form", "testimonial", "product_grid", "featured_product", "cart", "checkout"] as const;
+export const availableBlockTypes = ["text", "heading", "image", "button", "posts_grid", "video_embed", "section", "hero", "form", "testimonial", "product_grid", "featured_product", "cart", "checkout", "product_details"] as const;
 export type BlockType = (typeof availableBlockTypes)[number];
 
 // --- Zod Schemas & Inferred Types ---
@@ -530,6 +530,20 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
         useCases: ['Checkout page']
     }
   },
+
+  "product_details": {
+    type: "product_details",
+    label: "Product Details (Context)",
+    icon: "Tag",
+    initialContent: {} as ProductDetailsBlockContent,
+    editorComponentFilename: "ProductDetailsBlockEditor.tsx",
+    rendererComponentFilename: "ProductDetailsBlockRenderer.tsx",
+    schema: ProductDetailsBlockSchema,
+    documentation: {
+        description: 'Displays product details (Title, Price, Add to Cart) using context.',
+        useCases: ['Product Template Page']
+    }
+  },
 };
 
 
@@ -613,7 +627,8 @@ export type AllBlockContent =
   | ({ type: "product_grid" } & ProductGridBlockContent)
   | ({ type: "featured_product" } & FeaturedProductBlockContent)
   | ({ type: "cart" } & CartBlockContent)
-  | ({ type: "checkout" } & CheckoutBlockContent);
+  | ({ type: "checkout" } & CheckoutBlockContent)
+  | ({ type: "product_details" } & ProductDetailsBlockContent);
 
 /**
 * Validate block content against its schema

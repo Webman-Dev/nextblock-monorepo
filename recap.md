@@ -118,3 +118,31 @@ We extensively debugged and fixed the `/api/checkout` flow in `libs/ecommerce/sr
 ## 1. Store Experience
 
 - **Cart Drawer**: Added a "View Cart" button to the cart drawer, allowing users to access the full `/cart` page before proceeding to checkout. This improves the user flow for reviewing and managing cart items.
+
+# Milestone 4.0: Product Gallery & CMS Refinement
+
+## 1. Product Form Overhaul (`ProductForm.tsx`)
+
+- **Premium Layout**:
+  - Reorganized form into a structured 2-column grid layout (Product Info | Status & Pricing).
+  - Implemented shadcn/ui "Card" containers for logical grouping.
+  - moved "Save Changes" to the bottom footer for better visual balance.
+- **Action Header**:
+  - Added a dedicated header with "View Product" (opens live page) and "Delete Product" buttons.
+  - Added "Edit Product" badge/subtitle for clearer context.
+
+## 2. Advanced Gallery Management
+
+- **New Component**: Created `ProductMediaManager` with:
+  - **Drag-and-Drop Reordering**: Native HTML5 DnD for intuitive image sorting.
+  - **Grid Layout**: Responsive thumbnail grid (optimized to `grid-cols-6` for density).
+  - **Main Image Indicator**: Visual tag for the first image in the list.
+- **Server Integration**:
+  - Updated `product-actions.ts` to handle complex relation updates (delete + re-insert with `sort_order`).
+  - Implemented `MediaPickerDialog` to reuse the global media library.
+
+## 3. Critical Fixes
+
+- **Image Loading**: Fixed PDP 404 errors by updating `apps/nextblock/app/product/[slug]/page.tsx` to correctly resolve `R2_BASE_URL` vs Supabase Storage URLs.
+- **Type Safety**: Resolved strict null checks in `EditProductPage` props.
+- **UX Polish**: removed duplicate `<h1>` headers from parent wrappers to clean up the UI.

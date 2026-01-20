@@ -8,9 +8,12 @@ import dynamic from 'next/dynamic';
 import { ProductFormValues, productSchema } from '@nextblock-cms/ecommerce';
 // eslint-disable-next-line @nx/enforce-module-boundaries
 import { useForm } from 'react-hook-form';
-import MediaPickerDialog from '../../media/components/MediaPickerDialog';
+// import MediaPickerDialog from '../../media/components/MediaPickerDialog';
+import { ProductMediaManager } from './ProductMediaManager';
 import { createProductAction, updateProductAction } from '../actions';
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { ExternalLink } from 'lucide-react';
 import type { Database } from '@nextblock-cms/db';
 import { DeleteProductButton } from './DeleteProductButton';
 
@@ -60,8 +63,8 @@ export function ProductForm({ initialData, isEdit = false }: ProductFormProps) {
       short_description: initialData?.short_description || '',
       description_json: initialData?.description_json || {},
       status: initialData?.status || 'draft',
-      // Determine media_id from initialData relations if present
-      media_id: initialData?.product_media?.[0]?.media_id || undefined, 
+      // Map initial media relations relative to provided initialData.product_media
+      product_media: initialData?.product_media?.map(pm => ({ media_id: pm.media_id })) || [],
     },
   });
 
@@ -79,14 +82,38 @@ export function ProductForm({ initialData, isEdit = false }: ProductFormProps) {
 
   // Use explicit useEffect to handle slug updates
   useEffect(() => {
-    if (dirtyFields.title) {
+    if (dirtyFields.title && !isEdit) { // Only auto-update on creation or if explicitly focusing on auto-generation logic
         const newSlug = slugify(title);
-        // optional: only update if user hasn't manually edited slug? 
-        // User asked for auto-populate. Let's just update it. 
-        // If they want to override, they can edit slug AFTER title.
         setValue('slug', newSlug, { shouldValidate: true });
     }
-  }, [title, dirtyFields.title, setValue]);
+  }, [title, dirtyFields.title, setValue, isEdit]);
+
+  // Initial media state for the manager
+  // We need to pass full media objects to the manager, but initialData might only have relation IDs if not typed fully.
+  // The 'initialData' prop in ProductFormProps seems to assume a certain shape. 
+  // Let's rely on what's passed.
+  // Logic to transform provided product_media (which likely has media join) to the shape ProductMediaManager expects
+  
+  const [mediaForManager, setMediaForManager] = useState<any[]>(() => {
+     // Transform db structure to manager structure
+     if (initialData?.product_media) {
+         return initialData.product_media.map((pm: any) => ({
+             id: pm.id || pm.media_id, // unique key
+             media_id: pm.media_id,
+             file_path: pm.media?.file_path || '',
+             alt: pm.media?.alt_text || '',
+             sort_order: pm.sort_order
+         })).sort((a: any, b: any) => a.sort_order - b.sort_order);
+     }
+     return [];
+  });
+
+  const onMediaUpdate = (updatedMedia: any[]) => {
+      setMediaForManager(updatedMedia);
+      // Update form value 'product_media' expected by Zod/Action
+      // Schema expects array of { media_id: string }
+      setValue('product_media', updatedMedia.map(m => ({ media_id: m.media_id })));
+  };
 
   const onSubmit = async (data: ProductFormValues) => {
     setIsSubmitting(true);
@@ -99,10 +126,8 @@ export function ProductForm({ initialData, isEdit = false }: ProductFormProps) {
     } catch (error: any) {
       console.error(error);
       if (error.message === 'NEXT_REDIRECT') {
-          // This is expected behavior for redirect actions
           return;
       }
-      // Check for unique constraint violation on slug
       if (error.message && error.message.includes('products_slug_key')) {
         setError('slug', { 
             type: 'manual', 
@@ -114,7 +139,6 @@ export function ProductForm({ initialData, isEdit = false }: ProductFormProps) {
             message: 'This SKU is already in use.' 
         });
       } else {
-          // General error (toast could be better here in real app)
           alert(`Error saving product: ${error.message}`);
       }
       setIsSubmitting(false);
@@ -122,129 +146,160 @@ export function ProductForm({ initialData, isEdit = false }: ProductFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 max-w-4xl mx-auto py-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="title">Title</Label>
-            <Input id="title" {...register('title')} placeholder="Product Title" />
-            {errors.title && <p className="text-red-500 text-sm">{errors.title.message as string}</p>}
-          </div>
-
-          <div>
-            <Label htmlFor="slug">Slug</Label>
-            <Input id="slug" {...register('slug')} placeholder="product-slug" />
-            {errors.slug && <p className="text-red-500 text-sm">{errors.slug.message as string}</p>}
-          </div>
-
-          <div>
-            <Label htmlFor="sku">SKU</Label>
-            <Input id="sku" {...register('sku')} placeholder="SKU-123" />
-            {errors.sku && <p className="text-red-500 text-sm">{errors.sku.message as string}</p>}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-             <div>
-              <Label htmlFor="price">Price ($)</Label>
-              <Input
-                id="price"
-                type="number"
-                step="0.01"
-                {...register('price', { valueAsNumber: true })}
-                placeholder="0.00"
-              />
-              {errors.price && <p className="text-red-500 text-sm">{errors.price.message as string}</p>}
-            </div>
-             <div>
-              <Label htmlFor="sale_price">Sale Price ($)</Label>
-              <Input
-                id="sale_price"
-                type="number"
-                step="0.01"
-                {...register('sale_price', { valueAsNumber: true })}
-                placeholder="0.00"
-              />
-              {errors.sale_price && <p className="text-red-500 text-sm">{errors.sale_price.message as string}</p>}
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="stock">Stock</Label>
-            <Input
-              id="stock"
-              type="number"
-              {...register('stock', { valueAsNumber: true })}
-              placeholder="0"
-            />
-             {errors.stock && <p className="text-red-500 text-sm">{errors.stock.message as string}</p>}
-          </div>
-
-          <div>
-             <Label>Status</Label>
-             <Select 
-                onValueChange={(val) => setValue('status', val as any)} 
-                defaultValue={watch('status')}
-             >
-              <SelectTrigger>
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-           <div>
-            <Label>Product Image</Label>
-            <MediaPickerDialog
-              onSelect={(media: Database['public']['Tables']['media']['Row']) => {
-                 if (media) {
-                   setValue('media_id', media.id);
-                 }
-              }}
-            />
-            {watch('media_id') && (
-               <div className="mt-2 border rounded p-2">
-                 <p className="text-xs text-muted-foreground">Image ID: {watch('media_id')}</p>
-                 {/* In a real app we'd fetch the URL or pass the media object to preview. */}
-               </div>
-            )}
-           </div>
-
-           <div>
-              <Label>Short Description</Label>
-              <Input {...register('short_description')} placeholder="Brief summary..." />
-           </div>
-        </div>
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 pb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+         <div>
+            <h1 className="text-3xl font-bold tracking-tight">{isEdit ? 'Edit Product' : 'Create Product'}</h1>
+            <p className="text-sm text-muted-foreground">
+               {isEdit ? 'Manage product details, pricing, and media.' : 'Add a new product to your store.'}
+            </p>
+         </div>
+         <div className="flex items-center gap-2">
+             {isEdit && initialData?.id && (
+                <DeleteProductButton 
+                    id={initialData.id} 
+                    productName={watch('title')} 
+                    redirectTo="/cms/products"
+                    className="border-red-200 hover:bg-red-50 hover:text-red-700"
+                />
+             )}
+             
+             {watch('slug') && watch('status') === 'active' && (
+                 <Button variant="outline" asChild>
+                    <Link href={`/product/${watch('slug')}`} target="_blank">
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        View
+                    </Link>
+                 </Button>
+             )}
+         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label>Detailed Description</Label>
-        <div className="min-h-[300px] border rounded-md overflow-hidden text-block-editor">
-          <NotionEditor
-            initialContent={watch('description_json') || {}}
-            onUpdate={(content: any) => setValue('description_json', content)}
-          />
-        </div>
-      </div>
+      <div className="space-y-8">
+         {/* Row 1: Product Information */}
+         <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
+            <h2 className="text-lg font-semibold">Product Information</h2>
+            <div className="space-y-4">
+              <div>
+                  <Label htmlFor="title">Title</Label>
+                  <Input id="title" {...register('title')} placeholder="Product Title" />
+                  {errors.title && <p className="text-destructive text-sm">{errors.title.message as string}</p>}
+              </div>
+              <div>
+                  <Label htmlFor="slug">Slug</Label>
+                  <Input id="slug" {...register('slug')} placeholder="product-slug" className="font-mono text-sm" />
+                  {errors.slug && <p className="text-destructive text-sm">{errors.slug.message as string}</p>}
+              </div>
+            </div>
+         </div>
 
-      <div className="flex justify-between gap-4">
-        {isEdit && initialData?.id && (
-             <DeleteProductButton 
-                id={initialData.id} 
-                productName={watch('title')} 
-                redirectTo="/cms/products"
-             />
-        )}
-        <div className="flex gap-4 ml-auto">
-            <Button disabled={isSubmitting} type="submit">
-            {isSubmitting ? 'Saving...' : isEdit ? 'Update Product' : 'Create Product'}
+         {/* Row 2: Pricing/Inventory (50%) & Status (50%) */}
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
+                <h2 className="text-lg font-semibold">Pricing & Inventory</h2>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <Label htmlFor="price">Price ($)</Label>
+                        <Input
+                            id="price"
+                            type="number"
+                            step="0.01"
+                            {...register('price', { valueAsNumber: true })}
+                            placeholder="0.00"
+                        />
+                        {errors.price && <p className="text-destructive text-sm">{errors.price.message as string}</p>}
+                    </div>
+                    <div>
+                        <Label htmlFor="sale_price">Sale Price ($)</Label>
+                        <Input
+                            id="sale_price"
+                            type="number"
+                            step="0.01"
+                            {...register('sale_price', { valueAsNumber: true })}
+                            placeholder="0.00"
+                        />
+                    </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <Label htmlFor="sku">SKU</Label>
+                        <Input id="sku" {...register('sku')} placeholder="SKU-123" />
+                    </div>
+                    <div>
+                        <Label htmlFor="stock">Stock</Label>
+                        <Input
+                        id="stock"
+                        type="number"
+                        {...register('stock', { valueAsNumber: true })}
+                        placeholder="0"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
+                <h2 className="text-lg font-semibold">Status & Metadata</h2>
+                <div>
+                     <Label>Status</Label>
+                    <Select 
+                        onValueChange={(val) => setValue('status', val as any)} 
+                        defaultValue={watch('status')}
+                    >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="archived">Archived</SelectItem>
+                    </SelectContent>
+                    </Select>
+                </div>
+                <div>
+                  <Label htmlFor="short_description">Short Description</Label>
+                  <Input {...register('short_description')} placeholder="Brief summary (SEO)..." />
+                </div>
+            </div>
+         </div>
+
+         {/* Row 3: Description & Media - Keeping Media big or side? 
+             User didn't specify, but Media is nicer wide for gallery. 
+             Detailed description is vertical.
+             Let's split 60/40 or just stack. 
+             Ideally Description is main content, Media is visual. 
+             Let's use the 1fr/400px split for the bottom part which worked well before.
+         */}
+         <div className="grid grid-cols-1 lg:grid-cols-[1fr,400px] gap-8">
+            <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
+                <Label className="text-lg font-semibold">Detailed Description</Label>
+                <div className="min-h-[400px] border rounded-lg overflow-hidden text-block-editor">
+                <NotionEditor
+                    initialContent={watch('description_json') || {}}
+                    onUpdate={(content: any) => setValue('description_json', content)}
+                />
+                </div>
+            </div>
+
+            <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4 h-fit">
+                {/* 
+                  ProductMediaManager
+                */}
+                <ProductMediaManager 
+                    initialMedia={mediaForManager} 
+                    onUpdate={onMediaUpdate}
+                />
+                {/* Hidden input to ensure form state catches it if needed, though setValue usually enough */}
+                <input type="hidden" {...register('product_media')} /> 
+            </div>
+         </div>
+
+         {/* Bottom Actions */}
+         <div className="flex justify-end pt-4 border-t">
+            <Button disabled={isSubmitting} type="submit" size="lg">
+                {isSubmitting ? 'Saving...' : 'Save Changes'}
             </Button>
-        </div>
+         </div>
+
       </div>
     </form>
   );

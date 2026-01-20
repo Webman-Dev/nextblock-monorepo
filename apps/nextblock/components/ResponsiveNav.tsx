@@ -106,6 +106,11 @@ export default function ResponsiveNav({
         href: `/cms/posts/${currentContent.id}/edit`,
         label: t('edit_post'),
       };
+    } else if (currentContent.type === 'product') {
+      editPathDetails = {
+        href: `/cms/products/${currentContent.id}/edit`,
+        label: 'Edit Product', // Using hardcoded string as t('edit_product') might not exist yet
+      };
     }
   }
   // The old path-based logic for determining editPathDetails is removed

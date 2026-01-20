@@ -6,7 +6,9 @@ export interface Product {
   slug: string;
   price: number;
   sale_price?: number | null;
-  image_url?: string; // Resolved URL
-  short_description?: string;
+  image_url?: string; // Resolved URL of the primary image
+  images?: { url: string; alt?: string }[]; // Array of resolved image URLs
+  short_description?: string | null;
+  description_json?: any; // Tiptap JSON content
   stock?: number;
 }

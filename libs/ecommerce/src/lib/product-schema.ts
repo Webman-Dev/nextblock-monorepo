@@ -12,7 +12,11 @@ export const productSchema = z.object({
   stock: z.coerce.number().int().min(0, 'Stock must be a non-negative integer'),
   short_description: z.string().optional(),
   description_json: z.any().optional(), // Using any for Tiptap JSON structure
-  media_id: z.string().optional(), // For the main product image
+  media_id: z.string().optional(), // For the main product image (backward compat or single select)
+  product_media: z.array(z.object({
+      media_id: z.string(),
+      // We can sort based on index in this array, or explicit sort_order from UI
+  })).optional(),
   status: z.enum(['draft', 'active', 'archived']),
 });
 

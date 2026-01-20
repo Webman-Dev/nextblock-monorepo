@@ -24,3 +24,8 @@ export type CartBlockContent = z.infer<typeof CartBlockSchema>;
 // Checkout Block Schema
 export const CheckoutBlockSchema = z.object({});
 export type CheckoutBlockContent = z.infer<typeof CheckoutBlockSchema>;
+
+// Product Details Block Schema (Context Aware)
+export const ProductDetailsBlockSchema = z.object({});
+export type ProductDetailsBlockContent = z.infer<typeof ProductDetailsBlockSchema>;
+

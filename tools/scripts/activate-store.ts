@@ -151,6 +151,28 @@ async function activateStore() {
           order: 0
         }
       ]
+    },
+    {
+      title: 'Default Product Layout',
+      slug: 'product-template',
+      status: 'published',
+      requiredBlocks: [
+        {
+          block_type: 'product_details',
+          content: {},
+          order: 0
+        },
+        {
+           block_type: 'heading',
+           content: { level: 2, text_content: 'You might also like', textAlign: 'center' },
+           order: 1
+        },
+        {
+          block_type: 'product_grid',
+          content: { type: 'latest', limit: 4 },
+          order: 2
+        }
+      ]
     }
   ];
 
@@ -480,9 +502,39 @@ async function activateStore() {
       if (s3) {
           console.log('Checking R2 for cover image...');
           const localPath = path.resolve(__dirname, '../../apps/nextblock/public/images/NBcover.webp');
-          // Start with slash for local path resolution? No, localPath is absolute.
-          // R2 Key: mediaKeyClean (images/NBcover.webp) matches what we stored.
           await uploadToR2(s3, r2Bucket, mediaKeyClean, localPath, 'image/webp');
+      }
+
+      // Sync to Supabase Storage (Critical for Frontend)
+      console.log('Checking Supabase Storage for cover image...');
+      const localPath = path.resolve(__dirname, '../../apps/nextblock/public/images/NBcover.webp');
+      if (fs.existsSync(localPath)) {
+          const fileBuffer = fs.readFileSync(localPath);
+          const bucketName = 'media'; // Matches the bucket in URL construction
+          
+          // Ensure bucket exists
+          const { data: buckets } = await supabase.storage.listBuckets();
+          if (!buckets?.find(b => b.name === bucketName)) {
+               console.log(`Creating public bucket "${bucketName}"...`);
+               await supabase.storage.createBucket(bucketName, { public: true });
+          }
+          
+          // Upload file
+          // mediaKeyClean is 'images/NBcover.webp'
+          const { error: uploadError } = await supabase.storage
+              .from(bucketName)
+              .upload(mediaKeyClean, fileBuffer, {
+                  contentType: 'image/webp',
+                  upsert: true
+              });
+              
+          if (uploadError) {
+              console.error('Supabase Storage Upload Error:', uploadError.message);
+          } else {
+              console.log(`Supabase Storage: Uploaded "${mediaKeyClean}" successfully.`);
+          }
+      } else {
+          console.warn(`Local file not found: ${localPath}`);
       }
       
       // C. Ensure Product Exists
@@ -525,7 +577,7 @@ async function activateStore() {
               } else if (newProduct) {
                   console.log('Product created.');
                   
-                  // D. Link Media
+                  // D. Link Media 1 (Use original media)
                   const { error: linkError } = await supabase
                       .from('product_media')
                       .insert({
@@ -534,8 +586,34 @@ async function activateStore() {
                           sort_order: 0
                       });
                       
-                  if (linkError) console.error('Error linking media:', linkError.message);
-                  else console.log('Product media linked.');
+                  if (linkError) console.error('Error linking media 1:', linkError.message);
+                  else console.log('Product media 1 linked.');
+
+                  // E. Create and Link Media 2 (Reuse same file, new media record for demo)
+                   const mediaId2 = uuidv4();
+                   const { error: mediaError2 } = await supabase.from('media').insert({
+                        id: mediaId2,
+                        uploader_id: uploaderId,
+                        file_name: 'NBcover-alt.webp',
+                        object_key: mediaKeyClean, // Point to same file
+                        file_path: mediaKeyClean, 
+                        file_type: 'image/webp',
+                        size_bytes: 150000, 
+                        description: 'NextBlock Cover Image Alt',
+                        folder: 'images'
+                   });
+
+                   if (!mediaError2) {
+                        const { error: linkError2 } = await supabase
+                            .from('product_media')
+                            .insert({
+                                product_id: newProduct.id,
+                                media_id: mediaId2,
+                                sort_order: 1
+                            });
+                         if (linkError2) console.error('Error linking media 2:', linkError2.message);
+                         else console.log('Product media 2 linked (Gallery).');
+                   }
               }
           } else {
               console.log('Product already exists.');

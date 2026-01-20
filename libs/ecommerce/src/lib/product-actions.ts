@@ -49,6 +49,30 @@ export async function getProduct(supabase: SupabaseClient<Database>, id: string)
     .single();
 }
 
+export async function getProductBySlug(supabase: SupabaseClient<Database>, slug: string) {
+  return supabase
+    .from('products')
+    .select(
+      `
+      *,
+      product_media (
+        media_id,
+        sort_order,
+        media (
+          id,
+          file_path,
+          file_name,
+          blur_data_url,
+          width,
+          height
+        )
+      )
+    `
+    )
+    .eq('slug', slug)
+    .single();
+}
+
 export async function createProduct(supabase: SupabaseClient<Database>, data: ProductFormValues) {
   const { media_id, ...rest } = data;
   
@@ -71,7 +95,14 @@ export async function createProduct(supabase: SupabaseClient<Database>, data: Pr
 
   if (error) throw error;
 
-  if (media_id && product) {
+  if (data.product_media && data.product_media.length > 0 && product) {
+     const mediaInserts = data.product_media.map((item, index) => ({
+        product_id: product.id,
+        media_id: item.media_id,
+        sort_order: index,
+      }));
+      await supabase.from('product_media').insert(mediaInserts);
+  } else if (media_id && product) {
     await supabase.from('product_media').insert({
       product_id: product.id,
       media_id: media_id,
@@ -98,6 +129,9 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
     updated_at: new Date().toISOString(),
   };
 
+  // Type assertion or update ProductFormValues interface if needed to include product_media 
+
+
   const { data: product, error } = await supabase
     .from('products')
     .update(productData)
@@ -112,30 +146,30 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
   // For now, based on "Image (thumbnail)" requirement, we treat the main image as a single relation or primary one.
   // The schema had product_media as m:n. 
   
-  if (media_id) {
-    // Check if this media is already linked? 
-    // Or just clear and re-link as primary? 
-    // Let's assume we replace the "primary" image (sort_order 0 or just the first one)
-    // For simplicity given the requirement "reuse MediaPickerDialog to select *a* product image":
-    
-    // First, remove existing media for this product if we want to replace it strict 1-1 style for the main image?
-    // Or just append?
-    // The prompt says "Store the media_id in the form". 
-    // Let's assume we overwrite the existing associations to keep it simple for a single image picker, 
-    // OR we check if it exists. 
-    // Let's do a replace strategy for now to match the "single image" feel of the form input.
-    
+  // Handle media update
+  if (data.product_media) {
+    // 1. Delete existing associations
+    // In a more optimized world we'd diff, but for < 20 images this is fine and robust
     await supabase.from('product_media').delete().eq('product_id', id);
-    
-    await supabase.from('product_media').insert({
+
+    // 2. Insert new associations
+    if (data.product_media.length > 0) {
+      const mediaInserts = data.product_media.map((item, index) => ({
+        product_id: id,
+        media_id: item.media_id,
+        sort_order: index, // Use current array index as sort order
+      }));
+
+      await supabase.from('product_media').insert(mediaInserts);
+    }
+  } else if (media_id) {
+     // Backward compatibility for single media_id field if product_media not provided
+     await supabase.from('product_media').delete().eq('product_id', id);
+     await supabase.from('product_media').insert({
       product_id: id,
       media_id: media_id,
       sort_order: 0,
     });
-  } else {
-      // If media_id is explicitly undefined/null, maybe we should clear it?
-      // But the form might just not send it if unchanged? 
-      // Safe bet: if media_id is provided, set it.
   }
 
   return product;
