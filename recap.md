@@ -79,3 +79,36 @@ We extensively debugged and fixed the `/api/checkout` flow in `libs/ecommerce/sr
 - **Admin Capabilities**: Extended `CustomerProfileForm` to conditionally render "Admin Settings" (Role selection) and handle custom admin actions while preserving a unified codebase.
 - **Enhanced Feedback**: Implemented success message handling by passing URL query parameters to the form state, giving users immediate feedback after server-side redirects.
 - **Robustness**: Fixed multiple edge cases including `NEXT_REDIRECT` error handling, avatar `src` issues, and role selector defaults.
+
+## 6. CMS Navigation & Profile UI Optimization
+
+- **Profile Icon**:
+  - Replaced generic initial with a circular `Avatar` component.
+  - Added `avatar_url` support for user images.
+  - Implemented a primary color border on hover for better interactivity.
+- **Navigation Layout**:
+  - Repositioned the **Shopping Bag** icon to the far right for a standard e-commerce feel.
+  - Removed the redundant "CMS Dashboard" link from the main navigation.
+  - Added a **Pencil Icon** to the "Edit Page" / "Edit Post" links to improve visibility and UX.
+- **Sign Out Flow**:
+  - Converted sign-out logic to client-side (`supabase.auth.signOut()`) to ensure immediate UI updates without page refreshes.
+
+# Milestone 3.8: Sandbox Content Restoration & Security
+
+## 1. Secure Sandbox Reset
+
+- **Premium Gating**: Modified `reset_sandbox` function to accept a `p_include_premium` parameter (default: `FALSE`).
+- **Conditional Seeding**: Wrapped all e-commerce data (Shop/Cart/Checkout pages, Products, Orders) in conditional logic, ensuring the open-source version stays clean while premium environments get the full suite.
+- **Auto-Seed**: Configured local development (`npm run db:push`) to automatically seed both Standard and Premium content.
+
+## 2. Content Restoration
+
+- **Rich Content**: Restored the original, detailed block layouts for Home and Blog pages (replacing temporary placeholders).
+  - **Home**: Banner, Features, Testimonials, CTA.
+  - **Blog**: Hero, "Deep Dives" Grid.
+- **Runtime Fixes**: Patched `HeroBlockRenderer` to safely handle missing styling properties, preventing crashes on older data.
+
+## 3. Navigation & UX
+
+- **Navigation Order**: Fixed menu order to **Home -> Articles -> Shop** for a logical user flow.
+- **Consistency**: Verified `reset_sandbox` correctly recreates the navigation hierarchy on every reset.

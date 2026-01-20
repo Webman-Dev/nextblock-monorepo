@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
   });
 
   try {
-    const { error } = await supabase.rpc('reset_sandbox');
+    const { error } = await supabase.rpc('reset_sandbox', { p_include_premium: true });
 
     if (error) {
       console.error('Error resetting sandbox:', error);
