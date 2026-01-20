@@ -108,12 +108,37 @@ export function ProductForm({ initialData, isEdit = false }: ProductFormProps) {
      return [];
   });
 
+  const [removedMediaIds, setRemovedMediaIds] = useState<Set<string>>(new Set());
+
   const onMediaUpdate = (updatedMedia: any[]) => {
+      // identify items that were in mediaForManager but are not in updatedMedia
+      const currentIds = new Set(updatedMedia.map(m => m.id));
+      const removed = mediaForManager.filter(m => !currentIds.has(m.id));
+      
+      if (removed.length > 0) {
+          setRemovedMediaIds(prev => {
+              const next = new Set(prev);
+              removed.forEach(m => {
+                  // We only care about the media_id (UUID), not the temp id if it differs
+                  // ProductMediaManager uses 'id' for keying, but 'media_id' is the real DB ID
+                  if (m.media_id) next.add(m.media_id);
+              });
+              return next;
+          });
+      }
+
       setMediaForManager(updatedMedia);
       // Update form value 'product_media' expected by Zod/Action
       // Schema expects array of { media_id: string }
       setValue('product_media', updatedMedia.map(m => ({ media_id: m.media_id })));
+      // Also update the explicitly removed field
+      setValue('explicitly_removed_media_ids', Array.from(removedMediaIds));
   };
+
+  // Sync removedMediaIds to form whenever it changes (due to closure staleness in onMediaUpdate, better to use effect)
+  useEffect(() => {
+     setValue('explicitly_removed_media_ids', Array.from(removedMediaIds));
+  }, [removedMediaIds, setValue]);
 
   const onSubmit = async (data: ProductFormValues) => {
     setIsSubmitting(true);

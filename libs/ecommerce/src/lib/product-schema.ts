@@ -18,6 +18,7 @@ export const productSchema = z.object({
       // We can sort based on index in this array, or explicit sort_order from UI
   })).optional(),
   status: z.enum(['draft', 'active', 'archived']),
+  explicitly_removed_media_ids: z.array(z.string()).optional(),
 });
 
 export type ProductFormValues = z.infer<typeof productSchema>;

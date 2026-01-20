@@ -98,6 +98,7 @@ export const ProductMediaManager = ({ initialMedia, onUpdate }: ProductMediaMana
             onSelect={addMedia} 
             triggerLabel="+ Add Image"
             triggerVariant="outline"
+            defaultFolder="uploads/products/"
           />
       </div>
 

@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { deleteMediaFiles } from '@nextblock-cms/utils/server';
 import { Database } from '@nextblock-cms/db';
 import { ProductFormValues } from './product-schema';
 
@@ -113,6 +114,8 @@ export async function createProduct(supabase: SupabaseClient<Database>, data: Pr
   return product;
 }
 
+
+
 export async function updateProduct(supabase: SupabaseClient<Database>, id: string, data: ProductFormValues) {
   const { media_id, ...rest } = data;
 
@@ -129,8 +132,13 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
     updated_at: new Date().toISOString(),
   };
 
-  // Type assertion or update ProductFormValues interface if needed to include product_media 
+  // Get current media associations before update to identify removed ones
+  const { data: currentProductMedia } = await supabase
+    .from('product_media')
+    .select('media_id')
+    .eq('product_id', id);
 
+  const currentMediaIds = currentProductMedia?.map(pm => pm.media_id) || [];
 
   const { data: product, error } = await supabase
     .from('products')
@@ -172,8 +180,109 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
     });
   }
 
+  // IDENTIFY AND CLEAN UP ORPHANED MEDIA
+  // Calculate which media IDs were removed from this product
+  const newMediaIds = data.product_media 
+    ? data.product_media.map(m => m.media_id)
+    : (media_id ? [media_id] : []);
+    
+  console.log(`[updateProduct] Cleanup Check - Product: ${id}`);
+  console.log(`[updateProduct] Current Media IDs (DB):`, currentMediaIds);
+  console.log(`[updateProduct] New Media IDs (Form):`, newMediaIds);
+
+  const explicitlyRemovedIds = data.explicitly_removed_media_ids || [];
+  console.log(`[updateProduct] Explicitly Removed IDs (UI):`, explicitlyRemovedIds);
+
+  const calculatedRemovedIds = currentMediaIds.filter(id => !newMediaIds.includes(id));
+  
+  // Combine both lists and deduplicate
+  const removedMediaIds = Array.from(new Set([...calculatedRemovedIds, ...explicitlyRemovedIds]));
+  
+  console.log(`[updateProduct] Final Removed IDs for cleanup check:`, removedMediaIds);
+
+  if (removedMediaIds.length > 0) {
+    for (const removedId of removedMediaIds) {
+      // Check if this media is used by ANY other product (product_media table)
+      // Note: We already deleted the relation for THIS product above, so count should be 0 if it was unique to this product
+      const { count: productUsageCount, error: productUsageError } = await supabase
+        .from('product_media')
+        .select('*', { count: 'exact', head: true })
+        .eq('media_id', removedId);
+      
+      console.log(`[updateProduct] Checking usage for ${removedId} - Product Usage: ${productUsageCount}`);
+
+      if (productUsageError) {
+        console.error('Error checking product usage for media cleanup:', productUsageError);
+        continue;
+      }
+
+      if (productUsageCount && productUsageCount > 0) continue; // Used by another product
+
+      // Check posts usage
+      const { count: postsUsageCount, error: postsUsageError } = await supabase
+          .from('posts')
+          .select('*', { count: 'exact', head: true })
+          .eq('feature_image_id', removedId);
+
+      console.log(`[updateProduct] Checking usage for ${removedId} - Posts Usage: ${postsUsageCount}`);
+
+      if (postsUsageError) {
+          console.error('Error checking posts usage for media cleanup:', postsUsageError);
+          continue;
+      }
+
+      if (postsUsageCount && postsUsageCount > 0) continue; // Used by a post
+
+      // Check logos usage
+      const { count: logosUsageCount, error: logosUsageError } = await supabase
+          .from('logos')
+          .select('*', { count: 'exact', head: true })
+          .eq('media_id', removedId);
+      
+      console.log(`[updateProduct] Checking usage for ${removedId} - Logos Usage: ${logosUsageCount}`);
+
+      if (logosUsageError) {
+          console.error('Error checking logos usage for media cleanup:', logosUsageError);
+          continue;
+      }
+      
+      if (logosUsageCount && logosUsageCount > 0) continue; // Used by a logo
+
+      // If we reach here, the media is an orphan. Delete it!
+      
+      // 1. Get media details to find file path and variants
+      const { data: mediaToDelete } = await supabase
+        .from('media')
+        .select('object_key, variants')
+        .eq('id', removedId)
+        .single();
+      
+      if (mediaToDelete) {
+         const keysToDelete = [mediaToDelete.object_key];
+         // Add variant keys if they exist
+         if (mediaToDelete.variants && Array.isArray(mediaToDelete.variants)) {
+             mediaToDelete.variants.forEach((v: any) => {
+                 if (v.objectKey) keysToDelete.push(v.objectKey);
+             });
+         }
+
+         // 2. Delete from R2
+         console.log(`[updateProduct] Deleting orphaned media ${removedId}. Keys:`, keysToDelete);
+         await deleteMediaFiles(keysToDelete);
+
+         // 3. Delete from DB
+         await supabase.from('media').delete().eq('id', removedId);
+         console.log(`Orphaned media ${removedId} deleted.`);
+      } else {
+         console.warn(`[updateProduct] Media ${removedId} not found in Media table.`);
+      }
+    }
+  }
+
   return product;
 }
+
+
 
 export async function deleteProduct(supabase: SupabaseClient<Database>, id: string) {
   const { error } = await supabase.from('products').delete().eq('id', id);
