@@ -146,3 +146,23 @@ We extensively debugged and fixed the `/api/checkout` flow in `libs/ecommerce/sr
 - **Image Loading**: Fixed PDP 404 errors by updating `apps/nextblock/app/product/[slug]/page.tsx` to correctly resolve `R2_BASE_URL` vs Supabase Storage URLs.
 - **Type Safety**: Resolved strict null checks in `EditProductPage` props.
 - **UX Polish**: removed duplicate `<h1>` headers from parent wrappers to clean up the UI.
+
+# Milestone 4.1: Sandbox & Frontend Reliability
+
+## 1. Sandbox Image Resolution
+
+- **Issue**: `NBcover.webp` was appearing blurred/low-res in the sandbox environment (520px vs 1024px).
+- **Fix**:
+  - Updated `20260120120000_update_sandbox_reset.sql` to seed the correct dimensions (1024x572) and size in bytes.
+  - Updated `activate-store.ts` to ensure the high-resolution source file is uploaded to the bucket.
+
+## 2. Invisible Content Debugging (Articles Page)
+
+- **Issue**: The "Articles" page hero subtitle and buttons were present in the database but invisible on the frontend.
+- **Diagnosis**:
+  - **Subtitle**: Used custom Tailwind classes (e.g., `tracking-[0.3em]`, `text-blue-400`) that existed in the DB but not in the codebase, preventing JIT generation.
+  - **Buttons**: The `Button` component classes (from `@nextblock-cms/ui`) were not identifying correctly due to Windows path resolution issues in the Tailwind config.
+  - **Renderer**: `ButtonBlockRenderer` was crashing silently because it tried to invoke client-side `buttonVariants` from a Server Component.
+- **Fixes**:
+  - **Force Styles**: Added all missing classes (both custom and Button component classes) to `apps/nextblock/app/force-styles.tsx` to force Generation.
+  - **Client Boundary**: Refactored `ButtonBlockRenderer.tsx` to be a Client Component (`"use client"`) and direct `Link` wrapper, resolving the server-side execution error.

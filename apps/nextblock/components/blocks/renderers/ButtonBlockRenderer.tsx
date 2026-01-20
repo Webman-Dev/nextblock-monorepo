@@ -1,6 +1,7 @@
+"use client";
 import React from "react";
 import Link from "next/link";
-import { Button } from "@nextblock-cms/ui";
+import { buttonVariants } from "@nextblock-cms/ui";
 import { cn } from "@nextblock-cms/utils";
 
 export type ButtonBlockContent = {
@@ -26,8 +27,19 @@ const ButtonBlockRenderer: React.FC<ButtonBlockRendererProps> = ({
   const isAnchor = content.url?.startsWith("#");
 
   const buttonText = content.text || "Button";
-  const buttonVariant = content.variant || "default";
-  const buttonSize = content.size || "default";
+  // Map variant name if needed or pass directly if it matches
+  // The migration might have uppercase 'DEFAULT' or 'OUTLINE', ensure lowercase
+  const variantRaw = content.variant?.toLowerCase() || "default";
+  // Cast to specific allowed variants for TS safety if strictly typed, else as any
+  const variant = (variantRaw === 'default' || variantRaw === 'outline' || variantRaw === 'secondary' || variantRaw === 'ghost' || variantRaw === 'link' || variantRaw === 'destructive') 
+    ? variantRaw 
+    : 'default';
+
+  const sizeRaw = content.size?.toLowerCase() || "default";
+  const size = (sizeRaw === 'default' || sizeRaw === 'sm' || sizeRaw === 'lg' || sizeRaw === 'icon') 
+    ? sizeRaw 
+    : 'default';
+    
   const buttonPosition = content.position || "left";
 
   const alignmentClasses = {
@@ -35,47 +47,37 @@ const ButtonBlockRenderer: React.FC<ButtonBlockRendererProps> = ({
       center: "justify-center text-center",
       right: "justify-end text-right",
   };
+  
+  // We use buttonVariants directly to avoid 'asChild' composition issues with Radix Slot
+  // This ensures we just render a clean Link or Anchor with the correct classes.
+  const classes = cn(
+    buttonVariants({ variant, size }),
+    variant === 'outline' && "text-foreground", // Ensure outline text is visible
+    "no-underline" // Force no-underline for links
+  );
 
   return (
     <div className={cn("my-6 flex w-full", alignmentClasses[buttonPosition])}>
-      {/* Case 1: Internal link (not external, not anchor, has URL) */}
+      {/* Case 1: Internal link */}
       {!isExternal && !isAnchor && !!content.url ? (
-        <Button
-            asChild
-            variant={buttonVariant}
-            size={buttonSize}
-            className={cn(content.variant === 'outline' && "text-foreground")}
-        >
-            <Link href={content.url}>
-                {buttonText}
-            </Link>
-        </Button>
-      ) : /* Case 2: External or Anchor link (has URL) */
-      (isExternal || isAnchor) && !!content.url ? (
-        <Button
-            asChild
-            variant={buttonVariant}
-            size={buttonSize}
-            className={cn(content.variant === 'outline' && "text-foreground")}
-        >
-            <a
-            href={content.url}
-            target={isExternal ? "_blank" : undefined}
-            rel={isExternal ? "noopener noreferrer" : undefined}
-            >
+        <Link href={content.url} className={classes}>
             {buttonText}
-            </a>
-        </Button>
-      ) : (
-        /* Case 3: No URL or other edge cases - render a plain or disabled button */
-        <Button
-            variant={buttonVariant}
-            size={buttonSize}
-            disabled={!content.url}
-            className={cn(content.variant === 'outline' && "text-foreground")}
+        </Link>
+      ) : /* Case 2: External or Anchor link */
+      (isExternal || isAnchor) && !!content.url ? (
+        <a
+          href={content.url}
+          target={isExternal ? "_blank" : undefined}
+          rel={isExternal ? "noopener noreferrer" : undefined}
+          className={classes}
         >
           {buttonText}
-        </Button>
+        </a>
+      ) : (
+        /* Case 3: No URL - render a disabled fake button */
+        <button disabled className={cn(classes, "opacity-50 cursor-not-allowed")}>
+          {buttonText}
+        </button>
       )}
     </div>
   );

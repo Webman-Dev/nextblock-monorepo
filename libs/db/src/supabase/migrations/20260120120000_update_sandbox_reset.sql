@@ -11,6 +11,7 @@ DECLARE
   v_logo_media_id uuid := gen_random_uuid();
   v_feature_media_id uuid := gen_random_uuid();
   v_cover_media_id uuid := gen_random_uuid(); -- New for Product
+
   
   -- Page Groups
   v_home_page_group_id uuid := gen_random_uuid();
@@ -21,6 +22,7 @@ DECLARE
   v_shop_page_group_id uuid := gen_random_uuid();
   v_cart_page_group_id uuid := gen_random_uuid();
   v_checkout_page_group_id uuid := gen_random_uuid();
+  v_product_template_page_group_id uuid := gen_random_uuid();
 
   v_en_lang_id bigint;
   v_fr_lang_id bigint;
@@ -37,6 +39,8 @@ DECLARE
   v_shop_page_fr_id bigint;
   v_cart_page_fr_id bigint;
   v_checkout_page_fr_id bigint;
+  v_product_template_page_id bigint;
+  v_product_template_page_fr_id bigint;
 
   -- Product ID
   v_premium_product_id uuid := gen_random_uuid();
@@ -148,7 +152,9 @@ BEGIN
       (v_en_lang_id, 'Checkout', 'checkout', 'published', v_checkout_page_group_id),
       (v_fr_lang_id, 'Boutique', 'boutique', 'published', v_shop_page_group_id),
       (v_fr_lang_id, 'Panier', 'panier', 'published', v_cart_page_group_id),
-      (v_fr_lang_id, 'Paiement', 'paiement', 'published', v_checkout_page_group_id);
+      (v_fr_lang_id, 'Paiement', 'paiement', 'published', v_checkout_page_group_id),
+      (v_en_lang_id, 'Default Product Layout', 'product-template', 'published', v_product_template_page_group_id),
+      (v_fr_lang_id, 'Modèle de produit par défaut', 'modele-produit', 'published', v_product_template_page_group_id);
   END IF;
 
   -- 5. Media (Feature)
@@ -174,6 +180,8 @@ BEGIN
     SELECT id INTO v_shop_page_fr_id FROM public.pages WHERE slug = 'boutique' AND language_id = v_fr_lang_id;
     SELECT id INTO v_cart_page_fr_id FROM public.pages WHERE slug = 'panier' AND language_id = v_fr_lang_id;
     SELECT id INTO v_checkout_page_fr_id FROM public.pages WHERE slug = 'paiement' AND language_id = v_fr_lang_id;
+    SELECT id INTO v_product_template_page_id FROM public.pages WHERE slug = 'product-template' AND language_id = v_en_lang_id;
+    SELECT id INTO v_product_template_page_fr_id FROM public.pages WHERE slug = 'modele-produit' AND language_id = v_fr_lang_id;
   END IF;
 
   -- 8. Blocks (Standard)
@@ -833,6 +841,20 @@ supabase db push
     -- Checkout (FR)
     INSERT INTO public.blocks (page_id, language_id, block_type, content, "order")
     VALUES (v_checkout_page_fr_id, v_fr_lang_id, 'checkout', '{}'::jsonb, 0);
+
+    -- Product Template (EN)
+    INSERT INTO public.blocks (page_id, language_id, block_type, content, "order")
+    VALUES 
+    (v_product_template_page_id, v_en_lang_id, 'product_details', '{}'::jsonb, 0),
+    (v_product_template_page_id, v_en_lang_id, 'heading', '{"level": 2, "text_content": "You might also like", "textAlign": "center"}'::jsonb, 1),
+    (v_product_template_page_id, v_en_lang_id, 'product_grid', '{"type": "latest", "limit": 4}'::jsonb, 2);
+
+    -- Product Template (FR)
+    INSERT INTO public.blocks (page_id, language_id, block_type, content, "order")
+    VALUES 
+    (v_product_template_page_fr_id, v_fr_lang_id, 'product_details', '{}'::jsonb, 0),
+    (v_product_template_page_fr_id, v_fr_lang_id, 'heading', '{"level": 2, "text_content": "Vous aimerez peut-être aussi", "textAlign": "center"}'::jsonb, 1),
+    (v_product_template_page_fr_id, v_fr_lang_id, 'product_grid', '{"type": "latest", "limit": 4}'::jsonb, 2);
   END IF;
 
 
@@ -869,7 +891,9 @@ supabase db push
 
       -- Link Media to Product
       INSERT INTO public.product_media (product_id, media_id, sort_order)
-      VALUES (v_premium_product_id, v_cover_media_id, 0);
+      VALUES 
+      (v_premium_product_id, v_cover_media_id, 0),
+      (v_premium_product_id, v_feature_media_id, 1);
   END IF;
 
 
