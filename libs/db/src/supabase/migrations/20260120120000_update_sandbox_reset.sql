@@ -97,15 +97,17 @@ BEGIN
   -- 2. Media & Logo
   SELECT id INTO v_admin_id FROM public.profiles WHERE role = 'ADMIN' LIMIT 1;
 
-  INSERT INTO public.media (id, uploader_id, file_name, object_key, file_type, size_bytes, description)
+  INSERT INTO public.media (id, uploader_id, file_name, object_key, file_type, size_bytes, description, width, height)
   VALUES (
     v_logo_media_id,
     v_admin_id,
     'nextblock-logo-small.webp',
-    '/images/nextblock-logo-small.webp',
+    'images/nextblock-logo-small.webp',
     'image/webp',
     10000,
-    'NextBlock Site Logo'
+    'NextBlock Site Logo',
+    200,
+    200
   );
 
   INSERT INTO public.logos (name, media_id)
@@ -113,17 +115,19 @@ BEGIN
   
   -- Insert Cover Media for Product (Only if Premium)
   IF p_include_premium THEN
-    INSERT INTO public.media (id, uploader_id, file_name, object_key, file_type, size_bytes, description, file_path, folder)
+    INSERT INTO public.media (id, uploader_id, file_name, object_key, file_type, size_bytes, description, file_path, folder, width, height)
     VALUES (
         v_cover_media_id,
         v_admin_id,
-        'NBcover.webp',
-        'images/NBcover.webp',
+        'goals.webp',
+        'images/goals.webp',
         'image/webp',
         150000,
         'NextBlock Cover Image',
-        'images/NBcover.webp',
-        'images'
+        'images/goals.webp',
+        'images',
+        1200,
+        800
     );
   END IF;
 
@@ -158,8 +162,8 @@ BEGIN
   END IF;
 
   -- 5. Media (Feature)
-  INSERT INTO public.media (id, file_name, object_key, file_type, size_bytes)
-  VALUES (v_feature_media_id, 'programmer-upscaled.webp', '/images/programmer-upscaled.webp', 'image/webp', 100000);
+  INSERT INTO public.media (id, file_name, object_key, file_type, size_bytes, width, height)
+  VALUES (v_feature_media_id, 'programmer-upscaled.webp', 'images/programmer-upscaled.webp', 'image/webp', 100000, 1920, 1080);
 
   -- 6. Posts
   INSERT INTO public.posts (language_id, title, slug, status, translation_group_id, feature_image_id)
@@ -892,8 +896,7 @@ supabase db push
       -- Link Media to Product
       INSERT INTO public.product_media (product_id, media_id, sort_order)
       VALUES 
-      (v_premium_product_id, v_cover_media_id, 0),
-      (v_premium_product_id, v_feature_media_id, 1);
+      (v_premium_product_id, v_cover_media_id, 0);
   END IF;
 
 
