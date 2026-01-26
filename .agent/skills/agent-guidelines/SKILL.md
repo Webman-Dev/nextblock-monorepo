@@ -34,3 +34,20 @@ description: When you need to understand the project's core mandate, operational
 
 - Use the **`context7` MCP tool** to fetch the latest documentation for Next.js, Supabase, Nx, Tailwind, etc.
 - Do not guess about API updates; verify with `context7` if unsure.
+
+## 5. Project Knowledge Source (NotebookLM)
+
+> [!TIP]
+> **Use this for:** High-level roadmap, monetization strategy, and architectural "why" questions.
+> **Notebook:** NextBlock CMS: Roadmap and Monetization Strategy
+
+When you need deep context about the project's direction or specific architectural decisions not explained in the code:
+
+1. **Query the Notebook:**
+
+   ```bash
+   python scripts/run.py ask_question.py --notebook-id nextblock-cms-roadmap-and-mone --question "Your question here"
+   ```
+
+2. **Wait for the answer:** It may take 10-20 seconds.
+3. **Cite the source:** Mention that the info came from the project roadmap notebook.
