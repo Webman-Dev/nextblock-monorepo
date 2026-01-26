@@ -42,3 +42,15 @@ description: When you need to understand the directory structure, open-core mode
 - `apps/create-nextblock/templates/nextblock-template` is **generated code**.
 - **Do not edit it directly.**
 - Edit `apps/nextblock` instead, then run `npm run sync:create-nextblock` to update the template.
+
+## 5. Architectural Reference (NotebookLM)
+
+For questions about the _intent_ behind the architecture, monetization strategy, or future roadmap that aren't clear from the directory structure itself:
+
+**Use the specialized notebook:**
+
+```bash
+python scripts/run.py ask_question.py --notebook-id nextblock-cms-roadmap-and-mone --question "Why did we choose this architecture?"
+```
+
+This notebook ("NextBlock CMS: Roadmap and Monetization Strategy") contains the high-level vision documents.
