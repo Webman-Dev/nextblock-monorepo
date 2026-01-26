@@ -3,6 +3,7 @@ import type { Database } from '@nextblock-cms/db';
 import HeaderAuth from './header-auth';
 import LanguageSwitcher from './LanguageSwitcher';
 import ResponsiveNav from './ResponsiveNav';
+import { CartIcon } from '@nextblock-cms/ecommerce';
 
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
 type Logo =
@@ -37,6 +38,7 @@ export default function Header({
       }
       logo={logo}
       siteTitle={siteTitle}
+      cartIconComponent={<CartIcon />}
     />
   );
 }

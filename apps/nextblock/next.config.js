@@ -34,19 +34,37 @@ module.exports = nextConfig;
 
 function getRemotePatterns() {
   /** @type {RemotePattern[]} */
-  const patterns = [
-    {
-      protocol: 'https',
-      hostname: 'pub-a31e3f1a87d144898aeb489a8221f92e.r2.dev',
-      pathname: '/**',
-    },
-    {
-      protocol: 'https',
-      hostname: 'e260676f72b0b18314b868f136ed72ae.r2.cloudflarestorage.com',
-      pathname: '/**',
-    },
-  ];
+  const patterns = [];
 
+  // Add R2 Bucket URL if authenticated
+  if (process.env.NEXT_PUBLIC_R2_PUBLIC_URL) {
+    try {
+      const parsed = new URL(process.env.NEXT_PUBLIC_R2_PUBLIC_URL);
+      patterns.push({
+        protocol: parsed.protocol === 'https:' ? 'https' : 'http',
+        hostname: parsed.hostname,
+        pathname: '/**',
+      });
+    } catch {
+      // ignore malformed value
+    }
+  }
+
+  // Add R2 Custom Domain URL
+  if (process.env.NEXT_PUBLIC_R2_BASE_URL) {
+    try {
+      const parsed = new URL(process.env.NEXT_PUBLIC_R2_BASE_URL);
+      patterns.push({
+        protocol: parsed.protocol === 'https:' ? 'https' : 'http',
+        hostname: parsed.hostname,
+        pathname: '/**',
+      });
+    } catch {
+      // ignore malformed value
+    }
+  }
+
+  // Add General Public URL
   if (process.env.NEXT_PUBLIC_URL) {
     try {
       const parsed = new URL(process.env.NEXT_PUBLIC_URL);

@@ -42,6 +42,8 @@
     "sharp": "^0.34.2",
     "uuid": "^10.0.0",
     "zod": "^3.25.76",
+    "@hookform/resolvers": "^5.2.2",
+    "react-hook-form": "^7.71.1",
     "@nextblock-cms/ui": "workspace:*",
     "@nextblock-cms/utils": "workspace:*",
     "@nextblock-cms/db": "workspace:*",

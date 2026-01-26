@@ -12,6 +12,7 @@ import type { Metadata } from 'next';
 import Header from "../components/Header";
 import FooterNavigation from "../components/FooterNavigation";
 import { Providers } from './providers';
+import { CartDrawer } from '@nextblock-cms/ecommerce';
 import { ToasterProvider } from './ToasterProvider';
 import { createClient as createSupabaseServerClient, getProfileWithRoleServerSide } from '@nextblock-cms/db/server';
 import { getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
@@ -219,6 +220,8 @@ export default async function RootLayout({
               </div>
             </footer>
           </div>
+
+          <CartDrawer />
         </Providers>
         <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID || ""} />
       </body>

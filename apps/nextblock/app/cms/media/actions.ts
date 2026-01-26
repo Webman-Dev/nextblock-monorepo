@@ -213,10 +213,26 @@ export async function deleteMediaItem(mediaId: string, objectKey: string) {
       return encodedRedirect("error", "/cms/media", "R2 client is not configured for deletion.");
     }
 
+    // Fetch media to get variants
+    const { data: mediaToDelete } = await supabase
+      .from('media')
+      .select('variants')
+      .eq('id', mediaId)
+      .single();
+
+    const keysToDelete = [objectKey];
+    if (mediaToDelete?.variants && Array.isArray(mediaToDelete.variants)) {
+        mediaToDelete.variants.forEach((v: any) => {
+            if (v.objectKey) keysToDelete.push(v.objectKey);
+        });
+    }
+
     try {
-        const deleteCommand = new DeleteObjectCommand({
+        const deleteCommand = new DeleteObjectsCommand({
             Bucket: R2_BUCKET_NAME,
-            Key: objectKey,
+            Delete: {
+                Objects: keysToDelete.map(key => ({ Key: key })),
+            },
         });
         await s3Client.send(deleteCommand);
     } catch (r2Error: unknown) {
@@ -265,7 +281,30 @@ export async function deleteMultipleMediaItems(items: Array<{ id: string; object
     return { error: "R2 client is not configured for deletion." };
   }
 
-  const r2ObjectsToDelete = items.map(item => ({ Key: item.objectKey }));
+  // Fetch variants for all items
+  const { data: mediaItems } = await supabase
+    .from('media')
+    .select('id, object_key, variants')
+    .in('id', items.map(i => i.id));
+
+  const allKeysToDelete: string[] = [];
+  
+  // If we found the items in DB, use their variants data
+  if (mediaItems) {
+      mediaItems.forEach(item => {
+          allKeysToDelete.push(item.object_key);
+          if (item.variants && Array.isArray(item.variants)) {
+              item.variants.forEach((v: any) => {
+                  if (v.objectKey) allKeysToDelete.push(v.objectKey);
+              });
+          }
+      });
+  } else {
+      // Fallback to just the provided keys if DB fetch fails (unlikely)
+      items.forEach(item => allKeysToDelete.push(item.objectKey));
+  }
+
+  const r2ObjectsToDelete = allKeysToDelete.map(key => ({ Key: key }));
   const itemIdsToDelete = items.map(item => item.id);
   let r2DeletionError = null;
   let dbDeletionError = null;

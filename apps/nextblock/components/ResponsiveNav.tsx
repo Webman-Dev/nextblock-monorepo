@@ -9,6 +9,7 @@ import { useTranslations } from '@nextblock-cms/utils';
 type Logo = Database['public']['Tables']['logos']['Row'] & { media: (Database['public']['Tables']['media']['Row'] & { alt_text: string | null }) | null };
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
 import Image from 'next/image'
+import { Pencil } from 'lucide-react';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 const FALLBACK_LOGO_PATH = '/images/nextblock-logo-small.webp';
@@ -68,6 +69,7 @@ interface ResponsiveNavProps {
   cmsDashboardLinkHref: string;
   headerAuthComponent: React.ReactNode;
   languageSwitcherComponent: React.ReactNode;
+  cartIconComponent?: React.ReactNode;
 }
 
 export default function ResponsiveNav({
@@ -79,6 +81,7 @@ export default function ResponsiveNav({
   languageSwitcherComponent,
   logo,
   siteTitle,
+  cartIconComponent,
 }: ResponsiveNavProps) {
   const { t } = useTranslations();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -102,6 +105,11 @@ export default function ResponsiveNav({
       editPathDetails = {
         href: `/cms/posts/${currentContent.id}/edit`,
         label: t('edit_post'),
+      };
+    } else if (currentContent.type === 'product') {
+      editPathDetails = {
+        href: `/cms/products/${currentContent.id}/edit`,
+        label: 'Edit Product', // Using hardcoded string as t('edit_product') might not exist yet
       };
     }
   }
@@ -292,17 +300,14 @@ export default function ResponsiveNav({
         {/* Right side: Auth, LangSwitcher (desktop), Hamburger (mobile) */}
         <div className="hidden md:flex items-center space-x-4">
           {canAccessCms && editPathDetails && (
-            <Link href={editPathDetails.href} className="hover:underline font-semibold text-sm text-foreground mr-3">
+            <Link href={editPathDetails.href} className="hover:underline font-semibold text-sm text-foreground mr-3 flex items-center">
+              <Pencil className="w-4 h-4 mr-2" />
               {editPathDetails.label}
-            </Link>
-          )}
-          {canAccessCms && (
-            <Link href={cmsDashboardLinkHref} className="hover:underline font-semibold text-sm text-foreground">
-              {t('cms_dashboard')}
             </Link>
           )}
           {headerAuthComponent}
           {languageSwitcherComponent}
+          {cartIconComponent}
         </div>
 
         <div className="md:hidden flex items-center z-[60]">
@@ -357,27 +362,22 @@ export default function ResponsiveNav({
                 {editPathDetails && (
                   <Link
                     href={editPathDetails.href}
-                    className="block px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="flex items-center px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-gray-100 dark:hover:bg-gray-700"
                     onClick={() => {
                       toggleMobileMenu();
                     }}
                   >
+                    <Pencil className="w-4 h-4 mr-2" />
                     {editPathDetails.label}
                   </Link>
                 )}
-                <Link
-                  href={cmsDashboardLinkHref}
-                  className="block px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-gray-100 dark:hover:bg-gray-700"
-                  onClick={toggleMobileMenu}
-                >
-                  {t('cms_dashboard')}
-                </Link>
               </div>
             )}
           </nav>
 
           <div className="mt-auto pt-6 border-t border-foreground/20 space-y-4">
             <div >{headerAuthComponent}</div>
+            <div >{cartIconComponent}</div>
             <div >{languageSwitcherComponent}</div>
           </div>
         </div>

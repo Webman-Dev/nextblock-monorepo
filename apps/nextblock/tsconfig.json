@@ -61,6 +61,9 @@
     },
     {
       "path": "../../libs/sdk/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/ecommerce/tsconfig.lib.json"
     }
   ]
 }

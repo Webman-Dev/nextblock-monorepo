@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 export interface CurrentContent {
   id: string | number | null;
-  type: 'page' | 'post' | null;
+  type: 'page' | 'post' | 'product' | null;
   slug: string | null;
 }
 
@@ -22,12 +22,17 @@ export const CurrentContentProvider = ({ children }: { children: ReactNode }) =>
     slug: null,
   });
 
-  const setCurrentContent = (content: CurrentContent) => {
+  const setCurrentContent = React.useCallback((content: CurrentContent) => {
     setCurrentContentState(content);
-  };
+  }, []);
+
+  const value = React.useMemo(() => ({
+    currentContent,
+    setCurrentContent
+  }), [currentContent, setCurrentContent]);
 
   return (
-    <CurrentContentContext.Provider value={{ currentContent, setCurrentContent }}>
+    <CurrentContentContext.Provider value={value}>
       {children}
     </CurrentContentContext.Provider>
   );

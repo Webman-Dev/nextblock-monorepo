@@ -3,8 +3,7 @@
 import { signInAction } from "../../actions";
 import { FormMessage, Message } from "../../../components/form-message";
 import { SubmitButton } from "../../../components/submit-button";
-import { Input } from "@nextblock-cms/ui";
-import { Label } from "@nextblock-cms/ui";
+import { Input, Label } from "@nextblock-cms/ui";
 import Link from "next/link";
 import { useTranslations } from "@nextblock-cms/utils";
 import { useSearchParams } from "next/navigation";
@@ -27,13 +26,15 @@ function getMessage(searchParams: URLSearchParams): Message | undefined {
     return undefined;
 }
 
+import { GitHubLoginButton } from "../../../components/GitHubLoginButton";
+
 export default function Login() {
   const { t } = useTranslations();
   const searchParams = useSearchParams();
   const formMessage = getMessage(searchParams);
 
   return (
-    <form className="flex-1 flex flex-col w-full max-w-160 mx-auto">
+    <div className="flex-1 flex flex-col w-full max-w-160 mx-auto">
       <SandboxCredentialsAlert />
       <h1 className="text-2xl font-medium">{t('sign_in')}</h1>
       <p className="text-sm text-foreground">
@@ -42,29 +43,43 @@ export default function Login() {
           {t('sign_up')}
         </Link>
       </p>
-      <div className="flex flex-col gap-2 [&>input]:mb-3 mt-8">
-        <Label htmlFor="email">{t('email')}</Label>
-        <Input name="email" placeholder={t('you_at_example_com')} required />
-        <div className="flex justify-between items-center">
-          <Label htmlFor="password">{t('password')}</Label>
-          <Link
-            className="text-xs text-foreground underline"
-            href="/forgot-password"
-          >
-            {t('forgot_password')}
-          </Link>
+
+      <div className="flex flex-col gap-2 mt-8">
+        <GitHubLoginButton t={t} />
+
+        <div className="relative py-2">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">{t('or_continue_with') || "Or continue with"}</span>
+          </div>
         </div>
-        <Input
-          type="password"
-          name="password"
-          placeholder={t('your_password')}
-          required
-        />
-        <SubmitButton pendingText={t('signing_in_pending')} formAction={signInAction}>
-          {t('sign_in')}
-        </SubmitButton>
-        <FormMessage message={formMessage} />
+
+        <form className="flex flex-col gap-2 [&>input]:mb-3">
+          <Label htmlFor="email">{t('email')}</Label>
+          <Input name="email" placeholder={t('you_at_example_com')} required />
+          <div className="flex justify-between items-center">
+            <Label htmlFor="password">{t('password')}</Label>
+            <Link
+              className="text-xs text-foreground underline"
+              href="/forgot-password"
+            >
+              {t('forgot_password')}
+            </Link>
+          </div>
+          <Input
+            type="password"
+            name="password"
+            placeholder={t('your_password')}
+            required
+          />
+          <SubmitButton pendingText={t('signing_in_pending')} formAction={signInAction}>
+            {t('sign_in')}
+          </SubmitButton>
+          <FormMessage message={formMessage} />
+        </form>
       </div>
-    </form>
+    </div>
   );
 }

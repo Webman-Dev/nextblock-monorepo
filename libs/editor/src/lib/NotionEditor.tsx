@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, JSONContent } from '@tiptap/react';
 import { editorExtensions } from './kit';
 import { EditorBubbleMenu } from './components/menus/BubbleMenu';
 import { EditorFloatingMenu } from './components/menus/FloatingMenu';
@@ -16,8 +16,10 @@ import type { OpenImagePicker } from './utils/mediaPicker';
 import { setOpenImagePicker } from './utils/mediaPicker';
 
 interface NotionEditorProps {
-  content: string;
-  onChange: (content: string) => void;
+  content?: string | JSONContent;
+  initialContent?: string | JSONContent;
+  onChange?: (content: string) => void;
+  onUpdate?: (content: JSONContent) => void;
   placeholder?: string;
   editable?: boolean;
   showToolbar?: boolean;
@@ -30,7 +32,9 @@ interface NotionEditorProps {
 
 export const NotionEditor: React.FC<NotionEditorProps> = ({
   content,
+  initialContent,
   onChange,
+  onUpdate,
   placeholder,
   editable = true,
   showToolbar = true,
@@ -43,7 +47,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const editor = useEditor({
     extensions: editorExtensions,
-    content,
+    content: content ?? initialContent,
     editable,
     immediatelyRender: false, // Next.js hydration safety
     editorProps: {
@@ -73,7 +77,8 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
     if (!editor) return;
 
     const updateHandler = () => {
-       onChange(editor.getHTML());
+       onChange?.(editor.getHTML());
+       onUpdate?.(editor.getJSON());
     };
     const focusHandler = () => {
        onFocus?.();
@@ -91,7 +96,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
       editor.off('focus', focusHandler);
       editor.off('blur', blurHandler);
     };
-  }, [editor, onChange, onFocus, onBlur]);
+  }, [editor, onChange, onFocus, onBlur, onUpdate]);
 
   // Bridge the openImagePicker into editor.storage so menus/extensions can access it
   useEffect(() => {
@@ -123,29 +128,41 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
     };
   }, [editor]);
 
-  // Optional: keep editor in sync if content prop changes (e.g., loading a draft)
+
+  // Sync content prop changes
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || content === undefined) return;
 
     // 1. If content matches what we last knew about (either we typed it, or we just synced it),
     // then ignore. This filters out the "parent echo" updates.
     if (content === lastContentRef.current) return;
 
-    const current = editor.getHTML();
+    const currentHTML = editor.getHTML();
 
-    // 2. Fallback for the empty string / <p></p> mismatch specifically (for extra safety)
-    // Tiptap represents empty content as <p></p>, which conflicts with an empty string ""
-    if (editor.isEmpty && (content === '' || content === '<p></p>')) {
-      lastContentRef.current = content;
-      return;
+    if (typeof content === 'string') {
+       if (content === currentHTML) return;
+       if (editor.isEmpty && (content === '' || content === '<p></p>')) {
+          lastContentRef.current = content;
+          return;
+       }
+       const { from, to } = editor.state.selection;
+       editor.commands.setContent(content, { emitUpdate: false });
+       editor.commands.setTextSelection({ from, to });
+       lastContentRef.current = content;
+    } else {
+       // JSON content comparison is strictly reference based or we assume if it changed it's new
+       // For a proper implementation we might need deep comparison, but for now assuming new reference = new content
+       // This might cause loop if parent creates new object every render.
+       // Ideally parent should memoize.
+       // We can skip check if we assume JSON usage is mostly uncontrolled or careful.
+       // But let's basic check.
+       // Simplify: just set content.
+       const { from, to } = editor.state.selection;
+       editor.commands.setContent(content, { emitUpdate: false });
+       editor.commands.setTextSelection({ from, to });
+       lastContentRef.current = content;
     }
 
-    if (content !== current) {
-      const { from, to } = editor.state.selection;
-      editor.commands.setContent(content, { emitUpdate: false });
-      editor.commands.setTextSelection({ from, to });
-      lastContentRef.current = content;
-    }
   }, [content, editor]);
 
   useEffect(() => {

@@ -38,7 +38,9 @@
     "db:restore": "node apps/nextblock/scripts/restore.js",
     "db:types": "node tools/scripts/gen-db-types.js",
     "db:link": "dotenv -e .env.local -- node tools/scripts/supabase-link.js",
-    "db:push": "dotenv -e .env.local -- npx supabase db push --workdir libs/db/src --include-all && dotenv -e .env.local -- npx supabase config push --workdir libs/db/src",
+    "db:repair": "dotenv -e .env.local -- npx supabase migration repair --status reverted 20260115163000 --workdir libs/db/src",
+    "db:reset": "dotenv -e .env.local -- npx supabase db reset --workdir libs/db/src",
+    "db:push": "dotenv -e .env.local -- npx supabase db push --workdir libs/db/src --include-all && dotenv -e .env.local -- npx supabase config push --workdir libs/db/src && dotenv -e .env.local -- npx tsx tools/scripts/seed-sandbox-images.ts",
     "sync:create-nextblock": "npm --prefix apps/create-nextblock run sync-template",
     "test-create": "node apps/create-nextblock/bin/create-nextblock.js",
     "deploy:supabase": "node tools/scripts/deploy-supabase.js"
@@ -160,8 +162,10 @@
   "dependencies": {
     "@floating-ui/dom": "^1.7.4",
     "@floating-ui/react": "^0.27.16",
+    "@hookform/resolvers": "^5.2.2",
     "@next/bundle-analyzer": "^16.0.1",
     "@next/third-parties": "^16.1.1",
+    "@stripe/stripe-js": "^8.6.1",
     "@tiptap/core": "^3.9.0",
     "@tiptap/extension-blockquote": "^3.9.0",
     "@tiptap/extension-bold": "^3.9.0",
@@ -232,11 +236,14 @@
     "katex": "^0.16.25",
     "lowlight": "^3.3.0",
     "react-day-picker": "^9.13.0",
+    "react-hook-form": "^7.71.1",
     "react-hot-toast": "^2.6.0",
+    "stripe": "^20.1.2",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.20.6",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "zustand": "^5.0.10"
   },
   "nx": {
     "includedScripts": []

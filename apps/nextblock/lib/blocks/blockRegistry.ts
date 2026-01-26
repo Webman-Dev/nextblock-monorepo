@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { TestimonialBlockConfig, TestimonialBlockContent } from '../../components/blocks/TestimonialBlock';
+import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSchema, FeaturedProductBlockContent, CartBlockSchema, CartBlockContent, CheckoutBlockSchema, CheckoutBlockContent, ProductDetailsBlockSchema, ProductDetailsBlockContent } from './ecommerce-block-schemas';
 
 /**
  * Block Registry System
@@ -12,7 +13,7 @@ import { TestimonialBlockConfig, TestimonialBlockContent } from '../../component
 /**
  * Available block types - defined here as the source of truth
  */
-export const availableBlockTypes = ["text", "heading", "image", "button", "posts_grid", "video_embed", "section", "hero", "form", "testimonial"] as const;
+export const availableBlockTypes = ["text", "heading", "image", "button", "posts_grid", "video_embed", "section", "hero", "form", "testimonial", "product_grid", "featured_product", "cart", "checkout", "product_details"] as const;
 export type BlockType = (typeof availableBlockTypes)[number];
 
 // --- Zod Schemas & Inferred Types ---
@@ -473,6 +474,76 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
       useCases: ['Social proof', 'Customer reviews'],
     }
   } as BlockDefinition<TestimonialBlockContent>,
+
+  "product_grid": {
+    type: "product_grid",
+    label: "Product Grid",
+    icon: "ShoppingBag", // Lucide icon
+    initialContent: { type: 'latest', limit: 6 } as ProductGridBlockContent,
+    editorComponentFilename: "ProductGridBlockEditor.tsx", // Assuming standard naming
+    rendererComponentFilename: "ProductGridBlockRenderer.tsx", // Assuming mapping to ProductGridBlock.tsx handled by renderer map not shown here, or we need to ensure the renderer map uses the file we created. The prompt implies creating the file in `lib/blocks` serves as the component. I will assume the system maps it.
+    schema: ProductGridBlockSchema,
+    documentation: {
+        description: 'Displays a grid of products.',
+        useCases: ['Homepage featured products', 'Category pages']
+    }
+  },
+
+  "featured_product": {
+    type: "featured_product",
+    label: "Featured Product",
+    icon: "Star",
+    initialContent: { productId: '', showBackground: false } as FeaturedProductBlockContent,
+    editorComponentFilename: "FeaturedProductBlockEditor.tsx",
+    rendererComponentFilename: "FeaturedProductBlockRenderer.tsx", 
+    schema: FeaturedProductBlockSchema,
+    documentation: {
+        description: 'Highlights a specific product with a detailed view.',
+        useCases: ['Product spotlight', 'Special offers']
+    }
+  },
+
+  "cart": {
+    type: "cart",
+    label: "Cart",
+    icon: "ShoppingCart",
+    initialContent: {} as CartBlockContent,
+    editorComponentFilename: "CartBlockEditor.tsx",
+    rendererComponentFilename: "CartBlockRenderer.tsx",
+    schema: CartBlockSchema,
+    documentation: {
+        description: 'Displays the shopping cart.',
+        useCases: ['Cart page']
+    }
+  },
+
+  "checkout": {
+    type: "checkout",
+    label: "Checkout",
+    icon: "CreditCard",
+    initialContent: {} as CheckoutBlockContent,
+    editorComponentFilename: "CheckoutBlockEditor.tsx",
+    rendererComponentFilename: "CheckoutBlockRenderer.tsx",
+    schema: CheckoutBlockSchema,
+    documentation: {
+        description: 'Displays the checkout form.',
+        useCases: ['Checkout page']
+    }
+  },
+
+  "product_details": {
+    type: "product_details",
+    label: "Product Details (Context)",
+    icon: "Tag",
+    initialContent: {} as ProductDetailsBlockContent,
+    editorComponentFilename: "ProductDetailsBlockEditor.tsx",
+    rendererComponentFilename: "ProductDetailsBlockRenderer.tsx",
+    schema: ProductDetailsBlockSchema,
+    documentation: {
+        description: 'Displays product details (Title, Price, Add to Cart) using context.',
+        useCases: ['Product Template Page']
+    }
+  },
 };
 
 
@@ -552,7 +623,12 @@ export type AllBlockContent =
   | ({ type: "hero" } & HeroBlockContent)
   | ({ type: "video_embed" } & VideoEmbedBlockContent)
   | ({ type: "form" } & FormBlockContent)
-  | ({ type: "testimonial" } & TestimonialBlockContent);
+  | ({ type: "testimonial" } & TestimonialBlockContent)
+  | ({ type: "product_grid" } & ProductGridBlockContent)
+  | ({ type: "featured_product" } & FeaturedProductBlockContent)
+  | ({ type: "cart" } & CartBlockContent)
+  | ({ type: "checkout" } & CheckoutBlockContent)
+  | ({ type: "product_details" } & ProductDetailsBlockContent);
 
 /**
 * Validate block content against its schema

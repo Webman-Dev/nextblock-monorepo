@@ -7,7 +7,7 @@ if (typeof window !== 'undefined') {
   throw new Error(SERVER_ONLY_ERROR_MESSAGE);
 }
 
-import { S3Client } from "@aws-sdk/client-s3";
+import { S3Client, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 
 let cachedClient: S3Client | null = null;
 let warnedMissingEnv = false;
@@ -45,4 +45,31 @@ export async function getS3Client(): Promise<S3Client | null> {
     cachedClient = buildClient();
   }
   return cachedClient;
+}
+
+export async function deleteMediaFiles(keys: string[]) {
+  const s3 = await getS3Client();
+  if (!s3 || !process.env.R2_BUCKET_NAME) {
+      console.warn("deleteMediaFiles: S3 client or Bucket not configured.");
+      return;
+  }
+
+  if (keys.length === 0) return;
+
+  try {
+    const output = await s3.send(
+      new DeleteObjectsCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Delete: {
+          Objects: keys.map((key) => ({ Key: key })),
+        },
+      })
+    );
+
+    if (output.Errors && output.Errors.length > 0) {
+        console.error("[deleteMediaFiles] Errors reported by R2:", output.Errors);
+    }
+  } catch (error) {
+    console.error("[deleteMediaFiles] Exception failed to delete files from R2:", error);
+  }
 }

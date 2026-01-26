@@ -21,3 +21,4 @@ export * from './lib/tooltip';
 export * from './lib/ui';
 export * from './lib/spinner';
 export * from './lib/alert';
+export * from './lib/sheet';
