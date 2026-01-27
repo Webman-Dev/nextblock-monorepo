@@ -642,7 +642,6 @@ export type Database = {
                     id: string;
                     role?: Database["public"]["Enums"]["user_role"];
                     updated_at?: string | null;
-                    username?: string | null;
                     website?: string | null;
                 };
                 Update: {
@@ -651,7 +650,6 @@ export type Database = {
                     id?: string;
                     role?: Database["public"]["Enums"]["user_role"];
                     updated_at?: string | null;
-                    username?: string | null;
                     website?: string | null;
                 };
                 Relationships: [];
