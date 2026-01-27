@@ -47,7 +47,7 @@ We extensively debugged and fixed the `/api/checkout` flow in `libs/ecommerce/sr
 ## 1. Customer Identity & Auth
 
 - **GitHub Auth**: Added "Continue with GitHub" to Sign In/Sign Up pages.
-- **Optional Fields**: Updated database schema to make `full_name` and `avatar_url` optional to support various auth providers.
+- **Optional- **Profiles\*\*: Extended user data (`full_name`, `avatar_url`, `billing_address`, `github_username`). Linked to Auth users via `id`.ers.
 - **Profile Redirection**: Implemented logic to handle new user onboarding and profile creation.
 
 ## 2. Customer Profile

@@ -12,7 +12,7 @@ type RevisionListItem = {
   revision_type: 'snapshot' | 'diff';
   created_at: string;
   author_id: string | null;
-  author?: { full_name?: string | null; username?: string | null } | null;
+  author?: { full_name?: string | null; github_username?: string | null } | null;
 };
 
 const REVISIONS_PER_PAGE = 10; // Reduced to 10 as requested
@@ -22,7 +22,7 @@ export async function listPageRevisions(pageId: number, page = 1, startDate?: st
 
   let query = supabase
     .from('page_revisions')
-    .select('id, page_id, author_id, version, revision_type, created_at, content, author:profiles(full_name, username)', { count: 'exact' })
+    .select('id, page_id, author_id, version, revision_type, created_at, content, author:profiles(full_name, github_username)', { count: 'exact' })
     .eq('page_id', pageId)
     .order('version', { ascending: false })
     .limit(1000); // Fetch up to 1000 recent revisions to allow dense pagination after filtering
@@ -105,7 +105,7 @@ export async function listPageRevisions(pageId: number, page = 1, startDate?: st
      revision_type: 'snapshot',
      created_at: pageCreatedAt ?? new Date().toISOString(),
      author_id: null,
-     author: { full_name: 'System (Initial)', username: 'system' },
+     author: { full_name: 'System (Initial)', github_username: 'system' },
      has_changes: true, // V1 always counts
      content: null
    });
@@ -139,7 +139,7 @@ export async function listPostRevisions(postId: number, page = 1, startDate?: st
 
   let query = supabase
     .from('post_revisions')
-    .select('id, post_id, author_id, version, revision_type, created_at, content, author:profiles(full_name, username)', { count: 'exact' })
+    .select('id, post_id, author_id, version, revision_type, created_at, content, author:profiles(full_name, github_username)', { count: 'exact' })
     .eq('post_id', postId)
     .order('version', { ascending: false })
     .limit(1000);
@@ -221,7 +221,7 @@ export async function listPostRevisions(postId: number, page = 1, startDate?: st
      revision_type: 'snapshot',
      created_at: postCreatedAt ?? new Date().toISOString(),
      author_id: null,
-     author: { full_name: 'System (Initial)', username: 'system' },
+     author: { full_name: 'System (Initial)', github_username: 'system' },
      has_changes: true,
      content: null
    });

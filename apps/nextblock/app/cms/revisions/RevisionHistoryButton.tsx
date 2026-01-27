@@ -31,7 +31,7 @@ type RevisionItem = {
   revision_type: 'snapshot' | 'diff';
   created_at: string;
   author_id: string | null;
-  author?: { full_name?: string | null; username?: string | null } | null;
+  author?: { full_name?: string | null; github_username?: string | null } | null;
 };
 
 import { Input } from "@nextblock-cms/ui";
@@ -223,7 +223,7 @@ export default function RevisionHistoryButton({ parentType, parentId }: Revision
             <div className="rounded border divide-y">
               {revisions.map((rev: RevisionItem, idx) => {
                 const when = rev.created_at ? formatDistanceToNow(new Date(rev.created_at), { addSuffix: true }) : '';
-                const authorName = rev.author?.full_name || rev.author?.username;
+                const authorName = rev.author?.full_name || rev.author?.github_username;
                 const isCurrent = currentVersion != null && rev.version === currentVersion;
                 const isInitial = rev.version === 1;
 
