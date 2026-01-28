@@ -630,29 +630,28 @@ export type Database = {
                 Row: {
                     avatar_url: string | null;
                     full_name: string | null;
-                    github_username: string | null;
                     id: string;
                     role: Database["public"]["Enums"]["user_role"];
                     updated_at: string | null;
-
+                    username: string | null;
                     website: string | null;
                 };
                 Insert: {
                     avatar_url?: string | null;
                     full_name?: string | null;
-                    github_username?: string | null;
                     id: string;
                     role?: Database["public"]["Enums"]["user_role"];
                     updated_at?: string | null;
+                    username?: string | null;
                     website?: string | null;
                 };
                 Update: {
                     avatar_url?: string | null;
                     full_name?: string | null;
-                    github_username?: string | null;
                     id?: string;
                     role?: Database["public"]["Enums"]["user_role"];
                     updated_at?: string | null;
+                    username?: string | null;
                     website?: string | null;
                 };
                 Relationships: [];

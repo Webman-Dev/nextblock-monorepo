@@ -28,7 +28,7 @@ export const FeaturedProductBlock = async ({ content }: { content: FeaturedProdu
       sale_price: typeof product.sale_price === 'number' ? product.sale_price / 100 : undefined,
       image_url: imageUrl,
       short_description: product.short_description || undefined,
-      stock: product.stock ?? undefined,
+      stock: product.stock,
   };
 
   return (
