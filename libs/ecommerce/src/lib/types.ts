@@ -10,5 +10,5 @@ export interface Product {
   images?: { url: string; alt?: string }[]; // Array of resolved image URLs
   short_description?: string | null;
   description_json?: any; // Tiptap JSON content
-  stock?: number;
+  stock?: number | null;
 }
