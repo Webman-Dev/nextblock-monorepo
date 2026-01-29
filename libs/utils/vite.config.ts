@@ -182,7 +182,7 @@ if (typeof window !== 'undefined') {
 
         const serverEsm = `'use server';
 ${serverOnlyGuard}
-import { S3Client } from '@aws-sdk/client-s3';
+import { S3Client, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 
 ${serverSharedHelper}
 
@@ -191,12 +191,39 @@ async function getS3Client() {
   return client;
 }
 
-export { getS3Client, encodedRedirect, getEmailServerConfig, hasEnvVars };
+async function deleteMediaFiles(keys) {
+  const s3 = await getS3Client();
+  if (!s3 || !process.env.R2_BUCKET_NAME) {
+      console.warn("deleteMediaFiles: S3 client or Bucket not configured.");
+      return;
+  }
+
+  if (keys.length === 0) return;
+
+  try {
+    const output = await s3.send(
+      new DeleteObjectsCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Delete: {
+          Objects: keys.map((key) => ({ Key: key })),
+        },
+      })
+    );
+
+    if (output.Errors && output.Errors.length > 0) {
+        console.error("[deleteMediaFiles] Errors reported by R2:", output.Errors);
+    }
+  } catch (error) {
+    console.error("[deleteMediaFiles] Exception failed to delete files from R2:", error);
+  }
+}
+
+export { getS3Client, deleteMediaFiles, encodedRedirect, getEmailServerConfig, hasEnvVars };
 `;
 
         const serverCjs = `'use server';
 ${serverOnlyGuard}
-const { S3Client } = require('@aws-sdk/client-s3');
+const { S3Client, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
 
 ${serverSharedHelper}
 
@@ -205,10 +232,39 @@ async function getS3Client() {
   return client;
 }
 
-module.exports = { getS3Client, encodedRedirect, getEmailServerConfig, hasEnvVars };
+async function deleteMediaFiles(keys) {
+  const s3 = await getS3Client();
+  if (!s3 || !process.env.R2_BUCKET_NAME) {
+      console.warn("deleteMediaFiles: S3 client or Bucket not configured.");
+      return;
+  }
+
+  if (keys.length === 0) return;
+
+  try {
+    const output = await s3.send(
+      new DeleteObjectsCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Delete: {
+          Objects: keys.map((key) => ({ Key: key })),
+        },
+      })
+    );
+
+    if (output.Errors && output.Errors.length > 0) {
+        console.error("[deleteMediaFiles] Errors reported by R2:", output.Errors);
+    }
+  } catch (error) {
+    console.error("[deleteMediaFiles] Exception failed to delete files from R2:", error);
+  }
+}
+
+module.exports = { getS3Client, deleteMediaFiles, encodedRedirect, getEmailServerConfig, hasEnvVars };
 `;
 
         const serverDts = `import { S3Client } from '@aws-sdk/client-s3';
+
+export declare function deleteMediaFiles(keys: string[]): Promise<void>;
 
 export declare function getS3Client(): Promise<S3Client | null>;
 export declare function encodedRedirect(type: 'error' | 'success', path: string, message: string): Promise<never>;
