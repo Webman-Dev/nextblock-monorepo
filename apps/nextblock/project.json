@@ -17,8 +17,7 @@
       ],
       "options": {
         "commands": [
-          "nx run nextblock:build-base",
-          "node tools/scripts/copy-next-build.js nextblock dist/apps/nextblock"
+          "nx run nextblock:build-base"
         ],
         "parallel": false,
         "forwardAllArgs": true,
