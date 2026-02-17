@@ -12,8 +12,8 @@ import { Info } from 'lucide-react';
 import type { Database } from "@nextblock-cms/db";
 
 type Language = Database["public"]["Tables"]["languages"]["Row"];
-import { useAuth } from '@/context/AuthContext';
-import { useHotkeys } from '@/hooks/use-hotkeys';
+import { useAuth } from '../../../../../context/AuthContext';
+import { useHotkeys } from '../../../../../hooks/use-hotkeys';
 
 interface LanguageFormProps {
   language?: Language | null;

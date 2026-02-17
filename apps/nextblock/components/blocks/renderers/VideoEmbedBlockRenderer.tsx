@@ -1,5 +1,5 @@
 import React from "react";
-import { validateBlockContent, VideoEmbedBlockContent } from "@/lib/blocks/blockRegistry";
+import { validateBlockContent, VideoEmbedBlockContent } from '../../../lib/blocks/blockRegistry';
 
 interface VideoEmbedBlockRendererProps {
   content: VideoEmbedBlockContent;

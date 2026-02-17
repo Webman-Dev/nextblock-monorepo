@@ -17,3 +17,8 @@ ON CONFLICT (key) DO NOTHING;
 INSERT INTO public.site_settings (key, value)
 VALUES ('is_admin_created', 'false'::jsonb)
 ON CONFLICT (key) DO NOTHING;
+
+-- Seed initial payment provider setting (default to stripe)
+INSERT INTO public.site_settings (key, value)
+VALUES ('payment_provider', '"stripe"'::jsonb)
+ON CONFLICT (key) DO NOTHING;

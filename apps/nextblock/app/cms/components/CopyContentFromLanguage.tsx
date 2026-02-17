@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@nextblock-cms/ui";
 import { Label } from "@nextblock-cms/ui";
-import { copyBlocksFromLanguage } from "@/app/cms/blocks/actions";
+import { copyBlocksFromLanguage } from '../blocks/actions';
 import type { Database } from "@nextblock-cms/db";
 import { useRouter } from "next/navigation";
 

@@ -9,7 +9,7 @@ import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { ImageIcon, X as XIcon, Save } from "lucide-react";
 import { cn } from "@nextblock-cms/utils";
 import type { Database } from "@nextblock-cms/db";
-import type { SectionBlockContent } from "@/lib/blocks/blockRegistry";
+import { SectionBlockContent } from '../../../../lib/blocks/blockRegistry';
 import MediaPickerDialog from "@/app/cms/media/components/MediaPickerDialog";
 
 type Media = Database["public"]["Tables"]["media"]["Row"];

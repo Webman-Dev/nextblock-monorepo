@@ -27,6 +27,7 @@ create table public.products (
   short_description text,
   description_json jsonb,
   metadata jsonb,
+  lemonsqueezy_variant_id text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -77,6 +78,7 @@ create table public.orders (
   total integer not null,
   stripe_session_id text unique,
   customer_details jsonb,
+  provider text check (provider in ('stripe', 'lemon_squeezy')) default 'stripe',
   created_at timestamptz default now()
 );
 

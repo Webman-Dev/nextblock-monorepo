@@ -1,9 +1,9 @@
 "use client";
 
 import { ThemeProvider } from "next-themes";
-import { AuthProvider } from "@/context/AuthContext";
-import { LanguageProvider } from "@/context/LanguageContext";
-import { CurrentContentProvider } from "@/context/CurrentContentContext";
+import { AuthProvider } from '../context/AuthContext';
+import { LanguageProvider } from '../context/LanguageContext';
+import { CurrentContentProvider } from '../context/CurrentContentContext';
 import { TranslationsProvider } from '@nextblock-cms/utils';
 
 export function Providers({ children, ...props }: { children: React.ReactNode;[key: string]: any; }) {

@@ -301,6 +301,7 @@ export type Database = {
           created_at: string | null
           customer_details: Json | null
           id: string
+          provider: string | null
           status: string
           stripe_session_id: string | null
           total: number
@@ -310,6 +311,7 @@ export type Database = {
           created_at?: string | null
           customer_details?: Json | null
           id?: string
+          provider?: string | null
           status?: string
           stripe_session_id?: string | null
           total: number
@@ -319,6 +321,7 @@ export type Database = {
           created_at?: string | null
           customer_details?: Json | null
           id?: string
+          provider?: string | null
           status?: string
           stripe_session_id?: string | null
           total?: number
@@ -590,6 +593,7 @@ export type Database = {
           created_at: string | null
           description_json: Json | null
           id: string
+          lemonsqueezy_variant_id: string | null
           metadata: Json | null
           price: number
           sale_price: number | null
@@ -605,6 +609,7 @@ export type Database = {
           created_at?: string | null
           description_json?: Json | null
           id?: string
+          lemonsqueezy_variant_id?: string | null
           metadata?: Json | null
           price: number
           sale_price?: number | null
@@ -620,6 +625,7 @@ export type Database = {
           created_at?: string | null
           description_json?: Json | null
           id?: string
+          lemonsqueezy_variant_id?: string | null
           metadata?: Json | null
           price?: number
           sale_price?: number | null
@@ -716,7 +722,9 @@ export type Database = {
       }
       get_my_claim: { Args: { claim: string }; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
-      reset_sandbox: { Args: never; Returns: undefined }
+      reset_sandbox:
+        | { Args: never; Returns: undefined }
+        | { Args: { p_include_premium?: boolean }; Returns: undefined }
     }
     Enums: {
       menu_location: "HEADER" | "FOOTER" | "SIDEBAR"

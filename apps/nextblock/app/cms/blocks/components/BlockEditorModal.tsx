@@ -9,7 +9,7 @@ import {
   DialogDescription,
 } from "@nextblock-cms/ui";
 import { Button } from "@nextblock-cms/ui";
-import { blockRegistry, type BlockType } from "@/lib/blocks/blockRegistry";
+import { blockRegistry, BlockType } from '../../../../lib/blocks/blockRegistry';
 
 // A generic representation of a block object.
 // The modal primarily needs `type` to get the label and `content` for editing.

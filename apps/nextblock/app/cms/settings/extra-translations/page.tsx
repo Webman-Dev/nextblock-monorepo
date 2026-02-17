@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useTransition, useRef } from 'react';
 import { useActionState } from 'react';
-import { useHotkeys } from '@/hooks/use-hotkeys';
+import { useHotkeys } from '../../../../hooks/use-hotkeys';
 import { getTranslations, createTranslation, updateTranslation } from './actions';
-import { getLanguages } from '@/app/cms/settings/languages/actions';
+import { getLanguages } from '../languages/actions';
 import { Button } from '@nextblock-cms/ui';
 import {
   Dialog,
@@ -25,7 +25,7 @@ import {
   TableRow,
 } from '@nextblock-cms/ui';
 import { Spinner, Alert, AlertDescription } from '@nextblock-cms/ui';
-import { SubmitButton } from '@/components/submit-button';
+import { SubmitButton } from '../../../../components/submit-button';
 
 type Translation = Awaited<ReturnType<typeof getTranslations>>[number];
 type Language = NonNullable<Awaited<ReturnType<typeof getLanguages>>['data']>[number];

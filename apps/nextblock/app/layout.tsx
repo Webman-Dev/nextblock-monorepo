@@ -5,7 +5,7 @@ import '@nextblock-cms/editor/styles/editor.css';
 import { EnvVarWarning } from "../components/env-var-warning";
 import { SandboxBanner } from "../components/SandboxBanner";
 import { SpeedInsights } from "@vercel/speed-insights/next"
-// eslint-disable-next-line @nx/enforce-module-boundaries
+ 
 import { GoogleTagManager } from '@next/third-parties/google'
 import { ThemeSwitcher } from '../components/theme-switcher';
 import type { Metadata } from 'next';

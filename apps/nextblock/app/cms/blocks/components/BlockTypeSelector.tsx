@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@nextblock-cms/ui";
-import { blockRegistry, BlockType } from '@/lib/blocks/blockRegistry';
+import { blockRegistry, BlockType } from '../../../../lib/blocks/blockRegistry';
 import BlockTypeCard from './BlockTypeCard';
 
 interface BlockTypeSelectorProps {

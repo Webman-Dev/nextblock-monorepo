@@ -16,8 +16,8 @@ import {
   SelectValue,
 } from "@nextblock-cms/ui";
 import type { Database } from "@nextblock-cms/db";
-import { useAuth } from "@/context/AuthContext";
-import { useHotkeys } from "@/hooks/use-hotkeys";
+import { useAuth } from '../../../../context/AuthContext';
+import { useHotkeys } from '../../../../hooks/use-hotkeys';
 
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
 type MenuLocation = Database['public']['Enums']['menu_location'];

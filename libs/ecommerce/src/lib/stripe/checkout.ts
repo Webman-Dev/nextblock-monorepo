@@ -1,6 +1,6 @@
 import { stripe } from './client';
 import { createClient } from '@supabase/supabase-js';
-import { type CartItem } from '../cart-store';
+import { type CartItem } from '../types';
 
 export const createCheckoutSession = async (
   cartItems: CartItem[]

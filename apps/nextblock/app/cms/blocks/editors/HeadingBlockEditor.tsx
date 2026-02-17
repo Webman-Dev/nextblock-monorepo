@@ -5,7 +5,7 @@ import React from "react";
 import { Label } from "@nextblock-cms/ui";
 import { Input } from "@nextblock-cms/ui";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@nextblock-cms/ui";
-import type { HeadingBlockContent } from "@/lib/blocks/blockRegistry";
+import { HeadingBlockContent } from '../../../../lib/blocks/blockRegistry';
 import { BlockEditorProps } from '../components/BlockEditorModal';
 
 export default function HeadingBlockEditor({ content, onChange }: BlockEditorProps<Partial<HeadingBlockContent>>) {

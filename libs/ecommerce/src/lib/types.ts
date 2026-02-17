@@ -1,3 +1,4 @@
+
 // Basic Product interface for UI components
 // In a real app, this might come from database types, but we define the UI requirement here.
 export interface Product {
@@ -12,3 +13,14 @@ export interface Product {
   description_json?: any; // Tiptap JSON content
   stock?: number | null;
 }
+
+export type CartItem = Product & {
+  quantity: number;
+  product_id: string; // Ensure this is present
+};
+
+export interface PaymentProvider {
+  createCheckoutSession(items: CartItem[], customerEmail?: string): Promise<{ url: string | null; error?: string }>;
+  getProviderName(): string;
+}
+

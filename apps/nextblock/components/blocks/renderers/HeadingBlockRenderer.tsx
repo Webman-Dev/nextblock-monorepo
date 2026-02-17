@@ -1,5 +1,5 @@
 import React from "react";
-import type { HeadingBlockContent } from "@/lib/blocks/blockRegistry";
+import { HeadingBlockContent } from '../../../lib/blocks/blockRegistry';
 
 interface HeadingBlockRendererProps {
   content: HeadingBlockContent;

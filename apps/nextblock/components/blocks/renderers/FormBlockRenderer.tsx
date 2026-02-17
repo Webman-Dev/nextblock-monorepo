@@ -2,8 +2,8 @@
 
 import React, { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { handleFormSubmission } from '@/app/actions/formActions';
-import type { FormBlockContent, FormField } from '@/lib/blocks/blockRegistry';
+import { handleFormSubmission } from '../../../app/actions/formActions';
+import { FormBlockContent, FormField } from '../../../lib/blocks/blockRegistry';
 import { Input } from '@nextblock-cms/ui';
 import { Textarea } from '@nextblock-cms/ui';
 import { Label } from '@nextblock-cms/ui';

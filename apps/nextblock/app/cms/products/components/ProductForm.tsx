@@ -1,12 +1,10 @@
 'use client';
 
-// eslint-disable-next-line @nx/enforce-module-boundaries
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui';
 // Use dynamic import for NotionEditor to avoid SSR/lazy-loading issues
 import dynamic from 'next/dynamic';
 import { ProductFormValues, productSchema } from '@nextblock-cms/ecommerce';
-// eslint-disable-next-line @nx/enforce-module-boundaries
 import { useForm } from 'react-hook-form';
 // import MediaPickerDialog from '../../media/components/MediaPickerDialog';
 import { ProductMediaManager } from './ProductMediaManager';
@@ -14,7 +12,6 @@ import { createProductAction, updateProductAction } from '../actions';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
-import type { Database } from '@nextblock-cms/db';
 import { DeleteProductButton } from './DeleteProductButton';
 
 // Define NotionEditor props locally or import if available, needed for dynamic
@@ -62,6 +59,7 @@ export function ProductForm({ initialData, isEdit = false }: ProductFormProps) {
       stock: initialData?.stock || 0,
       short_description: initialData?.short_description || '',
       description_json: initialData?.description_json || {},
+      lemonsqueezy_variant_id: initialData?.lemonsqueezy_variant_id || '',
       status: initialData?.status || 'draft',
       // Map initial media relations relative to provided initialData.product_media
       product_media: initialData?.product_media?.map(pm => ({ media_id: pm.media_id })) || [],
@@ -245,6 +243,13 @@ export function ProductForm({ initialData, isEdit = false }: ProductFormProps) {
                         />
                     </div>
                 </div>
+            
+                <div className="pt-2">
+                     <Label htmlFor="lemonsqueezy_variant_id">Lemon Squeezy Variant ID</Label>
+                     <Input id="lemonsqueezy_variant_id" {...register('lemonsqueezy_variant_id')} placeholder="12345" />
+                     <p className="text-xs text-muted-foreground mt-1">Required if using Lemon Squeezy. Found in your LS Dashboard.</p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <Label htmlFor="sku">SKU</Label>

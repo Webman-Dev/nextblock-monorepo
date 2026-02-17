@@ -13,7 +13,7 @@ export * from './lib/components/CustomerProfileForm';
 
 export * from './lib/cart-store';
 export * from './lib/use-cart';
-export * from './lib/types';
+export type * from './lib/types';
 
 export * from './lib/product-schema';
 export * from './lib/product-context';

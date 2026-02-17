@@ -10,7 +10,7 @@ import { Alert, AlertDescription, Spinner } from '@nextblock-cms/ui'
 import type { Database } from '@nextblock-cms/db'
 import { ImageIcon, X as XIcon } from 'lucide-react'
 import MediaPickerDialog from '@/app/cms/media/components/MediaPickerDialog'
-import { useHotkeys } from '@/hooks/use-hotkeys'
+import { useHotkeys } from '../../../../../hooks/use-hotkeys';
 type Media = Database['public']['Tables']['media']['Row'];
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || ''
 

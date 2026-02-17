@@ -42,7 +42,8 @@ export const handleStripeWebhook = async (
         .update({
           status: 'paid',
           stripe_session_id: session.id,
-          payment_intent_id: typeof session.payment_intent === 'string' ? session.payment_intent : undefined
+          payment_intent_id: typeof session.payment_intent === 'string' ? session.payment_intent : undefined,
+          provider: 'stripe'
         })
         .eq('id', orderId);
 

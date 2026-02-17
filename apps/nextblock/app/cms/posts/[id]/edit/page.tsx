@@ -17,7 +17,7 @@ import { Eye, ArrowLeft } from "lucide-react"; // Removed SeparatorVertical, use
 import ContentLanguageSwitcher from "@/app/cms/components/ContentLanguageSwitcher";
 import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server"; // Correct server-side fetch
 import CopyContentFromLanguage from "@/app/cms/components/CopyContentFromLanguage";
-import { UploadFolderProvider } from "@/app/cms/media/UploadFolderContext";
+import { UploadFolderProvider } from '../../../media/UploadFolderContext';
 import RevisionHistoryButton from "@/app/cms/revisions/RevisionHistoryButton";
 
 interface PostWithBlocks extends PostType {

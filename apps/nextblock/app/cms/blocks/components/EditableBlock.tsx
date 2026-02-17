@@ -8,7 +8,7 @@ import PostsGridBlockEditor from '../editors/PostsGridBlockEditor';
 type Block = Database['public']['Tables']['blocks']['Row'];
 import { Button, Card, CardContent, Avatar, AvatarImage, AvatarFallback } from "@nextblock-cms/ui";
 import { GripVertical, Edit2, Image as ImageIcon, MessageSquareQuote } from "lucide-react";
-import { getBlockDefinition, blockRegistry, BlockType } from "@/lib/blocks/blockRegistry";
+import { getBlockDefinition, blockRegistry, BlockType } from '../../../../lib/blocks/blockRegistry';
 import { BlockEditorModal } from './BlockEditorModal';
 import { DeleteBlockButtonClient } from './DeleteBlockButtonClient';
 import { cn } from '@nextblock-cms/utils';
