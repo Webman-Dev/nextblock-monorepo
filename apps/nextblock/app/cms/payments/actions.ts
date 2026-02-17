@@ -76,7 +76,7 @@ export async function updatePaymentSettings(provider: 'stripe' | 'lemon_squeezy'
         throw new Error('Failed to update settings');
     }
 
-    revalidatePath('/cms/settings/payments');
+    revalidatePath('/cms/payments');
     revalidatePath('/', 'layout'); // Update global context if it uses this
     return { success: true };
 }

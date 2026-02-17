@@ -7,7 +7,7 @@ import { useRouter, usePathname } from "next/navigation" // Import usePathname
 import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
-  Copyright as CopyrightIcon, ShoppingBag, ListOrdered,
+  Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard,
 } from "lucide-react"
 import { Button } from "@nextblock-cms/ui"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
@@ -195,6 +195,7 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
   else if (pathname.startsWith("/cms/settings/logos")) pageTitle = "Logos";
   else if (pathname.startsWith("/cms/settings/copyright")) pageTitle = "Copyright Settings";
   else if (pathname.startsWith("/cms/settings/extra-translations")) pageTitle = "Extra Translations";
+  else if (pathname.startsWith("/cms/payments")) pageTitle = "Payment Settings";
 
   else if (pathname.startsWith("/cms/settings")) pageTitle = "Settings";
   else if (pathname.startsWith("/cms/products/new")) pageTitle = "New Product";
@@ -268,6 +269,9 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
               <NavItem href="/cms/orders" icon={ListOrdered} isActive={pathname.startsWith("/cms/orders")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Orders
               </NavItem>
+              <NavItem href="/cms/payments" icon={CreditCard} isActive={pathname.startsWith("/cms/payments")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                Payments
+              </NavItem>
 
               {isAdmin && (
                 <>
@@ -301,6 +305,7 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
                     <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Extra Translations
                     </NavItem>
+
                  </CollapsibleNavItem>
                 </>
               )}
