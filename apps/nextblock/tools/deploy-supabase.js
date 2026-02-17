@@ -19,7 +19,7 @@ function getDbPassword() {
     try {
       const url = new URL(process.env.POSTGRES_URL);
       return url.password;
-    } catch (e) {
+    } catch {
       return null;
     }
   }
@@ -60,7 +60,7 @@ function runCommand(command) {
   try {
     console.log(`${colors.blue}Running: ${command}${colors.reset}`);
     execSync(command, { stdio: 'inherit' });
-  } catch (error) {
+  } catch {
     console.error(`${colors.red}❌ Command failed: ${command}${colors.reset}`);
     process.exit(1);
   }

@@ -26,7 +26,7 @@ import type { Database } from "@nextblock-cms/db";
 import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server";
 
 type Post = Database['public']['Tables']['posts']['Row'] & { feature_image_url?: string | null };
-import LanguageFilterSelect from "@/app/cms/components/LanguageFilterSelect";
+import LanguageFilterSelect from "../components/LanguageFilterSelect";
 import DeletePostButtonClient from "./components/DeletePostButtonClient"; // Import the new client component
 
 async function getPostsWithDetails(filterLanguageId?: number): Promise<{ post: Post; languageCode: string }[]> {

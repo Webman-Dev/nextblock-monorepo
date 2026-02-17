@@ -54,19 +54,7 @@ export async function updatePaymentSettings(provider: 'stripe' | 'lemon_squeezy'
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     if (!profile || profile.role !== 'ADMIN') throw new Error('Forbidden');
 
-    const { error } = await supabase.from('site_settings').upsert({
-        key: 'payment_provider',
-        value: provider // Supabase should handle string -> jsonb auto-casting often, but explicit is better. 
-        // We will pass the string, pg/supabase client usually handles it for jsonb columns if simple value?
-        // Actually, for jsonb, passing a raw string might try to parse it as JSON.
-        // If we want the JSON to be the string "stripe", we should pass JSON.stringify(provider) or ensure it's quoted?
-        // Let's rely on standard practice: value: JSON.stringify(provider) or just provider if library handles it.
-        // Safe bet: value is JSONB. So we want the JSON value of the string.
-        // value: `"${provider}"` ? No, supabase-js handles object/array to jsonb.
-        // But for a simple string... 
-        // Let's pass it as a JSON string to be safe `JSON.stringify(provider)`. 
-        // Wait, if I pass a string to upsert on a jsonb column, supabase-js might treat it as the value.
-    });
+
 
     // Let's try passing the value directly, supabase-js is smart. 
     // BUT to be safe given prompt "site_settings value is JSONB", 

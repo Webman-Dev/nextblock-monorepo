@@ -25,7 +25,7 @@ export default function PaymentSettingsPage() {
       if (typeof current === 'string' && current.startsWith('"') && current.endsWith('"')) {
           try {
              current = JSON.parse(current);
-          } catch(e) {}
+          } catch { /* empty */ }
       }
       
       setProvider(current as 'stripe' | 'lemon_squeezy');

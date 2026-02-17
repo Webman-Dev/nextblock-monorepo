@@ -31,7 +31,7 @@ import type { Database } from "@nextblock-cms/db";
 import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server";
 
 type Page = Database["public"]["Tables"]["pages"]["Row"];
-import LanguageFilterSelect from "@/app/cms/components/LanguageFilterSelect";
+import LanguageFilterSelect from "../components/LanguageFilterSelect";
 import DeletePageButtonClient from "./components/DeletePageButtonClient"; // Import the client component
 
 async function getPagesWithDetails(

@@ -18,7 +18,7 @@ import {
   DropdownMenuSeparator,
 } from '@nextblock-cms/ui'
 import { getLogos } from './actions'
-import MediaImage from '@/app/cms/media/components/MediaImage'
+import MediaImage from '../../media/components/MediaImage'
 import DeleteLogoButton from './components/DeleteLogoButton'
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || ''
