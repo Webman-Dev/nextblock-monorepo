@@ -20,7 +20,7 @@ export type CartItem = Product & {
 };
 
 export interface PaymentProvider {
-  createCheckoutSession(items: CartItem[], customerEmail?: string): Promise<{ url: string | null; error?: string }>;
+  createCheckoutSession(items: CartItem[], customerEmail?: string, userId?: string): Promise<{ url: string | null; error?: string }>;
   getProviderName(): string;
 }
 

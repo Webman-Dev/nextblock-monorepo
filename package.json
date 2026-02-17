@@ -43,7 +43,8 @@
     "db:push": "dotenv -e .env.local -- npx supabase db push --workdir libs/db/src --include-all && dotenv -e .env.local -- npx supabase config push --workdir libs/db/src && dotenv -e .env.local -- npx tsx tools/scripts/seed-sandbox-images.ts",
     "sync:create-nextblock": "npm --prefix apps/create-nextblock run sync-template",
     "test-create": "node apps/create-nextblock/bin/create-nextblock.js",
-    "deploy:supabase": "node tools/scripts/deploy-supabase.js"
+    "deploy:supabase": "node tools/scripts/deploy-supabase.js",
+    "lemon": "ngrok http 4200"
   },
   "private": true,
   "devDependencies": {

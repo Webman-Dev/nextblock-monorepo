@@ -10,7 +10,8 @@ export class StripeProvider implements PaymentProvider {
 
   async createCheckoutSession(
     cartItems: CartItem[],
-    customerEmail?: string // Stripe handles this in checkout or auto-email, but we can prefill
+    customerEmail?: string, // Stripe handles this in checkout or auto-email, but we can prefill
+    userId?: string
   ): Promise<{ url: string | null; error?: string }> {
     // Implement Stripe Logic matching existing checkout.ts
     // Use Service Role Key to bypass RLS

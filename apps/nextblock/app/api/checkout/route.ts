@@ -31,8 +31,12 @@ export async function POST(req: Request) {
     // 2. Get Provider Instance
     const provider = getPaymentProvider(providerName);
 
+    // Get User ID from session for security
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id;
+
     // 3. Create Session
-    const { url, error } = await provider.createCheckoutSession(items, customerEmail);
+    const { url, error } = await provider.createCheckoutSession(items, customerEmail, userId);
 
     if (error) {
       console.error('Checkout Error:', error);

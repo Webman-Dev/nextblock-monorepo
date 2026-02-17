@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { createClient } from '@nextblock-cms/db/server';
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
@@ -23,29 +23,42 @@ export async function POST(req: Request) {
 
     const { meta, data } = event;
     const eventName = meta.event_name;
-    // const customData = meta.custom_data || data.attributes.order_data?.custom_data; 
+    
+    // Logging as requested for debugging
+    console.log('LS Webhook Payload:', JSON.stringify(event, null, 2));
 
     if (eventName === 'order_created') {
         const orderId = meta.custom_data?.order_id;
+        const userId = meta.custom_data?.user_id || null;
+        
         if (!orderId) {
              console.error('No order_id found in Lemon Squeezy webhook metadata');
              return NextResponse.json({ error: 'No order_id' }, { status: 400 });
         }
 
-        const supabase = createClient();
+        if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+            return NextResponse.json({ error: 'Supabase config missing' }, { status: 500 });
+        }
+
+        const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL,
+            process.env.SUPABASE_SERVICE_ROLE_KEY,
+            {
+                auth: {
+                    autoRefreshToken: false,
+                    persistSession: false
+                }
+            }
+        );
         
         // Update Order
         const { error } = await supabase
             .from('orders')
             .update({
-                status: 'paid',
+                status: 'paid', // Map 'paid' from LS to 'paid' in our DB
                 provider: 'lemon_squeezy',
-                customer_details: data.attributes.user_email ? { email: data.attributes.user_email } : undefined
-                // Store LS order ID if we had a column? 'stripe_session_id' is unique.
-                // We might reuse 'stripe_session_id' for generic 'external_id' or just rely on status.
-                // The plan didn't specify a new column for external ID, but 'stripe_session_id' exists.
-                // We could rename it to 'external_id' but that's a schematic change.
-                // For now, let's just mark it paid.
+                customer_details: data.attributes.user_email ? { email: data.attributes.user_email } : undefined,
+                user_id: userId // Update user_id if present
             })
             .eq('id', orderId);
 

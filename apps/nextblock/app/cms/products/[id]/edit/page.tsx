@@ -30,6 +30,7 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
            short_description: product.short_description ?? undefined,
            description_json: product.description_json,
            sale_price: product.sale_price ?? undefined,
+           lemonsqueezy_variant_id: product.lemonsqueezy_variant_id ?? undefined,
            product_media: product.product_media,
         }} 
         isEdit 

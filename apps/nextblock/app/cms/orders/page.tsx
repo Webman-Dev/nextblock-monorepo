@@ -1,0 +1,157 @@
+import Link from 'next/link';
+import { getOrders } from './actions';
+
+export const metadata = {
+  title: 'Orders | NextBlock CMS',
+};
+
+// Helper to format currency if utils missing
+const formatPrice = (amount: number, currency = 'usd') => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currency,
+  }).format(amount / 100);
+};
+
+export default async function OrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; status?: string }>;
+}) {
+  const params = await searchParams;
+  const page = Number(params.page) || 1;
+  const status = params.status || 'all';
+
+  const { data: orders, totalPages } = await getOrders(page, status);
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
+        <div className="flex items-center gap-2">
+           {/* Simple Refresh via Link to same page */}
+           <Link href={`/cms/orders?page=${page}&status=${status}`} className="px-3 py-2 text-sm font-medium border rounded hover:bg-gray-50">
+             Refresh
+           </Link>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-2 border-b pb-4">
+        {['all', 'paid', 'pending', 'failed'].map((s) => (
+          <Link
+            key={s}
+            href={`/cms/orders?page=1&status=${s}`}
+            className={`px-3 py-1 rounded-full text-sm font-medium capitalize ${
+              status === s
+                ? 'bg-black text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {s}
+          </Link>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div className="border rounded-lg overflow-hidden">
+        <table className="w-full text-sm text-left">
+          <thead className="bg-gray-50 text-gray-500 font-medium border-b">
+            <tr>
+              <th className="px-4 py-3">ID</th>
+              <th className="px-4 py-3">Customer</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Provider</th>
+              <th className="px-4 py-3 text-right">Amount</th>
+              <th className="px-4 py-3 text-right">Date</th>
+              <th className="px-4 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {orders.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                  No orders found.
+                </td>
+              </tr>
+            ) : (
+              orders.map((order) => {
+                const customerEmail =
+                  (order.customer_details as any)?.email ||
+                  order.customer?.full_name ||
+                  'Unknown';
+                
+                return (
+                  <tr key={order.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-mono text-gray-500">
+                      {order.id.slice(0, 8)}...
+                    </td>
+                    <td className="px-4 py-3 font-medium">{customerEmail}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={order.status} />
+                    </td>
+                    <td className="px-4 py-3 capitalize text-gray-600">
+                        {order.provider === 'lemon_squeezy' ? '🍋 Lemon' : 'Stripe'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {formatPrice(order.total, 'usd')}
+                    </td>
+                    <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">
+                       {new Date(order.created_at || '').toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        href={`/cms/orders/${order.id}`}
+                        className="text-blue-600 hover:underline"
+                      >
+                        View
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex justify-between items-center pt-4">
+        <div className="text-sm text-gray-500">
+          Page {page} of {totalPages}
+        </div>
+        <div className="flex gap-2">
+          <Link
+            href={`/cms/orders?page=${Math.max(1, page - 1)}&status=${status}`}
+            className={`px-3 py-1 border rounded text-sm ${
+              page <= 1 ? 'pointer-events-none opacity-50' : 'hover:bg-gray-50'
+            }`}
+          >
+            Previous
+          </Link>
+          <Link
+            href={`/cms/orders?page=${Math.min(totalPages, page + 1)}&status=${status}`}
+            className={`px-3 py-1 border rounded text-sm ${
+              page >= totalPages ? 'pointer-events-none opacity-50' : 'hover:bg-gray-50'
+            }`}
+          >
+            Next
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  let colorClass = 'bg-gray-100 text-gray-700';
+  if (status === 'paid') colorClass = 'bg-green-100 text-green-700';
+  if (status === 'pending') colorClass = 'bg-yellow-100 text-yellow-700';
+  if (status === 'failed') colorClass = 'bg-red-100 text-red-700';
+
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${colorClass}`}>
+      {status}
+    </span>
+  );
+}
