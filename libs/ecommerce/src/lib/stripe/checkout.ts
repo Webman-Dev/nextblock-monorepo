@@ -1,6 +1,7 @@
 import { stripe } from './client';
 import { createClient } from '@supabase/supabase-js';
 import { type CartItem } from '../types';
+import { verifyPackageOnline } from '@nextblock-cms/db/server';
 
 export const createCheckoutSession = async (
   cartItems: CartItem[]
@@ -19,6 +20,12 @@ export const createCheckoutSession = async (
 
   if (!cartItems.length) {
     return { error: 'Cart is empty', url: null };
+  }
+
+  // 0. Verify E-Commerce License
+  const isEcommerceActive = await verifyPackageOnline('ecommerce');
+  if (!isEcommerceActive) {
+      return { error: 'E-Commerce Package not active. Please purchase a license to accept payments.', url: null };
   }
 
   // 1. Validate Prices against DB

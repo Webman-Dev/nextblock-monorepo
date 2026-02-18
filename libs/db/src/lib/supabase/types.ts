@@ -329,6 +329,39 @@ export type Database = {
         }
         Relationships: []
       }
+      package_activations: {
+        Row: {
+          created_at: string | null
+          id: string
+          instance_name: string
+          last_validated_at: string | null
+          license_key: string
+          meta: Json | null
+          package_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          instance_name: string
+          last_validated_at?: string | null
+          license_key: string
+          meta?: Json | null
+          package_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          instance_name?: string
+          last_validated_at?: string | null
+          license_key?: string
+          meta?: Json | null
+          package_id?: string
+          status?: string
+        }
+        Relationships: []
+      }
       page_revisions: {
         Row: {
           author_id: string | null

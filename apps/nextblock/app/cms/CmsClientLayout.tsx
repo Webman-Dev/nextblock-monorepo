@@ -7,7 +7,7 @@ import { useRouter, usePathname } from "next/navigation" // Import usePathname
 import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
-  Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard,
+  Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package,
 } from "lucide-react"
 import { Button } from "@nextblock-cms/ui"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
@@ -197,6 +197,7 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
   else if (pathname.startsWith("/cms/settings/extra-translations")) pageTitle = "Extra Translations";
   else if (pathname.startsWith("/cms/payments")) pageTitle = "Payment Settings";
 
+  else if (pathname.startsWith("/cms/settings/packages")) pageTitle = "Packages";
   else if (pathname.startsWith("/cms/settings")) pageTitle = "Settings";
   else if (pathname.startsWith("/cms/products/new")) pageTitle = "New Product";
   else if (pathname.startsWith("/cms/products/") && pathname.endsWith("/edit")) pageTitle = "Edit Product";
@@ -304,6 +305,9 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
                     </NavItem>
                     <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Extra Translations
+                    </NavItem>
+                    <NavItem href="/cms/settings/packages" icon={Package} isActive={pathname.startsWith("/cms/settings/packages")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Packages
                     </NavItem>
 
                  </CollapsibleNavItem>
