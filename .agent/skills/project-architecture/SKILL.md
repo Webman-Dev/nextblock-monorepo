@@ -7,21 +7,23 @@ description: When you need to understand the directory structure, open-core mode
 
 ## 1. High-Level Layout
 
-| Path                    | Type        | Purpose                                | Import Alias            |
-| ----------------------- | ----------- | -------------------------------------- | ----------------------- |
-| `apps/nextblock`        | Application | **Primary Prod App** (Admin + Public). | —                       |
-| `apps/create-nextblock` | Application | CLI Scaffolder.                        | —                       |
-| `libs/ui`               | Library     | Shared UI components.                  | `@nextblock-cms/ui`     |
-| `libs/utils`            | Library     | Core utilities.                        | `@nextblock-cms/utils`  |
-| `libs/db`               | Library     | Database layer (Supabase).             | `@nextblock-cms/db`     |
-| `libs/editor`           | Library     | Tiptap editor package.                 | `@nextblock-cms/editor` |
+| Path                    | Type        | Purpose                                                  | Import Alias               |
+| ----------------------- | ----------- | -------------------------------------------------------- | -------------------------- |
+| `apps/nextblock`        | Application | **Primary Prod App** (Admin + Public).                   | —                          |
+| `apps/create-nextblock` | Application | CLI Scaffolder.                                          | —                          |
+| `libs/ui`               | Library     | Shared UI components.                                    | `@nextblock-cms/ui`        |
+| `libs/utils`            | Library     | Core utilities.                                          | `@nextblock-cms/utils`     |
+| `libs/db`               | Library     | Database layer (Supabase).                               | `@nextblock-cms/db`        |
+| `libs/editor`           | Library     | Tiptap editor package.                                   | `@nextblock-cms/editor`    |
+| `libs/sdk`              | Library     | Public developer SDK surface.                            | `@nextblock-cms/sdk`       |
+| `libs/ecommerce`        | Library     | **Premium E-Commerce**. Source-available, license-gated. | `@nextblock-cms/ecommerce` |
 
 ## 2. Core Rules
 
 ### Open-Core Model
 
-- **Core:** Everything in this repo is Open Source (MIT), except `libs/ecommerce` (if present).
-- **Premium:** Private extensions live in `libs/ecommerce`.
+- **Core:** The monorepo is Open Source (AGPL).
+- **Premium:** Extensions like `libs/ecommerce` are present but require a License Key to activate.
 
 ### Code Placement Decisions
 

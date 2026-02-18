@@ -6,16 +6,16 @@ This guide summarizes how the NextBlock CMS workspace is organized, how shared c
 
 The repository follows the standard Nx model: deployable applications live in `apps/`, reusable code in `libs/`.
 
-| Path | Type | Purpose | Import Alias |
-| --- | --- | --- | --- |
-| `apps/nextblock` | Application | Production Next.js CMS (admin + public site). | — |
-| `apps/create-nextblock` | Application | CLI scaffolder published as `create-nextblock`. | — |
-| `libs/ui` | Library | Shared shadcn/ui components, design tokens, global styles. | `@nextblock-cms/ui` |
-| `libs/utils` | Library | Cross-cutting helpers (className utils, translations, R2 helpers, env checks). | `@nextblock-cms/utils` |
-| `libs/db` | Library | Supabase clients, database helpers, migrations. | `@nextblock-cms/db` |
-| `libs/editor` | Library | Tiptap v3 editor package consumed by the app and CLI template. | `@nextblock-cms/editor` |
-| `libs/sdk` | Library | Public developer SDK surface (roadmap). | `@nextblock-cms/sdk` |
-| `libs/ecommerce` | Library | Reserved for future commercial module. | `@nextblock-cms/ecommerce-premium` |
+| Path                    | Type        | Purpose                                                                                        | Import Alias               |
+| ----------------------- | ----------- | ---------------------------------------------------------------------------------------------- | -------------------------- |
+| `apps/nextblock`        | Application | Production Next.js CMS (admin + public site).                                                  | —                          |
+| `apps/create-nextblock` | Application | CLI scaffolder published as `create-nextblock`.                                                | —                          |
+| `libs/ui`               | Library     | Shared shadcn/ui components, design tokens, global styles.                                     | `@nextblock-cms/ui`        |
+| `libs/utils`            | Library     | Cross-cutting helpers (className utils, translations, R2 helpers, env checks).                 | `@nextblock-cms/utils`     |
+| `libs/db`               | Library     | Supabase clients, database helpers, migrations.                                                | `@nextblock-cms/db`        |
+| `libs/editor`           | Library     | Tiptap v3 editor package consumed by the app and CLI template.                                 | `@nextblock-cms/editor`    |
+| `libs/sdk`              | Library     | Public developer SDK surface (roadmap).                                                        | `@nextblock-cms/sdk`       |
+| `libs/ecommerce`        | Library     | Premium E-Commerce package. Source available, but requires License Key activation to function. | `@nextblock-cms/ecommerce` |
 
 ## 2. Shared Libraries
 
@@ -65,13 +65,13 @@ The repository follows the standard Nx model: deployable applications live in `a
 
 ## 5. Common Nx Commands
 
-| Command | Description | Example |
-| --- | --- | --- |
-| `nx serve <project>` | Run a project in dev mode. | `nx serve nextblock` |
-| `nx build <project>` | Production build for apps or libs. | `nx build editor` |
-| `nx lint <project>` | ESLint with Nx caching. | `nx lint ui` |
+| Command                   | Description                                | Example                      |
+| ------------------------- | ------------------------------------------ | ---------------------------- |
+| `nx serve <project>`      | Run a project in dev mode.                 | `nx serve nextblock`         |
+| `nx build <project>`      | Production build for apps or libs.         | `nx build editor`            |
+| `nx lint <project>`       | ESLint with Nx caching.                    | `nx lint ui`                 |
 | `nx run-many -t <target>` | Execute a target across multiple projects. | `nx run-many -t build --all` |
-| `nx graph` | Visualize dependency graph. | `nx graph` |
+| `nx graph`                | Visualize dependency graph.                | `nx graph`                   |
 
 ## 6. TypeScript & Project Hygiene
 

@@ -40,9 +40,9 @@ We combined the **flexibility of a Block Editor** with the **raw power of Next.j
 
 - **⚡ 100% Lighthouse Performance**: Built-in edge caching, image optimization, and zero layout shift. Speed is not a plugin; it's the default.
 - **🤖 Built for AI Agents**: Our codebase is documented and structured specifically to be easily read and extended by AI coding assistants.
-- **🛍️ E-Commerce Ready**: (Coming Soon) seamless integration with Stripe for premium digital products.
+- **🛍️ E-Commerce Ready**: Seamless integration with Stripe & Lemon Squeezy for premium digital products.
 - **🧱 Visual Block Editor**: A Tiptap-powered Notion-style editor that your clients will actually enjoy using.
-- **🔓 Open-Core Model**: The core is 100% Free & Open Source (AGPL). You only pay for premium enterprise modules if you need them.
+- **🔓 Open-Core Model**: The core is 100% Free & Open Source (AGPL). Premium features (like E-Commerce) are activated via License Keys.
 
 ## 🆚 The NextBlock Advantage
 
@@ -86,11 +86,11 @@ Everything you need to know about the architecture is in the `docs/` folder.
 
 Choose your path based on what you want to achieve.
 
-| **I want to...**    | **Read This**                                                       | **Description**                                                                                                                   |
-| :------------------ | :------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------- |
-| **Build a Website** | [👉 **User Quickstart Guide**](./docs/tutorial-user-quickstart.md)  | **Recommended.** Use the CLI (`npm create nextblock`) to launch a production-ready site with Supabase & Cloudflare R2 in minutes. |
-| **Get Premium**     | [💎 **Premium Access Guide**](./docs/PREMIUM_ACCESS.md)             | **Coming Soon.** Learn how to license the E-Commerce module and other premium extensions using our Twin Package system.           |
-| **Modify the Core** | [🛠️ **Contributor Guide**](./docs/tutorial-contributor-monorepo.md) | For advanced developers who want to clone the Monorepo, contribute to the open-source core, or understand the Nx architecture.    |
+| **I want to...**    | **Read This**                                        | **Description**                                                                                                                   |
+| :------------------ | :--------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------- |
+| **Build a Website** | [👉 **User Quickstart Guide**](./docs/QUICKSTART.md) | **Recommended.** Use the CLI (`npm create nextblock`) to launch a production-ready site with Supabase & Cloudflare R2 in minutes. |
+| **Get Premium**     | [💎 **Premium Access Guide**](./docs/PREMIUM.md)     | Learn how to buy and activate the E-Commerce package and other premium extensions using our License Key system.                   |
+| **Modify the Core** | [🛠️ **Contributor Guide**](./docs/CONTRIBUTING.md)   | For advanced developers who want to clone the Monorepo, contribute to the open-source core, or understand the Nx architecture.    |
 
 ---
 

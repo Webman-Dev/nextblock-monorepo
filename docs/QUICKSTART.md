@@ -29,7 +29,7 @@ The CLI will ask you for specific keys during setup. Let's get them ready first 
 
 1.  Go to your [Supabase Dashboard](https://supabase.com/dashboard).
 2.  Click **"New Project"**.
-3.  **Name**: `my-nextblock-site` (or whatever you like).
+3.  **Name**: `my-website` (or whatever you like).
 4.  **Password**: Generata a strong password and **Save it**! You will need this later.
 5.  **Region**: Choose the one closest to your users.
 6.  Wait for the project to provision (takes ~1-2 mins).

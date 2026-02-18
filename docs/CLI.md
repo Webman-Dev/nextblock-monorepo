@@ -6,7 +6,7 @@ The `create-nextblock` package is the primary onboarding surface for developers.
 
 - **Growth engine:** A polished CLI is the first impression for potential adopters. Fast setup and a working project feed the product-led growth loop and downstream marketplace plans.
 - **Single source of truth:** The scaffolded project mirrors the production `apps/nextblock` app, keeping features in sync via the template workflow.
-- **Package-first distribution:** Generated projects consume published libraries (`@nextblock-cms/ui`, `@nextblock-cms/editor`, etc.) rather than reading from the monorepo directly.
+- **Package-first distribution:** Generated projects consume published libraries (`@nextblock-cms/ui`, `@nextblock-cms/editor`, etc.) from npm.
 
 ## Workspace Layout
 

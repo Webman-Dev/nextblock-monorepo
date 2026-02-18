@@ -2,17 +2,16 @@
 
 **Welcome, Engineer.** You have chosen the red pill.
 
-This guide is for developers who want to work on the **core platform**, build **premium extensions**, or understand the **monorepo architecture**. If you just want to build a website, go to the [User Quickstart](./tutorial-user-quickstart.md).
+This guide is for developers who want to work on the **core platform**, build **premium extensions**, or understand the **monorepo architecture**. If you just want to build a website, go to the [User Quickstart](./QUICKSTART.md).
 
 ---
 
 ## 🏗️ The "Factory" Architecture
 
-We use **Nx** to manage a monorepo that contains both the "Product" (what users get) and the "Factory" (tools to build/distribute it).
+We use **Nx** to manage a monorepo that contains both the core "Product" and its libraries.
 
-- `apps/nextblock`: A "dev workbench" app. It imports libraries via local paths (`libs/*`), not npm. We use this to develop features.
-- `libs/ui`: The shared design system. Published as `@nextblock-cms/ui`.
-- `libs/editor`: The Tiptap block editor. Published as `@nextblock-cms/editor`.
+- `apps/nextblock`: The "dev workbench" app. It imports libraries via local paths (`libs/*`).
+- `libs/ui` & `libs/editor`: Open Source libraries published to NPM.
 - `apps/create-nextblock`: The CLI tool.
 
 **Your Goal**: Make changes in `libs/` or `apps/nextblock`, and ensure they work in the standalone template.
