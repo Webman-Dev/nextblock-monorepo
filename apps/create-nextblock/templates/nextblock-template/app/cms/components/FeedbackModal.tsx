@@ -1,10 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { useAuth } from "@/context/AuthContext"
+import { useAuth } from '../../../context/AuthContext';
 import { usePathname } from "next/navigation"
 import { toast } from "react-hot-toast"
-import { submitFeedback } from "@/app/actions/feedback"
+import { submitFeedback } from '../../actions/feedback';
 import {
   Dialog,
   DialogContent,

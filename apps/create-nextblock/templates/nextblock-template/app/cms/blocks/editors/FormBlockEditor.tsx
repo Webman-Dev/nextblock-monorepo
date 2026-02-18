@@ -10,8 +10,8 @@ import { Input } from '@nextblock-cms/ui';
 import { Label } from '@nextblock-cms/ui';
 import { Checkbox } from '@nextblock-cms/ui';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui';
-import { BlockEditorProps } from '@/app/cms/blocks/components/BlockEditorModal';
-import type { FormBlockContent, FormField, FormFieldOption } from '@/lib/blocks/blockRegistry';
+import { BlockEditorProps } from '../components/BlockEditorModal';
+import { FormBlockContent, FormField, FormFieldOption } from '../../../../lib/blocks/blockRegistry';
 
 // Sub-component for a single editable form field in the editor
 const SortableFormField = ({ field, index, onUpdate, onDelete }: { field: FormField, index: number, onUpdate: (index: number, field: FormField) => void, onDelete: (index: number) => void }) => {

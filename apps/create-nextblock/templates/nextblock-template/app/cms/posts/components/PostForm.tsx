@@ -26,19 +26,19 @@ import {
   DialogClose,
 } from "@nextblock-cms/ui";
 import type { Database } from "@nextblock-cms/db";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from '../../../../context/AuthContext';
 
 type Post = Database['public']['Tables']['posts']['Row'];
 type PageStatus = Database['public']['Enums']['page_status'];
 type Language = Database['public']['Tables']['languages']['Row'];
 type Media = Database['public']['Tables']['media']['Row'];
 // import MediaGridClient from "@/app/cms/media/components/MediaGridClient"; // Will render a custom grid instead
-import MediaImage from "@/app/cms/media/components/MediaImage"; // For displaying images in the modal
-import { getMediaItems } from "@/app/cms/media/actions";
-import MediaUploadForm from "@/app/cms/media/components/MediaUploadForm";
+import MediaImage from "../../media/components/MediaImage"; // For displaying images in the modal
+import { getMediaItems } from '../../media/actions';
+import MediaUploadForm from "../../media/components/MediaUploadForm";
 import { Separator } from "@nextblock-cms/ui";
 import { useRef } from "react";
-import { useHotkeys } from "@/hooks/use-hotkeys";
+import { useHotkeys } from '../../../../hooks/use-hotkeys';
 
 
 interface PostFormProps {

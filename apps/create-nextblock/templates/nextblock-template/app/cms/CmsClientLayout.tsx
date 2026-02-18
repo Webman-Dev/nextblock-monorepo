@@ -7,7 +7,7 @@ import { useRouter, usePathname } from "next/navigation" // Import usePathname
 import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
-  Copyright as CopyrightIcon,
+  Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package,
 } from "lucide-react"
 import { Button } from "@nextblock-cms/ui"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
@@ -162,7 +162,7 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
 
   const getInitials = () => {
     if (profile && profile.full_name) return profile.full_name.split(' ').map((n: string) => n[0]).join('').substring(0,2).toUpperCase();
-    if (profile && profile.username) return profile.username.substring(0,2).toUpperCase();
+    if (profile && profile.github_username) return profile.github_username.substring(0,2).toUpperCase();
     if (user && user.email) return user.email.charAt(0).toUpperCase();
     return "U"; // Default fallback
   }
@@ -195,7 +195,15 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
   else if (pathname.startsWith("/cms/settings/logos")) pageTitle = "Logos";
   else if (pathname.startsWith("/cms/settings/copyright")) pageTitle = "Copyright Settings";
   else if (pathname.startsWith("/cms/settings/extra-translations")) pageTitle = "Extra Translations";
+  else if (pathname.startsWith("/cms/payments")) pageTitle = "Payment Settings";
+
+  else if (pathname.startsWith("/cms/settings/packages")) pageTitle = "Packages";
   else if (pathname.startsWith("/cms/settings")) pageTitle = "Settings";
+  else if (pathname.startsWith("/cms/products/new")) pageTitle = "New Product";
+  else if (pathname.startsWith("/cms/products/") && pathname.endsWith("/edit")) pageTitle = "Edit Product";
+  else if (pathname.startsWith("/cms/products")) pageTitle = "Products";
+  else if (pathname.startsWith("/cms/orders/") && pathname.endsWith("/edit")) pageTitle = "Edit Order";
+  else if (pathname.startsWith("/cms/orders")) pageTitle = "Orders";
 
 
   return (
@@ -251,6 +259,21 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
                 Media
               </NavItem>
 
+              <div className="mt-6 mb-2">
+                <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider dark:text-slate-400">
+                  Store
+                </p>
+              </div>
+              <NavItem href="/cms/products" icon={ShoppingBag} isActive={pathname.startsWith("/cms/products")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                Products
+              </NavItem>
+              <NavItem href="/cms/orders" icon={ListOrdered} isActive={pathname.startsWith("/cms/orders")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                Orders
+              </NavItem>
+              <NavItem href="/cms/payments" icon={CreditCard} isActive={pathname.startsWith("/cms/payments")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                Payments
+              </NavItem>
+
               {isAdmin && (
                 <>
                   <div className="mt-6 mb-2">
@@ -283,6 +306,10 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
                     <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Extra Translations
                     </NavItem>
+                    <NavItem href="/cms/settings/packages" icon={Package} isActive={pathname.startsWith("/cms/settings/packages")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Packages
+                    </NavItem>
+
                  </CollapsibleNavItem>
                 </>
               )}
@@ -297,11 +324,11 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
           <div className="mt-auto p-3 border-t border-slate-200 dark:border-slate-700/60 shrink-0">
             <div className="flex items-center gap-3">
               <Avatar className="h-10 w-10 border">
-                <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.username || user?.email} />
+                <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.github_username || user?.email} />
                 <AvatarFallback className="bg-primary/10 text-primary font-medium">{getInitials()}</AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate text-slate-700 dark:text-slate-200">{profile?.full_name || profile?.username || user?.email}</p>
+                <p className="text-sm font-medium truncate text-slate-700 dark:text-slate-200">{profile?.full_name || profile?.github_username || user?.email}</p>
                 <div className="flex items-center gap-1.5">
                   <div className={cn("h-2 w-2 rounded-full", getRoleColor())}></div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">{role}</p>

@@ -1,7 +1,7 @@
 // app/cms/posts/new/page.tsx
 import PostForm from "../components/PostForm";
 import { createPost } from "../actions";
-import { getLanguages } from "@/app/cms/settings/languages/actions";
+import { getLanguages } from '../../settings/languages/actions';
 
 export default async function NewPostPage() {
   const languagesResult = await getLanguages();

@@ -3,7 +3,7 @@
 
 import React, { useId, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import MediaPickerDialog from '@/app/cms/media/components/MediaPickerDialog';
+import MediaPickerDialog from '../../media/components/MediaPickerDialog';
 import { Label } from '@nextblock-cms/ui';
 import { BlockEditorProps } from '../components/BlockEditorModal';
 

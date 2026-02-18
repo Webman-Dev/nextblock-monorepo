@@ -4,7 +4,7 @@ import React from 'react';
 import { Label } from "@nextblock-cms/ui";
 import { Input } from "@nextblock-cms/ui";
 import { Checkbox } from "@nextblock-cms/ui";
-import { generateDefaultContent, VideoEmbedBlockContent } from "@/lib/blocks/blockRegistry";
+import { generateDefaultContent, VideoEmbedBlockContent } from '../../../../lib/blocks/blockRegistry';
 import { BlockEditorProps } from '../components/BlockEditorModal';
 
 export default function VideoEmbedBlockEditor({ content, onChange }: BlockEditorProps<Partial<VideoEmbedBlockContent>>) {

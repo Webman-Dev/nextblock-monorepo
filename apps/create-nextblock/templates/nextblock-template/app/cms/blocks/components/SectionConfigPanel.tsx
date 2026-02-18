@@ -3,7 +3,7 @@
 import React from 'react';
 import { Label } from "@nextblock-cms/ui";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@nextblock-cms/ui";
-import type { SectionBlockContent } from "@/lib/blocks/blockRegistry";
+import { SectionBlockContent } from '../../../../lib/blocks/blockRegistry';
 import BackgroundSelector from './BackgroundSelector';
 
 interface SectionConfigPanelProps {

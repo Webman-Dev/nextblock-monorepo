@@ -44,7 +44,12 @@ async function getUsersData(currentAdminId: string): Promise<UserWithProfile[]> 
     throw new Error('Missing required environment variables');
   }
   
-  const supabaseAdmin = createServiceRoleClient(supabaseUrl, serviceRoleKey);
+  const supabaseAdmin = createServiceRoleClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  });
 
   const { data: { users: authUsers }, error: usersError } = await supabaseAdmin.auth.admin.listUsers({
       page: 1,
@@ -52,19 +57,19 @@ async function getUsersData(currentAdminId: string): Promise<UserWithProfile[]> 
   });
 
   if (usersError) {
-    console.error("Error fetching auth users:", usersError);
+    console.error("Error fetching auth users:", JSON.stringify(usersError, null, 2));
     return [];
   }
   if (!authUsers) return [];
 
   // Fetch all profiles
-  const supabase = createClient(); // Standard client for profile fetching (RLS applies)
-  const { data: profiles, error: profilesError } = await supabase
+  // Use admin client to bypass RLS policies so we can see all user profiles
+  const { data: profiles, error: profilesError } = await supabaseAdmin
     .from("profiles")
     .select("*");
 
   if (profilesError) {
-    console.error("Error fetching profiles:", profilesError);
+    console.error("Error fetching profiles:", JSON.stringify(profilesError, null, 2));
     // Continue without profiles if there's an error, or handle differently
   }
 
@@ -82,7 +87,7 @@ async function getUsersData(currentAdminId: string): Promise<UserWithProfile[]> 
       authUser: simplifiedAuthUser,
       profile: profilesMap.get(authUser.id) || null,
     };
-  }).filter(user => user.authUser.id !== currentAdminId); // Filter out the current admin from the list
+  });
 }
 
 export default async function CmsUsersListPage() {
@@ -123,8 +128,8 @@ export default async function CmsUsersListPage() {
               <TableRow>
                 <TableHead className="w-[80px]">Avatar</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Username</TableHead>
                 <TableHead>Full Name</TableHead>
+                <TableHead>GitHub</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Joined</TableHead>
                 <TableHead className="text-right w-[80px]">Actions</TableHead>
@@ -135,13 +140,13 @@ export default async function CmsUsersListPage() {
                 <TableRow key={authUser.id}>
                   <TableCell>
                      <Avatar className="h-9 w-9">
-                        <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.username || authUser.email} />
+                        <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.full_name || authUser.email} />
                         <AvatarFallback>{authUser.email?.charAt(0).toUpperCase() || 'U'}</AvatarFallback>
                     </Avatar>
                   </TableCell>
                   <TableCell className="font-medium">{authUser.email}</TableCell>
-                  <TableCell className="text-muted-foreground">{profile?.username || "N/A"}</TableCell>
                   <TableCell className="text-muted-foreground">{profile?.full_name || "N/A"}</TableCell>
+                  <TableCell className="text-muted-foreground">{profile?.github_username || "-"}</TableCell>
                   <TableCell>
                     <Badge variant={
                         profile?.role === "ADMIN" ? "destructive" :
@@ -156,7 +161,7 @@ export default async function CmsUsersListPage() {
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={authUser.id === currentAdmin.id}>
+                        <Button variant="ghost" size="icon">
                           <MoreHorizontal className="h-4 w-4" />
                           <span className="sr-only">User actions</span>
                         </Button>

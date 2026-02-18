@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import type { Database } from "@nextblock-cms/db";
-import { useLanguage } from '@/context/LanguageContext';
+import { useLanguage } from '../../../context/LanguageContext';
 
 type PostType = Database['public']['Tables']['posts']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
@@ -14,7 +14,7 @@ export type ImageBlockContent = {
   media_id: string | null;
   object_key?: string;
 };
-import { useCurrentContent } from '@/context/CurrentContentContext';
+import { useCurrentContent } from '../../../context/CurrentContentContext';
 import Link from 'next/link';
 
 interface PostClientContentProps {

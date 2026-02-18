@@ -6,11 +6,11 @@ import { Separator } from "@nextblock-cms/ui";
 import { Button } from "@nextblock-cms/ui";
 import { Eye, ArrowLeft } from "lucide-react";
 import PageForm from "../../components/PageForm";
-import BlockEditorArea from "@/app/cms/blocks/components/BlockEditorArea";
-import ContentLanguageSwitcher from "@/app/cms/components/ContentLanguageSwitcher";
-import CopyContentFromLanguage from "@/app/cms/components/CopyContentFromLanguage";
-import RevisionHistoryButton from "@/app/cms/revisions/RevisionHistoryButton";
-import { UploadFolderProvider } from "@/app/cms/media/UploadFolderContext";
+import BlockEditorArea from "../../../blocks/components/BlockEditorArea";
+import ContentLanguageSwitcher from "../../../components/ContentLanguageSwitcher";
+import CopyContentFromLanguage from "../../../components/CopyContentFromLanguage";
+import RevisionHistoryButton from "../../../revisions/RevisionHistoryButton";
+import { UploadFolderProvider } from '../../../media/UploadFolderContext';
 import type { Database } from "@nextblock-cms/db";
 
 type Page = Database["public"]["Tables"]["pages"]["Row"];

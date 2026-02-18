@@ -81,6 +81,10 @@ function generateBackgroundStyles(background: SectionBlockContent['background'])
   const styles: React.CSSProperties = {};
   let className = '';
 
+  if (!background) {
+    return { styles, className };
+  }
+
   if (background.min_height) {
     styles.minHeight = background.min_height;
   }
@@ -211,7 +215,7 @@ const HeroBlockRenderer: React.FC<SectionBlockRendererProps> = ({
 
   // Build CSS classes
   const containerClass = containerClasses[content.container_type] || containerClasses.container;
-  const gridClass = columnClasses[content.responsive_columns.desktop] || columnClasses[3];
+  const gridClass = columnClasses[content.responsive_columns?.desktop] || columnClasses[3];
   const gapClass = gapClasses[content.column_gap] || gapClasses.md;
   const paddingTopClass = paddingClasses[content.padding.top] || paddingClasses.md;
   const paddingBottomClass = paddingClasses[content.padding.bottom] || paddingClasses.md;

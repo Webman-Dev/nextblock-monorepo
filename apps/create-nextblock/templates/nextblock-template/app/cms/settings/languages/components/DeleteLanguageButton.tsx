@@ -5,7 +5,7 @@ import { Trash2, ShieldAlert } from "lucide-react";
 import { deleteLanguage } from "../actions"; // Server action
 import type { Database } from "@nextblock-cms/db";
 import { useTransition, useState } from 'react';
-import { ConfirmationModal } from "@/app/cms/components/ConfirmationModal";
+import { ConfirmationModal } from '../../../components/ConfirmationModal';
 import { toast } from 'react-hot-toast';
 
 type Language = Database['public']['Tables']['languages']['Row'];

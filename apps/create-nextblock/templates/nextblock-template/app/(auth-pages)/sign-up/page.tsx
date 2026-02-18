@@ -8,6 +8,7 @@ import { Label } from "@nextblock-cms/ui";
 import Link from "next/link";
 import { useTranslations } from "@nextblock-cms/utils";
 import { useSearchParams } from "next/navigation";
+import { GitHubLoginButton } from "../../../components/GitHubLoginButton";
 
 import { SandboxCredentialsAlert } from "../../../components/SandboxCredentialsAlert";
 
@@ -51,21 +52,34 @@ export default function Signup() {
             {t('sign_in')}
           </Link>
         </p>
-        <div className="flex flex-col gap-2 [&>input]:mb-3 mt-8">
-          <Label htmlFor="email">{t('email')}</Label>
-          <Input name="email" placeholder={t('you_at_example_com')} required />
-          <Label htmlFor="password">{t('password')}</Label>
-          <Input
-            type="password"
-            name="password"
-            placeholder={t('your_password')}
-            minLength={6}
-            required
-          />
-          <SubmitButton formAction={signUpAction} pendingText={t('signing_up_pending')}>
-            {t('sign_up')}
-          </SubmitButton>
-          <FormMessage message={formMessage} />
+        <div className="flex flex-col gap-2 mt-8">
+          <GitHubLoginButton t={t} />
+
+          <div className="relative py-2">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">{t('or_continue_with') || "Or continue with"}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 [&>input]:mb-3">
+            <Label htmlFor="email">{t('email')}</Label>
+            <Input name="email" placeholder={t('you_at_example_com')} required />
+            <Label htmlFor="password">{t('password')}</Label>
+            <Input
+              type="password"
+              name="password"
+              placeholder={t('your_password')}
+              minLength={6}
+              required
+            />
+            <SubmitButton formAction={signUpAction} pendingText={t('signing_up_pending')}>
+              {t('sign_up')}
+            </SubmitButton>
+            <FormMessage message={formMessage} />
+          </div>
         </div>
       </form>
     </>

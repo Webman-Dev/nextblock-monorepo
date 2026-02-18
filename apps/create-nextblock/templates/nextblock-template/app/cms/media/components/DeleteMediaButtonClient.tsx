@@ -6,7 +6,7 @@ import { DropdownMenuItem } from "@nextblock-cms/ui";
 import { Trash2 } from "lucide-react";
 import type { Database } from "@nextblock-cms/db";
 import { deleteMediaItem } from "../actions";
-import { ConfirmationModal } from '@/app/cms/components/ConfirmationModal';
+import { ConfirmationModal } from '../../components/ConfirmationModal';
 
 type Media = Database['public']['Tables']['media']['Row'];
 

@@ -5,7 +5,7 @@ import React, { useState, useTransition } from "react";
 import { DropdownMenuItem } from "@nextblock-cms/ui";
 import { Trash2, ShieldAlert } from "lucide-react";
 import { deleteUserAndProfile } from "../actions";
-import { ConfirmationModal } from "@/app/cms/components/ConfirmationModal";
+import { ConfirmationModal } from '../../components/ConfirmationModal';
 
 export function DeleteUserButtonClient({
   userId,

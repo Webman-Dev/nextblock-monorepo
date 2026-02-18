@@ -9,9 +9,9 @@ import { Label } from '@nextblock-cms/ui';
 import { Input } from '@nextblock-cms/ui';
 import { Button } from '@nextblock-cms/ui';
 import { Alert, AlertDescription, Spinner } from '@nextblock-cms/ui';
-import { type Message } from '@/components/form-message';
+import { Message } from '../../../../../components/form-message';
 import { useRef } from 'react';
-import { useHotkeys } from '@/hooks/use-hotkeys';
+import { useHotkeys } from '../../../../../hooks/use-hotkeys';
 
 interface CopyrightFormProps {
   languages: Language[];

@@ -214,12 +214,12 @@ export default async function proxy(request: NextRequest) {
 
       const csp = [
         "default-src 'self'",
-        `script-src 'self' blob: data: 'nonce-${nonceValue}' https://vercel.live https://vercel.com`,
+        `script-src 'self' blob: data: 'nonce-${nonceValue}' https://vercel.live https://vercel.com https://www.googletagmanager.com https://www.google-analytics.com https://analytics.google.com https://*.googletagmanager.com`,
         "style-src 'self' 'unsafe-inline' https://vercel.live https://vercel.com",
-        `img-src 'self' data: blob:${r2Hostnames} https://vercel.live https://vercel.com`,
+        `img-src 'self' data: blob:${r2Hostnames} https://vercel.live https://vercel.com https://www.googletagmanager.com https://www.google-analytics.com https://analytics.google.com https://*.googletagmanager.com`,
         "font-src 'self' https://vercel.live https://assets.vercel.com",
         "object-src 'none'",
-        `connect-src 'self' https://${supabaseHostname} wss://${supabaseHostname}${r2Hostnames} https://vercel.live https://vercel.com`,
+        `connect-src 'self' https://${supabaseHostname} wss://${supabaseHostname}${r2Hostnames} https://vercel.live https://vercel.com https://www.googletagmanager.com https://www.google-analytics.com https://analytics.google.com https://*.googletagmanager.com`,
         "frame-src 'self' blob: data: https://www.youtube.com https://vercel.live https://vercel.com",
         "form-action 'self'",
         "base-uri 'self'",

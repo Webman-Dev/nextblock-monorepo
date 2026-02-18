@@ -10,15 +10,15 @@ import { notFound, redirect } from "next/navigation";
 type PostType = Database['public']['Tables']['posts']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
 type Language = Database['public']['Tables']['languages']['Row'];
-import BlockEditorArea from "@/app/cms/blocks/components/BlockEditorArea";
+import BlockEditorArea from "../../../blocks/components/BlockEditorArea";
 import Link from "next/link";
 import { Button } from "@nextblock-cms/ui";
 import { Eye, ArrowLeft } from "lucide-react"; // Removed SeparatorVertical, use <Separator />
-import ContentLanguageSwitcher from "@/app/cms/components/ContentLanguageSwitcher";
+import ContentLanguageSwitcher from "../../../components/ContentLanguageSwitcher";
 import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server"; // Correct server-side fetch
-import CopyContentFromLanguage from "@/app/cms/components/CopyContentFromLanguage";
-import { UploadFolderProvider } from "@/app/cms/media/UploadFolderContext";
-import RevisionHistoryButton from "@/app/cms/revisions/RevisionHistoryButton";
+import CopyContentFromLanguage from "../../../components/CopyContentFromLanguage";
+import { UploadFolderProvider } from '../../../media/UploadFolderContext';
+import RevisionHistoryButton from "../../../revisions/RevisionHistoryButton";
 
 interface PostWithBlocks extends PostType {
   blocks: BlockType[];

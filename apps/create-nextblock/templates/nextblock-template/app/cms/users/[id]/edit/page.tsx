@@ -1,5 +1,4 @@
 // app/cms/users/[id]/edit/page.tsx
-import { createClient } from "@nextblock-cms/db/server";
 import UserForm from "../../components/UserForm";
 import { updateUserProfile } from "../../actions";
 import type { Database } from "@nextblock-cms/db";
@@ -14,7 +13,6 @@ type AuthUser = {
 };
 
 async function getUserAndProfileData(userId: string): Promise<{ authUser: AuthUser; profile: Profile | null } | null> {
-  const supabase = createClient();
 
   // Fetch user from auth.users
   // For admin operations, you might need a service_role client to fetch any user.
@@ -40,8 +38,8 @@ async function getUserAndProfileData(userId: string): Promise<{ authUser: AuthUs
     return null;
   }
 
-  // Fetch profile from public.profiles
-  const { data: profileData, error: profileError } = await supabase
+  // Fetch profile from public.profiles using Service Role to bypass RLS
+  const { data: profileData, error: profileError } = await serviceSupabase
     .from("profiles")
     .select("*")
     .eq("id", userId)
@@ -78,7 +76,7 @@ export default async function EditUserPage(props: { params: Promise<{ id: string
   const updateUserActionWithId = updateUserProfile.bind(null, userId);
 
   return (
-    <div className="max-w-xl mx-auto">
+    <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Edit User: {userData.authUser.email}</h1>
       <UserForm
         userToEditAuth={userData.authUser}

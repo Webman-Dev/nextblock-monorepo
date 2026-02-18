@@ -11,6 +11,7 @@ const PROJECT_ROOT = resolve(__dirname, '..');
 const SOURCE_DIR = resolve(PROJECT_ROOT, '../nextblock');
 const TARGET_DIR = resolve(PROJECT_ROOT, 'templates/nextblock-template');
 const REPO_ROOT = resolve(PROJECT_ROOT, '..', '..');
+const ROOT_DOCS_DIR = resolve(REPO_ROOT, 'docs');
 const ROOT_PACKAGE_JSON = resolve(REPO_ROOT, 'package.json');
 const UI_GLOBALS_SOURCE = resolve(
   PROJECT_ROOT,
@@ -87,6 +88,7 @@ async function ensureTemplateSync() {
   await ensureTemplateGitignore();
   await ensureGlobalStyles();
   await ensureClientTranslations();
+  await ensureDocsSync();
   await sanitizeBlockEditorImports();
   await sanitizeUiImports();
   await ensureUiProxies();
@@ -125,6 +127,21 @@ NEXT_PUBLIC_URL=http://localhost:3000
 `;
 
   await fs.writeFile(destination, placeholder);
+}
+
+async function ensureDocsSync() {
+  const destination = resolve(TARGET_DIR, 'docs');
+  console.log(
+    chalk.blue(
+      `Syncing docs from ${chalk.bold(relative(PROJECT_ROOT, ROOT_DOCS_DIR))}`,
+    ),
+  );
+
+  await fs.emptyDir(destination);
+  await fs.copy(ROOT_DOCS_DIR, destination, {
+    dereference: true,
+    filter: (src) => !src.includes('node_modules'),
+  });
 }
 
 async function ensureTemplateGitignore() {

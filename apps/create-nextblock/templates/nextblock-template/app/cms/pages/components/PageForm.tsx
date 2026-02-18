@@ -16,9 +16,9 @@ import {
 } from "@nextblock-cms/ui";
 import { Textarea } from "@nextblock-cms/ui";
 import type { Database } from "@nextblock-cms/db";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from '../../../../context/AuthContext';
 import { useRef } from "react";
-import { useHotkeys } from "@/hooks/use-hotkeys";
+import { useHotkeys } from '../../../../hooks/use-hotkeys';
 
 type Page = Database['public']['Tables']['pages']['Row'];
 type PageStatus = Database['public']['Enums']['page_status'];

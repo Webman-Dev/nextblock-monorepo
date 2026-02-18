@@ -5,7 +5,7 @@ import React, { useState, useRef } from 'react';
 import { DropdownMenuItem } from "@nextblock-cms/ui";
 import { Trash2 } from "lucide-react";
 import { deletePost } from "../actions";
-import { ConfirmationModal } from '@/app/cms/components/ConfirmationModal';
+import { ConfirmationModal } from '../../components/ConfirmationModal';
 
 interface DeletePostButtonClientProps {
   postId: number;

@@ -4,7 +4,7 @@ import { DropdownMenuItem } from "@nextblock-cms/ui";
 import { Trash2 } from "lucide-react";
 import { deleteLogo } from "../actions";
 import { useTransition, useState } from 'react';
-import { ConfirmationModal } from "@/app/cms/components/ConfirmationModal";
+import { ConfirmationModal } from '../../../components/ConfirmationModal';
 import { toast } from 'react-hot-toast';
 
 interface DeleteLogoButtonProps {

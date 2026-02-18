@@ -19,7 +19,7 @@ export type ImageBlockContent = {
     blur_data_url: string | null;
 };
 import { ImageIcon, X as XIcon } from 'lucide-react';
-import MediaPickerDialog from "@/app/cms/media/components/MediaPickerDialog"; // Import the upload form
+import MediaPickerDialog from "../../media/components/MediaPickerDialog"; // Import the upload form
 import { BlockEditorProps } from '../components/BlockEditorModal';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";

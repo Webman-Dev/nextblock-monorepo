@@ -1,5 +1,5 @@
 // app/cms/settings/copyright/page.tsx
-import { getActiveLanguagesServerSide } from '@/app/cms/settings/languages/actions';
+import { getActiveLanguagesServerSide } from '../languages/actions';
 import { getCopyrightSettings } from './actions';
 import CopyrightForm from './components/CopyrightForm';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@nextblock-cms/ui';

@@ -10,8 +10,8 @@ import { Input } from '@nextblock-cms/ui';
 import { Label } from '@nextblock-cms/ui';
 import { Textarea } from '@nextblock-cms/ui';
 import type { Database } from '@nextblock-cms/db';
-import { useAuth } from '@/context/AuthContext';
-import { useHotkeys } from '@/hooks/use-hotkeys';
+import { useAuth } from '../../../../context/AuthContext';
+import { useHotkeys } from '../../../../hooks/use-hotkeys';
 
 type Media = Database['public']['Tables']['media']['Row'];
 import { FileText } from 'lucide-react';

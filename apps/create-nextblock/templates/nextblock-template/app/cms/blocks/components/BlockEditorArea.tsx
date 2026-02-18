@@ -5,10 +5,10 @@ import React, { useState, useTransition, useEffect, ComponentType, useCallback, 
 import dynamic from 'next/dynamic';
 import debounce from 'lodash.debounce';
 import type { Database, Json } from "@nextblock-cms/db";
-import { type BlockType } from "@/lib/blocks/blockRegistry";
+import { BlockType } from '../../../../lib/blocks/blockRegistry';
 
 type Block = Database["public"]["Tables"]["blocks"]["Row"];
-import { getBlockDefinition, type SectionBlockContent } from "@/lib/blocks/blockRegistry";
+import { getBlockDefinition, SectionBlockContent } from '../../../../lib/blocks/blockRegistry';
 import { Button } from "@nextblock-cms/ui";
 import { PlusCircle } from "lucide-react";
 import {

@@ -3,10 +3,8 @@
 
 import React, { useState, useMemo } from "react";
 import ColumnEditor from "../components/ColumnEditor";
-import type { SectionBlockContent } from "@/lib/blocks/blockRegistry";
-import {
-  getBlockDefinition,
-} from "@/lib/blocks/blockRegistry";
+import { SectionBlockContent } from '../../../../lib/blocks/blockRegistry';
+import { getBlockDefinition } from '../../../../lib/blocks/blockRegistry';
 import SectionConfigPanel from "../components/SectionConfigPanel";
 
 
