@@ -1,7 +1,7 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
-import { NEXTBLOCK_PACKAGES, getPackageByVariantId } from '@nextblock-cms/utils';
+import { getPackageByVariantId } from '@nextblock-cms/utils';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 

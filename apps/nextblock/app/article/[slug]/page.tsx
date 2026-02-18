@@ -9,7 +9,7 @@ import PostClientContent from "./PostClientContent";
 
 import { getPostDataBySlug } from "./page.utils";
 import BlockRenderer from "../../../components/BlockRenderer";
-import { getSsgSupabaseClient } from "@nextblock-cms/db"; // Correct import
+import { getSsgSupabaseClient } from "@nextblock-cms/db/server"; // Correct import
 import type { HeroBlockContent } from '../../../lib/blocks/blockRegistry';
 
 export const dynamicParams = true;
