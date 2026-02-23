@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getPaymentProvider } from '@nextblock-cms/ecommerce/server';
-import { createClient } from '@nextblock-cms/db/server';
+import { createClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 
 export async function POST(req: Request) {
   try {
+    const isOnline = await verifyPackageOnline('ecommerce');
+    if (!isOnline) {
+      return NextResponse.json({ error: 'Ecommerce module license is inactive' }, { status: 403 });
+    }
+
     const { items, customerEmail } = await req.json();
 
     if (!items || !Array.isArray(items)) {

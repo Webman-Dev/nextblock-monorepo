@@ -15,7 +15,6 @@ export default defineConfig({
       entryRoot: 'src',
       tsconfigPath: './tsconfig.lib.json',
       outDir: '../../dist/libs/ui',
-      skipDiagnostics: true,
       afterBuild: () => {
         const packageJson = {
           name: '@nextblock-cms/ui',

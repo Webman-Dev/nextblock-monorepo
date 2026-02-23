@@ -4,12 +4,21 @@ const path = require('node:path');
 const fs = require('fs-extra');
 
 const TEMPLATE_SKIP_DIRECTORIES = new Set(['node_modules', '.next']);
-const TEMPLATE_SKIP_FILES = new Set(['project.json', 'nx.json', 'workspace.json']);
+const TEMPLATE_SKIP_FILES = new Set([
+  'project.json',
+  'nx.json',
+  'workspace.json',
+]);
 
 async function main() {
   const workspaceRoot = process.cwd();
   const sourceDir = path.join(workspaceRoot, 'apps', 'nextblock');
-  const targetDir = path.join(workspaceRoot, 'apps', 'create-nextblock', 'template');
+  const targetDir = path.join(
+    workspaceRoot,
+    'apps',
+    'create-nextblock',
+    'template',
+  );
 
   await ensureSourceExists(sourceDir);
   await syncTemplate(fs, sourceDir, targetDir);
@@ -39,6 +48,20 @@ function shouldCopyTemplatePath(sourceDir, currentPath) {
 
   if (!relative || relative === '') {
     return true;
+  }
+
+  const unixRelative = relative.split(path.sep).join('/');
+  if (
+    unixRelative.startsWith('app/cms/orders') ||
+    unixRelative.startsWith('app/cms/products') ||
+    unixRelative.startsWith('app/cms/payments') ||
+    unixRelative.startsWith('app/checkout') ||
+    unixRelative.startsWith('app/product') ||
+    unixRelative.startsWith('app/api/checkout') ||
+    unixRelative.startsWith('app/api/webhooks/lemon-squeezy') ||
+    unixRelative.startsWith('app/api/webhooks/stripe')
+  ) {
+    return false;
   }
 
   const segments = relative.split(path.sep);

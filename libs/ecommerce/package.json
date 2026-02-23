@@ -2,7 +2,7 @@
   "name": "@nextblock-cms/ecom",
   "version": "0.0.10",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
   },
   "repository": {
     "type": "git",

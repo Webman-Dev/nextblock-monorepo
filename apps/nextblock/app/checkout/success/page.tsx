@@ -7,10 +7,14 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
+
 export default function CheckoutSuccessPage() {
   const clearCart = useCartStore((state) => state?.clearCart); // Optional chaining just in case mock
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session_id');
+
+  // Verify license client-side or we rely on the backend payment intent block to have failed.
+  // We'll leave this simple since the payments are already gated.
 
   useEffect(() => {
     if (clearCart && sessionId) {

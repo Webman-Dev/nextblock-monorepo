@@ -37,33 +37,14 @@
     "**/*.jsx",
     "next-env.d.ts",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "../../libs/ui/tailwind.config.js"
+    "../../libs/ui/tailwind.config.js",
+    "../../libs/**/*.ts",
+    "../../libs/**/*.tsx"
   ],
   "exclude": [
     "node_modules",
     "jest.config.ts",
     "**/*.spec.ts",
     "**/*.test.ts"
-  ],
-  "references": [
-    {
-      "path": "../../libs/db/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/editor/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/ui/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/utils/tsconfig.json"
-    },
-    {
-      "path": "../../libs/sdk/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/ecommerce/tsconfig.lib.json"
-    }
   ]
 }

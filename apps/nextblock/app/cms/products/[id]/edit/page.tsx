@@ -1,40 +1,42 @@
-import { ProductForm } from '../../components/ProductForm';
-import { getProduct } from '../../actions';
-import { notFound } from 'next/navigation';
+import { EditProductPage as EditProductPageUI } from '@nextblock-cms/ecommerce/server';
+import { verifyPackageOnline } from '@nextblock-cms/db/server';
+import { redirect } from 'next/navigation';
+import MediaPickerDialog from '../../../media/components/MediaPickerDialog';
+import dynamic from 'next/dynamic';
 
-interface EditProductPageProps {
-  params: {
-    id: string;
-  };
+interface EditorProps {
+  initialContent?: any;
+  onUpdate?: (content: any) => void;
 }
 
-export default async function EditProductPage({ params }: EditProductPageProps) {
-  const { id } = await params;
-  const product = await getProduct(id);
+const NotionEditor = dynamic<EditorProps>(
+  () => import('@nextblock-cms/editor').then((mod) => mod.NotionEditor as any),
+  { ssr: false }
+);
 
-  if (!product) {
-    notFound();
+export default async function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
+  const isOnline = await verifyPackageOnline('ecommerce');
+  if (!isOnline) {
+      redirect('/cms/settings/packages');
   }
 
   return (
-    <div className="p-8">
-      <ProductForm 
-        initialData={{
-           id: product.id,
-           title: product.title,
-           slug: product.slug,
-           sku: product.sku,
-           stock: product.stock || 0,
-           price: product.price,
-           status: product.status as 'draft' | 'active' | 'archived',
-           short_description: product.short_description ?? undefined,
-           description_json: product.description_json,
-           sale_price: product.sale_price ?? undefined,
-           lemonsqueezy_variant_id: product.lemonsqueezy_variant_id ?? undefined,
-           product_media: product.product_media,
-        }} 
-        isEdit 
-      />
-    </div>
+    <EditProductPageUI 
+      params={params} 
+      renderMediaPicker={(props) => (
+        <MediaPickerDialog 
+          onSelect={props.onSelect} 
+          triggerLabel="+ Add Image"
+          triggerVariant="outline"
+          defaultFolder="uploads/products/"
+        />
+      )} 
+      renderEditor={(props: EditorProps) => (
+        <NotionEditor 
+          initialContent={props.initialContent}
+          onUpdate={props.onUpdate}
+        />
+      )}
+    />
   );
 }

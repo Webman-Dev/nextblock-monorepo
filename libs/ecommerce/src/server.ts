@@ -7,3 +7,8 @@ export * from './lib/product-actions'; // Assuming product actions are also serv
 export * from './lib/factory';
 export * from './lib/providers/stripe';
 export * from './lib/providers/lemon-squeezy';
+
+// CMS Pages
+export * from './lib/pages/cms/orders';
+export * from './lib/pages/cms/products';
+export * from './lib/pages/cms/payments';

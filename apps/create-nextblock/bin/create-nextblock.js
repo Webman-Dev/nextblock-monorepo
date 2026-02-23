@@ -52,16 +52,19 @@ const PACKAGE_VERSION_SOURCES = {
   '@nextblock-cms/sdk': resolve(REPO_ROOT, 'libs/sdk/package.json'),
 };
 
+program.name('create-nextblock').description('NextBlock CMS CLI');
+
 program
-  .name('create-nextblock')
+  .command('create [project-directory]', { isDefault: true })
   .description('Bootstrap a NextBlock CMS project')
-  .argument(
-    '[project-directory]',
-    'The name of the project directory to create',
-  )
   .option('--skip-install', 'Skip installing dependencies')
   .option('-y, --yes', 'Skip all interactive prompts and use defaults')
   .action(handleCommand);
+
+program
+  .command('activate [module]')
+  .description('Activate a premium NextBlock CMS module')
+  .action(handleActivateCommand);
 
 await program.parseAsync(process.argv).catch((error) => {
   console.error(
@@ -193,6 +196,190 @@ async function handleCommand(projectDirectory, options) {
     );
     process.exit(1);
   }
+}
+
+async function handleActivateCommand(moduleName, options) {
+  if (!moduleName || moduleName !== 'ecommerce') {
+    console.error(
+      chalk.red('Invalid module name. Supported modules: ecommerce'),
+    );
+    process.exit(1);
+  }
+
+  clack.intro(`🚀 Activating NextBlock module: ${moduleName}`);
+
+  const projectPath = process.cwd();
+
+  // 1. Install NPM package
+  clack.note(`Installing @nextblock-cms/${moduleName}...`);
+
+  await execa(
+    'npm',
+    ['install', `@nextblock-cms/ecommerce@npm:@nextblock-cms/ecom@latest`],
+    { cwd: projectPath, stdio: 'inherit' },
+  );
+  clack.note('NPM package installed!');
+
+  // 2. Inject Route Wrappers
+  clack.note('Injecting route wrappers...');
+
+  const routesToInject = {
+    'app/cms/orders/page.tsx': `import { OrdersPage as OrdersPageUI } from '@nextblock-cms/ecommerce';
+import { verifyPackageOnline } from '@nextblock-cms/db/server';
+import { redirect } from 'next/navigation';
+
+export default async function OrdersPage() {
+  const isOnline = await verifyPackageOnline('ecommerce');
+  if (!isOnline) {
+    redirect('/cms/settings/packages');
+  }
+
+  return <OrdersPageUI />;
+}`,
+    'app/cms/orders/[id]/page.tsx': `import { OrderDetailPage as OrderDetailPageUI } from '@nextblock-cms/ecommerce';
+import { verifyPackageOnline } from '@nextblock-cms/db/server';
+import { redirect } from 'next/navigation';
+
+export default async function OrderDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const isOnline = await verifyPackageOnline('ecommerce');
+  if (!isOnline) {
+    redirect('/cms/settings/packages');
+  }
+  const resolvedParams = await params;
+  return <OrderDetailPageUI params={resolvedParams} />;
+}`,
+    'app/cms/products/page.tsx': `import { ProductsPage as ProductsPageUI } from '@nextblock-cms/ecommerce';
+import { verifyPackageOnline } from '@nextblock-cms/db/server';
+import { redirect } from 'next/navigation';
+
+export default async function ProductsPage() {
+  const isOnline = await verifyPackageOnline('ecommerce');
+  if (!isOnline) {
+    redirect('/cms/settings/packages');
+  }
+
+  return <ProductsPageUI />;
+}`,
+    'app/cms/products/new/page.tsx': `import { NewProductPage as NewProductPageUI } from '@nextblock-cms/ecommerce';
+import { verifyPackageOnline } from '@nextblock-cms/db/server';
+import { redirect } from 'next/navigation';
+
+export default async function NewProductPage() {
+  const isOnline = await verifyPackageOnline('ecommerce');
+  if (!isOnline) {
+    redirect('/cms/settings/packages');
+  }
+
+  return <NewProductPageUI />;
+}`,
+    'app/cms/products/[id]/edit/page.tsx': `import { EditProductPage as EditProductPageUI } from '@nextblock-cms/ecommerce';
+import { verifyPackageOnline } from '@nextblock-cms/db/server';
+import { redirect } from 'next/navigation';
+
+export default async function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
+  const isOnline = await verifyPackageOnline('ecommerce');
+  if (!isOnline) {
+    redirect('/cms/settings/packages');
+  }
+
+  const resolvedParams = await params;
+  return <EditProductPageUI params={resolvedParams} />;
+}`,
+    'app/cms/payments/page.tsx': `import { PaymentsPage as PaymentsPageUI } from '@nextblock-cms/ecommerce';
+import { verifyPackageOnline } from '@nextblock-cms/db/server';
+import { redirect } from 'next/navigation';
+
+export default async function PaymentsPage() {
+  const isOnline = await verifyPackageOnline('ecommerce');
+  if (!isOnline) {
+    redirect('/cms/settings/packages');
+  }
+
+  return <PaymentsPageUI />;
+}`,
+    'app/checkout/success/page.tsx': `import { CheckoutSuccessPage as CheckoutSuccessPageUI } from '@nextblock-cms/ecommerce';
+import { verifyPackageOnline } from '@nextblock-cms/db/server';
+import { notFound } from 'next/navigation';
+
+export default async function CheckoutSuccessPage() {
+  const isOnline = await verifyPackageOnline('ecommerce');
+  if (!isOnline) {
+    notFound();
+  }
+
+  return <CheckoutSuccessPageUI />;
+}`,
+    'app/api/checkout/route.ts': `import { NextResponse } from 'next/server';
+import { getPaymentProvider } from '@nextblock-cms/ecommerce/server';
+import { createClient, verifyPackageOnline } from '@nextblock-cms/db/server';
+
+export async function POST(req: Request) {
+  try {
+    const isOnline = await verifyPackageOnline('ecommerce');
+    if (!isOnline) {
+      return NextResponse.json({ error: 'Ecommerce module license is inactive' }, { status: 403 });
+    }
+
+    const { items, customerEmail } = await req.json();
+
+    if (!items || !Array.isArray(items)) {
+      return NextResponse.json({ error: 'Invalid items data' }, { status: 400 });
+    }
+    
+    // 1. Get Selected Provider from Settings
+    const supabase = createClient();
+    const { data: settings } = await supabase
+        .from('site_settings')
+        .select('value')
+        .eq('key', 'payment_provider')
+        .single();
+        
+    // Parse provider, default to stripe
+    let providerName: 'stripe' | 'lemon_squeezy' = 'stripe';
+    if (settings?.value) {
+        let val = settings.value;
+        if (typeof val === 'string' && val.startsWith('"')) {
+            try { val = JSON.parse(val); } catch { /* ignore */ }
+        }
+        if (val === 'lemon_squeezy') providerName = 'lemon_squeezy';
+    }
+
+    // 2. Get Provider Instance
+    const provider = getPaymentProvider(providerName);
+
+    // Get User ID from session for security
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id;
+
+    // 3. Create Session
+    const { url, error } = await provider.createCheckoutSession(items, customerEmail, userId);
+
+    if (error) {
+      console.error('Checkout Error:', error);
+      return NextResponse.json({ error }, { status: 500 });
+    }
+
+    return NextResponse.json({ url });
+  } catch (err: any) {
+    console.error('Checkout API Error:', err);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}`,
+  };
+
+  for (const [routePath, content] of Object.entries(routesToInject)) {
+    const fullPath = resolve(projectPath, routePath);
+    await fs.ensureDir(dirname(fullPath));
+    await fs.writeFile(fullPath, content);
+  }
+
+  clack.outro(
+    '✅ Ecommerce module activated successfully! You can now use the storefront features.',
+  );
 }
 
 async function runSetupWizard(projectDir, projectName) {
@@ -604,8 +791,7 @@ async function runSetupWizard(projectDir, projectName) {
     'Optional Premium Module Setup:\nIf you have a nextblock license, you can install the premium modules now.',
   );
   const setupPremium = await clack.confirm({
-    message:
-      'Do you have a GitHub Personal Access Token (PAT) for premium modules?',
+    message: 'Do you want to install premium modules now?',
     initialValue: false,
   });
 
@@ -614,38 +800,15 @@ async function runSetupWizard(projectDir, projectName) {
   }
 
   if (setupPremium) {
-    const patPrompt = await clack.text({
-      message: 'Your GitHub Personal Access Token (PAT):',
-      placeholder: 'ghp_ or github_pat_...',
-      validate: (val) => {
-        if (!val) return 'PAT is required';
-        if (!val.startsWith('ghp_') && !val.startsWith('github_pat_')) {
-          return 'Token must start with ghp_ or github_pat_';
-        }
+    clack.note('Installing @nextblock-cms/ecommerce...');
+    await execa(
+      'npm',
+      ['install', '@nextblock-cms/ecommerce@npm:@nextblock-cms/ecom@latest'],
+      {
+        cwd: projectPath,
+        stdio: 'inherit',
       },
-    });
-
-    if (clack.isCancel(patPrompt)) {
-      handleWizardCancel('Setup cancelled.');
-    }
-
-    const pat = patPrompt.trim();
-
-    // Configure .npmrc for the project
-    const npmrcPath = resolve(projectPath, '.npmrc');
-    const npmrcContent = [
-      '@nextblock-cms:registry=https://npm.pkg.github.com',
-      `//npm.pkg.github.com/:_authToken=${pat}`,
-      '',
-    ].join('\n');
-
-    await fs.writeFile(npmrcPath, npmrcContent);
-    clack.note('Premium modules configured in .npmrc!');
-
-    clack.note('Installing @nextblock-cms/ecom...');
-    await runCommand('npm', ['install', '@nextblock-cms/ecom'], {
-      cwd: projectPath,
-    });
+    );
     clack.note('Premium module installed!');
   }
 
