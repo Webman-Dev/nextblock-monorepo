@@ -2,17 +2,7 @@ import { EditProductPage as EditProductPageUI } from '@nextblock-cms/ecommerce/s
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { redirect } from 'next/navigation';
 import MediaPickerDialog from '../../../media/components/MediaPickerDialog';
-import dynamic from 'next/dynamic';
-
-interface EditorProps {
-  initialContent?: any;
-  onUpdate?: (content: any) => void;
-}
-
-const NotionEditor = dynamic<EditorProps>(
-  () => import('@nextblock-cms/editor').then((mod) => mod.NotionEditor as any),
-  { ssr: false }
-);
+import { ClientNotionEditor as NotionEditor, EditorProps } from '../../ClientNotionEditor';
 
 export default async function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
   const isOnline = await verifyPackageOnline('ecommerce');

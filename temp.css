@@ -412,7 +412,6 @@
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
 }
 .block {
   display: block;
@@ -3755,7 +3754,6 @@
     overflow: hidden;
     display: -webkit-box;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
   }
 }
 .\[\&\>tr\]\:last\:border-b-0 {
@@ -3853,7 +3851,6 @@
     text-transform: none;
   }
   button, input[type="button"], input[type="reset"], input[type="submit"] {
-    -webkit-appearance: button;
     background-color: transparent;
     background-image: none;
   }
@@ -3870,7 +3867,6 @@
     height: auto;
   }
   [type="search"] {
-    -webkit-appearance: textfield;
     outline-offset: -2px;
   }
   ::-webkit-search-decoration {
@@ -3920,7 +3916,6 @@
   }
   audio, canvas, embed, iframe, img, object, svg, video {
     display: block;
-    vertical-align: middle;
   }
   img, video {
     max-width: 100%;
