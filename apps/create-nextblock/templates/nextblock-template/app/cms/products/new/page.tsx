@@ -1,9 +1,26 @@
-import { ProductForm } from '../components/ProductForm';
+import { verifyPackageOnline } from '@nextblock-cms/db/server';
+import { redirect } from 'next/navigation';
+import { NewProductPage as NewProductPageUI } from '@nextblock-cms/ecommerce/server';
+import MediaPickerDialog from '../../media/components/MediaPickerDialog';
+import { ClientNotionEditor as NotionEditor } from '../ClientNotionEditor';
 
-export default function NewProductPage() {
+export default async function NewProductPage() {
+  const isOnline = await verifyPackageOnline('ecommerce');
+  if (!isOnline) {
+      redirect('/cms/settings/packages');
+  }
+
   return (
-    <div className="p-8">
-      <ProductForm />
-    </div>
+    <NewProductPageUI 
+      mediaPickerNode={
+        <MediaPickerDialog
+          onSelect={(media) => console.log('This will not work across boundary', media)}
+          triggerLabel="+ Add Image"
+          triggerVariant="outline"
+          defaultFolder="uploads/products/"
+        />
+      }
+      editorNode={<NotionEditor />}
+    />
   );
 }

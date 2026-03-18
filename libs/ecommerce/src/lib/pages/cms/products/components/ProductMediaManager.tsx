@@ -21,10 +21,10 @@ type MediaItem = {
 interface ProductMediaManagerProps {
   initialMedia: MediaItem[];
   onUpdate: (media: MediaItem[]) => void;
-  renderMediaPicker?: (props: { onSelect: (media: any) => void }) => React.ReactNode;
+  mediaPickerNode?: React.ReactNode;
 }
 
-export const ProductMediaManager = ({ initialMedia, onUpdate, renderMediaPicker }: ProductMediaManagerProps) => {
+export const ProductMediaManager = ({ initialMedia, onUpdate, mediaPickerNode }: ProductMediaManagerProps) => {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(initialMedia);
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
@@ -94,8 +94,8 @@ export const ProductMediaManager = ({ initialMedia, onUpdate, renderMediaPicker 
     <div className="space-y-4">
       <div className="flex justify-between items-center">
           <Label>Product Gallery</Label>
-          {renderMediaPicker ? (
-             renderMediaPicker({ onSelect: addMedia })
+          {mediaPickerNode ? (
+             React.cloneElement(mediaPickerNode as React.ReactElement<any>, { onSelect: addMedia })
           ) : (
             <div className="text-sm italic text-muted-foreground mr-4 border p-2 bg-muted rounded">
                Media Picker not injected. Cannot add images.

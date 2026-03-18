@@ -90,7 +90,8 @@ export async function createProduct(supabase: SupabaseClient<Database>, data: Pr
     price: toCents(rest.price),
     // Handle 0 correctly: explicitly check for number type or null check (0 is falsy)
     sale_price: (typeof rest.sale_price === 'number') ? toCents(rest.sale_price) : null,
-    lemonsqueezy_variant_id: rest.lemonsqueezy_variant_id ?? null,
+    freemius_plan_id: rest.freemius_plan_id ?? null,
+    freemius_product_id: rest.freemius_product_id ?? null,
   };
 
   const { data: product, error } = await supabase.from('products').insert(productData).select().single();
@@ -130,7 +131,8 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
     description_json: rest.description_json ?? null,
     price: toCents(rest.price),
     sale_price: (typeof rest.sale_price === 'number') ? toCents(rest.sale_price) : null,
-    lemonsqueezy_variant_id: rest.lemonsqueezy_variant_id ?? null,
+    freemius_plan_id: rest.freemius_plan_id ?? null,
+    freemius_product_id: rest.freemius_product_id ?? null,
     updated_at: new Date().toISOString(),
   };
 

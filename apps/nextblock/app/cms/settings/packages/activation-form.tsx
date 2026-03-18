@@ -34,7 +34,7 @@ export function ActivationForm() {
       <h3 className="text-lg font-medium mb-4">Activate a Package</h3>
       <div className="flex gap-4">
         <Input 
-          placeholder="Enter your Lemon Squeezy License Key" 
+          placeholder="Enter your Freemius License Key"
           value={key}
           onChange={(e) => setKey(e.target.value)}
           className="max-w-md"
@@ -45,7 +45,7 @@ export function ActivationForm() {
         </Button>
       </div>
       <p className="text-sm text-muted-foreground mt-2">
-        Enter the license key you received from Lemon Squeezy to unlock the package features.
+        Enter the license key you received from Freemius to unlock the package features.
       </p>
     </div>
   );

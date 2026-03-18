@@ -17,6 +17,7 @@ interface HeaderProps {
   logo: Logo | null;
   currentPageData?: { slug: string; translation_group_id: string | null };
   siteTitle: string;
+  isEcommerceActive?: boolean;
 }
 
 export default function Header({
@@ -25,6 +26,7 @@ export default function Header({
   logo,
   currentPageData,
   siteTitle,
+  isEcommerceActive = false,
 }: HeaderProps) {
   return (
     <ResponsiveNav
@@ -38,7 +40,8 @@ export default function Header({
       }
       logo={logo}
       siteTitle={siteTitle}
-      cartIconComponent={<CartIcon />}
+      cartIconComponent={isEcommerceActive ? <CartIcon /> : null}
+      isEcommerceActive={isEcommerceActive}
     />
   );
 }

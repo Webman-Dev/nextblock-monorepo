@@ -6,7 +6,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-
+import { fulfillOrderAction } from './actions';
 
 export default function CheckoutSuccessPage() {
   const clearCart = useCartStore((state) => state?.clearCart); // Optional chaining just in case mock
@@ -17,8 +17,17 @@ export default function CheckoutSuccessPage() {
   // We'll leave this simple since the payments are already gated.
 
   useEffect(() => {
-    if (clearCart && sessionId) {
-      clearCart();
+    // If we landed here from Freemius with a session ID, we definitely finished checkout. Empty cart!
+    if (sessionId) {
+      if (clearCart) {
+         console.log('Checkout success page hit with Session ID! Emptying LocalStorage Cart...');
+         clearCart();
+      }
+      
+      // Attempt to immediately mark the order as paid in the DB safely
+      fulfillOrderAction(sessionId).then((res) => {
+         if (res?.success) console.log('Order marked as paid successfully!');
+      });
     }
   }, [clearCart, sessionId]);
 

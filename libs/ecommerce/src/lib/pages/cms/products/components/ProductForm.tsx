@@ -1,4 +1,5 @@
 'use client';
+import React, { useState, useEffect } from 'react';
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui';
@@ -6,17 +7,10 @@ import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger,
 import { ProductFormValues, productSchema } from '../../../../product-schema';
 import { useForm } from 'react-hook-form';
 import { ProductMediaManager } from './ProductMediaManager';
-import { createProductAction, updateProductAction } from '../actions';
-import { useState, useEffect } from 'react';
+import { createProductAction, updateProductAction } from '../server-actions';
 import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 import { DeleteProductButton } from './DeleteProductButton';
-
-// Define Editor props locally
-interface EditorProps {
-  initialContent?: any;
-  onUpdate?: (content: any) => void;
-}
 
 interface ProductFormProps {
   initialData?: ProductFormValues & { 
@@ -24,8 +18,8 @@ interface ProductFormProps {
     product_media?: { media_id: string }[] 
   };
   isEdit?: boolean;
-  renderMediaPicker?: (props: { onSelect: (media: any) => void }) => React.ReactNode;
-  renderEditor?: (props: EditorProps) => React.ReactNode;
+  mediaPickerNode?: React.ReactNode;
+  editorNode?: React.ReactNode;
 }
 
 // Simple slugify helper
@@ -41,7 +35,7 @@ const slugify = (text: string) => {
     .replace(/-+$/, '');      // Trim - from end
 };
 
-export function ProductForm({ initialData, isEdit = false, renderMediaPicker, renderEditor }: ProductFormProps) {
+export function ProductForm({ initialData, isEdit = false, mediaPickerNode, editorNode }: ProductFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -54,7 +48,8 @@ export function ProductForm({ initialData, isEdit = false, renderMediaPicker, re
       stock: initialData?.stock || 0,
       short_description: initialData?.short_description || '',
       description_json: initialData?.description_json || {},
-      lemonsqueezy_variant_id: initialData?.lemonsqueezy_variant_id || '',
+      freemius_product_id: initialData?.freemius_product_id || '',
+      freemius_plan_id: initialData?.freemius_plan_id || '',
       status: initialData?.status || 'draft',
       // Map initial media relations relative to provided initialData.product_media
       product_media: initialData?.product_media?.map(pm => ({ media_id: pm.media_id })) || [],
@@ -239,11 +234,17 @@ export function ProductForm({ initialData, isEdit = false, renderMediaPicker, re
                     </div>
                 </div>
             
-                <div className="pt-2">
-                     <Label htmlFor="lemonsqueezy_variant_id">Lemon Squeezy Variant ID</Label>
-                     <Input id="lemonsqueezy_variant_id" {...register('lemonsqueezy_variant_id')} placeholder="12345" />
-                     <p className="text-xs text-muted-foreground mt-1">Required if using Lemon Squeezy. Found in your LS Dashboard.</p>
+                <div className="pt-2 grid grid-cols-2 gap-4">
+                     <div>
+                         <Label htmlFor="freemius_product_id">Freemius Product ID</Label>
+                         <Input id="freemius_product_id" {...register('freemius_product_id')} placeholder="24851" />
+                     </div>
+                     <div>
+                         <Label htmlFor="freemius_plan_id">Freemius Plan ID</Label>
+                         <Input id="freemius_plan_id" {...register('freemius_plan_id')} placeholder="41208" />
+                     </div>
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">Required if using Freemius digital checkouts. Found in your Freemius Dashboard.</p>
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -298,10 +299,12 @@ export function ProductForm({ initialData, isEdit = false, renderMediaPicker, re
             <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
                 <Label className="text-lg font-semibold">Detailed Description</Label>
                 <div className="min-h-[400px] border rounded-lg overflow-hidden text-block-editor">
-                {renderEditor ? renderEditor({
-                    initialContent: watch('description_json') || {},
-                    onUpdate: (content: any) => setValue('description_json', content)
-                }) : (
+                {editorNode ? (
+                    React.cloneElement(editorNode as React.ReactElement<any>, {
+                        initialContent: watch('description_json') || {},
+                        onUpdate: (content: any) => setValue('description_json', content)
+                    })
+                ) : (
                     <div className="p-4 text-sm text-muted-foreground italic text-center mt-10">
                         Editor not injected. Adding descriptions is disabled.
                     </div>
@@ -316,7 +319,7 @@ export function ProductForm({ initialData, isEdit = false, renderMediaPicker, re
                 <ProductMediaManager 
                     initialMedia={mediaForManager} 
                     onUpdate={onMediaUpdate}
-                    renderMediaPicker={renderMediaPicker}
+                    mediaPickerNode={mediaPickerNode}
                 />
                 {/* Hidden input to ensure form state catches it if needed, though setValue usually enough */}
                 <input type="hidden" {...register('product_media')} /> 

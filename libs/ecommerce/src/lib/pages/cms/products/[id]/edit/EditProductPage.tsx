@@ -6,11 +6,11 @@ interface EditProductPageProps {
   params: Promise<{
     id: string;
   }>;
-  renderMediaPicker?: (props: { onSelect: (media: any) => void }) => React.ReactNode;
-  renderEditor?: (props: { initialContent?: any, onUpdate?: (content: any) => void }) => React.ReactNode;
+  mediaPickerNode?: React.ReactNode;
+  editorNode?: React.ReactNode;
 }
 
-export async function EditProductPage({ params, renderMediaPicker, renderEditor }: EditProductPageProps) {
+export async function EditProductPage({ params, mediaPickerNode, editorNode }: EditProductPageProps) {
   const { id } = await params;
   const product = await getProduct(id);
 
@@ -32,12 +32,12 @@ export async function EditProductPage({ params, renderMediaPicker, renderEditor 
            short_description: product.short_description ?? undefined,
            description_json: product.description_json,
            sale_price: product.sale_price ?? undefined,
-           lemonsqueezy_variant_id: product.lemonsqueezy_variant_id ?? undefined,
+           freemius_plan_id: product.freemius_plan_id ?? undefined,
            product_media: product.product_media,
         }} 
         isEdit 
-        renderMediaPicker={renderMediaPicker}
-        renderEditor={renderEditor}
+        mediaPickerNode={mediaPickerNode}
+        editorNode={editorNode}
       />
     </div>
   );

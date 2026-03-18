@@ -9,6 +9,8 @@
       "import": "./index.mjs",
       "require": "./index.js"
     },
+    "./tailwind.config": "./tailwind.config.js",
+    "./tailwind.config.js": "./tailwind.config.js",
     "./styles/*": "./styles/*"
   },
   "files": [

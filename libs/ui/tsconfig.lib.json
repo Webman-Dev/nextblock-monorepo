@@ -9,9 +9,9 @@
       "@nx/react/typings/image.d.ts"
     ],
     "paths": {
-      "@nextblock-cms/utils": ["../../dist/out-tsc/libs/utils/src/index"],
-      "@nextblock-cms/utils/*": ["../../dist/out-tsc/libs/utils/src/*"],
-      "@nextblock-cms/utils/server": ["../../dist/out-tsc/libs/utils/src/server"]
+      "@nextblock-cms/utils": ["dist/libs/utils/index"],
+      "@nextblock-cms/utils/*": ["dist/libs/utils/*"],
+      "@nextblock-cms/utils/server": ["dist/libs/utils/server"]
     },
   },
   "include": [

@@ -102,7 +102,7 @@ const CollapsibleNavItem = ({ icon: Icon, title, children, isActive, adminOnly, 
 };
 
 
-export default function CmsClientLayout({ children }: { children: ReactNode }) {
+export default function CmsClientLayout({ children, isEcommerceActive = false }: { children: ReactNode, isEcommerceActive?: boolean }) {
   const { user, profile, role, isLoading, isAdmin, isWriter } = useAuth();
   const router = useRouter();
   const pathname = usePathname(); // Use the usePathname hook
@@ -259,20 +259,24 @@ export default function CmsClientLayout({ children }: { children: ReactNode }) {
                 Media
               </NavItem>
 
-              <div className="mt-6 mb-2">
-                <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider dark:text-slate-400">
-                  Store
-                </p>
-              </div>
-              <NavItem href="/cms/products" icon={ShoppingBag} isActive={pathname.startsWith("/cms/products")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
-                Products
-              </NavItem>
-              <NavItem href="/cms/orders" icon={ListOrdered} isActive={pathname.startsWith("/cms/orders")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
-                Orders
-              </NavItem>
-              <NavItem href="/cms/payments" icon={CreditCard} isActive={pathname.startsWith("/cms/payments")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                Payments
-              </NavItem>
+              {isEcommerceActive && (
+                <>
+                  <div className="mt-6 mb-2">
+                    <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider dark:text-slate-400">
+                      Store
+                    </p>
+                  </div>
+                  <NavItem href="/cms/products" icon={ShoppingBag} isActive={pathname.startsWith("/cms/products")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                    Products
+                  </NavItem>
+                  <NavItem href="/cms/orders" icon={ListOrdered} isActive={pathname.startsWith("/cms/orders")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                    Orders
+                  </NavItem>
+                  <NavItem href="/cms/payments" icon={CreditCard} isActive={pathname.startsWith("/cms/payments")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                    Payments
+                  </NavItem>
+                </>
+              )}
 
               {isAdmin && (
                 <>

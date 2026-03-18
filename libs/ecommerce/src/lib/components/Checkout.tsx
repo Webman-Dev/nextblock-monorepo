@@ -8,15 +8,21 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-  Separator
+  Separator,
+  Input,
+  Label
 } from '@nextblock-cms/ui';
 import { useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
+// eslint-disable-next-line @nx/enforce-module-boundaries
+import { Checkout as FreemiusCheckout } from '@freemius/checkout';
 
 export const Checkout = () => {
   const [isProcessing, setIsProcessing] = useState(false);
+  const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
   const store = useCart((state) => state);
   const subtotal = useCartSubtotal();
 
@@ -25,15 +31,60 @@ export const Checkout = () => {
   const { items } = store;
 
   const handlePay = async () => {
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+      setEmailError('Please enter a valid email address.');
+      return;
+    }
+    setEmailError('');
     setIsProcessing(true);
+    
     try {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: items }),
+        body: JSON.stringify({ items: items, customerEmail: email }),
       });
       const data = await res.json();
-      if (data.url) {
+      
+      if (data.customProps && data.customProps.provider === 'freemius') {
+          const cp = data.customProps;
+          
+          const checkoutConfig = {
+              product_id: cp.plugin_id,
+              public_key: cp.public_key,
+              sandbox: cp.sandbox
+          };
+          
+          const openConfig = {
+              name: 'Order Checkout',
+              plan_id: cp.plan_id,
+              user_email: cp.user_email,
+              sandbox: cp.sandbox, // Also pass sandbox here just in case
+              success: function() {
+                  window.location.href = `/checkout/success?session_id=${cp.order_id}`;
+              }
+          };
+          
+          console.log('Freemius Settings JSON:', checkoutConfig);
+          console.log('Freemius Open JSON:', openConfig);
+          
+          try {
+              // Initialize Freemius Checkout
+              const handler = new FreemiusCheckout(checkoutConfig);
+              
+              // Open the checkout overlay
+              handler.open(openConfig);
+              setIsProcessing(false); // Stop the spinner once the popup is open
+          } catch (e: any) {
+              console.error('Freemius SDK Init Error details:', e);
+              console.error('customProps used:', cp);
+              alert('Checkout popup blocked or failed to load. Error: ' + (e.message || String(e)) + '. Falling back to direct link.');
+              if (data.url) window.location.href = data.url;
+              setIsProcessing(false);
+          }
+          
+      } else if (data.url) {
+        // Fallback or Stripe checkout
         window.location.href = data.url;
       } else {
         alert('Checkout failed: ' + (data.error || 'Unknown error'));
@@ -109,9 +160,25 @@ export const Checkout = () => {
                             <span>Total</span>
                             <span>${subtotal?.toFixed(2)}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground mb-4">
                             * Taxes and shipping will be calculated on the next step.
                         </p>
+                        
+                        <div className="space-y-2 mt-4">
+                             <Label htmlFor="checkout-email">Email Address <span className="text-destructive">*</span></Label>
+                             <Input 
+                                id="checkout-email" 
+                                type="email" 
+                                placeholder="you@example.com" 
+                                value={email}
+                                onChange={(e) => {
+                                    setEmail(e.target.value);
+                                    if (emailError) setEmailError('');
+                                }}
+                                required
+                             />
+                             {emailError && <p className="text-xs text-destructive">{emailError}</p>}
+                        </div>
                     </CardContent>
                     <CardFooter>
                         <Button className="w-full" size="lg" onClick={handlePay} disabled={isProcessing}>

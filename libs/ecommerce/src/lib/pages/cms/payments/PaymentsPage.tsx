@@ -6,7 +6,7 @@ import { getStoreConfigStatus, getPaymentSettings, updatePaymentSettings } from 
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export function PaymentsPage() {
-  const [provider, setProvider] = useState<'stripe' | 'lemon_squeezy'>('stripe');
+  const [provider, setProvider] = useState<'stripe' | 'freemius'>('stripe');
   const [configStatus, setConfigStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -28,7 +28,7 @@ export function PaymentsPage() {
           } catch { /* empty */ }
       }
       
-      setProvider(current as 'stripe' | 'lemon_squeezy');
+      setProvider(current as 'stripe' | 'freemius');
       setConfigStatus(status);
       setLoading(false);
     }
@@ -53,7 +53,7 @@ export function PaymentsPage() {
   }
 
   const isStripeReady = configStatus?.stripe?.hasKeys;
-  const isLemonReady = configStatus?.lemonSqueezy?.hasKeys;
+  const isFreemiusReady = configStatus?.freemius?.hasKeys;
 
   return (
     <div className="space-y-6 max-w-3xl p-8">
@@ -77,10 +77,10 @@ export function PaymentsPage() {
                <RadioGroupItem value="stripe" id="stripe" className="mt-1" />
                <div className="grid gap-1.5 leading-none w-full">
                   <Label htmlFor="stripe" className="font-semibold text-base cursor-pointer">
-                    Stripe
+                    Physical Goods & Services (Powered by Stripe Connect)
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Accept credit cards, Apple Pay, and Google Pay.
+                    Select this provider to process payments for physical merchandise, in-person consulting, and standard e-commerce. (Note: You are responsible for your own tax liability).
                   </p>
                   
                   {!isStripeReady && (
@@ -100,25 +100,25 @@ export function PaymentsPage() {
                </div>
             </div>
 
-            <div className={`flex items-start space-x-3 space-y-0 rounded-md border p-4 ${provider === 'lemon_squeezy' ? 'border-primary bg-accent/10' : ''}`}>
-               <RadioGroupItem value="lemon_squeezy" id="lemon_squeezy" className="mt-1" />
+            <div className={`flex items-start space-x-3 space-y-0 rounded-md border p-4 ${provider === 'freemius' ? 'border-primary bg-accent/10' : ''}`}>
+               <RadioGroupItem value="freemius" id="freemius" className="mt-1" />
                <div className="grid gap-1.5 leading-none w-full">
-                  <Label htmlFor="lemon_squeezy" className="font-semibold text-base cursor-pointer">
-                    Lemon Squeezy
+                  <Label htmlFor="freemius" className="font-semibold text-base cursor-pointer">
+                    Digital Goods & Software (Powered by Freemius)
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Tax handling, global payments, and SaaS features.
+                    Select this MoR to automatically handle global tax compliance, VAT, and software licensing for digital downloads and SaaS subscriptions.
                   </p>
                   
-                  {!isLemonReady && (
+                  {!isFreemiusReady && (
                       <MissingKeysGuide 
-                        provider="Lemon Squeezy" 
-                        missingKeys={configStatus.lemonSqueezy.missing} 
-                        docsUrl="https://app.lemonsqueezy.com/settings/api"
-                        docsLabel="Lemon Squeezy -> Settings -> API"
+                        provider="Freemius" 
+                        missingKeys={configStatus.freemius.missing} 
+                        docsUrl="https://dashboard.freemius.com/"
+                        docsLabel="Freemius Dashboard -> Developers -> Credentials"
                       />
                   )}
-                  {isLemonReady && (
+                  {isFreemiusReady && (
                       <div className="mt-2 text-sm text-green-600 flex items-center gap-2">
                           <CheckCircle2 className="w-4 h-4" />
                           <span>Ready to process payments</span>

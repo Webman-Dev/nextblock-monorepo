@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+// eslint-disable-next-line @nx/enforce-module-boundaries
 import * as clack from '@clack/prompts';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -198,7 +199,7 @@ async function handleCommand(projectDirectory, options) {
   }
 }
 
-async function handleActivateCommand(moduleName, options) {
+async function handleActivateCommand(moduleName, _options) {
   if (!moduleName || moduleName !== 'ecommerce') {
     console.error(
       chalk.red('Invalid module name. Supported modules: ecommerce'),

@@ -1,0 +1,11 @@
+﻿[dotenv@17.2.3] injecting env (43) from .env.local -- tip: ≡ƒöÉ prevent building .env in docker: https://dotenvx.com/prebuild
+LATEST ORDER: {
+  "id": "cd201cc0-ac74-4322-b30c-9bce04ea9b34",
+  "user_id": "63a8aa07-ef6e-4cc7-bafa-ece023c74366",
+  "status": "pending",
+  "total": 25000,
+  "stripe_session_id": null,
+  "customer_details": null,
+  "provider": "freemius",
+  "created_at": "2026-03-05T17:55:26.363837+00:00"
+}

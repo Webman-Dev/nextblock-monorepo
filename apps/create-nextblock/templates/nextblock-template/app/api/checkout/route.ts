@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getPaymentProvider } from '@nextblock-cms/ecommerce/server';
-import { createClient } from '@nextblock-cms/db/server';
+import { createClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 
 export async function POST(req: Request) {
   try {
+    const isOnline = await verifyPackageOnline('ecommerce');
+    if (!isOnline) {
+      return NextResponse.json({ error: 'Ecommerce module license is inactive' }, { status: 403 });
+    }
+
     const { items, customerEmail } = await req.json();
 
     if (!items || !Array.isArray(items)) {
@@ -19,13 +24,13 @@ export async function POST(req: Request) {
         .single();
         
     // Parse provider, default to stripe
-    let providerName: 'stripe' | 'lemon_squeezy' = 'stripe';
+    let providerName: 'stripe' | 'freemius' = 'stripe';
     if (settings?.value) {
         let val = settings.value;
         if (typeof val === 'string' && val.startsWith('"')) {
             try { val = JSON.parse(val); } catch { /* ignore */ }
         }
-        if (val === 'lemon_squeezy') providerName = 'lemon_squeezy';
+        if (val === 'freemius') providerName = 'freemius';
     }
 
     // 2. Get Provider Instance

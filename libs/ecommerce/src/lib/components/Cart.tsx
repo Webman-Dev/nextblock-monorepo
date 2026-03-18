@@ -12,10 +12,10 @@ import {
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export const Cart = () => {
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const router = useRouter();
   const store = useCart((state) => state);
   const subtotal = useCartSubtotal();
 
@@ -23,26 +23,8 @@ export const Cart = () => {
 
   const { items, updateQuantity, removeItem } = store;
 
-  const handleCheckout = async () => {
-    setIsCheckingOut(true);
-    try {
-      const res = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: items }),
-      });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        alert('Checkout failed: ' + (data.error || 'Unknown error'));
-        setIsCheckingOut(false);
-      }
-    } catch (error) {
-       console.error(error);
-       alert('An error occurred. Please try again.');
-       setIsCheckingOut(false);
-    }
+  const handleCheckout = () => {
+    router.push('/checkout');
   };
 
   if (items.length === 0) {
@@ -150,8 +132,8 @@ export const Cart = () => {
                     <p className="text-sm text-muted-foreground">
                         Shipping and taxes calculated at checkout.
                     </p>
-                    <Button className="w-full" size="lg" onClick={handleCheckout} disabled={isCheckingOut}>
-                        {isCheckingOut ? 'Processing...' : 'Proceed to Checkout'}
+                    <Button className="w-full" size="lg" onClick={handleCheckout}>
+                        Proceed to Checkout
                     </Button>
                  </div>
             </div>

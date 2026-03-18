@@ -1,6 +1,6 @@
 import { getProductBySlug, getProducts } from '@nextblock-cms/ecommerce/server';
 import { ProductProvider } from '@nextblock-cms/ecommerce';
-import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
+import { getSsgSupabaseClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 import { notFound } from 'next/navigation';
 import { Metadata } from 'next';
 import { getPageDataBySlug } from "../../[slug]/page.utils";
@@ -57,6 +57,12 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
   const supabase = getSsgSupabaseClient();
+
+  // 0. Verify License
+  const isOnline = await verifyPackageOnline('ecommerce');
+  if (!isOnline) {
+      notFound();
+  }
 
   // 1. Fetch Product Data
   const { data: product } = await getProductBySlug(supabase, slug);

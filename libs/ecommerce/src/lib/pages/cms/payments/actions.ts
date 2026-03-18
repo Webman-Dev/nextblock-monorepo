@@ -10,20 +10,20 @@ export async function getStoreConfigStatus() {
   if (!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) stripeMissing.push('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY');
   if (!process.env.STRIPE_WEBHOOK_SECRET) stripeMissing.push('STRIPE_WEBHOOK_SECRET');
 
-  // Check Lemon Squeezy
-  const lsMissing = [];
-  if (!process.env.LEMONSQUEEZY_API_KEY) lsMissing.push('LEMONSQUEEZY_API_KEY');
-  if (!process.env.LEMONSQUEEZY_STORE_ID) lsMissing.push('LEMONSQUEEZY_STORE_ID');
-  if (!process.env.LEMONSQUEEZY_WEBHOOK_SECRET) lsMissing.push('LEMONSQUEEZY_WEBHOOK_SECRET');
+  // Check Freemius
+  const fmMissing = [];
+  if (!process.env.FREEMIUS_STORE_ID) fmMissing.push('FREEMIUS_STORE_ID');
+  if (!process.env.FREEMIUS_PUBLIC_KEY) fmMissing.push('FREEMIUS_PUBLIC_KEY');
+  if (!process.env.FREEMIUS_SECRET_KEY) fmMissing.push('FREEMIUS_SECRET_KEY');
 
   return {
     stripe: {
       hasKeys: stripeMissing.length === 0,
       missing: stripeMissing
     },
-    lemonSqueezy: {
-      hasKeys: lsMissing.length === 0,
-      missing: lsMissing
+    freemius: {
+      hasKeys: fmMissing.length === 0,
+      missing: fmMissing
     }
   };
 }
@@ -44,7 +44,7 @@ export async function getPaymentSettings() {
     return data.value; 
 }
 
-export async function updatePaymentSettings(provider: 'stripe' | 'lemon_squeezy') {
+export async function updatePaymentSettings(provider: 'stripe' | 'freemius') {
     const supabase = await createClient();
     
     // Admin check

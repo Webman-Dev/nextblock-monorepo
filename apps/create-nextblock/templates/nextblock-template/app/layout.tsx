@@ -22,6 +22,7 @@ import { getCopyrightSettings } from './cms/settings/copyright/actions';
 import { getTranslations } from './cms/settings/extra-translations/actions';
 import type { Database } from '@nextblock-cms/db';
 import { headers, cookies } from 'next/headers';
+import { verifyPackageOnline } from '@nextblock-cms/db/server';
 
 const defaultUrl = process.env.NEXT_PUBLIC_URL || "http://localhost:3000";
 
@@ -88,6 +89,8 @@ async function loadLayoutData() {
   const canAccessCms = role === 'ADMIN' || role === 'WRITER';
   const siteTitle = logo?.site_title ?? 'Nextblock';
 
+  const isEcommerceActive = await verifyPackageOnline('ecommerce');
+
   return {
     user,
     profile,
@@ -103,6 +106,7 @@ async function loadLayoutData() {
     logo,
     canAccessCms,
     siteTitle,
+    isEcommerceActive,
   };
 }
 
@@ -162,9 +166,10 @@ export default async function RootLayout({
   hasSupabaseEnv,
   headerNavItems,
   logo,
-    footerNavItems,
+  footerNavItems,
   canAccessCms,
   siteTitle,
+  isEcommerceActive,
 } = await loadLayoutData();
 
   return (
@@ -203,6 +208,7 @@ export default async function RootLayout({
                     canAccessCms={canAccessCms}
                     logo={logo}
                     siteTitle={siteTitle}
+                    isEcommerceActive={isEcommerceActive}
                   />
                 )}
               </div>
@@ -221,7 +227,7 @@ export default async function RootLayout({
             </footer>
           </div>
 
-          <CartDrawer />
+          {isEcommerceActive && <CartDrawer />}
         </Providers>
         <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID || ""} />
       </body>

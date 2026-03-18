@@ -26,7 +26,7 @@ const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 interface MediaPickerDialogProps {
   triggerLabel?: string;
   triggerVariant?: "default" | "outline" | "secondary" | "destructive" | "ghost";
-  onSelect: (media: Media) => void;
+  onSelect?: (media: Media) => void;
   accept?: (m: Media) => boolean; // filter, e.g. only images
   title?: string;
   open?: boolean; onOpenChange?: (open: boolean) => void; hideTrigger?: boolean;
@@ -88,7 +88,9 @@ export default function MediaPickerDialog({
   }, [items, accept]);
 
   const handleSelect = (media: Media) => {
-    onSelect(media);
+    if (onSelect) {
+      onSelect(media);
+    }
     setIsOpen(false);
   };
 

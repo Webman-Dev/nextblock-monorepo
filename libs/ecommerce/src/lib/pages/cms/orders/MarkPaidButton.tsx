@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { markOrderAsPaid } from './actions';
+import { markOrderAsPaid } from './server-actions';
 import { useRouter } from 'next/navigation';
 
 export function MarkPaidButton({ orderId }: { orderId: string }) {

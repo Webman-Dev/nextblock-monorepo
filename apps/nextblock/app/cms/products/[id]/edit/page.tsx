@@ -1,8 +1,8 @@
-import { EditProductPage as EditProductPageUI } from '@nextblock-cms/ecommerce/server';
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { redirect } from 'next/navigation';
+import { EditProductPage as EditProductPageUI } from '@nextblock-cms/ecommerce/server';
 import MediaPickerDialog from '../../../media/components/MediaPickerDialog';
-import { ClientNotionEditor as NotionEditor, EditorProps } from '../../ClientNotionEditor';
+import { ClientNotionEditor as NotionEditor } from '../../ClientNotionEditor';
 
 export default async function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
   const isOnline = await verifyPackageOnline('ecommerce');
@@ -12,21 +12,16 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
 
   return (
     <EditProductPageUI 
-      params={params} 
-      renderMediaPicker={(props) => (
-        <MediaPickerDialog 
-          onSelect={props.onSelect} 
+      params={params}
+      mediaPickerNode={
+        <MediaPickerDialog
+
           triggerLabel="+ Add Image"
           triggerVariant="outline"
           defaultFolder="uploads/products/"
         />
-      )} 
-      renderEditor={(props: EditorProps) => (
-        <NotionEditor 
-          initialContent={props.initialContent}
-          onUpdate={props.onUpdate}
-        />
-      )}
+      }
+      editorNode={<NotionEditor />}
     />
   );
 }

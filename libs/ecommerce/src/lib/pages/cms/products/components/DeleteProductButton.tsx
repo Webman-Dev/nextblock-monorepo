@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@nextblock-cms/ui';
-import { deleteProductAction } from '../actions';
+import { deleteProductAction } from '../server-actions';
 import { useTransition } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';

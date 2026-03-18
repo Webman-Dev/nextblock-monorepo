@@ -87,7 +87,7 @@ export async function OrdersPage({
                       <StatusBadge status={order.status} />
                     </td>
                     <td className="px-4 py-3 capitalize text-gray-600 dark:text-gray-400">
-                        {order.provider === 'lemon_squeezy' ? '🍋 Lemon' : 'Stripe'}
+                        {order.provider === 'freemius' ? 'Freemius' : 'Stripe'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {formatPrice(order.total, 'usd')}

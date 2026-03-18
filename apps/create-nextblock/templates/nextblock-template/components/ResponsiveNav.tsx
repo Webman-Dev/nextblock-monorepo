@@ -70,6 +70,7 @@ interface ResponsiveNavProps {
   headerAuthComponent: React.ReactNode;
   languageSwitcherComponent: React.ReactNode;
   cartIconComponent?: React.ReactNode;
+  isEcommerceActive?: boolean;
 }
 
 export default function ResponsiveNav({
@@ -82,6 +83,7 @@ export default function ResponsiveNav({
   logo,
   siteTitle,
   cartIconComponent,
+  isEcommerceActive = false,
 }: ResponsiveNavProps) {
   const { t } = useTranslations();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -90,7 +92,18 @@ export default function ResponsiveNav({
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const menuContainerRef = useRef<HTMLDivElement>(null);
 
-  const hierarchicalNavItems = useMemo(() => buildHierarchy(navItems), [navItems]);
+  const activeNavItems = useMemo(() => {
+    if (isEcommerceActive) return navItems;
+    return navItems.filter(item => {
+      const href = item.url.toLowerCase();
+      if (href.startsWith('/product') || href.startsWith('/checkout') || href.startsWith('/shop') || href.startsWith('/cart')) {
+        return false;
+      }
+      return true;
+    });
+  }, [navItems, isEcommerceActive]);
+
+  const hierarchicalNavItems = useMemo(() => buildHierarchy(activeNavItems), [activeNavItems]);
   const { currentContent } = useCurrentContent();
 
   let editPathDetails: { href: string; label: string } | null = null;

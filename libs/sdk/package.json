@@ -4,7 +4,10 @@
   "type": "module",
   "main": "./index.js",
   "types": "./index.d.ts",
-  "dependencies": {},
+  "dependencies": {
+    "zod": "*",
+    "lucide-react": "*"
+  },
   "publishConfig": {
     "access": "public"
   }

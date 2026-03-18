@@ -9,7 +9,7 @@ import PostClientContent from "./PostClientContent";
 
 import { getPostDataBySlug } from "./page.utils";
 import BlockRenderer from "../../../components/BlockRenderer";
-import { getSsgSupabaseClient } from "@nextblock-cms/db"; // Correct import
+import { getSsgSupabaseClient } from "@nextblock-cms/db/server"; // Correct import
 import type { HeroBlockContent } from '../../../lib/blocks/blockRegistry';
 
 export const dynamicParams = true;
@@ -47,7 +47,8 @@ export async function generateStaticParams(): Promise<ResolvedPostParams[]> {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Missing Supabase environment variables');
+    console.warn('Missing Supabase environment variables in generateStaticParams (Posts)');
+    return [];
   }
   
   const supabase = createSupabaseJsClient(supabaseUrl, supabaseAnonKey);

@@ -1,10 +1,11 @@
 export const NEXTBLOCK_PACKAGES = {
   ecommerce: {
     id: 'ecommerce',
-    name: 'E-Commerce Pro',
-    description: 'Full-featured digital store with Stripe & Lemon Squeezy.',
-    ls_variant_id: '1317020', // Hardcoded from Lemon Squeezy
-    purchase_url: 'https://nextblock.ca/pricing', // Fallback link
+    name: 'NextBlock Commerce Pro',
+    description: 'Full-featured digital store with Stripe & Freemius.',
+    fm_product_id: '24851', // Product ID for NextBlock Commerce Pro
+    fm_plan_id: '41208', // $25/month or $250/year
+    purchase_url: 'https://checkout.freemius.com/app/24851/plan/41208/?sandbox=true',
   },
   // Future packages (e.g. AI Agents) will be added here
 } as const;
@@ -16,7 +17,7 @@ export function getPackageById(id: string): PackageDef | undefined {
   return NEXTBLOCK_PACKAGES[id as PackageId];
 }
 
-export function getPackageByVariantId(variantId: string | number): PackageDef | undefined {
-  const vid = String(variantId);
-  return Object.values(NEXTBLOCK_PACKAGES).find(p => p.ls_variant_id === vid);
+export function getPackageByFreemiusId(productId: string | number): PackageDef | undefined {
+  const pid = String(productId);
+  return Object.values(NEXTBLOCK_PACKAGES).find(p => p.fm_product_id === pid);
 }

@@ -1,11 +1,11 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
-import { getPackageByVariantId } from '@nextblock-cms/utils';
+import { NEXTBLOCK_PACKAGES } from '@nextblock-cms/utils';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 
-const LS_API_URL = 'https://api.lemonsqueezy.com/v1';
+const FM_API_URL = 'https://api.freemius.com/v1';
 
 // Helper to get service role client
 const getServiceRoleClient = () => {
@@ -38,49 +38,47 @@ export async function activatePackage(key: string) {
   const headerList = await headers();
   // instance_name is usually the domain, for local dev use 'localhost' or actual host
   const instanceName = headerList.get('host') || 'nextblock-instance';
+  
+  // Freemius requires a 32-char unique identifier for the install.
+  // We hash the instance (domain) to ensure reactivations on the same domain use the same UID.
+  const crypto = require('crypto');
+  const uid = crypto.createHash('md5').update(instanceName).digest('hex');
 
   try {
-    // 1. Activate with Lemon Squeezy
-    const response = await fetch(`${LS_API_URL}/licenses/activate`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        license_key: key,
-        instance_name: instanceName,
-      }),
-    });
+    let data = null;
+    let pkg = null;
+    let fmProductId = null;
 
-    const data = await response.json();
+    // We don't know the exact package just from the license key, so we try activating
+    // against our known Freemius Product IDs from the NEXTBLOCK_PACKAGES registry.
+    const packages = Object.values(NEXTBLOCK_PACKAGES);
+    
+    for (const p of packages) {
+      if (!p.fm_product_id) continue;
+      
+      const siteUrl = encodeURIComponent(`http://${instanceName}`);
+      const response = await fetch(`${FM_API_URL}/products/${p.fm_product_id}/licenses/activate.json?uid=${uid}&license_key=${encodeURIComponent(key)}&url=${siteUrl}`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        }
+      });
 
-    if (!data.activated) {
-        return { error: data.error || 'Activation failed. Invalid key or limit reached.' };
+      const responseData = await response.json();
+      console.log('Freemius Activation Attempt for Product', p.fm_product_id, 'Response:', response.status, responseData);
+      
+      // Freemius returns the license object directly if successful, or an error/api_response
+      if (response.ok && responseData.install_id) {
+          data = responseData;
+          pkg = p;
+          fmProductId = p.fm_product_id;
+          break;
+      }
     }
 
-    // 2. Identify Package
-    // const variantId = data.meta?.variant_id; // Sometimes variant_id is inside attributes
-    const variantId = data.meta?.variant_id || data.license_key?.variant_id || (data.data?.attributes?.product_id ? String(data.data.attributes.product_id) : null); 
-    
-    // Fallback: if variant_id is missing, we might need a better mapping strategy
-    // For now, let's try to map product_id if available, or just error out.
-    // The user payload has product_id: 835771. 
-    // Our constant has ls_variant_id.
-    
-    // Let's trust getPackageByVariantId will find it if we pass the right thing.
-    // The payload shows data.attributes.product_id = 835771. 
-    // data.meta.variant_id is NOT in the payload provided by user.
-    // Wait, the payload provided by user is a WEBHOOK payload.
-    // The response from Activate API is slightly different.
-    // Assume activate API returns what we need. 
-    
-    const pkg = getPackageByVariantId(variantId);
-
-    if (!pkg) {
-         // Attempt to look up by product_id if variant_id fails? 
-         // For now, just error.
-        return { error: `License valid, but package variant (${variantId}) is not recognized by this system.` };
+    if (!data || !pkg) {
+        return { error: 'Activation failed. Invalid key, wrong product, or limit reached.' };
     }
 
     // 3. Store in DB - USE SERVICE ROLE
@@ -93,17 +91,17 @@ export async function activatePackage(key: string) {
             instance_name: instanceName,
             package_id: pkg.id,
             status: 'active',
-            meta: data,
+            meta: {
+              ...data,
+              fm_product_id: fmProductId,
+              fm_install_id: data.install_id,
+              fm_uid: uid
+            },
             last_validated_at: new Date().toISOString(),
         }, { onConflict: 'license_key, package_id' });
 
     if (dbError) {
         console.error('DB Error activating package:', dbError);
-        // Attempt a read to see if it's general access
-        const { error: readError } = await supabase.from('package_activations').select('count', { count: 'exact', head: true });
-        if (readError) console.error('DB Read Check failed too:', readError);
-        else console.log('DB Read Check succeeded (Service Role working for reads).');
-        
         return { error: 'Activation successful, but local saving failed: ' + dbError.message };
     }
 
@@ -122,7 +120,7 @@ export async function deactivatePackage(packageId: string) {
     // 1. Get current activation
     const { data: activation, error: fetchError } = await supabase
         .from('package_activations')
-        .select('id, license_key, instance_name')
+        .select('id, license_key, instance_name, meta')
         .eq('package_id', packageId)
         .eq('status', 'active')
         .single();
@@ -131,21 +129,22 @@ export async function deactivatePackage(packageId: string) {
         return { error: 'No active license found for this package.' };
     }
 
-    // 2. Deactivate at Lemon Squeezy
+    // 2. Deactivate at Freemius
     try {
-         await fetch(`${LS_API_URL}/licenses/deactivate`, {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                license_key: activation.license_key,
-                instance_name: activation.instance_name,
-            }),
-        });
+        const fmProductId = activation.meta?.fm_product_id;
+        const uid = activation.meta?.fm_uid;
+        const installId = activation.meta?.fm_install_id;
+        
+        if (fmProductId && uid && installId) {
+          await fetch(`${FM_API_URL}/products/${fmProductId}/licenses/deactivate.json?uid=${uid}&install_id=${installId}&license_key=${encodeURIComponent(activation.license_key)}`, {
+              method: 'POST',
+              headers: {
+                  'Accept': 'application/json',
+              }
+          });
+        }
     } catch (err) {
-        console.warn('LS Deactivation failed (network?), removing locally anyway.', err);
+        console.warn('Freemius Deactivation failed (network?), removing locally anyway.', err);
     }
 
     // 3. Remove/Update local DB

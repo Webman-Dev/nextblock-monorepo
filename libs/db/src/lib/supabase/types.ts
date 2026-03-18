@@ -625,6 +625,8 @@ export type Database = {
         Row: {
           created_at: string | null
           description_json: Json | null
+          freemius_plan_id: string | null
+          freemius_product_id: string | null
           id: string
           lemonsqueezy_variant_id: string | null
           metadata: Json | null
@@ -641,6 +643,8 @@ export type Database = {
         Insert: {
           created_at?: string | null
           description_json?: Json | null
+          freemius_plan_id?: string | null
+          freemius_product_id?: string | null
           id?: string
           lemonsqueezy_variant_id?: string | null
           metadata?: Json | null
@@ -657,6 +661,8 @@ export type Database = {
         Update: {
           created_at?: string | null
           description_json?: Json | null
+          freemius_plan_id?: string | null
+          freemius_product_id?: string | null
           id?: string
           lemonsqueezy_variant_id?: string | null
           metadata?: Json | null

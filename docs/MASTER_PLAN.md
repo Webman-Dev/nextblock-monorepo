@@ -55,10 +55,6 @@ NextBlock fundamentally rejects the traditional open-source distribution approac
 
 - **The Configuration Dichotomy:** During development, applications import libraries via TypeScript path aliases defined in `tsconfig.base.json` (e.g., `import { Button } from '@nextblock-monorepo/ui'` resolves to uncompiled source code). In production, these same libraries resolve to compiled transpiled files like `node_modules/@nextblock-monorepo/ui/dist/index.js`.
 
-## 3. Engineering & 100-Day Technical Roadmap
-
-NextBlock enforces a rigorous 100-Day Roadmap divided into four 25-day phases to achieve flawless performance and scale.
-
 ### Phase 1: Performance Foundation
 
 - **Core Architecture:** NextBlock leverages Next.js Incremental Static Regeneration (ISR) and stale-while-revalidate caching directives, pushing dynamic content to the Edge Network (Vercel or Cloudflare). This delivers sub-millisecond latency globally, reducing Time to First Byte (TTFB).
