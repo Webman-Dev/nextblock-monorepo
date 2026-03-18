@@ -58,3 +58,5 @@ vitest.config.*.timestamp*
 apps/nextblock/backups/
 
 nextblock-cms
+.claude/worktrees
+.claude/settings.local.json
