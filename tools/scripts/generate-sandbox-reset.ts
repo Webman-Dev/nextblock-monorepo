@@ -35,7 +35,10 @@ async function generateSandboxReset() {
   let concatenatedSql = '';
   for (const file of files) {
     console.log(` - Reading ${file}`);
-    const content = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf-8');
+    let content = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf-8');
+    // Strip BEGIN; and COMMIT; because they cause errors inside an EXECUTE block
+    content = content.replace(/(?:^|\n)\s*BEGIN\s*;/ig, '\n');
+    content = content.replace(/(?:^|\n)\s*COMMIT\s*;/ig, '\n');
     concatenatedSql += `\n\n-- >>> FROM: ${file} <<<\n`;
     concatenatedSql += content;
   }

@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   const r2AccessKeyId = process.env.R2_ACCESS_KEY_ID;
   const r2SecretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
   const r2BucketName = process.env.R2_BUCKET_NAME;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  const siteUrl = request.nextUrl.origin || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_URL;
 
   if (!supabaseUrl || !supabaseServiceKey || !r2AccountId || !r2AccessKeyId || !r2SecretAccessKey || !r2BucketName || !siteUrl) {
     return NextResponse.json({ error: 'Missing environment variables' }, { status: 500 });
