@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
 
     // 5. Reset Database
     console.log('[Sandbox Reset] Resetting Database...');
-    const { error } = await supabase.rpc('reset_sandbox', { p_include_premium: true });
+    const { error } = await supabase.rpc('reset_sandbox_state');
 
     if (error) {
       console.error('[Sandbox Reset] DB Error:', error);
