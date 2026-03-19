@@ -29,7 +29,13 @@ export async function GET(request: NextRequest) {
   const r2SecretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
   const r2BucketName = process.env.R2_BUCKET_NAME;
   // Prioritize canonical URL for Vercel production to bypass internal deployment protections
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || request.nextUrl.origin || process.env.NEXT_PUBLIC_URL;
+  let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || request.nextUrl.origin || process.env.NEXT_PUBLIC_URL;
+  if (siteUrl && !siteUrl.startsWith('http')) {
+    siteUrl = `https://${siteUrl}`;
+  }
+  if (siteUrl && siteUrl.endsWith('/')) {
+    siteUrl = siteUrl.slice(0, -1);
+  }
 
   if (!supabaseUrl || !supabaseServiceKey || !r2AccountId || !r2AccessKeyId || !r2SecretAccessKey || !r2BucketName || !siteUrl) {
     return NextResponse.json({ error: 'Missing environment variables' }, { status: 500 });
