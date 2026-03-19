@@ -99,7 +99,7 @@ This project is optimized for deployment on [Vercel](https://vercel.com/).
 1.  Push your code to a GitHub/GitLab/Bitbucket repository.
 2.  Import the project into Vercel.
 3.  **Configure Environment Variables in Vercel:**
-    - Add all the environment variables from your `.env.local` file to your Vercel project settings (Project Settings -> Environment Variables). This includes Supabase keys, R2 keys, `NEXT_PUBLIC_SITE_URL` (set to your production domain), and `REVALIDATE_SECRET_TOKEN`.
+    - Add all the environment variables from your `.env.local` file to your Vercel project settings (Project Settings -> Environment Variables). This includes Supabase keys, R2 keys, `NEXT_PUBLIC_URL` (set to your production domain), and `REVALIDATE_SECRET_TOKEN`.
 4.  Vercel will automatically build and deploy your Next.js application.
 5.  Ensure your Supabase Database Webhooks are pointing to your production Next.js API endpoint for revalidation.
 

@@ -68,7 +68,7 @@ export async function generateMetadata(
     return { title: "Page Not Found" };
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
+  const siteUrl = process.env.NEXT_PUBLIC_URL || "";
   const supabase = getSsgSupabaseClient();
   
   // Parallel queries for better performance

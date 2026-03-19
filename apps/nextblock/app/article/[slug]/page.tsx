@@ -80,7 +80,7 @@ export async function generateMetadata(
     };
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
+  const siteUrl = process.env.NEXT_PUBLIC_URL || "";
   const supabase = getSsgSupabaseClient();
   const { data: languages } = await supabase.from('languages').select('id, code');
   const { data: postTranslations } = await supabase

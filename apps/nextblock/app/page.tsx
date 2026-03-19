@@ -57,7 +57,7 @@ export async function generateMetadata(): Promise<Metadata> {
     return { title: "Homepage Not Found" };
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
+  const siteUrl = process.env.NEXT_PUBLIC_URL || "";
 
   // Simplified metadata without complex hreflang queries for better performance
   return {

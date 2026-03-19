@@ -16,7 +16,7 @@ export const createCheckoutSession = async (
   }
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:4200';
+  const siteUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:4200';
 
   if (!cartItems.length) {
     return { error: 'Cart is empty', url: null };
