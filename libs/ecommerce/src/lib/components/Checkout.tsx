@@ -15,14 +15,16 @@ import {
 import { useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
-// eslint-disable-next-line @nx/enforce-module-boundaries
+import { Loader2, FlaskConical, X } from 'lucide-react';
+
+const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
 import { Checkout as FreemiusCheckout } from '@freemius/checkout';
 
 export const Checkout = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
+  const [showSandboxModal, setShowSandboxModal] = useState(false);
   const store = useCart((state) => state);
   const subtotal = useCartSubtotal();
 
@@ -36,6 +38,13 @@ export const Checkout = () => {
       return;
     }
     setEmailError('');
+
+    // In sandbox mode, skip real checkout and show mock modal
+    if (isSandbox) {
+      setShowSandboxModal(true);
+      return;
+    }
+
     setIsProcessing(true);
     
     try {
@@ -111,6 +120,38 @@ export const Checkout = () => {
 
   return (
     <div className="container mx-auto px-4 py-12 md:px-6">
+
+      {/* Sandbox Mock Checkout Modal */}
+      {showSandboxModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowSandboxModal(false)}>
+          <div className="relative bg-background border rounded-xl shadow-2xl p-8 max-w-md mx-4" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setShowSandboxModal(false)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900/20">
+                <FlaskConical className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+              </div>
+              <h2 className="text-xl font-semibold">Checkout Successful</h2>
+            </div>
+            <p className="text-muted-foreground mb-2">
+              🎉 This is a <strong>Sandbox environment</strong>. The Freemius checkout is skipped here for demo purposes.
+            </p>
+            <p className="text-muted-foreground mb-6">
+              To purchase a real license for your self-hosted NextBlock instance, visit:
+            </p>
+            <a
+              href="https://nextblock.ca"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full text-center py-3 px-4 rounded-lg bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity"
+            >
+              Purchase at nextblock.ca
+            </a>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto max-w-4xl">
         <h1 className="mb-8 text-3xl font-bold">Checkout</h1>
         

@@ -31,12 +31,6 @@ export default function CheckoutSuccessPage() {
       <p className="mb-8 max-w-md text-muted-foreground">
         Your payment was successful. We will send you an email confirmation shortly.
       </p>
-      
-      {sessionId && (
-        <p className="mb-8 text-xs text-muted-foreground">
-            Session Ref: {sessionId.slice(0, 10)}...
-        </p>
-      )}
 
       <Button asChild>
         <Link href="/">Return to Home</Link>

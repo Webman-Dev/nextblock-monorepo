@@ -33,6 +33,10 @@ const getServiceRoleClient = () => {
 };
 
 export async function activatePackage(key: string) {
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+    return { error: 'License activation is disabled in Sandbox mode. To purchase a real license, visit nextblock.ca' };
+  }
+
   if (!key) {
     return { error: 'License key is required.' };
   }
@@ -129,6 +133,10 @@ export async function activatePackage(key: string) {
 }
 
 export async function deactivatePackage(packageId: string) {
+    if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+        return { error: 'License deactivation is disabled in Sandbox mode.' };
+    }
+
     const supabase = getServiceRoleClient();
     
     // 1. Get current activation
