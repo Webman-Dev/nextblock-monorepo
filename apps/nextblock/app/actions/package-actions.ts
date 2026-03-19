@@ -5,9 +5,9 @@ import { NEXTBLOCK_PACKAGES } from '@nextblock-cms/utils';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 
-const FM_API_URL = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true'
-  ? 'https://sandbox-api.freemius.com/v1'
-  : 'https://api.freemius.com/v1';
+// Freemius handles both Sandbox and Production keys on the same API domain.
+// The key itself determines the environment.
+const FM_API_URL = 'https://api.freemius.com/v1';
 
 // Helper to get service role client
 const getServiceRoleClient = () => {
@@ -51,6 +51,7 @@ export async function activatePackage(key: string) {
     let pkg = null;
     let fmProductId = null;
     let hasLicenseError = false;
+    let specificErrorMsg: string | null = null;
 
     // We don't know the exact package just from the license key, so we try activating
     // against our known Freemius Product IDs from the NEXTBLOCK_PACKAGES registry.
@@ -82,14 +83,16 @@ export async function activatePackage(key: string) {
       const errorCode = responseData?.error?.code;
       if (errorCode === 'not_found' || errorCode === 'invalid_license_key') {
           hasLicenseError = true;
+      } else if (responseData?.error?.message) {
+          specificErrorMsg = responseData.error.message;
       }
     }
 
     if (!data || !pkg) {
-        if (hasLicenseError && process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true') {
+        if (hasLicenseError && process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true' && !specificErrorMsg) {
             return { error: 'Sorry, this is a sandbox key. Please purchase the real key at nextblock.ca' };
         }
-        return { error: 'Activation failed. Invalid key, wrong product, or limit reached.' };
+        return { error: specificErrorMsg || 'Activation failed. Invalid key, wrong product, or limit reached.' };
     }
 
     // 3. Store in DB - USE SERVICE ROLE
