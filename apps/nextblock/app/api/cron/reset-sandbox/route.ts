@@ -29,7 +29,12 @@ export async function GET(request: NextRequest) {
   const r2SecretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
   const r2BucketName = process.env.R2_BUCKET_NAME;
   // Prioritize canonical URL for Vercel production to bypass internal deployment protections
-  let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || request.nextUrl.origin || process.env.NEXT_PUBLIC_URL;
+  let siteUrl = process.env.NEXT_PUBLIC_URL || request.nextUrl.origin;
+  
+  // If local development, defer to the actual request host origin to prevent 3000/4200 port mismatches
+  if (siteUrl && siteUrl.includes('localhost:') && request.nextUrl.origin.includes('localhost:')) {
+    siteUrl = request.nextUrl.origin;
+  }
   if (siteUrl && !siteUrl.startsWith('http')) {
     siteUrl = `https://${siteUrl}`;
   }
