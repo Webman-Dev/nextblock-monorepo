@@ -32,6 +32,11 @@ export const Checkout = () => {
 
   const { items } = store;
 
+  const closeSandboxModal = () => {
+    setShowSandboxModal(false);
+    if (store?.clearCart) store.clearCart();
+  };
+
   const handlePay = async () => {
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
       setEmailError('Please enter a valid email address.');
@@ -123,9 +128,9 @@ export const Checkout = () => {
 
       {/* Sandbox Mock Checkout Modal */}
       {showSandboxModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowSandboxModal(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={closeSandboxModal}>
           <div className="relative bg-background border rounded-xl shadow-2xl p-8 max-w-md mx-4" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setShowSandboxModal(false)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
+            <button onClick={closeSandboxModal} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
               <X className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-3 mb-4">
