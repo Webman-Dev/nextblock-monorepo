@@ -32,6 +32,7 @@ Deep dives into the internal workings.
 - [**Licensing Model**](./LICENSING.md): How the License Key system works internally.
 - [**Monorepo Structure**](./MONOREPO.md): Nx workspace organization.
 - [**CLI Tooling**](./CLI.md): How `create-nextblock` works.
+- [**Sandbox Automations**](./SANDBOX_RESET.md): Public demo environment architecture.
 
 ### 🧱 Editor & Blocks
 
