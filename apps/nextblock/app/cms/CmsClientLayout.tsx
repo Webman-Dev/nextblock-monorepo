@@ -12,7 +12,7 @@ import {
 import { Button } from "@nextblock-cms/ui"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
 import { cn } from "@nextblock-cms/utils"
-import { signOutAction } from "../actions";
+// removed signOutAction import
 import Image from "next/image";
 import { FeedbackModal } from "./components/FeedbackModal";
 
@@ -103,7 +103,7 @@ const CollapsibleNavItem = ({ icon: Icon, title, children, isActive, adminOnly, 
 
 
 export default function CmsClientLayout({ children, isEcommerceActive = false }: { children: ReactNode, isEcommerceActive?: boolean }) {
-  const { user, profile, role, isLoading, isAdmin, isWriter } = useAuth();
+  const { user, profile, role, isLoading, isAdmin, isWriter, supabase } = useAuth();
   const router = useRouter();
   const pathname = usePathname(); // Use the usePathname hook
   const [cmsSidebarOpen, setCmsSidebarOpen] = React.useState(false);
@@ -144,6 +144,12 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
   const closeSidebarOnMobile = () => {
     if (window.innerWidth < 768) {
       setCmsSidebarOpen(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
     }
   };
 
@@ -338,11 +344,9 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                   <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">{role}</p>
                 </div>
               </div>
-              <form action={signOutAction}>
-                <Button type="submit" variant="ghost" size="icon" className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300" title="Sign Out">
-                    <LogOut className="h-4 w-4" />
-                </Button>
-              </form>
+              <Button onClick={handleSignOut} variant="ghost" size="icon" className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300" title="Sign Out">
+                  <LogOut className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         </div>
