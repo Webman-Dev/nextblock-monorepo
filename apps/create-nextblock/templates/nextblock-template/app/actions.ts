@@ -11,7 +11,11 @@ export const signUpAction = async (formData: FormData) => {
   const supabase = await createClient();
   const origin = (await headers()).get("origin");
   const nextPublicUrl = process.env.NEXT_PUBLIC_URL;
-  const redirectBase = nextPublicUrl ? `https://${nextPublicUrl}` : origin;
+  const redirectBase = nextPublicUrl
+    ? nextPublicUrl.startsWith("http")
+      ? nextPublicUrl
+      : `https://${nextPublicUrl}`
+    : origin;
 
   if (!email || !password) {
     return encodedRedirect(
@@ -75,7 +79,11 @@ export const forgotPasswordAction = async (formData: FormData) => {
   const supabase = await createClient();
   const origin = (await headers()).get("origin");
   const nextPublicUrl = process.env.NEXT_PUBLIC_URL;
-  const redirectBase = nextPublicUrl ? `https://${nextPublicUrl}` : origin;
+  const redirectBase = nextPublicUrl
+    ? nextPublicUrl.startsWith("http")
+      ? nextPublicUrl
+      : `https://${nextPublicUrl}`
+    : origin;
   const callbackUrl = formData.get("callbackUrl")?.toString();
 
   if (!email) {
