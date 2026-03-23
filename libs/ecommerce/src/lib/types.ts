@@ -12,6 +12,8 @@ export interface Product {
   short_description?: string | null;
   description_json?: any; // Tiptap JSON content
   stock?: number | null;
+  freemius_product_id?: string;
+  custom_props?: any;
 }
 
 export type CartItem = Product & {

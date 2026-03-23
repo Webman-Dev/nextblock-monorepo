@@ -157,7 +157,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
     images: images,
     short_description: product.short_description || undefined,
     description_json: product.description_json,
-    stock: product.stock !== undefined && product.stock !== null ? product.stock : undefined
+    stock: product.stock !== undefined && product.stock !== null ? product.stock : undefined,
+    freemius_product_id: product.freemius_product_id || undefined,
   };
 
   return (

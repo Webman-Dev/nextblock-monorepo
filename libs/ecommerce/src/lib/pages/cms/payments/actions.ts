@@ -12,7 +12,6 @@ export async function getStoreConfigStatus() {
 
   // Check Freemius
   const fmMissing = [];
-  if (!process.env.FREEMIUS_STORE_ID) fmMissing.push('FREEMIUS_STORE_ID');
   if (!process.env.FREEMIUS_PUBLIC_KEY) fmMissing.push('FREEMIUS_PUBLIC_KEY');
   if (!process.env.FREEMIUS_SECRET_KEY) fmMissing.push('FREEMIUS_SECRET_KEY');
 

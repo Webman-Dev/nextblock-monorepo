@@ -98,7 +98,11 @@ export const ProductDetailsLayout: React.FC = () => {
                  />
                  <div className="grid grid-cols-2 gap-4 text-center text-xs text-muted-foreground pt-2">
                     <div className="flex items-center justify-center gap-2">
-                        <span>📦 Free Shipping</span>
+                        {((product as any).custom_props?.provider === 'freemius' || (product as any).freemius_product_id) ? (
+                            <span>📥 Instant Digital Delivery</span>
+                        ) : (
+                            <span>📦 Free Shipping</span>
+                        )}
                     </div>
                     <div className="flex items-center justify-center gap-2">
                         <span>🛡️ Secure Checkout</span>
