@@ -19,7 +19,6 @@ import CharacterCount from '@tiptap/extension-character-count'
 import Typography from '@tiptap/extension-typography'
 import Link from '@tiptap/extension-link'
 import Gapcursor from '@tiptap/extension-gapcursor'
-import Underline from '@tiptap/extension-underline'
 import History from '@tiptap/extension-history'
 import DragHandle from '@tiptap/extension-drag-handle'
 import NodeRange from '@tiptap/extension-node-range'
@@ -35,7 +34,6 @@ import bash from 'highlight.js/lib/languages/bash'
 import sql from 'highlight.js/lib/languages/sql'
 
 // custom extensions
-import { TrailingNode } from './extensions/TrailingNode'
 import { AdvancedPlaceholder } from './extensions/AdvancedPlaceholder'
 import AlertWidget from './extensions/AlertWidget'
 import CtaWidgetNode from './extensions/CtaWidgetNode'
@@ -103,7 +101,6 @@ export const editorExtensions: Extensions = [
   }),
 
   Gapcursor,
-  Underline,
 
   // CRITICAL FIX: Add History extension to replace disabled StarterKit history
   History.configure({
@@ -248,7 +245,6 @@ export const editorExtensions: Extensions = [
   // Revisit once upstream fixes land.
 
   // Custom extensions
-  TrailingNode,
   AlertWidget,
   CtaWidgetNode,
   SlashCommand,

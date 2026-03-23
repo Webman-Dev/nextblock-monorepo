@@ -21,7 +21,7 @@ export const productSchema = z.object({
   })).optional(),
   status: z.enum(['draft', 'active', 'archived']),
   language_id: z.coerce.number().int().min(1, 'Language is required'),
-  translation_group_id: z.string().uuid().optional(),
+  translation_group_id: z.string().uuid().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
   explicitly_removed_media_ids: z.array(z.string()).optional(),
 });
 

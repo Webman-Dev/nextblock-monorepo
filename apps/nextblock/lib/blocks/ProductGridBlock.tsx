@@ -9,23 +9,43 @@ import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
 interface ProductGridBlockProps {
   content: ProductGridBlockContent;
   languageId?: number;
+  excludeProductId?: string;
+  excludeTranslationGroupId?: string | null;
 }
 
 // Component (Server Component)
-export const ProductGridBlock = async ({ content, languageId }: ProductGridBlockProps) => {
+export const ProductGridBlock = async ({ 
+  content, 
+  languageId,
+  excludeProductId,
+  excludeTranslationGroupId,
+}: ProductGridBlockProps) => {
   const supabase = getSsgSupabaseClient();
   // Fetch products filtered by language
+  // We fetch more to ensure we have enough after manual checks
   const { data: products } = await getProducts(supabase, {
     languageId,
-    limit: content.limit * 2, // Fetch more to ensure we have enough after manual checks if needed, but getProducts should handle it
+    limit: content.limit + 2, 
   }); 
   
   if (!products) {
-      return <div>Error loading products</div>;
+      return null; // Silent fail if no products
   }
 
-  // Transform DB products to UI products
-  const uiProducts = products.slice(0, content.limit).map(p => {
+  // 1. Filter out current product and its translations
+  const filteredProducts = products.filter(p => {
+    if (excludeProductId && p.id === excludeProductId) return false;
+    if (excludeTranslationGroupId && p.translation_group_id === excludeTranslationGroupId) return false;
+    return true;
+  });
+
+  // 2. Hide if no products remain
+  if (filteredProducts.length === 0) {
+      return null;
+  }
+
+  // 3. Transform DB products to UI products
+  const uiProducts = filteredProducts.slice(0, content.limit).map(p => {
       let imageUrl = undefined;
       // Accessing the nested media object correctly (array of objects with media property)
       // The type from getProducts select is: product_media: { media: { file_path: string | null } | null }[]
@@ -45,7 +65,7 @@ export const ProductGridBlock = async ({ content, languageId }: ProductGridBlock
         language_id: p.language_id,
         translation_group_id: p.translation_group_id,
       };
-  }).slice(0, content.limit);
+  });
 
   return (
     <section className="py-12">

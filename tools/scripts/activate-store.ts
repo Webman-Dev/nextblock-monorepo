@@ -163,14 +163,9 @@ async function activateStore() {
           order: 0
         },
         {
-           block_type: 'heading',
-           content: { level: 2, text_content: 'You might also like', textAlign: 'center' },
-           order: 1
-        },
-        {
           block_type: 'product_grid',
-          content: { type: 'latest', limit: 4 },
-          order: 2
+          content: { type: 'latest', limit: 4, title: 'You might also like' },
+          order: 1
         }
       ]
     }

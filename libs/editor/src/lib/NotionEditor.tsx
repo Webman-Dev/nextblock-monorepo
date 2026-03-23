@@ -47,7 +47,9 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const editor = useEditor({
     extensions: editorExtensions,
-    content: content ?? initialContent,
+    content: (content || initialContent) && typeof (content || initialContent) === 'object' && Object.keys(content || initialContent).length === 0 
+      ? undefined 
+      : (content ?? initialContent),
     editable,
     immediatelyRender: false, // Next.js hydration safety
     editorProps: {

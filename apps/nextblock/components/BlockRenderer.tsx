@@ -11,17 +11,23 @@ import ClientTextBlockRenderer from "./blocks/renderers/ClientTextBlockRenderer"
 interface BlockRendererProps {
   blocks: Block[];
   languageId: number;
+  excludeProductId?: string;
+  excludeTranslationGroupId?: string | null;
 }
 
 interface DynamicBlockRendererProps {
   block: Block;
   languageId: number;
+  excludeProductId?: string;
+  excludeTranslationGroupId?: string | null;
 }
 
 // Dynamic renderer component that handles the dynamic import logic for non-LCP blocks
 const DynamicBlockRenderer: React.FC<DynamicBlockRendererProps> = ({
   block,
   languageId,
+  excludeProductId,
+  excludeTranslationGroupId,
 }) => {
   const blockDefinition = getBlockDefinition(block.block_type as BlockType);
   
@@ -55,6 +61,8 @@ const DynamicBlockRenderer: React.FC<DynamicBlockRendererProps> = ({
         languageId={languageId}
         isInEditor={false} // Assuming public view
         className="my-4"
+        excludeProductId={excludeProductId}
+        excludeTranslationGroupId={excludeTranslationGroupId}
       />
     );
   }
@@ -91,6 +99,8 @@ const DynamicBlockRenderer: React.FC<DynamicBlockRendererProps> = ({
     <RendererComponent
       content={block.content}
       languageId={languageId}
+      excludeProductId={excludeProductId}
+      excludeTranslationGroupId={excludeTranslationGroupId}
     />
   );
 };
@@ -98,6 +108,8 @@ const DynamicBlockRenderer: React.FC<DynamicBlockRendererProps> = ({
 const BlockRenderer: React.FC<BlockRendererProps> = ({
   blocks,
   languageId,
+  excludeProductId,
+  excludeTranslationGroupId,
 }) => {
   if (!blocks || blocks.length === 0) {
     return null;
@@ -122,6 +134,8 @@ const BlockRenderer: React.FC<BlockRendererProps> = ({
             key={block.id}
             block={block}
             languageId={languageId}
+            excludeProductId={excludeProductId}
+            excludeTranslationGroupId={excludeTranslationGroupId}
           />
         );
       })}

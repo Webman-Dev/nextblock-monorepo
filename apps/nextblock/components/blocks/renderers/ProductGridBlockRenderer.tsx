@@ -5,8 +5,22 @@ import { ProductGridBlockContent } from '../../../lib/blocks/ecommerce-block-sch
 interface ProductGridBlockRendererProps {
   content: ProductGridBlockContent;
   languageId: number;
+  excludeProductId?: string;
+  excludeTranslationGroupId?: string | null;
 }
 
-export default function ProductGridBlockRenderer({ content, languageId }: ProductGridBlockRendererProps) {
-  return <ProductGridBlock content={content} languageId={languageId} />;
+export default function ProductGridBlockRenderer({ 
+  content, 
+  languageId,
+  excludeProductId,
+  excludeTranslationGroupId,
+}: ProductGridBlockRendererProps) {
+  return (
+    <ProductGridBlock 
+      content={content} 
+      languageId={languageId} 
+      excludeProductId={excludeProductId}
+      excludeTranslationGroupId={excludeTranslationGroupId}
+    />
+  );
 }

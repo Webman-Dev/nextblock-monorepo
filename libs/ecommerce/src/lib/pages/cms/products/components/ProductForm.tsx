@@ -77,12 +77,12 @@ export function ProductForm({
       sale_price: initialData?.sale_price ? initialData.sale_price / 100 : null,
       stock: initialData?.stock || 0,
       short_description: initialData?.short_description || '',
-      description_json: initialData?.description_json || {},
+      description_json: initialData?.description_json || { type: 'doc', content: [{ type: 'paragraph' }] },
       freemius_product_id: initialData?.freemius_product_id || '',
       freemius_plan_id: initialData?.freemius_plan_id || '',
       status: initialData?.status || 'draft',
       language_id: initialData?.language_id || (targetLanguageId ? parseInt(targetLanguageId, 10) : (availableLanguagesProp.find(l => l.is_default)?.id || availableLanguagesProp[0]?.id)),
-      translation_group_id: initialData?.translation_group_id || translationGroupId || '',
+      translation_group_id: initialData?.translation_group_id || translationGroupId || undefined,
       // Map initial media relations relative to provided initialData.product_media
       product_media: initialData?.product_media?.map(pm => ({ media_id: pm.media_id })) || [],
     },
@@ -96,6 +96,13 @@ export function ProductForm({
     setError,
     formState: { errors, dirtyFields },
   } = form;
+
+  // Debug errors
+  useEffect(() => {
+    if (Object.keys(errors).length > 0) {
+      console.log('--- ProductForm Validation Errors ---', errors);
+    }
+  }, [errors]);
 
   // Auto-generate slug from title if title is modified
   const title = watch('title');
@@ -162,6 +169,7 @@ export function ProductForm({
 
   const onSubmit = async (data: ProductFormValues) => {
     setIsSubmitting(true);
+    console.log('--- ProductForm onSubmit Start ---', data);
     try {
       if (isEdit && initialData?.id) {
         await updateProductAction(initialData.id, data);
@@ -294,6 +302,7 @@ export function ProductForm({
                     <div>
                         <Label htmlFor="sku">SKU</Label>
                         <Input id="sku" {...register('sku')} placeholder="SKU-123" />
+                        {errors.sku && <p className="text-destructive text-sm">{errors.sku.message as string}</p>}
                     </div>
                     <div>
                         <Label htmlFor="stock">Stock</Label>

@@ -96,21 +96,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
         updated_at: new Date().toISOString()
       },
       {
-         id: 'fallback-related-title',
-         block_type: 'heading',
-         content: { level: 2, text_content: "You might also like", textAlign: "center" },
-         page_id: 'temp',
-         order: 1,
-         language_id: 1,
-         created_at: new Date().toISOString(),
-         updated_at: new Date().toISOString()
-      },
-      {
          id: 'fallback-product-grid',
          block_type: 'product_grid',
-         content: { type: 'latest', limit: 4 },
+         content: { type: 'latest', limit: 4, title: "You might also like" },
          page_id: 'temp',
-         order: 2,
+         order: 1,
          language_id: 1,
          created_at: new Date().toISOString(),
          updated_at: new Date().toISOString()
@@ -171,7 +161,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
               If templatePage is null, we defaulted languageId to 1.
             */}
             <CurrentContentSetter id={product.id} type="product" slug={product.slug} translation_group_id={product.translation_group_id} />
-            <BlockRenderer blocks={blocks} languageId={languageId} />
+            <BlockRenderer 
+              blocks={blocks} 
+              languageId={languageId} 
+              excludeProductId={product.id}
+              excludeTranslationGroupId={product.translation_group_id}
+            />
         </ProductProvider>
     </div>
   );
