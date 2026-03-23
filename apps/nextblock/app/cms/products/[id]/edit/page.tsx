@@ -4,6 +4,11 @@ import { EditProductPage as EditProductPageUI } from '@nextblock-cms/ecommerce/s
 import MediaPickerDialog from '../../../media/components/MediaPickerDialog';
 import { ClientNotionEditor as NotionEditor } from '../../ClientNotionEditor';
 
+console.log('--- Page Component Debug ---', {
+    MediaPickerDialog: typeof MediaPickerDialog,
+    NotionEditor: typeof NotionEditor,
+});
+
 export default async function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
   const isOnline = await verifyPackageOnline('ecommerce');
   if (!isOnline) {

@@ -4,6 +4,7 @@
 // Export the different Supabase client instances
 export * from './lib/supabase/client';
 export * from './lib/supabase/types';
+export * from './lib/media-actions';
 
 // NOTE: Middleware and SSG clients are not exported here to avoid accidentally pulling 
 // server-side code (like next/headers) into client bundles via this barrel file.

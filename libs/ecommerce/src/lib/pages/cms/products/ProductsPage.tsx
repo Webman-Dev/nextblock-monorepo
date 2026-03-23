@@ -3,6 +3,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { getProducts } from './actions';
 import { DeleteProductButton } from './components/DeleteProductButton';
+import { SyncFreemiusButton } from './components/SyncFreemiusButton';
+import { SyncProductForm } from './components/SyncProductForm';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 
@@ -13,9 +15,14 @@ export async function ProductsPage() {
     <div className="p-8 space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Products</h1>
-        <Link href="/cms/products/new">
-          <Button>New Product</Button>
-        </Link>
+        <div className="flex flex-wrap items-center gap-4">
+          <SyncProductForm />
+          <div className="h-10 w-[1px] bg-slate-200 dark:bg-slate-800 mx-2 hidden sm:block"></div>
+          <SyncFreemiusButton title="Sync Full Store" />
+          <Link href="/cms/products/new">
+            <Button>New Product</Button>
+          </Link>
+        </div>
       </div>
 
       <div className="rounded-lg border overflow-hidden dark:border-slate-700">

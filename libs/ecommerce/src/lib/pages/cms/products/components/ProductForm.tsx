@@ -12,6 +12,23 @@ import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 import { DeleteProductButton } from './DeleteProductButton';
 
+console.log('--- ProductForm Exhaustive Debug ---', {
+    Button: typeof Button,
+    Input: typeof Input,
+    Label: typeof Label,
+    Select: typeof Select,
+    SelectContent: typeof SelectContent,
+    SelectItem: typeof SelectItem,
+    SelectTrigger: typeof SelectTrigger,
+    SelectValue: typeof SelectValue,
+    DeleteProductButton: typeof DeleteProductButton,
+    ProductMediaManager: typeof ProductMediaManager,
+    ExternalLink: typeof ExternalLink,
+    Link: typeof Link,
+    React: typeof React,
+    productSchema: typeof productSchema,
+});
+
 interface ProductFormProps {
   initialData?: ProductFormValues & { 
     id?: string; 
@@ -191,7 +208,14 @@ export function ProductForm({ initialData, isEdit = false, mediaPickerNode, edit
       <div className="space-y-8">
          {/* Row 1: Product Information */}
          <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
-            <h2 className="text-lg font-semibold">Product Information</h2>
+            <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Product Information</h2>
+                {isEdit && initialData?.id && (
+                    <div className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-1 rounded select-all" title="Internal System ID">
+                        ID: {initialData.id}
+                    </div>
+                )}
+            </div>
             <div className="space-y-4">
               <div>
                   <Label htmlFor="title">Title</Label>
@@ -237,14 +261,17 @@ export function ProductForm({ initialData, isEdit = false, mediaPickerNode, edit
                 <div className="pt-2 grid grid-cols-2 gap-4">
                      <div>
                          <Label htmlFor="freemius_product_id">Freemius Product ID</Label>
-                         <Input id="freemius_product_id" {...register('freemius_product_id')} placeholder="24851" />
+                         <Input id="freemius_product_id" {...register('freemius_product_id')} />
                      </div>
                      <div>
                          <Label htmlFor="freemius_plan_id">Freemius Plan ID</Label>
-                         <Input id="freemius_plan_id" {...register('freemius_plan_id')} placeholder="41208" />
+                         <Input id="freemius_plan_id" {...register('freemius_plan_id')} />
                      </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">Required if using Freemius digital checkouts. Found in your Freemius Dashboard.</p>
+                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                    <strong>Note:</strong> These IDs are required to trigger the Freemius checkout popup and sync products. 
+                    Removing them from the database would break the license management and automated sync features.
+                </p>
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>

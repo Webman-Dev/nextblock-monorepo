@@ -54,6 +54,29 @@ const renderNode = (node: TiptapNode, index: number): React.ReactNode => {
 };
 
 export const SimpleTiptapRenderer: React.FC<SimpleTiptapRendererProps> = ({ content, className }) => {
-  if (!content || !content.content) return null;
-  return <div className={className}>{content.content.map((node: TiptapNode, i: number) => renderNode(node, i))}</div>;
+  if (!content) return null;
+
+  // 1. Handle HTML string or stringified JSON
+  if (typeof content === 'string') {
+    // Check if it's stringified JSON (common in some DB drivers for jsonb)
+    if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(content);
+        return <SimpleTiptapRenderer content={parsed} className={className} />;
+      } catch {
+        // Not valid JSON, treat as HTML
+      }
+    }
+    // Render as pure HTML
+    return <div className={className} dangerouslySetInnerHTML={{ __html: content }} />;
+  }
+
+  // 2. Handle TipTap JSON structure
+  if (!content.content || !Array.isArray(content.content)) return null;
+  
+  return (
+    <div className={className}>
+      {content.content.map((node: TiptapNode, i: number) => renderNode(node, i))}
+    </div>
+  );
 };

@@ -19,3 +19,29 @@ export async function getProduct(id: string) {
   if (error) throw new Error(error.message);
   return data;
 }
+
+import { 
+  syncFreemiusProductsToSupabase, 
+  syncSingleFreemiusProduct 
+} from '../../../providers/freemius';
+import { revalidatePath } from 'next/cache';
+
+export async function triggerFreemiusSync() {
+  try {
+    const result = await syncFreemiusProductsToSupabase();
+    revalidatePath('/cms/products', 'page');
+    return { success: true, data: result };
+  } catch (error: any) {
+    return { error: error.message || 'Failed to sync with Freemius' };
+  }
+}
+
+export async function triggerSingleProductSync(productId: string) {
+  try {
+    const result = await syncSingleFreemiusProduct(productId);
+    revalidatePath('/cms/products', 'page');
+    return { success: true, data: result };
+  } catch (error: any) {
+    return { error: error.message || 'Failed to sync product with Freemius' };
+  }
+}

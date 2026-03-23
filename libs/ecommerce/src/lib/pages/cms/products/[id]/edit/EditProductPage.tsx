@@ -1,5 +1,10 @@
 import { ProductForm } from '../../components/ProductForm';
 import { getProduct } from '../../actions';
+
+console.log('--- EditProductPage Debug ---', {
+    ProductForm: typeof ProductForm,
+    getProduct: typeof getProduct,
+});
 import { notFound } from 'next/navigation';
 
 interface EditProductPageProps {
@@ -33,6 +38,7 @@ export async function EditProductPage({ params, mediaPickerNode, editorNode }: E
            description_json: product.description_json,
            sale_price: product.sale_price ?? undefined,
            freemius_plan_id: product.freemius_plan_id ?? undefined,
+           freemius_product_id: product.freemius_product_id ?? undefined,
            product_media: product.product_media,
         }} 
         isEdit 

@@ -12,7 +12,7 @@
   --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
 
-  --primary: 221 83% 53%; /* Blue 600 - Tech Blue */
+  --primary: 211.55, 50.26%, 37.84%;/* Blue 600 - Tech Blue */
   --primary-foreground: 210 40% 98%;
 
   --secondary: 210 40% 96.1%; /* Slate 100 */
@@ -29,11 +29,11 @@
 
   --border: 214.3 31.8% 91.4%; /* Slate 200 */
   --input: 214.3 31.8% 91.4%;
-  --ring: 221 83% 53%; /* Blue 600 */
+  --ring: 211.55, 50.26%, 37.84%; /* Blue 600 */
 
   --radius: 0.75rem;
 
-  --chart-1: 221 83% 53%;
+  --chart-1: 211.55, 50.26%, 37.84%;
   --chart-2: 215 16% 47%;
   --chart-3: 215 25% 27%;
   --chart-4: 210 40% 96%;
@@ -69,7 +69,7 @@
   --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
 
-  --primary: 221 83% 53%; /* Blue 600 - Tech Blue */
+  --primary: 211.55, 50.26%, 37.84%; /* Blue 600 - Tech Blue */
   --primary-foreground: 210 40% 98%;
 
   --secondary: 210 40% 96.1%; /* Slate 100 */
@@ -86,11 +86,11 @@
 
   --border: 214.3 31.8% 91.4%; /* Slate 200 */
   --input: 214.3 31.8% 91.4%;
-  --ring: 221 83% 53%; /* Blue 600 */
+  --ring: 211.55, 50.26%, 37.84%; /* Blue 600 */
 
   --radius: 0.75rem;
 
-  --chart-1: 221 83% 53%;
+  --chart-1: 211.55, 50.26%, 37.84%;
   --chart-2: 215 16% 47%;
   --chart-3: 215 25% 27%;
   --chart-4: 210 40% 96%;

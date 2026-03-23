@@ -28,14 +28,14 @@ export const ProductDetailsLayout: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4 md:px-6 py-12 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
-      <div className="grid gap-12 lg:grid-cols-2 items-start">
+      <div className="grid gap-12 lg:grid-cols-[2fr_3fr] items-start">
         {/* Left Column: Gallery */}
         <div className="w-full max-w-2xl mx-auto lg:max-w-none">
             <ProductGallery images={images} className="w-full" />
         </div>
 
         {/* Right Column: Details */}
-        <div className="flex flex-col gap-8 pt-2 max-w-xl mx-auto lg:mx-0 lg:max-w-none lg:sticky lg:top-24">
+        <div className="flex flex-col gap-8 pt-2 max-w-xl mx-auto lg:mx-0 lg:max-w-none lg:top-24">
           
           <div className="space-y-6">
              {/* Header Section */}
@@ -57,9 +57,12 @@ export const ProductDetailsLayout: React.FC = () => {
                     {product.title}
                 </h1>
 
-                <div className="prose prose-neutral dark:prose-invert max-w-none text-muted-foreground leading-relaxed">
+                <div className="prose prose-neutral dark:prose-invert max-w-none text-muted-foreground leading-relaxed text-left">
                     {product.short_description ? (
-                        <p className="text-lg mb-4">{product.short_description}</p>
+                        <div 
+                            className="text-lg mb-6 leading-relaxed"
+                            dangerouslySetInnerHTML={{ __html: product.short_description }}
+                        />
                     ) : null}
                 </div>
                 
@@ -78,16 +81,6 @@ export const ProductDetailsLayout: React.FC = () => {
              </div>
 
              <Separator className="my-2" />
-
-             {/* Detailed Description */}
-             <div className="prose prose-neutral dark:prose-invert max-w-none leading-relaxed">
-                 {product.description_json && (
-                    <SimpleTiptapRenderer content={product.description_json} />
-                 )}
-                 {!product.description_json && (
-                    <p className="italic text-sm">No description available.</p>
-                 )}
-             </div>
           </div>
 
           {/* Action Section */}
@@ -116,6 +109,16 @@ export const ProductDetailsLayout: React.FC = () => {
           
         </div>
       </div>
+
+      {/* Detailed Description */}
+        <div className="prose prose-neutral dark:prose-invert max-w-none leading-relaxed mt-12">
+            {product.description_json && (
+            <SimpleTiptapRenderer content={product.description_json} />
+            )}
+            {!product.description_json && (
+            <p className="italic text-sm">No description available.</p>
+            )}
+        </div>
     </div>
   );
 };

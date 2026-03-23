@@ -134,3 +134,170 @@ export class FreemiusProvider implements PaymentProvider {
       };
     }
 }
+
+/**
+ * Internal helper for Freemius API calls with correct signature
+ */
+async function fetchFreemiusHelper(path: string, devId: string, publicKey: string, secretKey: string) {
+    const method = 'GET';
+    const date = new Date().toUTCString().replace('GMT', '+0000');
+    
+    // HMAC-SHA256 signature format: METHOD \n CONTENT_MD5 \n CONTENT_TYPE \n DATE \n URL
+    const stringToSign = `${method}\n\n\n${date}\n${path}`;
+    
+    const hexHash = crypto.createHmac('sha256', secretKey).update(stringToSign).digest('hex');
+    const signature = Buffer.from(hexHash)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+    
+    const authHeader = `FS ${devId}:${publicKey}:${signature}`;
+
+    const response = await fetch(`https://api.freemius.com${path}`, {
+        headers: {
+            'Authorization': authHeader,
+            'Date': date,
+            'Accept': 'application/json'
+        }
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        console.error(`[Freemius API] [ERROR] ${path} returned ${response.status}: ${errText}`);
+        throw new Error(`Freemius API failed on ${path}: ${response.status} - ${errText}`);
+    }
+
+    return response.json();
+}
+
+export async function syncFreemiusProductsToSupabase() {
+    const devId = process.env.FREEMIUS_DEVELOPER_ID;
+    const publicKey = process.env.FREEMIUS_PUBLIC_KEY;
+    const secretKey = process.env.FREEMIUS_SECRET_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!devId || !publicKey || !secretKey || !supabaseUrl || !supabaseServiceKey) {
+        throw new Error('Missing necessary environment variables for Freemius Sync.');
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: { autoRefreshToken: false, persistSession: false }
+    });
+
+    const fetcher = (path: string) => fetchFreemiusHelper(path, devId, publicKey, secretKey);
+
+    try {
+        console.log(`[Freemius Sync] Fetching all plugins for developer ${devId}...`);
+        const pluginsData = await fetcher(`/v1/developers/${devId}/plugins.json`);
+        const plugins = pluginsData.plugins || [];
+        
+        console.log(`[Freemius Sync] Found ${plugins.length} plugins. Syncing plans...`);
+
+        let totalSyncCount = 0;
+        for (const plugin of plugins) {
+            const count = await syncSingleFreemiusProductInternal(supabase, devId, plugin.id.toString(), plugin.title, fetcher);
+            totalSyncCount += count;
+        }
+
+        return { success: true, count: totalSyncCount };
+    } catch (err: any) {
+        console.error('[Freemius Sync] Global Error:', err);
+        throw err;
+    }
+}
+
+export async function syncSingleFreemiusProduct(productId: string) {
+    const devId = process.env.FREEMIUS_DEVELOPER_ID;
+    const publicKey = process.env.FREEMIUS_PUBLIC_KEY;
+    const secretKey = process.env.FREEMIUS_SECRET_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!devId || !publicKey || !secretKey || !supabaseUrl || !supabaseServiceKey) {
+        throw new Error('Missing environment variables for Freemius Sync.');
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const fetcher = (path: string) => fetchFreemiusHelper(path, devId, publicKey, secretKey);
+
+    // First fetch the plugin details to get the title
+    const plugin = await fetcher(`/v1/developers/${devId}/plugins/${productId}.json`);
+    
+    const count = await syncSingleFreemiusProductInternal(supabase, devId, productId, plugin.title, fetcher);
+    return { success: true, count };
+}
+
+async function syncSingleFreemiusProductInternal(
+    supabase: any, 
+    devId: string, 
+    productId: string, 
+    pluginTitle: string,
+    fetchFreemius: (path: string) => Promise<any>
+) {
+    console.log(`[Freemius Sync] Fetching plans for plugin: ${pluginTitle} (${productId})...`);
+    let syncCount = 0;
+
+    try {
+        const plansPath = `/v1/developers/${devId}/plugins/${productId}/plans.json`;
+        const plansData = await fetchFreemius(plansPath);
+        const plans = plansData.plans || [];
+        console.log(`[Freemius Sync] Received ${plans.length} plans for plugin ${productId}.`);
+
+        for (const plan of plans) {
+            const planIdStr = plan.id.toString();
+            console.log(`[Freemius Sync] Processing plan: ${plan.title || plan.name} (${planIdStr})...`);
+            
+            // Fetch pricing for this specific plan
+            let price = 0;
+            try {
+                const pricingPath = `/v1/developers/${devId}/plugins/${productId}/plans/${planIdStr}/pricing.json`;
+                const pricingData = await fetchFreemius(pricingPath);
+                const pricing = pricingData.pricing || [];
+                if (pricing.length > 0) {
+                    // annual_price or monthly_price (stored in cents)
+                    price = Math.round((pricing[0].annual_price || pricing[0].monthly_price || 0) * 100);
+                }
+                console.log(`[Freemius Sync] Found pricing for plan ${planIdStr}: ${price}`);
+            } catch (pricingErr) {
+                console.warn(`[Freemius Sync] Could not fetch pricing for plan ${planIdStr}:`, pricingErr instanceof Error ? pricingErr.message : pricingErr);
+            }
+
+            const productSlug = `${pluginTitle}-${plan.title || plan.name}`
+                .toLowerCase()
+                .replace(/[^\w\s-]/g, '')
+                .replace(/[\s_]+/g, '-')
+                .replace(/^-+|-+$/g, '');
+
+            const productPayload = {
+                title: `${pluginTitle} - ${plan.title || plan.name}`,
+                slug: productSlug,
+                short_description: plan.description || '',
+                price: price,
+                freemius_plan_id: planIdStr,
+                freemius_product_id: productId,
+                status: 'active',
+                stock: 999, 
+                sku: `FM-${productId}-${planIdStr}`,
+            };
+
+            console.log(`[Freemius Sync] Upserting product: ${productPayload.sku}`);
+
+            const { data: upsertData, error: upsertError } = await supabase
+                .from('products')
+                .upsert(productPayload, { onConflict: 'sku' })
+                .select();
+
+            if (upsertError) {
+                console.error(`[Freemius Sync] Error upserting product ${productPayload.sku}:`, upsertError);
+            } else {
+                console.log(`[Freemius Sync] Successfully synced product ${productPayload.sku} (ID: ${upsertData?.[0]?.id}).`);
+                syncCount++;
+            }
+        }
+    } catch (err: any) {
+        console.error(`[Freemius Sync] Failed sync for plugin ${productId}:`, err.message);
+    }
+    return syncCount;
+}
