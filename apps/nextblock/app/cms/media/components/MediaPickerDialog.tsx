@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { Database } from "@nextblock-cms/db";
@@ -31,6 +31,7 @@ interface MediaPickerDialogProps {
   title?: string;
   open?: boolean; onOpenChange?: (open: boolean) => void; hideTrigger?: boolean;
   defaultFolder?: string; // optional folder to pre-populate upload
+  children?: React.ReactNode;
 }
 
 export default function MediaPickerDialog({
@@ -43,6 +44,7 @@ export default function MediaPickerDialog({
   onOpenChange,
   hideTrigger,
   defaultFolder,
+  children,
 }: MediaPickerDialogProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = typeof open === "boolean";
@@ -98,9 +100,11 @@ export default function MediaPickerDialog({
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {!hideTrigger && (
         <DialogTrigger asChild>
-          <Button type="button" variant={triggerVariant} size="sm">
-            {triggerLabel}
-          </Button>
+          {children || (
+            <Button type="button" variant={triggerVariant} size="sm">
+              {triggerLabel}
+            </Button>
+          )}
         </DialogTrigger>
       )}
       <DialogContent className="sm:max-w-[650px] md:max-w-[800px] lg:max-w-[1000px] max-h-[90vh] flex flex-col">

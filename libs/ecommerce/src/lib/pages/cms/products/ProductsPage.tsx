@@ -71,7 +71,11 @@ export async function ProductsPage({
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className="font-medium">{product.title}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link href={`/cms/products/${product.id}/edit`} className="hover:underline">
+                      {product.title}
+                    </Link>
+                  </TableCell>
                   <TableCell>{product.sku}</TableCell>
                   <TableCell>${(product.price / 100).toFixed(2)}</TableCell>
                   <TableCell>

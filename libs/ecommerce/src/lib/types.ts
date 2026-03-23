@@ -5,6 +5,7 @@ export interface Product {
   id: string;
   title: string;
   slug: string;
+  sku: string;
   price: number;
   sale_price?: number | null;
   image_url?: string; // Resolved URL of the primary image

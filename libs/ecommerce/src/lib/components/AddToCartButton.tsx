@@ -47,6 +47,7 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
       price: product.price,
       image_url: product.image_url,
       slug: product.slug,
+      sku: product.sku,
       language_id: product.language_id,
       translation_group_id: product.translation_group_id,
     });

@@ -401,8 +401,8 @@ export async function GET(request: NextRequest) {
                     freemius_product_id, freemius_plan_id
                   )
                   VALUES (
-                    ${product.sku + '-fr'}, 'NextBlock Commerce Pro', ${product.slug + '-fr'}, 
-                    ${product.price}, ${product.sale_price}, ${product.stock}, ${product.status},
+                    ${product.sku}, 'NextBlock Commerce Pro - Licence Commerce', ${product.slug + '-fr'}, 
+                    ${product.price}, ${product.sale_price}, ${product.stock || 99}, ${product.status},
                     ${shortDescFr}, ${db.json(htmlDescriptionFr)},
                     ${frLangId}, ${product.translation_group_id},
                     ${product.freemius_product_id}, ${product.freemius_plan_id}

@@ -45,6 +45,7 @@ export const ProductMediaManager = ({ initialMedia, onUpdate, mediaPickerNode }:
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
     if (dragItem.current === null || dragOverItem.current === null) return;
     
     const copyListItems = [...mediaItems];
@@ -94,13 +95,6 @@ export const ProductMediaManager = ({ initialMedia, onUpdate, mediaPickerNode }:
     <div className="space-y-4">
       <div className="flex justify-between items-center">
           <Label>Product Gallery</Label>
-          {mediaPickerNode ? (
-             React.cloneElement(mediaPickerNode as React.ReactElement<any>, { onSelect: addMedia })
-          ) : (
-            <div className="text-sm italic text-muted-foreground mr-4 border p-2 bg-muted rounded">
-               Media Picker not injected. Cannot add images.
-            </div>
-          )}
       </div>
 
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
@@ -147,11 +141,23 @@ export const ProductMediaManager = ({ initialMedia, onUpdate, mediaPickerNode }:
           </div>
         ))}
 
-        {mediaItems.length === 0 && (
-             <div className="col-span-full flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg bg-muted/10 text-muted-foreground my-2">
-                 <ImageIcon className="w-8 h-8 mb-2 opacity-50" />
-                 <p className="text-sm">No images added</p>
-                 <p className="text-xs opacity-70">Add images to create a gallery</p>
+        {mediaPickerNode ? (
+          React.cloneElement(mediaPickerNode as React.ReactElement<any>, { 
+            onSelect: addMedia,
+            children: (
+              <button
+                type="button"
+                className="group relative aspect-square flex flex-col items-center justify-center border-2 border-dashed rounded-lg bg-muted/10 text-muted-foreground hover:bg-muted/20 hover:border-muted-foreground/50 transition-all focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <ImageIcon className="w-8 h-8 mb-2 opacity-50 group-hover:opacity-75 transition-opacity" />
+                <span className="text-sm font-medium">Add Image</span>
+              </button>
+            )
+          })
+        ) : (
+             <div className="relative aspect-square flex flex-col items-center justify-center border-2 border-dashed rounded-lg bg-muted/10 text-muted-foreground">
+                 <ImageIcon className="w-8 h-8 mb-2 opacity-30" />
+                 <span className="text-xs text-center px-2">Media Picker not injected</span>
              </div>
         )}
       </div>

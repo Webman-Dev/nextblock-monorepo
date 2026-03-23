@@ -64,13 +64,8 @@ export const FeaturedProduct = ({ product, className, imagePosition = 'left' }: 
             <div className="flex flex-col gap-4 sm:flex-row">
                 <AddToCartButton 
                     product={{
-                        id: product.id,
+                        ...product,
                         price: product.sale_price ?? product.price,
-                        title: product.title,
-                        image_url: product.image_url,
-                        slug: product.slug,
-                        language_id: product.language_id,
-                        translation_group_id: product.translation_group_id
                     }} 
                     className="h-12 w-full px-8 text-lg sm:w-auto"
                 />

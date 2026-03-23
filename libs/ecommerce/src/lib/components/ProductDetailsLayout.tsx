@@ -90,11 +90,8 @@ export const ProductDetailsLayout: React.FC = () => {
              <div className="flex flex-col gap-4">
                  <AddToCartButton 
                     product={{
-                        id: product.id,
+                        ...product,
                         price: salePrice ?? price,
-                        title: product.title,
-                        image_url: product.image_url,
-                        slug: product.slug
                     }} 
                     className="w-full h-14 text-lg font-bold shadow-md transition-all hover:shadow-lg active:scale-[0.98]"
                  />

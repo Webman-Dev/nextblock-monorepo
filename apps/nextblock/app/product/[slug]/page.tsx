@@ -141,6 +141,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     id: product.id,
     title: product.title,
     slug: product.slug,
+    sku: product.sku,
     price: product.price,
     sale_price: product.sale_price || null,
     image_url: imageUrl,

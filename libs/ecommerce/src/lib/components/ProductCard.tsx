@@ -48,11 +48,8 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
         <div className="mt-auto">
           <AddToCartButton 
             product={{
-                id: product.id,
-                price: product.sale_price ?? product.price,
-                title: product.title,
-                image_url: product.image_url,
-                slug: product.slug
+              ...product,
+              price: product.sale_price ?? product.price,
             }} 
             className="w-full"
           />
