@@ -65,24 +65,24 @@ export async function EditProductPage({
         </div>
       </div>
 
-      <ProductForm 
-        initialData={{
-           id: product.id,
-           title: product.title,
-           slug: product.slug,
-           sku: product.sku,
-           stock: product.stock || 0,
-           price: (product.price || 0) / 100, // Convert cents to dollars for form
-           status: product.status as 'draft' | 'active' | 'archived',
-           short_description: product.short_description ?? undefined,
-           description_json: product.description_json,
-           sale_price: product.sale_price ? product.sale_price / 100 : undefined,
-           freemius_plan_id: product.freemius_plan_id ?? undefined,
-           freemius_product_id: product.freemius_product_id ?? undefined,
-           language_id: product.language_id,
-           translation_group_id: product.translation_group_id,
-           product_media: product.product_media,
-        }} 
+       <ProductForm 
+         initialData={{
+            id: product.id,
+            title: product.title,
+            slug: product.slug,
+            sku: product.sku,
+            stock: product.stock || 0,
+            price: product.price || 0,
+            status: product.status as 'draft' | 'active' | 'archived',
+            short_description: product.short_description ?? undefined,
+            description_json: product.description_json,
+            sale_price: product.sale_price || undefined,
+            freemius_plan_id: product.freemius_plan_id ?? undefined,
+            freemius_product_id: product.freemius_product_id ?? undefined,
+            language_id: product.language_id,
+            translation_group_id: product.translation_group_id,
+            product_media: product.product_media,
+         }} 
         isEdit 
         mediaPickerNode={mediaPickerNode}
         editorNode={editorNode}

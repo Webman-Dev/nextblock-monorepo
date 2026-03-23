@@ -12,23 +12,6 @@ import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 import { DeleteProductButton } from './DeleteProductButton';
 
-console.log('--- ProductForm Exhaustive Debug ---', {
-    Button: typeof Button,
-    Input: typeof Input,
-    Label: typeof Label,
-    Select: typeof Select,
-    SelectContent: typeof SelectContent,
-    SelectItem: typeof SelectItem,
-    SelectTrigger: typeof SelectTrigger,
-    SelectValue: typeof SelectValue,
-    DeleteProductButton: typeof DeleteProductButton,
-    ProductMediaManager: typeof ProductMediaManager,
-    ExternalLink: typeof ExternalLink,
-    Link: typeof Link,
-    React: typeof React,
-    productSchema: typeof productSchema,
-});
-
 interface ProductFormProps {
   initialData?: ProductFormValues & { 
     id?: string; 
@@ -97,13 +80,6 @@ export function ProductForm({
     formState: { errors, dirtyFields },
   } = form;
 
-  // Debug errors
-  useEffect(() => {
-    if (Object.keys(errors).length > 0) {
-      console.log('--- ProductForm Validation Errors ---', errors);
-    }
-  }, [errors]);
-
   // Auto-generate slug from title if title is modified
   const title = watch('title');
 
@@ -169,7 +145,6 @@ export function ProductForm({
 
   const onSubmit = async (data: ProductFormValues) => {
     setIsSubmitting(true);
-    console.log('--- ProductForm onSubmit Start ---', data);
     try {
       if (isEdit && initialData?.id) {
         await updateProductAction(initialData.id, data);
@@ -181,16 +156,21 @@ export function ProductForm({
       if (error.message === 'NEXT_REDIRECT') {
           return;
       }
-      if (error.message && error.message.includes('products_slug_key')) {
-        setError('slug', { 
-            type: 'manual', 
-            message: 'This slug is already in use. Please choose another one.' 
-        });
-      } else if (error.message && error.message.includes('products_sku_key')) {
-         setError('sku', { 
-            type: 'manual', 
-            message: 'This SKU is already in use.' 
-        });
+      if (error.code === '23505') {
+        const msg = error.message?.toLowerCase() || '';
+        if (msg.includes('products_slug_key') || msg.includes('slug')) {
+          setError('slug', { 
+              type: 'manual', 
+              message: 'This slug is already in use. Please choose another one.' 
+          });
+        } else if (msg.includes('products_sku_key') || msg.includes('sku')) {
+          setError('sku', { 
+              type: 'manual', 
+              message: 'This SKU is already in use.' 
+          });
+        } else {
+          alert(`Error saving product (Unique Violation): ${error.message}`);
+        }
       } else {
           alert(`Error saving product: ${error.message}`);
       }

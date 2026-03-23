@@ -95,6 +95,11 @@ export default function LanguageSwitcher({ currentPageData }: LanguageSwitcherPr
     setTimeout(() => {
       if (pathname !== targetPath) {
         router.push(targetPath);
+        // Force Next.js to re-fetch the root layout since the language cookie changed.
+        // This ensures the Header/Footer navigation links update accurately.
+        setTimeout(() => {
+           router.refresh();
+        }, 50);
       } else {
         // If path is the same, refresh to ensure content updates for the new locale
         router.refresh();

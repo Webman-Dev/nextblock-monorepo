@@ -425,21 +425,24 @@ export async function GET(request: NextRequest) {
 
             // 6. Add Shop Pages & Navigation Items
             console.log('[Sandbox Reset] Adding Shop Pages and navigation items...');
+            let globalShopGroupId: string | undefined;
             
             if (enLangId) {
               const langId = enLangId;
               
               // Insert Page
-              const [existingPage] = await db`SELECT id FROM public.pages WHERE language_id = ${langId} AND slug = 'shop'`;
+              const [existingPage] = await db`SELECT id, translation_group_id FROM public.pages WHERE language_id = ${langId} AND slug = 'shop'`;
               let pageId = existingPage?.id;
+              globalShopGroupId = existingPage?.translation_group_id;
               
               if (!pageId) {
                 const [newPage] = await db`
                   INSERT INTO public.pages (language_id, title, slug, status, meta_title, meta_description)
                   VALUES (${langId}, 'Shop Our Products', 'shop', 'published', 'NextBlock Store', 'Browse our premium products')
-                  RETURNING id
+                  RETURNING id, translation_group_id
                 `;
                 pageId = newPage.id;
+                globalShopGroupId = newPage?.translation_group_id;
 
                 const heroContent = {
                   container_type: "full-width",
@@ -525,8 +528,8 @@ export async function GET(request: NextRequest) {
               
               if (!pageId) {
                 const [newPage] = await db`
-                  INSERT INTO public.pages (language_id, title, slug, status, meta_title, meta_description)
-                  VALUES (${langId}, 'Boutique en Ligne', 'boutique', 'published', 'Boutique NextBlock', 'Découvrez nos produits premium')
+                  INSERT INTO public.pages (language_id, title, slug, status, meta_title, meta_description, translation_group_id)
+                  VALUES (${langId}, 'Boutique en Ligne', 'boutique', 'published', 'Boutique NextBlock', 'Découvrez nos produits premium', ${globalShopGroupId ?? null})
                   RETURNING id
                 `;
                 pageId = newPage.id;

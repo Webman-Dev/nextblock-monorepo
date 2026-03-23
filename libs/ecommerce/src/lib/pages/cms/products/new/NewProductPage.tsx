@@ -6,6 +6,7 @@ interface NewProductPageProps {
   availableLanguagesProp: any[];
   translationGroupId?: string;
   targetLanguageId?: string;
+  initialData?: any;
 }
 
 export function NewProductPage({ 
@@ -13,7 +14,8 @@ export function NewProductPage({
   editorNode,
   availableLanguagesProp,
   translationGroupId,
-  targetLanguageId
+  targetLanguageId,
+  initialData
 }: NewProductPageProps) {
   return (
     <div className="p-8">
@@ -23,6 +25,7 @@ export function NewProductPage({
          availableLanguagesProp={availableLanguagesProp}
          translationGroupId={translationGroupId}
          targetLanguageId={targetLanguageId}
+         initialData={initialData}
       />
     </div>
   );
