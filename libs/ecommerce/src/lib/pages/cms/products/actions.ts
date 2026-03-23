@@ -6,7 +6,7 @@ import {
   getProducts as getProductsLib
 } from '../../../product-actions';
 
-export async function getProducts(options?: { page?: number; limit?: number; search?: string }) {
+export async function getProducts(options?: { page?: number; limit?: number; search?: string; languageId?: number }) {
   const supabase = createClient();
   const { data, count, error } = await (await getProductsLib(supabase, options));
   if (error) throw new Error(error.message);
@@ -45,3 +45,30 @@ export async function triggerSingleProductSync(productId: string) {
     return { error: error.message || 'Failed to sync product with Freemius' };
   }
 }
+
+import { copyProductFromLanguage as copyProductLib } from '../../../product-actions';
+
+export async function copyProductFromLanguageAction(targetId: string, sourceId: string) {
+  try {
+    const supabase = createClient();
+    await copyProductLib(supabase, targetId, sourceId);
+    revalidatePath('/cms/products');
+    revalidatePath(`/cms/products/${targetId}/edit`);
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to copy product content' };
+  }
+}
+
+export async function getProductTranslations(translationGroupId: string) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, title, language_id, slug')
+    .eq('translation_group_id', translationGroupId);
+    
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+

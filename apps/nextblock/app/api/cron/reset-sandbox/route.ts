@@ -164,8 +164,13 @@ export async function GET(request: NextRequest) {
             console.log('[Sandbox Reset] Enriching NextBlock Commerce Pro...');
             const commerceLogoKey = 'images/commerce-square.webp';
             
+            // 0. Get language IDs
+            const [enLangRaw] = await db`SELECT id FROM public.languages WHERE code = 'en' LIMIT 1`;
+            const [frLangRaw] = await db`SELECT id FROM public.languages WHERE code = 'fr' LIMIT 1`;
+            const enLangId = enLangRaw?.id;
+            const frLangId = frLangRaw?.id;
+
             // 1. Ensure media record exists for the seeded asset
-            // Set file_path as well to enable frontend rendering in ProductGrid/Details
             const [mediaRecord] = await db`
               INSERT INTO public.media (file_name, object_key, file_path, file_type, size_bytes)
               VALUES ('commerce-square.webp', ${commerceLogoKey}, ${commerceLogoKey}, 'image/webp', 1651652)
@@ -175,23 +180,23 @@ export async function GET(request: NextRequest) {
 
             // 2. Find the synced product (NextBlock Commerce Pro)
             const [product] = await db`
-              SELECT id FROM public.products 
-              WHERE freemius_product_id = '24851' 
+              SELECT * FROM public.products 
+              WHERE freemius_product_id = '24851' AND language_id = ${enLangId}
               LIMIT 1
             `;
 
             if (product && mediaRecord) {
-              // 3. Link media to product
+              // 3. Link media to English product
               await db`
                 INSERT INTO public.product_media (product_id, media_id, sort_order)
                 VALUES (${product.id}, ${mediaRecord.id}, 0)
                 ON CONFLICT (product_id, media_id) DO NOTHING
               `;
 
-              // 4. Update descriptions with "impressive" content from docs
-              const shortDesc = "NextBlock Ecommerce is an AI-native, block-based storefront engine for Next.js. Featuring a premium, developer-first aesthetic and high-performance edge rendering.";
+              // 4. Update English descriptions
+              const shortDescEn = "NextBlock Ecommerce is an AI-native, block-based storefront engine for Next.js. Featuring a premium, developer-first aesthetic and high-performance edge rendering.";
               
-              const htmlDescription = {
+              const htmlDescriptionEn = {
                 type: "doc",
                 content: [
                   {
@@ -292,29 +297,146 @@ export async function GET(request: NextRequest) {
 
               await db`
                 UPDATE public.products 
-                SET short_description = ${shortDesc}, 
-                    description_json = ${db.json(htmlDescription)}
+                SET short_description = ${shortDescEn}, 
+                    description_json = ${db.json(htmlDescriptionEn)}
                 WHERE id = ${product.id}
               `;
-              console.log('[Sandbox Reset] Successfully enriched commerce product.');
+
+              // 5. Create French Version
+              if (frLangId) {
+                console.log('[Sandbox Reset] Creating French version of NextBlock Commerce Pro...');
+                
+                const shortDescFr = "NextBlock Ecommerce est un moteur de boutique basé sur des blocs et natif de l'IA pour Next.js. Doté d'une esthétique premium et d'un rendu edge haute performance.";
+                
+                const htmlDescriptionFr = {
+                  type: "doc",
+                  content: [
+                    {
+                      type: "heading",
+                      attrs: { level: 2 },
+                      content: [{ type: "text", text: "🚀 Le futur du commerce numérique" }]
+                    },
+                    {
+                      type: "paragraph",
+                      content: [
+                        {
+                          type: "text",
+                          text: "NextBlock Ecommerce comble le fossé entre l'architecture headless haute performance et l'édition visuelle intuitive. Construit sur la NextBlock Performance Stack (NPS), il exploite Next.js 15/16, Supabase et Tailwind CSS pour offrir une latence de moins d'une milliseconde."
+                        }
+                      ]
+                    },
+                    {
+                      type: "heading",
+                      attrs: { level: 3 },
+                      content: [{ type: "text", text: "🎨 Éditeur style Notion" }]
+                    },
+                    {
+                      type: "paragraph",
+                      content: [
+                        {
+                          type: "text",
+                          text: "Arrêtez de vous battre avec des backends complexes. Notre éditeur propulsé par Tiptap offre une interface familière basée sur des blocs qui vous permet de créer de superbes pages produits aussi facilement qu'un document."
+                        }
+                      ]
+                    },
+                    {
+                      type: "heading",
+                      attrs: { level: 3 },
+                      content: [{ type: "text", text: "🛡️ Sécurisé par conception" }]
+                    },
+                    {
+                      type: "paragraph",
+                      content: [
+                        {
+                          type: "text",
+                          text: "Intégré avec Freemius pour les licences cryptographiques et la facturation récurrente. Stratégie de paiement à double couche avec Lemon Squeezy MoR et support natif Stripe."
+                        }
+                      ]
+                    },
+                    {
+                      type: "heading",
+                      attrs: { level: 3 },
+                      content: [{ type: "text", text: "Spécifications techniques clés" }]
+                    },
+                    {
+                      type: "bulletList",
+                      content: [
+                        {
+                          type: "listItem",
+                          content: [
+                            {
+                              type: "paragraph",
+                              content: [{ type: "text", text: "⚡ ISR & Mise en cache Edge : Temps de premier octet (TTFB) inférieur à la milliseconde." }]
+                            }
+                          ]
+                        },
+                        {
+                          type: "listItem",
+                          content: [
+                            {
+                              type: "paragraph",
+                              content: [{ type: "text", text: "📦 Monorepo Nx : Architecture strictement découplée pour une évolutivité ultime." }]
+                            }
+                          ]
+                        },
+                        {
+                          type: "listItem",
+                          content: [
+                            {
+                              type: "paragraph",
+                              content: [{ type: "text", text: "🖼️ Optimisation AVIF : Payloads média 20 % plus petits avec Next.js Image." }]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                };
+
+                const [frProduct] = await db`
+                  INSERT INTO public.products (
+                    sku, title, slug, price, sale_price, stock, status, 
+                    short_description, description_json, 
+                    language_id, translation_group_id,
+                    freemius_product_id, freemius_plan_id
+                  )
+                  VALUES (
+                    ${product.sku + '-fr'}, 'NextBlock Commerce Pro', ${product.slug + '-fr'}, 
+                    ${product.price}, ${product.sale_price}, ${product.stock}, ${product.status},
+                    ${shortDescFr}, ${db.json(htmlDescriptionFr)},
+                    ${frLangId}, ${product.translation_group_id},
+                    ${product.freemius_product_id}, ${product.freemius_plan_id}
+                  )
+                  ON CONFLICT ON CONSTRAINT products_language_id_slug_key DO UPDATE SET title = EXCLUDED.title
+                  RETURNING id
+                `;
+
+                if (frProduct) {
+                   await db`
+                    INSERT INTO public.product_media (product_id, media_id, sort_order)
+                    VALUES (${frProduct.id}, ${mediaRecord.id}, 0)
+                    ON CONFLICT (product_id, media_id) DO NOTHING
+                  `;
+                }
+              }
+              console.log('[Sandbox Reset] Successfully enriched commerce products (EN & FR).');
             }
 
-            // 5. Add Shop Pages & Navigation Items
+
+            // 6. Add Shop Pages & Navigation Items
             console.log('[Sandbox Reset] Adding Shop Pages and navigation items...');
-            const enLang = await db`SELECT id FROM public.languages WHERE code = 'en' LIMIT 1`;
-            const frLang = await db`SELECT id FROM public.languages WHERE code = 'fr' LIMIT 1`;
             
-            if (enLang.length > 0) {
-              const langId = enLang[0].id;
+            if (enLangId) {
+              const langId = enLangId;
               
               // Insert Page
-              const [existingPage] = await db`SELECT id FROM public.pages WHERE language_id = ${langId} AND slug = 'products'`;
+              const [existingPage] = await db`SELECT id FROM public.pages WHERE language_id = ${langId} AND slug = 'shop'`;
               let pageId = existingPage?.id;
               
               if (!pageId) {
                 const [newPage] = await db`
                   INSERT INTO public.pages (language_id, title, slug, status, meta_title, meta_description)
-                  VALUES (${langId}, 'Shop Our Products', 'products', 'published', 'NextBlock Store', 'Browse our premium products')
+                  VALUES (${langId}, 'Shop Our Products', 'shop', 'published', 'NextBlock Store', 'Browse our premium products')
                   RETURNING id
                 `;
                 pageId = newPage.id;
@@ -385,26 +507,26 @@ export async function GET(request: NextRequest) {
                 `;
               }
 
-              const [exists] = await db`SELECT id FROM public.navigation_items WHERE language_id = ${langId} AND url = '/products'`;
+              const [exists] = await db`SELECT id FROM public.navigation_items WHERE language_id = ${langId} AND url = '/shop'`;
               if (!exists) {
                 await db`
                   INSERT INTO public.navigation_items (language_id, menu_key, label, url, "order")
-                  VALUES (${langId}, 'HEADER', 'Shop', '/products', 2)
+                  VALUES (${langId}, 'HEADER', 'Shop', '/shop', 2)
                 `;
               }
             }
 
-            if (frLang.length > 0) {
-              const langId = frLang[0].id;
+            if (frLangId) {
+              const langId = frLangId;
 
-              // Insert French Page (keep slug 'products' matching original nav link)
-              const [existingPage] = await db`SELECT id FROM public.pages WHERE language_id = ${langId} AND slug = 'products'`;
+              // Insert French Page (keep slug 'boutique' matching original nav link)
+              const [existingPage] = await db`SELECT id FROM public.pages WHERE language_id = ${langId} AND slug = 'boutique'`;
               let pageId = existingPage?.id;
               
               if (!pageId) {
                 const [newPage] = await db`
                   INSERT INTO public.pages (language_id, title, slug, status, meta_title, meta_description)
-                  VALUES (${langId}, 'Boutique en Ligne', 'products', 'published', 'Boutique NextBlock', 'Découvrez nos produits premium')
+                  VALUES (${langId}, 'Boutique en Ligne', 'boutique', 'published', 'Boutique NextBlock', 'Découvrez nos produits premium')
                   RETURNING id
                 `;
                 pageId = newPage.id;
@@ -475,11 +597,11 @@ export async function GET(request: NextRequest) {
                 `;
               }
 
-              const [exists] = await db`SELECT id FROM public.navigation_items WHERE language_id = ${langId} AND url = '/products'`;
+              const [exists] = await db`SELECT id FROM public.navigation_items WHERE language_id = ${langId} AND url = '/boutique'`;
               if (!exists) {
                 await db`
                   INSERT INTO public.navigation_items (language_id, menu_key, label, url, "order")
-                  VALUES (${langId}, 'HEADER', 'Boutique', '/products', 2)
+                  VALUES (${langId}, 'HEADER', 'Boutique', '/boutique', 2)
                 `;
               }
             }

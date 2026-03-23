@@ -4,8 +4,9 @@
 import { useLanguage } from '../context/LanguageContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui';
 import { useRouter, usePathname } from 'next/navigation';
-import { getPageTranslations, getPageMetadataBySlugAndLocale } from '../app/actions/languageActions';
+import { getContentTranslations, getContentMetadataBySlugAndLocale } from '../app/actions/languageActions';
 import { Language } from '../app/actions/languageActions';
+import { useCurrentContent } from '../context/CurrentContentContext';
 
 interface CurrentPageInfo {
   slug: string;
@@ -17,6 +18,7 @@ interface LanguageSwitcherProps {
 }
 
 export default function LanguageSwitcher({ currentPageData }: LanguageSwitcherProps) {
+  const { currentContent } = useCurrentContent();
   const { currentLocale, setCurrentLocale, availableLanguages, isLoadingLanguages } = useLanguage();
   const router = useRouter();
   const pathname = usePathname();
@@ -36,42 +38,58 @@ export default function LanguageSwitcher({ currentPageData }: LanguageSwitcherPr
     if (isHomePage) {
       targetPath = '/'; // For any homepage, new language path is root
     } else {
-      // Extract slug from pathname (remove leading slash)
-      const currentSlug = pathname.startsWith('/') ? pathname.slice(1) : pathname;
-      
-      let pageMetadata = currentPageData;
-      
-      // If currentPageData is not provided, try to fetch it
-      if (!pageMetadata && currentSlug) {
-        try {
-          const fetchedMetadata = await getPageMetadataBySlugAndLocale(currentSlug, currentLocale);
-          if (fetchedMetadata) {
-            pageMetadata = fetchedMetadata;
-          }
-        } catch (error) {
-          console.error('Error fetching current page metadata:', error);
+    // Extract slug from pathname (remove leading slash)
+    const segments = pathname.split('/').filter(Boolean);
+    const currentSlug = segments[segments.length - 1] || '';
+    
+    let contentMetadata = currentContent.id ? { 
+      slug: currentContent.slug || '', 
+      translation_group_id: currentContent.translation_group_id || null,
+      type: currentContent.type
+    } : null;
+    
+    // Fallback to fetching if context is missing but we have a slug
+    if (!contentMetadata && currentSlug && !isHomePage) {
+      try {
+        // Try pages first, then products, then posts? 
+        // Or determine from pathname prefix
+        let type: 'pages' | 'posts' | 'products' = 'pages';
+        if (pathname.includes('/product/')) type = 'products';
+        if (pathname.includes('/article/')) type = 'posts';
+
+        const fetchedMetadata = await getContentMetadataBySlugAndLocale(currentSlug, currentLocale, type);
+        if (fetchedMetadata) {
+          contentMetadata = fetchedMetadata as any;
         }
+      } catch (error) {
+        console.error('Error fetching content metadata:', error);
       }
+    }
 
-      if (pageMetadata?.translation_group_id) {
-        try {
-          const translations = await getPageTranslations(pageMetadata.translation_group_id);
-          const foundTranslation = translations.find(t => t.language_code === newLocaleCode);
+    if (contentMetadata?.translation_group_id) {
+      try {
+        const typePlural = contentMetadata.type === 'product' ? 'products' : (contentMetadata.type === 'post' ? 'posts' : 'pages');
+        const translations = await getContentTranslations(contentMetadata.translation_group_id, typePlural);
+        const foundTranslation = translations.find(t => t.language_code === newLocaleCode);
 
-          if (foundTranslation) {
-            targetPath = `/${foundTranslation.slug}`;
+        if (foundTranslation) {
+          // Construct target path based on type
+          if (contentMetadata.type === 'product') {
+            targetPath = `/product/${foundTranslation.slug}`;
+          } else if (contentMetadata.type === 'post') {
+            targetPath = `/article/${foundTranslation.slug}`;
           } else {
-            // Original warning, without the [LanguageSwitcher] prefix
-            console.warn(`No translation found for ${pageMetadata.slug} to ${newLocaleCode}. Falling back to current path.`);
+            targetPath = `/${foundTranslation.slug}`;
           }
-        } catch (error) {
-          // Original error, without the [LanguageSwitcher] prefix
-          console.error("Error fetching page translations:", error);
+        } else {
+          console.warn(`No translation found for ${contentMetadata.slug} to ${newLocaleCode}. Falling back to current path.`);
         }
-      } else {
-        // Original warning, without the [LanguageSwitcher] prefix
-        console.warn(`No translation_group_id for page: ${pageMetadata?.slug || currentSlug}. Current path will be used.`);
+      } catch (error) {
+        console.error("Error fetching translations:", error);
       }
+    } else if (!isHomePage) {
+      console.warn(`No translation_group_id for content: ${contentMetadata?.slug || currentSlug}. Current path will be used.`);
+    }
     }
 
     setTimeout(() => {

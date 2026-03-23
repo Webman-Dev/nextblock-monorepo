@@ -196,8 +196,16 @@ export async function syncFreemiusProductsToSupabase() {
         console.log(`[Freemius Sync] Found ${plugins.length} plugins. Syncing plans...`);
 
         let totalSyncCount = 0;
+
+        // Get English language ID for default product language
+        const { data: enLang } = await supabase.from('languages').select('id').eq('code', 'en').single();
+        const enLangId = enLang?.id;
+        if (!enLangId) {
+            throw new Error('English language not found in database. Cannot sync products.');
+        }
+
         for (const plugin of plugins) {
-            const count = await syncSingleFreemiusProductInternal(supabase, devId, plugin.id.toString(), plugin.title, fetcher);
+            const count = await syncSingleFreemiusProductInternal(supabase, devId, plugin.id.toString(), plugin.title, fetcher, enLangId);
             totalSyncCount += count;
         }
 
@@ -222,10 +230,17 @@ export async function syncSingleFreemiusProduct(productId: string) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const fetcher = (path: string) => fetchFreemiusHelper(path, devId, publicKey, secretKey);
 
+    // Get English language ID for default product language
+    const { data: enLang } = await supabase.from('languages').select('id').eq('code', 'en').single();
+    const enLangId = enLang?.id;
+    if (!enLangId) {
+        throw new Error('English language not found in database. Cannot sync products.');
+    }
+
     // First fetch the plugin details to get the title
     const plugin = await fetcher(`/v1/developers/${devId}/plugins/${productId}.json`);
     
-    const count = await syncSingleFreemiusProductInternal(supabase, devId, productId, plugin.title, fetcher);
+    const count = await syncSingleFreemiusProductInternal(supabase, devId, productId, plugin.title, fetcher, enLangId);
     return { success: true, count };
 }
 
@@ -234,7 +249,8 @@ async function syncSingleFreemiusProductInternal(
     devId: string, 
     productId: string, 
     pluginTitle: string,
-    fetchFreemius: (path: string) => Promise<any>
+    fetchFreemius: (path: string) => Promise<any>,
+    languageId: number
 ) {
     console.log(`[Freemius Sync] Fetching plans for plugin: ${pluginTitle} (${productId})...`);
     let syncCount = 0;
@@ -280,13 +296,14 @@ async function syncSingleFreemiusProductInternal(
                 status: 'active',
                 stock: 999, 
                 sku: `FM-${productId}-${planIdStr}`,
+                language_id: languageId,
             };
 
             console.log(`[Freemius Sync] Upserting product: ${productPayload.sku}`);
 
             const { data: upsertData, error: upsertError } = await supabase
                 .from('products')
-                .upsert(productPayload, { onConflict: 'sku' })
+                .upsert(productPayload, { onConflict: 'language_id, sku' })
                 .select();
 
             if (upsertError) {

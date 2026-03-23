@@ -4,20 +4,33 @@ import Image from 'next/image';
 import { getProducts } from './actions';
 import { DeleteProductButton } from './components/DeleteProductButton';
 import { SyncFreemiusButton } from './components/SyncFreemiusButton';
-import { SyncProductForm } from './components/SyncProductForm';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 
-export async function ProductsPage() {
-  const { data: products } = await getProducts();
+import { Badge } from '@nextblock-cms/ui';
+import { getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
+
+export async function ProductsPage({ 
+  searchParams, 
+  languageFilterNode 
+}: { 
+  searchParams?: { lang?: string }, 
+  languageFilterNode?: React.ReactNode 
+}) {
+  const allLanguages = await getActiveLanguagesServerSide();
+  const selectedLangId = searchParams?.lang ? parseInt(searchParams.lang, 10) : undefined;
+  
+  const { data: products } = await getProducts({ languageId: selectedLangId });
+  
+  const langMap = new Map(allLanguages.map(l => [l.id, l.code.toUpperCase()]));
 
   return (
     <div className="p-8 space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Products</h1>
         <div className="flex flex-wrap items-center gap-4">
-          <SyncProductForm />
           <div className="h-10 w-[1px] bg-slate-200 dark:bg-slate-800 mx-2 hidden sm:block"></div>
+          {languageFilterNode}
           <SyncFreemiusButton title="Sync Full Store" />
           <Link href="/cms/products/new">
             <Button>New Product</Button>
@@ -33,6 +46,7 @@ export async function ProductsPage() {
               <TableHead>Title</TableHead>
               <TableHead>SKU</TableHead>
               <TableHead>Price</TableHead>
+              <TableHead>Language</TableHead>
               <TableHead>Stock</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -60,6 +74,11 @@ export async function ProductsPage() {
                   <TableCell className="font-medium">{product.title}</TableCell>
                   <TableCell>{product.sku}</TableCell>
                   <TableCell>${(product.price / 100).toFixed(2)}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {langMap.get(product.language_id) || 'N/A'}
+                    </Badge>
+                  </TableCell>
                   <TableCell>{product.stock}</TableCell>
                   <TableCell>
                     <span

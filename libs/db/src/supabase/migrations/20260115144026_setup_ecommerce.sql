@@ -17,9 +17,11 @@ $$ language sql security definer;
 -- Create products table
 create table public.products (
   id uuid primary key default gen_random_uuid(),
-  sku text not null unique,
+  language_id bigint not null references public.languages(id) on delete cascade,
+  translation_group_id uuid default gen_random_uuid() not null,
+  sku text not null,
   title text not null,
-  slug text not null unique,
+  slug text not null,
   price integer not null,
   sale_price integer,
   stock integer default 0,
@@ -30,7 +32,9 @@ create table public.products (
   freemius_plan_id text,
   freemius_product_id text,
   created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  updated_at timestamptz default now(),
+  constraint products_language_id_slug_key unique (language_id, slug),
+  constraint products_language_id_sku_key unique (language_id, sku)
 );
 
 -- PRODUCT RLS
@@ -132,6 +136,7 @@ create policy "Service Role manages order items"
 
 -- Indexes for performance
 create index idx_products_slug on public.products(slug);
+create index idx_products_translation_group_id on public.products(translation_group_id);
 create index idx_orders_user_id on public.orders(user_id);
 create index idx_order_items_order_id on public.order_items(order_id);
 create index idx_product_media_product_id on public.product_media(product_id);

@@ -5,6 +5,8 @@ import { AddToCartButton } from './AddToCartButton';
 import { cn } from '@nextblock-cms/utils';
 import Link from 'next/link';
 
+import { useTranslations } from '@nextblock-cms/utils';
+
 interface FeaturedProductProps {
   product: Product;
   className?: string;
@@ -12,6 +14,8 @@ interface FeaturedProductProps {
 }
 
 export const FeaturedProduct = ({ product, className, imagePosition = 'left' }: FeaturedProductProps) => {
+  const { t } = useTranslations();
+  
   return (
     <div className={cn("overflow-hidden rounded-xl border bg-card shadow-sm", className)}>
       <div className={cn("flex flex-col gap-8 md:flex-row", imagePosition === 'right' && "md:flex-row-reverse")}>
@@ -26,10 +30,11 @@ export const FeaturedProduct = ({ product, className, imagePosition = 'left' }: 
                 />
              ) : (
                 <div className="flex h-full w-full items-center justify-center bg-secondary text-muted-foreground">
-                    No Image
+                    {t('ecommerce.no_image')}
                 </div>
              )}
         </div>
+
 
         {/* Content Section */}
         <div className="flex flex-1 flex-col justify-center p-6 md:p-12">
@@ -63,16 +68,20 @@ export const FeaturedProduct = ({ product, className, imagePosition = 'left' }: 
                         price: product.sale_price ?? product.price,
                         title: product.title,
                         image_url: product.image_url,
-                        slug: product.slug
+                        slug: product.slug,
+                        language_id: product.language_id,
+                        translation_group_id: product.translation_group_id
                     }} 
                     className="h-12 w-full px-8 text-lg sm:w-auto"
                 />
+
                 <Link 
                     href={`/product/${product.slug}`} 
                     className="inline-flex h-12 items-center justify-center rounded-md border border-input bg-background px-8 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
                 >
-                    View Details
+                    {t('ecommerce.view_details')}
                 </Link>
+
             </div>
         </div>
       </div>

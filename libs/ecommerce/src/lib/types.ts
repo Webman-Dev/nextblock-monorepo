@@ -14,6 +14,9 @@ export interface Product {
   stock?: number | null;
   freemius_product_id?: string;
   custom_props?: any;
+  language_id: number;
+  translation_group_id: string;
+  language_code?: string;
 }
 
 export type CartItem = Product & {

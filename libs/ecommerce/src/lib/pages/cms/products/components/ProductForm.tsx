@@ -32,11 +32,16 @@ console.log('--- ProductForm Exhaustive Debug ---', {
 interface ProductFormProps {
   initialData?: ProductFormValues & { 
     id?: string; 
-    product_media?: { media_id: string }[] 
+    product_media?: { media_id: string }[] ;
+    language_id?: number;
+    translation_group_id?: string;
   };
   isEdit?: boolean;
   mediaPickerNode?: React.ReactNode;
   editorNode?: React.ReactNode;
+  availableLanguagesProp: any[]; // Or a specific Language type if imported
+  translationGroupId?: string;
+  targetLanguageId?: string;
 }
 
 // Simple slugify helper
@@ -52,7 +57,15 @@ const slugify = (text: string) => {
     .replace(/-+$/, '');      // Trim - from end
 };
 
-export function ProductForm({ initialData, isEdit = false, mediaPickerNode, editorNode }: ProductFormProps) {
+export function ProductForm({ 
+  initialData, 
+  isEdit = false, 
+  mediaPickerNode, 
+  editorNode,
+  availableLanguagesProp,
+  translationGroupId,
+  targetLanguageId
+}: ProductFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -68,6 +81,8 @@ export function ProductForm({ initialData, isEdit = false, mediaPickerNode, edit
       freemius_product_id: initialData?.freemius_product_id || '',
       freemius_plan_id: initialData?.freemius_plan_id || '',
       status: initialData?.status || 'draft',
+      language_id: initialData?.language_id || (targetLanguageId ? parseInt(targetLanguageId, 10) : (availableLanguagesProp.find(l => l.is_default)?.id || availableLanguagesProp[0]?.id)),
+      translation_group_id: initialData?.translation_group_id || translationGroupId || '',
       // Map initial media relations relative to provided initialData.product_media
       product_media: initialData?.product_media?.map(pm => ({ media_id: pm.media_id })) || [],
     },
@@ -205,6 +220,8 @@ export function ProductForm({ initialData, isEdit = false, mediaPickerNode, edit
          </div>
       </div>
 
+      <input type="hidden" {...register('translation_group_id')} />
+
       <div className="space-y-8">
          {/* Row 1: Product Information */}
          <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
@@ -307,6 +324,26 @@ export function ProductForm({ initialData, isEdit = false, mediaPickerNode, edit
                         <SelectItem value="archived">Archived</SelectItem>
                     </SelectContent>
                     </Select>
+                </div>
+                <div className="pt-2">
+                    <Label>Language</Label>
+                    <Select 
+                        onValueChange={(val) => setValue('language_id', parseInt(val, 10), { shouldValidate: true })} 
+                        value={watch('language_id')?.toString()}
+                        defaultValue={watch('language_id')?.toString()}
+                    >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select language" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {availableLanguagesProp.map((lang) => (
+                            <SelectItem key={lang.id} value={lang.id.toString()}>
+                                {lang.name} ({lang.code.toUpperCase()})
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                    </Select>
+                    {errors.language_id && <p className="text-destructive text-sm">{errors.language_id.message as string}</p>}
                 </div>
                 <div>
                   <Label htmlFor="short_description">Short Description</Label>

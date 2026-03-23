@@ -6,11 +6,19 @@ import { ProductGridBlockContent } from './ecommerce-block-schemas';
 
 import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
 
+interface ProductGridBlockProps {
+  content: ProductGridBlockContent;
+  languageId?: number;
+}
+
 // Component (Server Component)
-export const ProductGridBlock = async ({ content }: { content: ProductGridBlockContent }) => {
+export const ProductGridBlock = async ({ content, languageId }: ProductGridBlockProps) => {
   const supabase = getSsgSupabaseClient();
-  // In a real app we'd filter by category if type is category
-  const { data: products } = await getProducts(supabase); 
+  // Fetch products filtered by language
+  const { data: products } = await getProducts(supabase, {
+    languageId,
+    limit: content.limit * 2, // Fetch more to ensure we have enough after manual checks if needed, but getProducts should handle it
+  }); 
   
   if (!products) {
       return <div>Error loading products</div>;
@@ -33,9 +41,11 @@ export const ProductGridBlock = async ({ content }: { content: ProductGridBlockC
         price: p.price / 100,
         sale_price: typeof p.sale_price === 'number' ? p.sale_price / 100 : undefined,
         image_url: imageUrl,
-        short_description: p.short_description || undefined
+        short_description: p.short_description || undefined,
+        language_id: p.language_id,
+        translation_group_id: p.translation_group_id,
       };
-  });
+  }).slice(0, content.limit);
 
   return (
     <section className="py-12">

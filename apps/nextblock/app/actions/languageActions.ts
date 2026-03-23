@@ -33,49 +33,47 @@ export async function setCurrentLocaleCookie(locale: string) {
   cookieStore.set('NEXT_LOCALE', locale, { path: '/' });
 }
 
-export async function getPageTranslations(translationGroupId: string): Promise<{ slug: string, language_code: string }[]> {
+export async function getContentTranslations(translationGroupId: string, type: 'pages' | 'posts' | 'products' = 'pages'): Promise<{ slug: string, language_code: string }[]> {
   if (!translationGroupId) {
-    console.warn('getPageTranslations called without translationGroupId');
+    console.warn('getContentTranslations called without translationGroupId');
     return [];
   }
   const supabase = createClient();
 
   const { data, error } = await supabase
-    .from('pages')
-    .select('slug, status, languages(code)') // Use actual table name for join
+    .from(type)
+    .select('slug, languages(code)')
     .eq('translation_group_id', translationGroupId)
-    .eq('status', 'published');
+    .eq('status', type === 'products' ? 'active' : 'published'); // Products use 'active' or 'draft' status usually, but let's check
 
   if (error) {
-    console.error('Error fetching page translations:', error);
+    console.error(`Error fetching translations for ${type}:`, error);
     return [];
-  }
-
-  interface PageWithLanguage {
-    slug: string;
-    status: string; // Or your actual status type
-    languages: { code: string } | { code: string }[] | null; // Can be object, array of objects, or null
   }
 
   // Map the data to the expected format { slug: string, language_code: string }
   const formattedTranslations = data
-    ? (data as PageWithLanguage[]).map(page => {
+    ? (data as any[]).map(item => {
         let langCode = '';
-        if (page.languages) {
-          if (Array.isArray(page.languages)) {
-            langCode = page.languages[0]?.code || '';
-          } else { // It's an object
-            langCode = page.languages.code || '';
+        if (item.languages) {
+          if (Array.isArray(item.languages)) {
+            langCode = item.languages[0]?.code || '';
+          } else { 
+            langCode = item.languages.code || '';
           }
         }
         return {
-          slug: page.slug,
+          slug: item.slug,
           language_code: langCode,
         };
       }).filter(t => t.language_code)
     : [];
   
   return formattedTranslations;
+}
+
+export async function getPageTranslations(translationGroupId: string): Promise<{ slug: string, language_code: string }[]> {
+  return getContentTranslations(translationGroupId, 'pages');
 }
 
 // Helper to get language details by code, potentially used by LanguageSwitcher or other components
@@ -89,9 +87,9 @@ export async function getLanguageDetails(localeCode: string): Promise<Language |
     return data;
 }
 
-export async function getPageMetadataBySlugAndLocale(slug: string, localeCode: string): Promise<{ slug: string; translation_group_id: string | null } | null> {
+export async function getContentMetadataBySlugAndLocale(slug: string, localeCode: string, type: 'pages' | 'posts' | 'products' = 'pages'): Promise<{ slug: string; translation_group_id: string | null; type: string } | null> {
   if (!slug || !localeCode) {
-    console.warn('getPageMetadataBySlugAndLocale called without slug or localeCode');
+    console.warn('getContentMetadataBySlugAndLocale called without slug or localeCode');
     return null;
   }
   const supabase = createClient();
@@ -102,24 +100,27 @@ export async function getPageMetadataBySlugAndLocale(slug: string, localeCode: s
     return null;
   }
 
-  const { data: page, error } = await supabase
-    .from('pages')
+  const { data: item, error } = await supabase
+    .from(type)
     .select('slug, translation_group_id')
     .eq('slug', slug)
     .eq('language_id', languageData.id)
     .maybeSingle();
 
   if (error) {
-    console.error(`Error fetching page metadata for slug ${slug} and locale ${localeCode}:`, error);
+    console.error(`Error fetching metadata for ${type} slug ${slug} and locale ${localeCode}:`, error);
     return null;
   }
-  if (!page) {
-    // It's possible the slug is for a different content type (e.g. blog post) or doesn't exist.
-    // For now, we only search 'pages'. This might need to be expanded or handled gracefully.
-    console.warn(`No page found for slug ${slug} and locale ${localeCode}`);
+  if (!item) {
     return null;
   }
-  return page;
+  return { ...item, type };
+}
+
+export async function getPageMetadataBySlugAndLocale(slug: string, localeCode: string): Promise<{ slug: string; translation_group_id: string | null } | null> {
+  const metadata = await getContentMetadataBySlugAndLocale(slug, localeCode, 'pages');
+  if (!metadata) return null;
+  return { slug: metadata.slug, translation_group_id: metadata.translation_group_id };
 }
 
 export async function changeLanguage(newLocale: string, currentPath: string) {

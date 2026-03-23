@@ -16,6 +16,8 @@ import { useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
 import { useState } from 'react';
 import { Loader2, FlaskConical, X } from 'lucide-react';
+import { useTranslations } from '@nextblock-cms/utils';
+
 
 const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
 import { Checkout as FreemiusCheckout } from '@freemius/checkout';
@@ -27,6 +29,8 @@ export const Checkout = () => {
   const [showSandboxModal, setShowSandboxModal] = useState(false);
   const store = useCart((state) => state);
   const subtotal = useCartSubtotal();
+  const { t } = useTranslations();
+
 
   if (!store) return null;
 
@@ -39,9 +43,10 @@ export const Checkout = () => {
 
   const handlePay = async () => {
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
-      setEmailError('Please enter a valid email address.');
+      setEmailError(t('ecommerce.invalid_email'));
       return;
     }
+
     setEmailError('');
 
     // In sandbox mode, skip real checkout and show mock modal
@@ -70,7 +75,7 @@ export const Checkout = () => {
           };
           
           const openConfig = {
-              name: 'Order Checkout',
+              name: t('ecommerce.checkout_overlay_title'),
               plan_id: cp.plan_id,
               user_email: cp.user_email,
               sandbox: cp.sandbox, // Also pass sandbox here just in case
@@ -92,7 +97,7 @@ export const Checkout = () => {
           } catch (e: any) {
               console.error('Freemius SDK Init Error details:', e);
               console.error('customProps used:', cp);
-              alert('Checkout popup blocked or failed to load. Error: ' + (e.message || String(e)) + '. Falling back to direct link.');
+              alert(t('ecommerce.checkout_popup_blocked') + ' ' + (e.message || String(e)));
               if (data.url) window.location.href = data.url;
               setIsProcessing(false);
           }
@@ -101,27 +106,29 @@ export const Checkout = () => {
         // Fallback or Stripe checkout
         window.location.href = data.url;
       } else {
-        alert('Checkout failed: ' + (data.error || 'Unknown error'));
+        alert(t('ecommerce.checkout_failed') + (data.error || 'Unknown error'));
         setIsProcessing(false);
       }
     } catch (error) {
        console.error(error);
-       alert('An error occurred. Please try again.');
+       alert(t('ecommerce.generic_error'));
        setIsProcessing(false);
     }
   };
 
+
   if (items.length === 0) {
      return (
         <div className="container mx-auto flex min-h-[50vh] flex-col items-center justify-center p-8 text-center">
-            <h1 className="mb-4 text-2xl font-bold">Your cart is empty</h1>
-            <p className="mb-8 text-muted-foreground">Add some items before checking out.</p>
+            <h1 className="mb-4 text-2xl font-bold">{t('ecommerce.cart_empty')}</h1>
+            <p className="mb-8 text-muted-foreground">{t('ecommerce.cart_empty_description')}</p>
             <Button asChild>
-                <a href="/shop">Go to Shop</a>
+                <a href="/shop">{t('ecommerce.go_to_shop')}</a>
             </Button>
         </div>
      )
   }
+
 
   return (
     <div className="container mx-auto px-4 py-12 md:px-6">
@@ -137,13 +144,13 @@ export const Checkout = () => {
               <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900/20">
                 <FlaskConical className="h-6 w-6 text-amber-600 dark:text-amber-400" />
               </div>
-              <h2 className="text-xl font-semibold">Checkout Successful</h2>
+              <h2 className="text-xl font-semibold">{t('ecommerce.checkout_successful')}</h2>
             </div>
             <p className="text-muted-foreground mb-2">
-              🎉 This is a <strong>Sandbox environment</strong>. The Freemius checkout is skipped here for demo purposes.
+              🎉 {t('ecommerce.sandbox_notice')}
             </p>
             <p className="text-muted-foreground mb-6">
-              To purchase a real license for your self-hosted NextBlock instance, visit:
+              {t('ecommerce.license_notice')}
             </p>
             <a
               href="https://nextblock.ca"
@@ -151,22 +158,24 @@ export const Checkout = () => {
               rel="noopener noreferrer"
               className="block w-full text-center py-3 px-4 rounded-lg bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity"
             >
-              Purchase at nextblock.ca
+              {t('ecommerce.purchase_at')}
             </a>
+
           </div>
         </div>
       )}
 
       <div className="mx-auto max-w-4xl">
-        <h1 className="mb-8 text-3xl font-bold">Checkout</h1>
+        <h1 className="mb-8 text-3xl font-bold">{t('ecommerce.checkout')}</h1>
         
         <div className="grid gap-8 md:grid-cols-2">
             <div>
                 <Card>
                     <CardHeader>
-                        <CardTitle>Order Summary</CardTitle>
-                        <CardDescription>Review your items before proceeding to payment.</CardDescription>
+                        <CardTitle>{t('ecommerce.order_summary')}</CardTitle>
+                        <CardDescription>{t('ecommerce.order_summary_desc')}</CardDescription>
                     </CardHeader>
+
                     <CardContent className="grid gap-4">
                         {items.map((item) => (
                             <div key={item.id} className="flex items-start justify-between gap-4">
@@ -178,8 +187,9 @@ export const Checkout = () => {
                                    )}
                                    <div className="grid gap-1">
                                        <span className="font-medium text-sm">{item.title}</span>
-                                       <span className="text-xs text-muted-foreground">Qty: {item.quantity}</span>
+                                       <span className="text-xs text-muted-foreground">{t('ecommerce.qty')}: {item.quantity}</span>
                                    </div>
+
                                 </div>
                                 <span className="font-medium text-sm">
                                     ${(item.price * item.quantity).toFixed(2)}
@@ -193,29 +203,32 @@ export const Checkout = () => {
             <div>
                  <Card>
                     <CardHeader>
-                        <CardTitle>Payment Details</CardTitle>
-                        <CardDescription>Secure payment processing</CardDescription>
+                        <CardTitle>{t('ecommerce.payment_details')}</CardTitle>
+                        <CardDescription>{t('ecommerce.secure_payment')}</CardDescription>
                     </CardHeader>
+
                     <CardContent className="grid gap-4">
                         <div className="flex items-center justify-between">
-                            <span>Subtotal</span>
+                            <span>{t('ecommerce.subtotal')}</span>
                             <span>${subtotal?.toFixed(2)}</span>
                         </div>
                         <Separator />
                         <div className="flex items-center justify-between font-bold">
-                            <span>Total</span>
+                            <span>{t('ecommerce.total')}</span>
                             <span>${subtotal?.toFixed(2)}</span>
                         </div>
                         <p className="text-xs text-muted-foreground mb-4">
-                            * Taxes and shipping will be calculated on the next step.
+                            {t('ecommerce.shipping_taxes_notice')}
                         </p>
+
                         
                         <div className="space-y-2 mt-4">
-                             <Label htmlFor="checkout-email">Email Address <span className="text-destructive">*</span></Label>
+                             <Label htmlFor="checkout-email">{t('ecommerce.email_address')} <span className="text-destructive">*</span></Label>
+
                              <Input 
                                 id="checkout-email" 
                                 type="email" 
-                                placeholder="you@example.com" 
+                                placeholder={t('ecommerce.email_placeholder')} 
                                 value={email}
                                 onChange={(e) => {
                                     setEmail(e.target.value);
@@ -229,9 +242,10 @@ export const Checkout = () => {
                     <CardFooter>
                         <Button className="w-full" size="lg" onClick={handlePay} disabled={isProcessing}>
                             {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            {isProcessing ? 'Processing...' : 'Pay Now'}
+                            {isProcessing ? t('ecommerce.processing') : t('ecommerce.pay_now')}
                         </Button>
                     </CardFooter>
+
                  </Card>
             </div>
         </div>

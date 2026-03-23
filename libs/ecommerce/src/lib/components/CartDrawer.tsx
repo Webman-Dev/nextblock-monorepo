@@ -11,12 +11,15 @@ import { useRouter } from 'next/navigation';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
+import { useTranslations } from '@nextblock-cms/utils';
+
 
 
 export const CartDrawer = () => {
   const router = useRouter();
   const store = useCart((state) => state);
   const subtotal = useCartSubtotal();
+  const { t } = useTranslations();
 
   if (!store) return null;
 
@@ -36,7 +39,7 @@ export const CartDrawer = () => {
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetContent className="flex w-full flex-col pr-0 sm:max-w-lg">
         <SheetHeader className="px-1 text-left">
-          <SheetTitle>Shopping Cart ({items.length})</SheetTitle>
+          <SheetTitle>{t('ecommerce.shopping_cart')} ({items.length})</SheetTitle>
         </SheetHeader>
         
         {items.length > 0 ? (
@@ -45,7 +48,6 @@ export const CartDrawer = () => {
               <div key={item.id} className="flex gap-4">
                 {item.image_url ? (
                   <div className="relative aspect-square h-20 w-20 min-w-fit overflow-hidden rounded border bg-neutral-100">
-                    {/* Use standard img tag if local image optimization not available in this scope, or pass NextImage as generic if needed. Assuming standard img for now or we can use generic configured image */}
                     <img 
                       src={item.image_url} 
                       alt={item.title}
@@ -54,7 +56,7 @@ export const CartDrawer = () => {
                   </div>
                 ) : (
                   <div className="flex h-20 w-20 items-center justify-center rounded bg-secondary">
-                     <span className="text-xs text-muted-foreground">No Image</span>
+                     <span className="text-xs text-muted-foreground">{t('ecommerce.no_image')}</span>
                   </div>
                 )}
 
@@ -103,9 +105,9 @@ export const CartDrawer = () => {
           </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center space-y-2">
-            <span className="text-muted-foreground">Your cart is empty</span>
+            <span className="text-muted-foreground">{t('ecommerce.cart_empty')}</span>
             <Button variant="outline" onClick={() => setIsOpen(false)}>
-              Continue Shopping
+              {t('ecommerce.continue_shopping')}
             </Button>
           </div>
         )}
@@ -113,17 +115,17 @@ export const CartDrawer = () => {
         {items.length > 0 && (
           <div className="border-t pr-6 pt-4">
              <div className="flex items-center justify-between text-base font-medium">
-                <span>Subtotal</span>
+                <span>{t('ecommerce.subtotal')}</span>
                 <span>${subtotal?.toFixed(2)}</span>
              </div>
              <p className="mb-4 mt-1 text-xs text-muted-foreground">
-                Shipping and taxes calculated at checkout.
+                {t('ecommerce.shipping_taxes_calculated')}
              </p>
              <Button variant="outline" className="w-full mb-3" onClick={handleViewCart}>
-                View Full Cart
+                {t('ecommerce.view_full_cart')}
              </Button>
              <Button className="w-full" onClick={handleCheckout}>
-                Ready to Checkout
+                {t('ecommerce.ready_to_checkout')}
              </Button>
           </div>
         )}
@@ -131,3 +133,4 @@ export const CartDrawer = () => {
     </Sheet>
   );
 };
+

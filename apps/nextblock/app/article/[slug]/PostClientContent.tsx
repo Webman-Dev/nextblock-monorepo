@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import type { Database } from "@nextblock-cms/db";
 import { useLanguage } from '../../../context/LanguageContext';
+import { useCurrentContent } from '../../../context/CurrentContentContext';
+import Link from 'next/link';
 
 type PostType = Database['public']['Tables']['posts']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
@@ -14,8 +16,6 @@ export type ImageBlockContent = {
   media_id: string | null;
   object_key?: string;
 };
-import { useCurrentContent } from '../../../context/CurrentContentContext';
-import Link from 'next/link';
 
 interface PostClientContentProps {
   initialPostData: (PostType & { blocks: BlockType[]; language_code: string; language_id: number; translation_group_id: string; feature_image_url?: string | null; }) | null;
@@ -92,11 +92,11 @@ export default function PostClientContent({ initialPostData, currentSlug, childr
                            currentContent.slug !== null);
 
     if (needsUpdate) {
-      setCurrentContent({ id: postId, type: newType, slug: slugToSet });
+      setCurrentContent({ id: postId, type: newType, slug: slugToSet, translation_group_id: currentPostData?.translation_group_id });
     } else if (needsClearing) {
-      setCurrentContent({ id: null, type: null, slug: null });
+      setCurrentContent({ id: null, type: null, slug: null, translation_group_id: null });
     }
-  }, [postId, postSlug, setCurrentContent, currentContent.id, currentContent.type, currentContent.slug]);
+  }, [postId, postSlug, currentPostData?.translation_group_id, setCurrentContent, currentContent.id, currentContent.type, currentContent.slug]);
 
   // Separate useEffect for cleanup
   useEffect(() => {
@@ -105,15 +105,12 @@ export default function PostClientContent({ initialPostData, currentSlug, childr
     return () => {
       // Cleanup logic: only clear context if the current context ID matches the ID this instance was managing
       if (idToClean && currentContent.id === idToClean) {
-        setCurrentContent({ id: null, type: null, slug: null });
+        setCurrentContent({ id: null, type: null, slug: null, translation_group_id: null });
       }
     };
   }, [postId, setCurrentContent, currentContent.id]);
 
   if (!currentPostData && !isLoadingLanguages && !isLoadingTargetLang) {
-    // This state means the initial slug from the URL didn't resolve to any data.
-    // The server component (page.tsx) would have already called notFound().
-    // This is a fallback or could indicate an issue if reached.
     return (
       <div className="container mx-auto px-4 py-8 text-center">
         <h1 className="text-2xl font-bold mb-4">Article Not Found</h1>
@@ -127,12 +124,10 @@ export default function PostClientContent({ initialPostData, currentSlug, childr
     );
   }
   
-  // If initialPostData was null but we are still loading language context or trying to navigate
   if (!currentPostData && (isLoadingLanguages || isLoadingTargetLang)) {
      return <div className="container mx-auto px-4 py-20 text-center"><p>Loading article content...</p></div>;
   }
 
-  // If after all attempts, currentPostData is still null (should be caught by notFound in server component ideally)
   if (!currentPostData) {
      return <div className="container mx-auto px-4 py-20 text-center"><p>Could not load article content for &quot;{currentSlug}&quot;.</p></div>;
   }
@@ -142,13 +137,13 @@ export default function PostClientContent({ initialPostData, currentSlug, childr
       {isLoadingTargetLang && <div className="text-center py-2 text-sm text-muted-foreground">Switching language...</div>}
       
       {currentPostData?.feature_image_url && (
-        <div className="mb-8 relative"> {/* Adjust negative margins for full-bleed effect if container has padding */}
+        <div className="mb-8 relative">
           <Image
             src={currentPostData.feature_image_url}
             alt={`Hero image for ${currentPostData.title}`}
             width={800}
             height={400}
-            className="w-full h-auto max-h-[400px] md:max-h-[500px] object-cover shadow-lg" // Adjust max-h as needed, add rounded corners/shadow
+            className="w-full h-auto max-h-[400px] md:max-h-[500px] object-cover shadow-lg"
             priority
           />
         </div>

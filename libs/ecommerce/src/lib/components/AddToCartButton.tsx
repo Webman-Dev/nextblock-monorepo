@@ -4,14 +4,11 @@ import { Button } from '@nextblock-cms/ui';
 import { ShoppingCart } from 'lucide-react';
 
 import { useCart } from '../use-cart';
+import { useTranslations } from '@nextblock-cms/utils';
 
-interface Product {
-  id: string;
-  title: string;
-  price: number;
-  image_url?: string;
-  slug: string;
-}
+
+import { Product } from '../types';
+
 
 interface AddToCartButtonProps {
   product: Product;
@@ -25,6 +22,7 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
   // are synced. However, addItem is a function, not state, so it's stable.
   // But to be consistent with hydration pattern:
   const store = useCart((state) => state);
+  const { t } = useTranslations();
 
   if (!store) {
     // Render a disabled or loading state button during hydration if preferred,
@@ -33,7 +31,7 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
     return (
       <Button disabled className={className}>
         <ShoppingCart className="mr-2 h-4 w-4" />
-        Add to Cart
+        {t('ecommerce.add_to_cart')}
       </Button>
     );
   }
@@ -41,20 +39,25 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
   const { addItem } = store;
 
   const handleAddToCart = () => {
+
     addItem({
-      id: product.id, // Assuming simple ID mapping for now. For variants, ID should be variant ID.
+      id: product.id,
       product_id: product.id,
       title: product.title,
       price: product.price,
       image_url: product.image_url,
       slug: product.slug,
+      language_id: product.language_id,
+      translation_group_id: product.translation_group_id,
     });
+
   };
 
   return (
     <Button onClick={handleAddToCart} className={className}>
       <ShoppingCart className="mr-2 h-4 w-4" />
-      Add to Cart
+      {t('ecommerce.add_to_cart')}
     </Button>
   );
+
 };

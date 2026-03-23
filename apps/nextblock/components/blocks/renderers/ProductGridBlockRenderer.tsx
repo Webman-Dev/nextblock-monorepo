@@ -7,7 +7,6 @@ interface ProductGridBlockRendererProps {
   languageId: number;
 }
 
-export default function ProductGridBlockRenderer({ content }: ProductGridBlockRendererProps) {
-
-  return <ProductGridBlock content={content} />;
+export default function ProductGridBlockRenderer({ content, languageId }: ProductGridBlockRendererProps) {
+  return <ProductGridBlock content={content} languageId={languageId} />;
 }

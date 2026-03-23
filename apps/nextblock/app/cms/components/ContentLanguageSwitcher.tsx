@@ -20,9 +20,10 @@ import { cn } from '@nextblock-cms/utils'; // For conditional styling
 type Language = Database['public']['Tables']['languages']['Row'];
 type Page = Database['public']['Tables']['pages']['Row'];
 type Post = Database['public']['Tables']['posts']['Row'];
+type Product = Database['public']['Tables']['products']['Row'];
 interface ContentLanguageSwitcherProps {
-  currentItem: (Page | Post) & { language_code?: string; translation_group_id: string; }; // Must have translation_group_id
-  itemType: 'page' | 'post';
+  currentItem: (Page | Post | Product) & { language_code?: string; translation_group_id: string; }; // Must have translation_group_id
+  itemType: 'page' | 'post' | 'product';
   allSiteLanguages: Language[];
 }
 
@@ -54,7 +55,12 @@ export default function ContentLanguageSwitcher({
 
     async function fetchTranslations() {
       setIsLoading(true);
-      const table = itemType === 'page' ? 'pages' : 'posts';
+      const tableMap = {
+        'page': 'pages',
+        'post': 'posts',
+        'product': 'products'
+      };
+      const table = tableMap[itemType];
       const { data, error } = await supabase
         .from(table)
         .select('id, title, status, language_id, slug') // Fetch slug too
@@ -84,7 +90,9 @@ export default function ContentLanguageSwitcher({
     fetchTranslations();
   }, [currentItem.translation_group_id, itemType, supabase, allSiteLanguages]);
 
-  const currentLanguageName = allSiteLanguages.find(l => l.id === currentItem.language_id)?.name || currentItem.language_code;
+  const currentItemAny = currentItem as any;
+  const currentLanguageName = allSiteLanguages.find(l => l.id === currentItemAny.language_id)?.name || currentItem.language_code;
+
 
   if (allSiteLanguages.length <= 1 && !isLoading) {
     return null; // Don't show switcher if only one language configured
@@ -103,12 +111,20 @@ export default function ContentLanguageSwitcher({
         <DropdownMenuSeparator />
         {allSiteLanguages.map(lang => {
           const version = translations.find(t => t.language_id === lang.id);
-          const isCurrent = lang.id === currentItem.language_id;
+          const currentItemAny = currentItem as any;
+          const isCurrent = lang.id === currentItemAny.language_id;
+
           // Link to create new translation if it doesn't exist
           // This requires a more complex "create translation" flow or pre-created placeholders
+          const tableMap = {
+            'page': 'pages',
+            'post': 'posts',
+            'product': 'products'
+          };
+          const baseUrl = `/cms/${tableMap[itemType]}`;
           const editUrl = version
-            ? `/cms/${itemType === 'page' ? 'pages' : 'posts'}/${version.id}/edit`
-            : `/cms/${itemType === 'page' ? 'pages' : 'posts'}/new?from_group=${currentItem.translation_group_id}&target_lang_id=${lang.id}&base_slug=${currentItem.slug}`; // Example URL for creating new translation
+            ? `${baseUrl}/${version.id}/edit`
+            : `${baseUrl}/new?from_group=${currentItemAny.translation_group_id}&target_lang_id=${lang.id}&base_slug=${currentItemAny.slug}`; // Example URL for creating new translation
 
           if (version) {
             return (

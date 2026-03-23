@@ -6,9 +6,11 @@ import { ProductGallery } from './ProductGallery';
 import { AddToCartButton } from './AddToCartButton';
 import { Badge, Separator } from '@nextblock-cms/ui';
 import { SimpleTiptapRenderer } from './SimpleTiptapRenderer';
+import { useTranslations } from '@nextblock-cms/utils';
 
 export const ProductDetailsLayout: React.FC = () => {
   const product = useProduct();
+  const { t } = useTranslations();
 
   // Price formatting
   const price = product.price / 100;
@@ -43,12 +45,12 @@ export const ProductDetailsLayout: React.FC = () => {
                 <div className="flex items-center gap-3">
                     {salePrice && (
                         <Badge variant="destructive" className="px-2.5 py-1 text-xs font-bold uppercase tracking-wide animate-pulse shadow-sm">
-                            Sale {discountPercentage}% Off
+                            {t('ecommerce.sale_badge', { percent: String(discountPercentage) })}
                         </Badge>
                     )}
                     {product.stock && product.stock < 10 && (
                         <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">
-                            Only {product.stock} left
+                            {t('ecommerce.low_stock', { count: String(product.stock) })}
                         </Badge>
                      )}
                 </div>
@@ -99,13 +101,13 @@ export const ProductDetailsLayout: React.FC = () => {
                  <div className="grid grid-cols-2 gap-4 text-center text-xs text-muted-foreground pt-2">
                     <div className="flex items-center justify-center gap-2">
                         {((product as any).custom_props?.provider === 'freemius' || (product as any).freemius_product_id) ? (
-                            <span>📥 Instant Digital Delivery</span>
+                            <span>📥 {t('ecommerce.instant_digital_delivery')}</span>
                         ) : (
-                            <span>📦 Free Shipping</span>
+                            <span>📦 {t('ecommerce.free_shipping')}</span>
                         )}
                     </div>
                     <div className="flex items-center justify-center gap-2">
-                        <span>🛡️ Secure Checkout</span>
+                        <span>🛡️ {t('ecommerce.secure_checkout')}</span>
                     </div>
                  </div>
              </div>
@@ -120,7 +122,7 @@ export const ProductDetailsLayout: React.FC = () => {
             <SimpleTiptapRenderer content={product.description_json} />
             )}
             {!product.description_json && (
-            <p className="italic text-sm">No description available.</p>
+            <p className="italic text-sm">{t('ecommerce.no_description')}</p>
             )}
         </div>
     </div>

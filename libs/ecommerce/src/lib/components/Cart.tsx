@@ -13,11 +13,13 @@ import { Minus, Plus, Trash2 } from 'lucide-react';
 import { useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from '@nextblock-cms/utils';
 
 export const Cart = () => {
   const router = useRouter();
   const store = useCart((state) => state);
   const subtotal = useCartSubtotal();
+  const { t } = useTranslations();
 
   if (!store) return null;
 
@@ -30,10 +32,10 @@ export const Cart = () => {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center space-y-4 py-12">
-        <h2 className="text-2xl font-bold">Your cart is empty</h2>
-        <p className="text-muted-foreground">Looks like you haven't added anything to your cart yet.</p>
+        <h2 className="text-2xl font-bold">{t('ecommerce.cart_empty')}</h2>
+        <p className="text-muted-foreground">{t('ecommerce.cart_empty_description')}</p>
         <Button asChild>
-          <a href="/shop">Continue Shopping</a>
+          <a href="/shop">{t('ecommerce.continue_shopping')}</a>
         </Button>
       </div>
     );
@@ -41,7 +43,7 @@ export const Cart = () => {
 
   return (
     <div className="container mx-auto py-12">
-      <h1 className="mb-8 text-3xl font-bold">Shopping Cart</h1>
+      <h1 className="mb-8 text-3xl font-bold">{t('ecommerce.shopping_cart')}</h1>
 
       <div className="grid gap-12 lg:grid-cols-12 lg:items-start">
         <div className="lg:col-span-8">
@@ -49,10 +51,10 @@ export const Cart = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Quantity</TableHead>
-                  <TableHead className="text-right">Price</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>{t('ecommerce.product')}</TableHead>
+                  <TableHead>{t('ecommerce.quantity')}</TableHead>
+                  <TableHead className="text-right">{t('ecommerce.price')}</TableHead>
+                  <TableHead className="text-right">{t('ecommerce.total')}</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -71,7 +73,7 @@ export const Cart = () => {
                           </div>
                         ) : (
                           <div className="flex h-16 w-16 items-center justify-center rounded bg-secondary">
-                             <span className="text-[10px] text-muted-foreground">No Image</span>
+                             <span className="text-[10px] text-muted-foreground">{t('ecommerce.no_image')}</span>
                           </div>
                         )}
                         <div>
@@ -123,17 +125,17 @@ export const Cart = () => {
 
         <div className="lg:col-span-4">
             <div className="rounded-lg border bg-card p-6 shadow-sm">
-                <h2 className="mb-4 text-lg font-semibold">Order Summary</h2>
+                <h2 className="mb-4 text-lg font-semibold">{t('ecommerce.order_summary')}</h2>
                 <div className="flex justify-between border-b pb-4">
-                    <span>Subtotal</span>
+                    <span>{t('ecommerce.subtotal')}</span>
                     <span className="font-medium">${subtotal?.toFixed(2)}</span>
                 </div>
                  <div className="mt-4 flex flex-col gap-4">
                     <p className="text-sm text-muted-foreground">
-                        Shipping and taxes calculated at checkout.
+                        {t('ecommerce.shipping_taxes_calculated')}
                     </p>
                     <Button className="w-full" size="lg" onClick={handleCheckout}>
-                        Proceed to Checkout
+                        {t('ecommerce.proceed_to_checkout')}
                     </Button>
                  </div>
             </div>

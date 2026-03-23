@@ -20,7 +20,7 @@ export async function generateStaticParams() {
   const supabase = getSsgSupabaseClient();
   const { data: products } = await getProducts(supabase);
   if (!products) return [];
-  return products.map((product) => ({
+  return products.map((product: any) => ({
     slug: product.slug,
   }));
 }
@@ -159,6 +159,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
     description_json: product.description_json,
     stock: product.stock !== undefined && product.stock !== null ? product.stock : undefined,
     freemius_product_id: product.freemius_product_id || undefined,
+    language_id: product.language_id,
+    translation_group_id: product.translation_group_id,
   };
 
   return (
@@ -168,7 +170,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
               BlockRenderer expects languageId property. 
               If templatePage is null, we defaulted languageId to 1.
             */}
-            <CurrentContentSetter id={product.id} type="product" slug={product.slug} />
+            <CurrentContentSetter id={product.id} type="product" slug={product.slug} translation_group_id={product.translation_group_id} />
             <BlockRenderer blocks={blocks} languageId={languageId} />
         </ProductProvider>
     </div>

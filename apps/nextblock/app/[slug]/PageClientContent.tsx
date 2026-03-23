@@ -126,11 +126,16 @@ export default function PageClientContent({ initialPageData, currentSlug, childr
                            currentContent.slug !== null);
 
     if (needsUpdate) {
-      setCurrentContent({ id: pageId, type: newType, slug: slugToSet });
+      setCurrentContent({ 
+        id: pageId, 
+        type: newType, 
+        slug: slugToSet, 
+        translation_group_id: currentPageData?.translation_group_id 
+      });
     } else if (needsClearing) {
-      setCurrentContent({ id: null, type: null, slug: null });
+      setCurrentContent({ id: null, type: null, slug: null, translation_group_id: null });
     }
-  }, [pageId, pageSlug, setCurrentContent, currentContent.id, currentContent.type, currentContent.slug]);
+  }, [pageId, pageSlug, setCurrentContent, currentContent.id, currentContent.type, currentContent.slug, currentContent.translation_group_id, currentPageData?.translation_group_id]);
 
   // Separate useEffect for cleanup
   useEffect(() => {

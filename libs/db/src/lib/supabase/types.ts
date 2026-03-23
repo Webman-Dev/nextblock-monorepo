@@ -628,6 +628,7 @@ export type Database = {
           freemius_plan_id: string | null
           freemius_product_id: string | null
           id: string
+          language_id: number
           lemonsqueezy_variant_id: string | null
           metadata: Json | null
           price: number
@@ -638,6 +639,7 @@ export type Database = {
           status: string
           stock: number | null
           title: string
+          translation_group_id: string
           updated_at: string | null
         }
         Insert: {
@@ -646,6 +648,7 @@ export type Database = {
           freemius_plan_id?: string | null
           freemius_product_id?: string | null
           id?: string
+          language_id: number
           lemonsqueezy_variant_id?: string | null
           metadata?: Json | null
           price: number
@@ -656,6 +659,7 @@ export type Database = {
           status?: string
           stock?: number | null
           title: string
+          translation_group_id?: string
           updated_at?: string | null
         }
         Update: {
@@ -664,6 +668,7 @@ export type Database = {
           freemius_plan_id?: string | null
           freemius_product_id?: string | null
           id?: string
+          language_id?: number
           lemonsqueezy_variant_id?: string | null
           metadata?: Json | null
           price?: number
@@ -674,9 +679,18 @@ export type Database = {
           status?: string
           stock?: number | null
           title?: string
+          translation_group_id?: string
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "products_language_id_fkey"
+            columns: ["language_id"]
+            isOneToOne: false
+            referencedRelation: "languages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {

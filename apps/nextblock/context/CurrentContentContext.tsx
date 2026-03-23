@@ -6,6 +6,7 @@ export interface CurrentContent {
   id: string | number | null;
   type: 'page' | 'post' | 'product' | null;
   slug: string | null;
+  translation_group_id?: string | null;
 }
 
 interface CurrentContentContextType {

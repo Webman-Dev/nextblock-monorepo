@@ -20,6 +20,8 @@ export const productSchema = z.object({
       // We can sort based on index in this array, or explicit sort_order from UI
   })).optional(),
   status: z.enum(['draft', 'active', 'archived']),
+  language_id: z.coerce.number().int().min(1, 'Language is required'),
+  translation_group_id: z.string().uuid().optional(),
   explicitly_removed_media_ids: z.array(z.string()).optional(),
 });
 
