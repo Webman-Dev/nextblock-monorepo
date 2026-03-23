@@ -103,12 +103,11 @@ ON CONFLICT (key) DO NOTHING;
 
 -- Seed initial payment provider setting (default to stripe)
 INSERT INTO public.site_settings (key, value)
-VALUES ('payment_provider', '"stripe"'::jsonb)
+VALUES ('payment_provider', '"freemius"'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
 
 -- >>> FROM: 00000000000002_setup_profiles.sql <<<
--- 00000000000002_setup_profiles.sql
 -- Setup profiles table and auto-create trigger
 
 -- 1. Create profiles table
