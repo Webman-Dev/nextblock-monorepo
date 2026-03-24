@@ -297,6 +297,9 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                   <NavItem href="/cms/users" icon={Users} isActive={pathname.startsWith("/cms/users")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Manage Users
                   </NavItem>
+                  <NavItem href="/cms/settings/packages" icon={Package} isActive={pathname.startsWith("/cms/settings/packages")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                    Packages
+                  </NavItem>
                   <CollapsibleNavItem
                     icon={Settings}
                     title="Settings"
@@ -315,9 +318,6 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                     </NavItem>
                     <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Extra Translations
-                    </NavItem>
-                    <NavItem href="/cms/settings/packages" icon={Package} isActive={pathname.startsWith("/cms/settings/packages")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                      Packages
                     </NavItem>
 
                  </CollapsibleNavItem>
