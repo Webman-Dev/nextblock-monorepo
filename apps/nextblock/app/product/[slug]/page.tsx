@@ -151,7 +151,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     stock: product.stock !== undefined && product.stock !== null ? product.stock : undefined,
     freemius_product_id: product.freemius_product_id || undefined,
     language_id: product.language_id,
-    translation_group_id: product.translation_group_id,
+    translation_group_id: product.translation_group_id || "",
   };
 
   return (

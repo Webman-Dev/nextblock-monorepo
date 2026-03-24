@@ -21,14 +21,17 @@ export const FeaturedProductBlock = async ({ content }: { content: FeaturedProdu
   }
 
   const uiProduct = {
-      id: product.id,
-      title: product.title,
-      slug: product.slug,
-      price: product.price / 100,
-      sale_price: typeof product.sale_price === 'number' ? product.sale_price / 100 : undefined,
-      image_url: imageUrl,
-      short_description: product.short_description || undefined,
-      stock: product.stock,
+    id: product.id,
+    title: product.title,
+    slug: product.slug,
+    sku: product.sku,
+    price: product.price / 100,
+    sale_price: typeof product.sale_price === 'number' ? product.sale_price / 100 : undefined,
+    image_url: imageUrl,
+    short_description: product.short_description || undefined,
+    stock: product.stock,
+    language_id: product.language_id,
+    translation_group_id: product.translation_group_id || "",
   };
 
   return (

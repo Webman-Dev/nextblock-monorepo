@@ -58,12 +58,13 @@ export const ProductGridBlock = async ({
         id: p.id,
         title: p.title,
         slug: p.slug,
+        sku: p.sku,
         price: p.price / 100,
         sale_price: typeof p.sale_price === 'number' ? p.sale_price / 100 : undefined,
         image_url: imageUrl,
         short_description: p.short_description || undefined,
-        language_id: p.language_id,
-        translation_group_id: p.translation_group_id,
+        language_id: p.language_id as number,
+        translation_group_id: p.translation_group_id || "",
       };
   });
 
