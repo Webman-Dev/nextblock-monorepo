@@ -35,7 +35,6 @@ export const FeaturedProduct = ({ product, className, imagePosition = 'left' }: 
              )}
         </div>
 
-
         {/* Content Section */}
         <div className="flex flex-1 flex-col justify-center p-6 md:p-12">
             <Link href={`/product/${product.slug}`}>
