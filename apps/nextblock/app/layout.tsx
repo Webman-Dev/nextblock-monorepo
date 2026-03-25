@@ -183,7 +183,8 @@ export default async function RootLayout({
         <link rel="dns-prefetch" href="https://db.ppcppwsfnrptznvbxnsz.supabase.co" />
         <link rel="dns-prefetch" href="https://realtime.supabase.com" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <SpeedInsights/>
+        {/* @ts-expect-error - SpeedInsights version might have missing nonce in types but supports it in runtime */}
+        <SpeedInsights nonce={nonce}/>
       </head>
       <body className="bg-background text-foreground min-h-screen flex flex-col">
         <Providers
@@ -229,7 +230,7 @@ export default async function RootLayout({
 
           {isEcommerceActive && <CartDrawer />}
         </Providers>
-        <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID || ""} />
+        <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID || ""} nonce={nonce} />
       </body>
     </html>
   );
