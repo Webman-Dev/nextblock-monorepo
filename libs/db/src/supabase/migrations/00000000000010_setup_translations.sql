@@ -86,7 +86,6 @@ VALUES
   ('ecommerce.shipping_info', '{"en": "Shipping Information", "fr": "Informations de livraison"}'::jsonb),
   ('ecommerce.delivery_notice', '{"en": "Digital product - No shipping required", "fr": "Produit numérique - Aucune livraison requise"}'::jsonb),
   ('ecommerce.back_to_shop', '{"en": "Back to Shop", "fr": "Retour à la boutique"}'::jsonb),
-   ('ecommerce.continue_shopping', '{"en": "Continue Shopping", "fr": "Continuer vos achats"}'::jsonb),
   ('ecommerce.empty_cart', '{"en": "Your cart is empty", "fr": "Votre panier est vide"}'::jsonb),
   ('ecommerce.no_products_found', '{"en": "No products found", "fr": "Aucun produit trouvé"}'::jsonb),
   ('ecommerce.featured_products', '{"en": "Featured Products", "fr": "Produits vedettes"}'::jsonb),
@@ -135,7 +134,6 @@ VALUES
   ('ecommerce.free_shipping', '{"en": "Free Shipping", "fr": "Livraison gratuite"}'::jsonb),
   ('ecommerce.secure_checkout', '{"en": "Secure Checkout", "fr": "Paiement sécurisé"}'::jsonb),
   ('ecommerce.no_description', '{"en": "No description available.", "fr": "Aucune description disponible."}'::jsonb),
-  ('ecommerce.no_image', '{"en": "No Image", "fr": "Pas d''image"}'::jsonb),
   ('ecommerce.checkout_overlay_title', '{"en": "Order Checkout", "fr": "Paiement de la commande"}'::jsonb),
   ('ecommerce.email_placeholder', '{"en": "you@example.com", "fr": "vous@exemple.com"}'::jsonb)
 ON CONFLICT (key) DO UPDATE

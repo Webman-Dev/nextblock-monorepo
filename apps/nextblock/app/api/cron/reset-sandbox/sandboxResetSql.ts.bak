@@ -101,14 +101,13 @@ INSERT INTO public.site_settings (key, value)
 VALUES ('is_admin_created', 'false'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
--- Seed initial payment provider setting (default to freemius)
+-- Seed initial payment provider setting (default to stripe)
 INSERT INTO public.site_settings (key, value)
 VALUES ('payment_provider', '"freemius"'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
 
 -- >>> FROM: 00000000000002_setup_profiles.sql <<<
--- 00000000000002_setup_profiles.sql
 -- Setup profiles table and auto-create trigger
 
 -- 1. Create profiles table
@@ -637,7 +636,7 @@ COMMENT ON COLUMN public.logos.media_id IS 'Foreign key to the media table for t
 -- 00000000000010_setup_translations.sql
 -- Setup translations table
 
-CREATE TABLE IF NOT EXISTS public.translations (
+CREATE TABLE public.translations (
     key text PRIMARY KEY,
     translations jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -659,15 +658,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_updated_at') THEN
-        CREATE TRIGGER set_updated_at
-        BEFORE UPDATE ON public.translations
-        FOR EACH ROW
-        EXECUTE FUNCTION public.set_current_timestamp_updated_at();
-    END IF;
-END $$;
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON public.translations
+FOR EACH ROW
+EXECUTE FUNCTION public.set_current_timestamp_updated_at();
 
 -- 20260116 - Profile Form Translations (Moved from merged profiles migration)
 INSERT INTO public.translations (key, translations)
@@ -695,7 +689,7 @@ VALUES
   ('city_required', '{"en": "City is required", "es": "La ciudad es obligatoria", "fr": "La ville est requise"}'::jsonb),
   ('zip_code_required', '{"en": "Zip Code is required", "es": "El código postal es obligatorio", "fr": "Le code postal est requis"}'::jsonb),
   ('country_required', '{"en": "Country is required", "es": "El país es obligatorio", "fr": "Le pays est requis"}'::jsonb),
-  ('enter_valid_json', '{"en": "Enter valid JSON for billing address.", "es": "Ingrese JSON válido para la dirección de facturación.", "fr": "Entrez un JSON valide pour l''adresse de facturation."}'::jsonb),
+  ('enter_valid_json', '{"en": "Enter valid JSON for billing address.", "es": "Ingrese JSON válido para la dirección de facturación.", "fr": "Entrez un JSON valide para l''adresse de facturation."}'::jsonb),
   ('public_profile', '{"en": "Public Profile", "es": "Perfil Público", "fr": "Profil Public"}'::jsonb),
   ('details', '{"en": "Account Details", "es": "Detalles de la Cuenta", "fr": "Détails du Compte"}'::jsonb),
   ('identity', '{"en": "Identity", "es": "Identidad", "fr": "Identité"}'::jsonb),
@@ -722,6 +716,7 @@ VALUES
   ('ecommerce.shipping_info', '{"en": "Shipping Information", "fr": "Informations de livraison"}'::jsonb),
   ('ecommerce.delivery_notice', '{"en": "Digital product - No shipping required", "fr": "Produit numérique - Aucune livraison requise"}'::jsonb),
   ('ecommerce.back_to_shop', '{"en": "Back to Shop", "fr": "Retour à la boutique"}'::jsonb),
+  ('ecommerce.continue_shopping', '{"en": "Continue Shopping", "fr": "Continuer vos achats"}'::jsonb),
   ('ecommerce.empty_cart', '{"en": "Your cart is empty", "fr": "Votre panier est vide"}'::jsonb),
   ('ecommerce.no_products_found', '{"en": "No products found", "fr": "Aucun produit trouvé"}'::jsonb),
   ('ecommerce.featured_products', '{"en": "Featured Products", "fr": "Produits vedettes"}'::jsonb),
@@ -737,20 +732,16 @@ VALUES
   ('ecommerce.shopping_cart', '{"en": "Shopping Cart", "fr": "Panier d''achat"}'::jsonb),
   ('ecommerce.cart_empty', '{"en": "Your cart is empty", "fr": "Votre panier est vide"}'::jsonb),
   ('ecommerce.cart_empty_description', '{"en": "Looks like you haven''t added anything to your cart yet.", "fr": "On dirait que vous n''avez encore rien ajouté à votre panier."}'::jsonb),
-  ('ecommerce.continue_shopping', '{"en": "Continue Shopping", "fr": "Continuer vos achats"}'::jsonb),
   ('ecommerce.go_to_shop', '{"en": "Go to Shop", "fr": "Aller à la boutique"}'::jsonb),
   ('ecommerce.checkout_successful', '{"en": "Checkout Successful", "fr": "Paiement Réussi"}'::jsonb),
   ('ecommerce.sandbox_notice', '{"en": "This is a Sandbox environment. The Freemius checkout is skipped here for demo purposes.", "fr": "Ceci est un environnement de bac à sable. Le paiement Freemius est sauté ici à des fins de démonstration."}'::jsonb),
   ('ecommerce.license_notice', '{"en": "To purchase a real license for your self-hosted NextBlock instance, visit:", "fr": "Pour acheter une vraie licence pour votre instance NextBlock auto-hébergée, visitez :"}'::jsonb),
   ('ecommerce.purchase_at', '{"en": "Purchase at nextblock.ca", "fr": "Acheter sur nextblock.ca"}'::jsonb),
-  ('ecommerce.order_summary', '{"en": "Order Summary", "fr": "Résumé de la commande"}'::jsonb),
   ('ecommerce.order_summary_desc', '{"en": "Review your items before proceeding to payment.", "fr": "Vérifiez vos articles avant de procéder au paiement."}'::jsonb),
   ('ecommerce.qty', '{"en": "Qty", "fr": "Qté"}'::jsonb),
   ('ecommerce.quantity', '{"en": "Quantity", "fr": "Quantité"}'::jsonb),
   ('ecommerce.product', '{"en": "Product", "fr": "Produit"}'::jsonb),
   ('ecommerce.price', '{"en": "Price", "fr": "Prix"}'::jsonb),
-  ('ecommerce.total', '{"en": "Total", "fr": "Total"}'::jsonb),
-  ('ecommerce.subtotal', '{"en": "Subtotal", "fr": "Sous-total"}'::jsonb),
   ('ecommerce.secure_payment', '{"en": "Secure payment processing", "fr": "Traitement sécurisé du paiement"}'::jsonb),
   ('ecommerce.shipping_taxes_notice', '{"en": "* Taxes and shipping will be calculated on the next step.", "fr": "* Les taxes et les frais de livraison seront calculés à l''étape suivante."}'::jsonb),
   ('ecommerce.shipping_taxes_calculated', '{"en": "Shipping & taxes calculated at checkout.", "fr": "Livraison et taxes calculées lors du paiement."}'::jsonb),
@@ -774,6 +765,7 @@ VALUES
   ('ecommerce.email_placeholder', '{"en": "you@example.com", "fr": "vous@exemple.com"}'::jsonb)
 ON CONFLICT (key) DO UPDATE
 SET translations = EXCLUDED.translations;
+
 
 
 -- >>> FROM: 00000000000011_setup_revisions.sql <<<
@@ -2024,27 +2016,27 @@ returns boolean as $$
 $$ language sql security definer;
 
 -- Create products table
-create table public.products (
-  id uuid primary key default gen_random_uuid(),
-  language_id bigint not null references public.languages(id) on delete cascade,
-  translation_group_id uuid default gen_random_uuid() not null,
-  sku text not null,
-  title text not null,
-  slug text not null,
-  price integer not null,
-  sale_price integer,
-  stock integer default 0,
-  status text not null check (status in ('draft', 'active', 'archived')) default 'draft',
-  short_description text,
-  description_json jsonb,
-  metadata jsonb,
-  freemius_plan_id text,
-  freemius_product_id text,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now(),
-  constraint products_language_id_slug_key unique (language_id, slug),
-  constraint products_language_id_sku_key unique (language_id, sku)
-);
+  create table public.products (
+    id uuid primary key default gen_random_uuid(),
+    language_id bigint not null references public.languages(id) on delete cascade,
+    translation_group_id uuid default gen_random_uuid() not null,
+    sku text not null,
+    title text not null,
+    slug text not null,
+    price integer not null,
+    sale_price integer,
+    stock integer default 0,
+    status text not null check (status in ('draft', 'active', 'archived')) default 'draft',
+    short_description text,
+    description_json jsonb,
+    metadata jsonb,
+    freemius_plan_id text,
+    freemius_product_id text,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    constraint products_language_id_slug_key unique (language_id, slug),
+    constraint products_language_id_sku_key unique (language_id, sku)
+  );
 
 -- PRODUCT RLS
 alter table public.products enable row level security;
@@ -2145,7 +2137,6 @@ create policy "Service Role manages order items"
 
 -- Indexes for performance
 create index idx_products_slug on public.products(slug);
-create index idx_products_translation_group_id on public.products(translation_group_id);
 create index idx_orders_user_id on public.orders(user_id);
 create index idx_order_items_order_id on public.order_items(order_id);
 create index idx_product_media_product_id on public.product_media(product_id);
