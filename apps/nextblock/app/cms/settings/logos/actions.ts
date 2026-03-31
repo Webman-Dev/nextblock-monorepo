@@ -70,7 +70,7 @@ export async function getLogos() {
     throw new Error(`Failed to fetch logos: ${error.message}`)
   }
 
-  return data
+  return data as unknown as Logo[]
 }
 
 export async function getLogoById(id: string) {
