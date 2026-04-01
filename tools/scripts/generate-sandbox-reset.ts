@@ -6,7 +6,6 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: path.join(process.cwd(), '.env.local') });
 
 const MIGRATIONS_DIR = path.join(process.cwd(), 'libs', 'db', 'src', 'supabase', 'migrations');
-const DEBUG_OUTPUT_FILE = path.join(process.cwd(), 'tools', 'scripts', 'generated-reset-debug.sql');
 const TARGET_API_DIR = path.join(process.cwd(), 'apps', 'nextblock', 'app', 'api', 'cron', 'reset-sandbox');
 const OUT_FILE = path.join(TARGET_API_DIR, 'sandboxResetSql.ts');
 
@@ -75,9 +74,6 @@ ${concatenatedSql}
   // 3. Export as a typescript variable into the route directory
   const tsContent = `export const SANDBOX_RESET_SQL = \`\n${procedureSql.replace(/`/g, '\\`').replace(/\$\{/g, '\\${')}\n\`;\n`;
   fs.writeFileSync(OUT_FILE, tsContent);
-  
-  // Also save a fallback copy locally for debugging
-  fs.writeFileSync(DEBUG_OUTPUT_FILE, procedureSql);
   
   console.log(`[generate-sandbox-reset] ✅ Successfully compiled Sandbox Reset SQL to ${OUT_FILE}`);
 }
