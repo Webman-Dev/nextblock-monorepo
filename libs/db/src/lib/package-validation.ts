@@ -7,8 +7,8 @@ import { createClient } from './supabase/server';
  * @param packageId - The ID of the package to verify (e.g., 'ecommerce')
  * @returns boolean - true if active, false otherwise
  */
-export async function verifyPackageOnline(packageId: string): Promise<boolean> {
-    const supabase = await createClient();
+export async function verifyPackageOnline(packageId: string, customClient?: any): Promise<boolean> {
+    const supabase = customClient ?? await createClient();
 
     try {
         const { data, error } = await supabase

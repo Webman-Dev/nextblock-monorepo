@@ -10,6 +10,11 @@ import { CurrentContentSetter } from "../../../components/CurrentContentSetter";
 import type { Database } from "@nextblock-cms/db";
 type BlockType = Database['public']['Tables']['blocks']['Row'];
 
+export const dynamicParams = true;
+export const revalidate = 360;
+export const dynamic = 'force-dynamic'; // keeps per-request locale; paired with short revalidate
+export const fetchCache = 'force-no-store';
+
 interface ProductPageProps {
   params: Promise<{
     slug: string;
@@ -59,7 +64,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const supabase = getSsgSupabaseClient();
 
   // 0. Verify License
-  const isOnline = await verifyPackageOnline('ecommerce');
+  const isOnline = await verifyPackageOnline('ecommerce', supabase);
   if (!isOnline) {
       notFound();
   }
