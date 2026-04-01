@@ -64,7 +64,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const supabase = getSsgSupabaseClient();
 
   // 0. Verify License
-  const isOnline = await verifyPackageOnline('ecommerce', supabase);
+  const isOnline = await verifyPackageOnline('ecommerce');
   if (!isOnline) {
       notFound();
   }
