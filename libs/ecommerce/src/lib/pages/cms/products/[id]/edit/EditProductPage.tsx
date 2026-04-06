@@ -84,15 +84,16 @@ export async function EditProductPage({
         mediaPickerNode={mediaPickerNode}
         editorNode={editorNode}
         availableLanguagesProp={availableLanguagesProp}
+        freemiusDashboardNode={
+          product.freemius_product_id && pricingPlans ? (
+            <FreemiusPricingDashboard 
+              productId={product.id} 
+              freemiusProductId={product.freemius_product_id}
+              plans={pricingPlans}
+            />
+          ) : undefined
+        }
       />
-
-      {product.freemius_product_id && pricingPlans && (
-        <FreemiusPricingDashboard 
-          productId={product.id} 
-          freemiusProductId={product.freemius_product_id}
-          plans={pricingPlans}
-        />
-      )}
     </div>
   );
 }

@@ -4,7 +4,6 @@ import { useTransition } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Input } from '@nextblock-cms/ui';
 import { toast } from 'sonner';
 import { updateFreemiusOverride } from '../actions';
-import { SyncFreemiusPricingButton } from './SyncFreemiusPricingButton';
 
 interface FreemiusPricingData {
   id: string;
@@ -31,25 +30,19 @@ interface FreemiusPricingDashboardProps {
   plans: FreemiusPlanData[];
 }
 
-export function FreemiusPricingDashboard({ freemiusProductId, plans }: FreemiusPricingDashboardProps) {
+export function FreemiusPricingDashboard({ plans }: FreemiusPricingDashboardProps) {
   return (
-    <div className="space-y-6 mt-8 p-6 bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-lg shadow-sm">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-xl font-bold">Freemius Pricing & Synchronization</h2>
-          <p className="text-sm text-slate-500 mt-1">Manage local overrides and pull the latest pricing matrices.</p>
-        </div>
-        <SyncFreemiusPricingButton productId={freemiusProductId} />
-      </div>
-
+    <div className="w-full">
       {plans && plans.length > 0 ? (
         <div className="space-y-8">
           {plans.map((plan) => (
-            <div key={plan.id} className="space-y-4">
-              <h3 className="font-semibold text-lg text-slate-700 dark:text-slate-300 border-b pb-2">
-                {plan.title || plan.name}
-              </h3>
-              <div className="rounded-lg border overflow-x-auto dark:border-slate-700">
+            <div key={plan.id} className="w-full">
+              {plans.length > 1 && (
+                <h3 className="font-semibold text-lg text-slate-700 dark:text-slate-300 border-b pb-2 mb-4 mt-6">
+                  {plan.title || plan.name}
+                </h3>
+              )}
+              <div className={`${plans.length > 1 ? 'rounded-lg border' : 'rounded-b-lg border-x border-b'} overflow-x-auto dark:border-slate-700 bg-card`}>
                 <Table>
                   <TableHeader>
                     <TableRow>

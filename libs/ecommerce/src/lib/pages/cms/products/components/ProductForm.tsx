@@ -11,7 +11,7 @@ import { createProductAction, updateProductAction } from '../server-actions';
 import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 import { DeleteProductButton } from './DeleteProductButton';
-
+import { SyncFreemiusPricingButton } from './SyncFreemiusPricingButton';
 interface ProductFormProps {
   initialData?: ProductFormValues & { 
     id?: string; 
@@ -25,6 +25,7 @@ interface ProductFormProps {
   availableLanguagesProp: any[]; // Or a specific Language type if imported
   translationGroupId?: string;
   targetLanguageId?: string;
+  freemiusDashboardNode?: React.ReactNode;
 }
 
 // Simple slugify helper
@@ -47,7 +48,8 @@ export function ProductForm({
   editorNode,
   availableLanguagesProp,
   translationGroupId,
-  targetLanguageId
+  targetLanguageId,
+  freemiusDashboardNode
 }: ProductFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm<ProductFormValues>({
@@ -210,8 +212,8 @@ export function ProductForm({
 
       <input type="hidden" {...register('translation_group_id')} />
 
-      <div className="space-y-8">
-         {/* Row 1: Product Information */}
+      <div className="space-y-8 w-full max-w-[1400px]">
+         {/* 1. Product Information */}
          <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
             <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Product Information</h2>
@@ -222,162 +224,182 @@ export function ProductForm({
                 )}
             </div>
             <div className="space-y-4">
-              <div>
-                  <Label htmlFor="title">Title</Label>
-                  <Input id="title" {...register('title')} placeholder="Product Title" />
-                  {errors.title && <p className="text-destructive text-sm">{errors.title.message as string}</p>}
-              </div>
-              <div>
-                  <Label htmlFor="slug">Slug</Label>
-                  <Input id="slug" {...register('slug')} placeholder="product-slug" className="font-mono text-sm" />
-                  {errors.slug && <p className="text-destructive text-sm">{errors.slug.message as string}</p>}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                      <Label htmlFor="title">Title</Label>
+                      <Input id="title" {...register('title')} placeholder="Product Title" />
+                      {errors.title && <p className="text-destructive text-sm">{errors.title.message as string}</p>}
+                  </div>
+                  <div>
+                      <Label htmlFor="slug">Slug</Label>
+                      <Input id="slug" {...register('slug')} placeholder="product-slug" className="font-mono text-sm" />
+                      {errors.slug && <p className="text-destructive text-sm">{errors.slug.message as string}</p>}
+                  </div>
               </div>
             </div>
          </div>
 
-         {/* Row 2: Pricing/Inventory (50%) & Status (50%) */}
-         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
-                <h2 className="text-lg font-semibold">Pricing & Inventory</h2>
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <Label htmlFor="price">Price ($)</Label>
-                        <Input
-                            id="price"
-                            type="number"
-                            step="0.01"
-                            {...register('price', { valueAsNumber: true })}
-                            placeholder="0.00"
-                        />
-                        {errors.price && <p className="text-destructive text-sm">{errors.price.message as string}</p>}
-                    </div>
-                    <div>
-                        <Label htmlFor="sale_price">Sale Price ($)</Label>
-                        <Input
-                            id="sale_price"
-                            type="number"
-                            step="0.01"
-                            {...register('sale_price', { valueAsNumber: true })}
-                            placeholder="0.00"
-                        />
-                    </div>
-                </div>
-            
-                <div className="pt-2 grid grid-cols-2 gap-4">
+         {/* 2. Pricing & Licensing */}
+         <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
+             <div className="flex items-center justify-between">
+                 <h2 className="text-lg font-semibold">
+                     {watch('freemius_product_id') ? 'Digital Licensing & Prices' : 'Pricing & Inventory'}
+                 </h2>
+                 {watch('freemius_product_id') && (
+                     <SyncFreemiusPricingButton productId={watch('freemius_product_id') as string} />
+                 )}
+             </div>
+             
+             {!watch('freemius_product_id') && (
+                 <div className="grid grid-cols-2 gap-4">
                      <div>
-                         <Label htmlFor="freemius_product_id">Freemius Product ID</Label>
-                         <Input id="freemius_product_id" {...register('freemius_product_id')} />
+                         <Label htmlFor="price">Price ($)</Label>
+                         <Input
+                             id="price"
+                             type="number"
+                             step="0.01"
+                             {...register('price', { valueAsNumber: true })}
+                             placeholder="0.00"
+                         />
+                         {errors.price && <p className="text-destructive text-sm">{errors.price.message as string}</p>}
                      </div>
                      <div>
-                         <Label htmlFor="freemius_plan_id">Freemius Plan ID</Label>
-                         <Input id="freemius_plan_id" {...register('freemius_plan_id')} />
+                         <Label htmlFor="sale_price">Sale Price ($)</Label>
+                         <Input
+                             id="sale_price"
+                             type="number"
+                             step="0.01"
+                             {...register('sale_price', { valueAsNumber: true })}
+                             placeholder="0.00"
+                         />
                      </div>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                    <strong>Note:</strong> These IDs are required to trigger the Freemius checkout popup and sync products. 
-                    Removing them from the database would break the license management and automated sync features.
-                </p>
+                 </div>
+             )}
+         
+             <div className="pt-2 grid grid-cols-2 gap-4">
+                  <div>
+                      <Label htmlFor="freemius_product_id">Freemius Product ID</Label>
+                      <Input id="freemius_product_id" {...register('freemius_product_id')} />
+                  </div>
+                  <div>
+                      <Label htmlFor="freemius_plan_id">Freemius Plan ID</Label>
+                      <Input id="freemius_plan_id" {...register('freemius_plan_id')} />
+                  </div>
+             </div>
+             
+             {!watch('freemius_product_id') ? (
+                 <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                     <strong>Note:</strong> Entering a Freemius ID overrides manual pricing and converts this to a digital product synced via Freemius checkout.
+                 </p>
+             ) : (
+                 <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                     <strong>Note:</strong> Freemius integration uses plan prices instead of standard pricing.
+                 </p>
+             )}
 
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <Label htmlFor="sku">SKU</Label>
-                        <Input id="sku" {...register('sku')} placeholder="SKU-123" />
-                        {errors.sku && <p className="text-destructive text-sm">{errors.sku.message as string}</p>}
-                    </div>
-                    <div>
-                        <Label htmlFor="stock">Stock</Label>
-                        <Input
-                        id="stock"
-                        type="number"
-                        {...register('stock', { valueAsNumber: true })}
-                        placeholder="0"
-                        />
-                    </div>
-                </div>
-            </div>
+             {!watch('freemius_product_id') && (
+                 <div className="grid grid-cols-2 gap-4">
+                     <div>
+                         <Label htmlFor="sku">SKU</Label>
+                         <Input id="sku" {...register('sku')} placeholder="SKU-123" />
+                         {errors.sku && <p className="text-destructive text-sm">{errors.sku.message as string}</p>}
+                     </div>
+                     <div>
+                         <Label htmlFor="stock">Stock</Label>
+                         <Input
+                         id="stock"
+                         type="number"
+                         {...register('stock', { valueAsNumber: true })}
+                         placeholder="0"
+                         />
+                     </div>
+                 </div>
+             )}
 
-            <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
-                <h2 className="text-lg font-semibold">Status & Metadata</h2>
-                <div>
-                     <Label>Status</Label>
-                    <Select 
-                        onValueChange={(val) => setValue('status', val as any)} 
-                        defaultValue={watch('status')}
-                    >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="archived">Archived</SelectItem>
-                    </SelectContent>
-                    </Select>
-                </div>
-                <div className="pt-2">
-                    <Label>Language</Label>
-                    <Select 
-                        onValueChange={(val) => setValue('language_id', parseInt(val, 10), { shouldValidate: true })} 
-                        value={watch('language_id')?.toString()}
-                        defaultValue={watch('language_id')?.toString()}
-                    >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Select language" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {availableLanguagesProp.map((lang) => (
-                            <SelectItem key={lang.id} value={lang.id.toString()}>
-                                {lang.name} ({lang.code.toUpperCase()})
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                    </Select>
-                    {errors.language_id && <p className="text-destructive text-sm">{errors.language_id.message as string}</p>}
-                </div>
-                <div>
-                  <Label htmlFor="short_description">Short Description</Label>
-                  <Input {...register('short_description')} placeholder="Brief summary (SEO)..." />
-                </div>
-            </div>
+             {freemiusDashboardNode && (
+                 <div className="pt-0 border-t mt-4">
+                     {freemiusDashboardNode}
+                 </div>
+             )}
          </div>
 
-         {/* Row 3: Description & Media - Keeping Media big or side? 
-             User didn't specify, but Media is nicer wide for gallery. 
-             Detailed description is vertical.
-             Let's split 60/40 or just stack. 
-             Ideally Description is main content, Media is visual. 
-             Let's use the 1fr/400px split for the bottom part which worked well before.
-         */}
-         <div className="grid grid-cols-1 lg:grid-cols-[1fr,400px] gap-8">
-            <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
-                <Label className="text-lg font-semibold">Detailed Description</Label>
-                <div className="min-h-[400px] border rounded-lg overflow-hidden text-block-editor">
-                {editorNode ? (
-                    React.cloneElement(editorNode as React.ReactElement<any>, {
-                        initialContent: watch('description_json') || {},
-                        onUpdate: (content: any) => setValue('description_json', content)
-                    })
-                ) : (
-                    <div className="p-4 text-sm text-muted-foreground italic text-center mt-10">
-                        Editor not injected. Adding descriptions is disabled.
-                    </div>
-                )}
-                </div>
-            </div>
-
-            <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4 h-fit">
-                {/* 
-                  ProductMediaManager
-                */}
-                <ProductMediaManager 
-                    initialMedia={mediaForManager} 
-                    onUpdate={onMediaUpdate}
-                    mediaPickerNode={mediaPickerNode}
-                />
-                {/* Hidden input to ensure form state catches it if needed, though setValue usually enough */}
-                <input type="hidden" {...register('product_media')} /> 
-            </div>
+         {/* 3. Detailed Description */}
+         <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
+             <div className="flex flex-col space-y-4 mb-4">
+                 <div>
+                    <Label htmlFor="short_description" className="font-semibold text-lg block mb-2">Short Description (SEO)</Label>
+                    <Input {...register('short_description')} placeholder="Brief summary (SEO)..." />
+                 </div>
+             </div>
+             <Label className="mb-2 block font-semibold text-lg border-t pt-4">Detailed Description</Label>
+             <div className="min-h-[400px] border rounded-lg overflow-hidden text-block-editor">
+             {editorNode ? (
+                 React.cloneElement(editorNode as React.ReactElement<any>, {
+                     initialContent: watch('description_json') || {},
+                     onUpdate: (content: any) => setValue('description_json', content)
+                 })
+             ) : (
+                 <div className="p-4 text-sm text-muted-foreground italic text-center mt-10">
+                     Editor not injected. Adding descriptions is disabled.
+                 </div>
+             )}
+             </div>
          </div>
+
+         {/* 4. Media Gallery */}
+         <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
+             <h2 className="text-lg font-semibold">Media Gallery</h2>
+             <ProductMediaManager 
+                 initialMedia={mediaForManager} 
+                 onUpdate={onMediaUpdate}
+                 mediaPickerNode={mediaPickerNode}
+             />
+             <input type="hidden" {...register('product_media')} /> 
+         </div>
+
+         {/* 5. Publishing */}
+         <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
+             <h2 className="text-lg font-semibold">Publishing</h2>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div>
+                      <Label className="mb-2 block">Status</Label>
+                     <Select 
+                         onValueChange={(val) => setValue('status', val as any)} 
+                         defaultValue={watch('status')}
+                     >
+                     <SelectTrigger>
+                         <SelectValue placeholder="Select status" />
+                     </SelectTrigger>
+                     <SelectContent>
+                         <SelectItem value="draft">Draft</SelectItem>
+                         <SelectItem value="active">Active</SelectItem>
+                         <SelectItem value="archived">Archived</SelectItem>
+                     </SelectContent>
+                     </Select>
+                 </div>
+                 <div>
+                     <Label className="mb-2 block">Language</Label>
+                     <Select 
+                         onValueChange={(val) => setValue('language_id', parseInt(val, 10), { shouldValidate: true })} 
+                         value={watch('language_id')?.toString()}
+                         defaultValue={watch('language_id')?.toString()}
+                     >
+                     <SelectTrigger>
+                         <SelectValue placeholder="Select language" />
+                     </SelectTrigger>
+                     <SelectContent>
+                         {availableLanguagesProp.map((lang) => (
+                             <SelectItem key={lang.id} value={lang.id.toString()}>
+                                 {lang.name} ({lang.code.toUpperCase()})
+                             </SelectItem>
+                         ))}
+                     </SelectContent>
+                     </Select>
+                     {errors.language_id && <p className="text-destructive text-sm">{errors.language_id.message as string}</p>}
+                 </div>
+             </div>
+         </div>
+      </div>
 
          {/* Bottom Actions */}
          <div className="flex justify-end pt-4 border-t">
@@ -385,8 +407,6 @@ export function ProductForm({
                 {isSubmitting ? 'Saving...' : 'Save Changes'}
             </Button>
          </div>
-
-      </div>
     </form>
   );
 }
