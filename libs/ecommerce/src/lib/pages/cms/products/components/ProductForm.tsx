@@ -8,9 +8,6 @@ import { ProductFormValues, productSchema } from '../../../../product-schema';
 import { useForm } from 'react-hook-form';
 import { ProductMediaManager } from './ProductMediaManager';
 import { createProductAction, updateProductAction } from '../server-actions';
-import Link from 'next/link';
-import { ExternalLink } from 'lucide-react';
-import { DeleteProductButton } from './DeleteProductButton';
 import { SyncFreemiusPricingButton } from './SyncFreemiusPricingButton';
 interface ProductFormProps {
   initialData?: ProductFormValues & { 
@@ -182,37 +179,11 @@ export function ProductForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 pb-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-         <div>
-            <h1 className="text-3xl font-bold tracking-tight">{isEdit ? 'Edit Product' : 'Create Product'}</h1>
-            <p className="text-sm text-muted-foreground">
-               {isEdit ? 'Manage product details, pricing, and media.' : 'Add a new product to your store.'}
-            </p>
-         </div>
-         <div className="flex items-center gap-2">
-             {isEdit && initialData?.id && (
-                <DeleteProductButton 
-                    id={initialData.id} 
-                    productName={watch('title')} 
-                    redirectTo="/cms/products"
-                    className="border-red-200 hover:bg-red-50 hover:text-red-700"
-                />
-             )}
-             
-             {watch('slug') && watch('status') === 'active' && (
-                 <Button variant="outline" asChild>
-                    <Link href={`/product/${watch('slug')}`} target="_blank">
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                        View
-                    </Link>
-                 </Button>
-             )}
-         </div>
-      </div>
+
 
       <input type="hidden" {...register('translation_group_id')} />
 
-      <div className="space-y-8 w-full max-w-[1400px]">
+      <div className="space-y-8 w-full">
          {/* 1. Product Information */}
          <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
             <div className="flex items-center justify-between">

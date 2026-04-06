@@ -104,7 +104,7 @@ export function CopyProductFromLanguage({
   return (
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogTrigger asChild>
-          <Button variant="outline" size="sm" title="Copy content from another language">
+          <Button variant="outline" title="Copy content from another language">
             <CopyIcon className="h-4 w-4 mr-2" />
             Copy Content...
           </Button>

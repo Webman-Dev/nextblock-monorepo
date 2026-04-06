@@ -2,8 +2,10 @@ import { ProductForm } from '../../components/ProductForm';
 import { getProduct, getFreemiusPricingByProductId } from '../../actions';
 import { FreemiusPricingDashboard } from '../../components/FreemiusPricingDashboard';
 
+import { DeleteProductButton } from '../../components/DeleteProductButton';
+
 import { notFound } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@nextblock-cms/ui';
 
@@ -36,7 +38,7 @@ export async function EditProductPage({
   const pricingPlans = product.freemius_product_id ? await getFreemiusPricingByProductId(product.id) : null;
 
   return (
-    <div className="space-y-8 w-full mx-auto px-6 py-8">
+    <div className="space-y-8 w-full max-w-[1400px] mx-auto px-6 py-8">
       <div className="flex justify-between items-center flex-wrap gap-4 w-full">
         <div className="flex items-center gap-3">
           <Button
@@ -59,6 +61,20 @@ export async function EditProductPage({
         <div className="flex items-center gap-3 flex-wrap">
            {languageSwitcherNode?.(product)}
            {copyContentNode?.(product)}
+           <DeleteProductButton 
+                id={product.id} 
+                productName={product.title} 
+                redirectTo="/cms/products"
+                className="border-red-200 hover:bg-red-50 hover:text-red-700"
+            />
+            {product.slug && product.status === 'active' && (
+                 <Button variant="outline" asChild>
+                    <Link href={`/product/${product.slug}`} target="_blank">
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        View
+                    </Link>
+                 </Button>
+             )}
         </div>
       </div>
 
