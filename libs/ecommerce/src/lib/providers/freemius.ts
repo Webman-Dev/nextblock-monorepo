@@ -265,17 +265,18 @@ async function syncSingleFreemiusProductInternal(
             const planIdStr = plan.id.toString();
             console.log(`[Freemius Sync] Processing plan: ${plan.title || plan.name} (${planIdStr})...`);
             
-            // Fetch pricing for this specific plan
+            // 1. Fetch pricing for this specific plan
             let price = 0;
+            let fullPricing: any[] = [];
             try {
                 const pricingPath = `/v1/developers/${devId}/plugins/${productId}/plans/${planIdStr}/pricing.json`;
                 const pricingData = await fetchFreemius(pricingPath);
-                const pricing = pricingData.pricing || [];
-                if (pricing.length > 0) {
-                    // annual_price or monthly_price (stored in cents)
-                    price = Math.round((pricing[0].annual_price || pricing[0].monthly_price || 0) * 100);
+                fullPricing = pricingData.pricing || [];
+                if (fullPricing.length > 0) {
+                    // Base price calculation for the main products table fallback
+                    price = Math.round((fullPricing[0].annual_price || fullPricing[0].monthly_price || 0) * 100);
                 }
-                console.log(`[Freemius Sync] Found pricing for plan ${planIdStr}: ${price}`);
+                console.log(`[Freemius Sync] Found ${fullPricing.length} pricing configs for plan ${planIdStr}`);
             } catch (pricingErr) {
                 console.warn(`[Freemius Sync] Could not fetch pricing for plan ${planIdStr}:`, pricingErr instanceof Error ? pricingErr.message : pricingErr);
             }
@@ -299,19 +300,86 @@ async function syncSingleFreemiusProductInternal(
                 language_id: languageId,
             };
 
-            console.log(`[Freemius Sync] Upserting product: ${productPayload.sku}`);
-
+            // 2. Upsert Core Product
             const { data: upsertData, error: upsertError } = await supabase
                 .from('products')
                 .upsert(productPayload, { onConflict: 'language_id, sku' })
                 .select();
 
-            if (upsertError) {
+            if (upsertError || !upsertData || upsertData.length === 0) {
                 console.error(`[Freemius Sync] Error upserting product ${productPayload.sku}:`, upsertError);
-            } else {
-                console.log(`[Freemius Sync] Successfully synced product ${productPayload.sku} (ID: ${upsertData?.[0]?.id}).`);
-                syncCount++;
+                continue; // Cannot proceed without parent product
             }
+
+            const localProductId = upsertData[0].id;
+
+            // 3. Sync Freemius Plan
+            const { data: existingPlan } = await supabase
+                .from('freemius_plans')
+                .select('id')
+                .eq('product_id', localProductId)
+                .eq('name', plan.name)
+                .single();
+
+            let localPlanIdStr = '';
+
+            if (existingPlan) {
+                localPlanIdStr = existingPlan.id;
+                await supabase
+                    .from('freemius_plans')
+                    .update({ title: plan.title || plan.name, updated_at: new Date().toISOString() })
+                    .eq('id', localPlanIdStr);
+            } else {
+                const { data: newPlan } = await supabase
+                    .from('freemius_plans')
+                    .insert({
+                        product_id: localProductId,
+                        name: plan.name,
+                        title: plan.title || plan.name
+                    })
+                    .select('id')
+                    .single();
+                if (newPlan) localPlanIdStr = newPlan.id;
+            }
+
+            // 4. Sync Pricing Configurations Safely (Preserving Overrides)
+            if (localPlanIdStr && fullPricing.length > 0) {
+                for (const pr of fullPricing) {
+                    const lQuota = pr.licenses || 1;
+                    
+                    const { data: existingPricing } = await supabase
+                        .from('freemius_pricing')
+                        .select('id')
+                        .eq('plan_id', localPlanIdStr)
+                        .eq('license_quota', lQuota)
+                        .single();
+
+                    const pPayload = {
+                        api_monthly_price: pr.monthly_price ? Number(pr.monthly_price) : null,
+                        api_annual_price: pr.annual_price ? Number(pr.annual_price) : null,
+                        api_lifetime_price: pr.lifetime_price ? Number(pr.lifetime_price) : null,
+                        updated_at: new Date().toISOString()
+                    };
+
+                    if (existingPricing) {
+                        await supabase
+                            .from('freemius_pricing')
+                            .update(pPayload)
+                            .eq('id', existingPricing.id);
+                    } else {
+                        await supabase
+                            .from('freemius_pricing')
+                            .insert({
+                                plan_id: localPlanIdStr,
+                                license_quota: lQuota,
+                                ...pPayload
+                            });
+                    }
+                }
+            }
+            
+            console.log(`[Freemius Sync] Successfully fully synced product ${productPayload.sku}.`);
+            syncCount++;
         }
     } catch (err: any) {
         console.error(`[Freemius Sync] Failed sync for plugin ${productId}:`, err.message);

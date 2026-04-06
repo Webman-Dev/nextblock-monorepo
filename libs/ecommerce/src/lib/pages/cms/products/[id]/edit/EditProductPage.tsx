@@ -1,17 +1,13 @@
 import { ProductForm } from '../../components/ProductForm';
-import { getProduct } from '../../actions';
+import { getProduct, getFreemiusPricingByProductId } from '../../actions';
+import { FreemiusPricingDashboard } from '../../components/FreemiusPricingDashboard';
 
-console.log('--- EditProductPage Debug ---', {
-    ProductForm: typeof ProductForm,
-    getProduct: typeof getProduct,
-});
 import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@nextblock-cms/ui';
 
 interface EditProductPageProps {
-
   params: Promise<{
     id: string;
   }>;
@@ -22,7 +18,6 @@ interface EditProductPageProps {
   copyContentNode?: (product: any) => React.ReactNode;
 }
 
-
 export async function EditProductPage({ 
   params, 
   mediaPickerNode, 
@@ -32,11 +27,13 @@ export async function EditProductPage({
   copyContentNode
 }: EditProductPageProps) {
   const { id } = await params;
-  const product = await getProduct(id);
+  const product = await getProduct(id) as any;
 
   if (!product) {
     notFound();
   }
+
+  const pricingPlans = product.freemius_product_id ? await getFreemiusPricingByProductId(product.id) : null;
 
   return (
     <div className="space-y-8 w-full mx-auto px-6 py-8">
@@ -88,8 +85,14 @@ export async function EditProductPage({
         editorNode={editorNode}
         availableLanguagesProp={availableLanguagesProp}
       />
+
+      {product.freemius_product_id && pricingPlans && (
+        <FreemiusPricingDashboard 
+          productId={product.id} 
+          freemiusProductId={product.freemius_product_id}
+          plans={pricingPlans}
+        />
+      )}
     </div>
   );
 }
-
-

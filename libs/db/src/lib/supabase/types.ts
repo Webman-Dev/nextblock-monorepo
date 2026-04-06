@@ -629,7 +629,6 @@ export type Database = {
           freemius_product_id: string | null
           id: string
           language_id: number
-          lemonsqueezy_variant_id: string | null
           metadata: Json | null
           price: number
           sale_price: number | null
@@ -649,7 +648,6 @@ export type Database = {
           freemius_product_id?: string | null
           id?: string
           language_id: number
-          lemonsqueezy_variant_id?: string | null
           metadata?: Json | null
           price: number
           sale_price?: number | null
@@ -669,7 +667,6 @@ export type Database = {
           freemius_product_id?: string | null
           id?: string
           language_id?: number
-          lemonsqueezy_variant_id?: string | null
           metadata?: Json | null
           price?: number
           sale_price?: number | null
@@ -775,9 +772,6 @@ export type Database = {
       }
       get_my_claim: { Args: { claim: string }; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
-      reset_sandbox:
-        | { Args: never; Returns: undefined }
-        | { Args: { p_include_premium?: boolean }; Returns: undefined }
     }
     Enums: {
       menu_location: "HEADER" | "FOOTER" | "SIDEBAR"

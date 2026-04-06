@@ -10,10 +10,11 @@ export * from './lib/components/ProductGrid';
 export * from './lib/components/ProductGallery';
 export * from './lib/components/FeaturedProduct';
 export * from './lib/components/CustomerProfileForm';
+export * from './lib/components/SubscriptionSelector';
 
 export * from './lib/cart-store';
 export * from './lib/use-cart';
-export type * from './lib/types';
+export * from './lib/types';
 
 export * from './lib/product-schema';
 export * from './lib/product-context';

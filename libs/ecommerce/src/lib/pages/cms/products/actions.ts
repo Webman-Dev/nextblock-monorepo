@@ -71,4 +71,100 @@ export async function getProductTranslations(translationGroupId: string) {
   return data;
 }
 
+export async function getFreemiusPricingByProductId(productId: string) {
+  // NOTE: freemius_plans/freemius_pricing tables exist in migration but may not
+  // yet be in the auto-generated Database types. Using `as any` until DB is reset.
+  const supabase = createClient() as any;
+  const { data, error } = await supabase
+    .from('freemius_plans')
+    .select(`
+      id,
+      name,
+      title,
+      freemius_pricing (
+        id,
+        license_quota,
+        api_monthly_price,
+        api_annual_price,
+        api_lifetime_price,
+        override_monthly_price,
+        override_annual_price,
+        override_lifetime_price,
+        is_active
+      )
+    `)
+    .eq('product_id', productId);
+    
+  if (error) throw new Error(error.message);
+  return data;
+}
 
+export async function updateFreemiusOverride(pricingId: string, overrides: { 
+  override_monthly_price?: number | null; 
+  override_annual_price?: number | null; 
+  override_lifetime_price?: number | null; 
+}) {
+  // NOTE: freemius_pricing table exists in migration but may not yet be in
+  // the auto-generated Database types. Using `as any` until DB is reset.
+  const supabase = createClient() as any;
+  const { error } = await supabase
+    .from('freemius_pricing')
+    .update({
+      ...overrides,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', pricingId);
+    
+  if (error) {
+    return { success: false, error: error.message };
+  }
+  revalidatePath('/cms/products');
+  return { success: true };
+}
+
+export async function getPublicFreemiusPricing(freemiusProductId: string) {
+  // Queries freemius_plans/freemius_pricing and falls back gracefully.
+  const supabase = createClient() as any;
+  const { data, error } = await supabase
+    .from('freemius_plans')
+    .select(`
+      id,
+      name,
+      title,
+      freemius_pricing (
+        id,
+        license_quota,
+        api_monthly_price,
+        api_annual_price,
+        api_lifetime_price,
+        override_monthly_price,
+        override_annual_price,
+        override_lifetime_price,
+        is_active
+      )
+    `)
+    .eq('product_id', freemiusProductId);
+
+  if (error) throw new Error(error.message);
+
+  // Map to resolved pricing
+  const resolvedPlans = (data || []).map((plan: any) => {
+    return {
+      id: plan.id,
+      name: plan.name,
+      title: plan.title,
+      pricing: (plan.freemius_pricing || []).map((pricing: any) => {
+        return {
+          id: pricing.id,
+          license_quota: pricing.license_quota,
+          monthly_price: pricing.override_monthly_price ?? pricing.api_monthly_price,
+          annual_price: pricing.override_annual_price ?? pricing.api_annual_price,
+          lifetime_price: pricing.override_lifetime_price ?? pricing.api_lifetime_price,
+          is_active: pricing.is_active,
+        };
+      })
+    };
+  });
+
+  return resolvedPlans;
+}

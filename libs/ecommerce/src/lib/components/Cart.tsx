@@ -8,10 +8,12 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Badge,
 } from '@nextblock-cms/ui';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
+import { isDigitalItem } from '../types';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from '@nextblock-cms/utils';
 
@@ -78,29 +80,40 @@ export const Cart = () => {
                         )}
                         <div>
                           <div className="font-medium">{item.title}</div>
+                          {isDigitalItem(item) && item.billing_cycle && (
+                             <div className="text-xs text-muted-foreground capitalize mt-1">
+                                {item.billing_cycle} Subscription
+                             </div>
+                          )}
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                            >
-                                <Minus className="h-4 w-4" />
-                            </Button>
-                            <span className="w-8 text-center">{item.quantity}</span>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                            >
-                                <Plus className="h-4 w-4" />
-                            </Button>
-                      </div>
+                      {isDigitalItem(item) ? (
+                            <Badge variant="secondary" className="font-normal text-xs">
+                                1 (License)
+                            </Badge>
+                      ) : (
+                          <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                                >
+                                    <Minus className="h-4 w-4" />
+                                </Button>
+                                <span className="w-8 text-center">{item.quantity}</span>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                >
+                                    <Plus className="h-4 w-4" />
+                                </Button>
+                          </div>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">${item.price.toFixed(2)}</TableCell>
                     <TableCell className="text-right font-medium">

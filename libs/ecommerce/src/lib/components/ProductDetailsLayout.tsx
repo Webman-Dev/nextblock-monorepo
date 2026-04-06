@@ -4,6 +4,7 @@ import React from 'react';
 import { useProduct } from '../product-context';
 import { ProductGallery } from './ProductGallery';
 import { AddToCartButton } from './AddToCartButton';
+import { SubscriptionSelector } from './SubscriptionSelector';
 import { Badge, Separator } from '@nextblock-cms/ui';
 import { SimpleTiptapRenderer } from './SimpleTiptapRenderer';
 import { useTranslations } from '@nextblock-cms/utils';
@@ -28,6 +29,8 @@ export const ProductDetailsLayout: React.FC = () => {
     ? Math.round(((price - salePrice) / price) * 100)
     : 0;
 
+  const isFreemius = (product as any).custom_props?.provider === 'freemius' || (product as any).freemius_product_id;
+
   return (
     <div className="container mx-auto px-4 md:px-6 py-12 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
       <div className="grid gap-12 lg:grid-cols-[2fr_3fr] items-start">
@@ -48,7 +51,7 @@ export const ProductDetailsLayout: React.FC = () => {
                             {t('ecommerce.sale_badge', { percent: String(discountPercentage) })}
                         </Badge>
                     )}
-                    {product.stock && product.stock < 10 && (
+                    {!isFreemius && product.stock && product.stock < 10 && (
                         <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">
                             {t('ecommerce.low_stock', { count: String(product.stock) })}
                         </Badge>
@@ -68,18 +71,20 @@ export const ProductDetailsLayout: React.FC = () => {
                     ) : null}
                 </div>
                 
-                <div className="flex items-baseline gap-4">
-                   <div className="flex items-baseline gap-3">
-                       <span className="text-4xl font-bold text-primary">
-                           ${(salePrice ?? price).toFixed(2)}
-                       </span>
-                       {salePrice && (
-                           <span className="text-2xl text-muted-foreground line-through decoration-destructive/30 decoration-2">
-                               ${price.toFixed(2)}
+                {!isFreemius && (
+                    <div className="flex items-baseline gap-4">
+                       <div className="flex items-baseline gap-3">
+                           <span className="text-4xl font-bold text-primary">
+                               ${(salePrice ?? price).toFixed(2)}
                            </span>
-                       )}
-                   </div>
-                </div>
+                           {salePrice && (
+                               <span className="text-2xl text-muted-foreground line-through decoration-destructive/30 decoration-2">
+                                   ${price.toFixed(2)}
+                               </span>
+                           )}
+                       </div>
+                    </div>
+                )}
              </div>
 
              <Separator className="my-2" />
@@ -88,13 +93,17 @@ export const ProductDetailsLayout: React.FC = () => {
           {/* Action Section */}
           <div className="p-8 rounded-2xl bg-secondary/10 border border-secondary/20 shadow-sm backdrop-blur-sm mt-auto">
              <div className="flex flex-col gap-4">
-                 <AddToCartButton 
-                    product={{
-                        ...product,
-                        price: salePrice ?? price,
-                    }} 
-                    className="w-full h-14 text-lg font-bold shadow-md transition-all hover:shadow-lg active:scale-[0.98]"
-                 />
+                 {isFreemius ? (
+                     <SubscriptionSelector product={product} />
+                 ) : (
+                     <AddToCartButton 
+                        product={{
+                            ...product,
+                            price: salePrice ?? price,
+                        }} 
+                        className="w-full h-14 text-lg font-bold shadow-md transition-all hover:shadow-lg active:scale-[0.98]"
+                     />
+                 )}
                  <div className="grid grid-cols-2 gap-4 text-center text-xs text-muted-foreground pt-2">
                     <div className="flex items-center justify-center gap-2">
                         {((product as any).custom_props?.provider === 'freemius' || (product as any).freemius_product_id) ? (
