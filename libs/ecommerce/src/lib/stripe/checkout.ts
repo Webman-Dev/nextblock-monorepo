@@ -143,6 +143,17 @@ export const createCheckoutSession = async (
       success_url: `${siteUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${siteUrl}/`,
       line_items,
+      billing_address_collection: 'required',
+      shipping_address_collection: {
+        allowed_countries: [
+           'US', 'CA', 'GB', 'AU', 'NZ', 'IE', 'FR', 'DE', 'IT', 'ES', 
+           'MX', 'BR', 'AR', 'CL', 'CO', 'PE', 'ZA', 'NG', 'KE', 'IN', 
+           'JP', 'KR', 'CN', 'SG', 'MY', 'PH', 'TH', 'VN', 'ID', 'AE', 
+           'SA', 'EG', 'MA', 'DZ', 'TN', 'PT', 'NL', 'BE', 'CH', 'AT', 
+           'SE', 'NO', 'DK', 'FI', 'PL', 'CZ', 'HU', 'RO', 'BG', 'GR', 
+           'TR', 'IL', 'CY', 'MT'
+        ],
+      },
       metadata: {
         orderId: order.id,
       },

@@ -78,6 +78,52 @@ export const handleStripeWebhook = async (
          }
       }
 
+      // 3. Save Shipping details to user_addresses table
+      const email = session.customer_details?.email;
+      const stripeSessionAny = session as any;
+      const shippingAddress = stripeSessionAny.shipping_details?.address;
+
+      if (email && shippingAddress) {
+        try {
+          // Query core users table by email
+          const { data: userRecord, error: userError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', email)
+            .single();
+
+          if (userError || !userRecord) {
+             console.log(`Could not find user for email ${email} to save shipping address.`);
+          } else {
+             const userAddressData = {
+                user_id: userRecord.id,
+                address_type: 'shipping',
+                line1: shippingAddress.line1 || null,
+                line2: shippingAddress.line2 || null,
+                city: shippingAddress.city || null,
+                state: shippingAddress.state || null,
+                postal_code: shippingAddress.postal_code || null,
+                country_code: shippingAddress.country || null,
+             };
+
+             const { error: addressError } = await supabase
+               .from('user_addresses')
+               .insert(userAddressData);
+
+             if (addressError) {
+                console.error('Failed to insert user shipping address:', addressError);
+                // Return 500 so Stripe retries if this is strict requirement
+                return { received: false, error: 'Failed to process shipping address' };
+             } else {
+                console.log(`Successfully saved shipping address for user ${userRecord.id}`);
+             }
+          }
+        } catch (dbErr) {
+           console.error('Exception while saving shipping address:', dbErr);
+           return { received: false, error: 'Database operations failed' };
+        }
+      }
+
       break;
     }
     default:
