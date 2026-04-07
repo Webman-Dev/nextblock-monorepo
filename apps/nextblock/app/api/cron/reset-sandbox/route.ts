@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
     if (!dbUrl) throw new Error('Missing POSTGRES_URL environment variable');
     
     // Connect directly via standard Postgres driver to bypass Supabase schema restrictions
-    const db = postgres(dbUrl, { ssl: 'require' });
+    const db = postgres(dbUrl, { ssl: 'require', onnotice: () => { /* silence */ } });
     try {
       await db.unsafe(SANDBOX_RESET_SQL);
       console.log('[Sandbox Reset] Database re-seeded successfully.');

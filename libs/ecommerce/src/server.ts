@@ -11,3 +11,4 @@ export * from './lib/providers/freemius';
 export * from './lib/pages/cms/orders';
 export * from './lib/pages/cms/products';
 export * from './lib/pages/cms/payments';
+export * from './lib/pages/cms/shipping';

@@ -36,11 +36,11 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
         
         <div className="mb-4 flex items-baseline gap-2">
           <span className="text-xl font-bold text-primary">
-            ${(product.sale_price ?? product.price).toFixed(2)}
+            ${((product.sale_price ?? product.price) / 100).toFixed(2)}
           </span>
           {product.sale_price && (
             <span className="text-sm text-muted-foreground line-through">
-              ${product.price.toFixed(2)}
+              ${(product.price / 100).toFixed(2)}
             </span>
           )}
         </div>
@@ -49,7 +49,8 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
           <AddToCartButton 
             product={{
               ...product,
-              price: product.sale_price ?? product.price,
+              price: product.price, // Keep raw cents for the store
+              sale_price: product.sale_price // Keep raw cents for the store
             }} 
             className="w-full"
           />

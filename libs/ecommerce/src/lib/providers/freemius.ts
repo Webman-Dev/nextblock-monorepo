@@ -10,7 +10,9 @@ export class FreemiusProvider implements PaymentProvider {
     async createCheckoutSession(
       cartItems: CartItem[],
       customerEmail?: string,
-      userId?: string
+      userId?: string,
+      _shippingAddress?: any,
+      _shippingMethodId?: string
     ): Promise<{ url: string | null; error?: string; customProps?: any }> {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

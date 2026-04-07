@@ -16,6 +16,7 @@ import { useCart } from '../use-cart';
 import { isDigitalItem } from '../types';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from '@nextblock-cms/utils';
+import { ShippingEstimator } from './ShippingEstimator';
 
 export const Cart = () => {
   const router = useRouter();
@@ -115,9 +116,20 @@ export const Cart = () => {
                           </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">${item.price.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex flex-col items-end">
+                        <span className="font-medium">
+                          ${((item.sale_price ?? item.price) / 100).toFixed(2)}
+                        </span>
+                        {item.sale_price && (
+                          <span className="text-xs text-muted-foreground line-through">
+                            ${(item.price / 100).toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right font-medium">
-                      ${(item.price * item.quantity).toFixed(2)}
+                      ${(((item.sale_price ?? item.price) * item.quantity) / 100).toFixed(2)}
                     </TableCell>
                      <TableCell>
                         <Button
@@ -141,13 +153,18 @@ export const Cart = () => {
                 <h2 className="mb-4 text-lg font-semibold">{t('ecommerce.order_summary')}</h2>
                 <div className="flex justify-between border-b pb-4">
                     <span>{t('ecommerce.subtotal')}</span>
-                    <span className="font-medium">${subtotal?.toFixed(2)}</span>
+                    <span className="font-medium">${(subtotal / 100).toFixed(2)}</span>
                 </div>
                  <div className="mt-4 flex flex-col gap-4">
                     <p className="text-sm text-muted-foreground">
                         {t('ecommerce.shipping_taxes_calculated')}
                     </p>
-                    <Button className="w-full" size="lg" onClick={handleCheckout}>
+                    
+                    {items.some(item => !isDigitalItem(item)) && (
+                        <ShippingEstimator cartTotal={subtotal} />
+                    )}
+
+                    <Button className="w-full mt-4" size="lg" onClick={handleCheckout}>
                         {t('ecommerce.proceed_to_checkout')}
                     </Button>
                  </div>

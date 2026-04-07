@@ -45,11 +45,11 @@ export const FeaturedProduct = ({ product, className, imagePosition = 'left' }: 
             
             <div className="mb-6 flex items-baseline gap-3">
                 <span className="text-3xl font-bold text-primary">
-                    ${(product.sale_price ?? product.price).toFixed(2)}
+                    ${((product.sale_price ?? product.price) / 100).toFixed(2)}
                 </span>
                 {product.sale_price && (
                     <span className="text-lg text-muted-foreground line-through">
-                        ${product.price.toFixed(2)}
+                        ${(product.price / 100).toFixed(2)}
                     </span>
                 )}
             </div>
@@ -62,10 +62,7 @@ export const FeaturedProduct = ({ product, className, imagePosition = 'left' }: 
 
             <div className="flex flex-col gap-4 sm:flex-row">
                 <AddToCartButton 
-                    product={{
-                        ...product,
-                        price: product.sale_price ?? product.price,
-                    }} 
+                    product={product} 
                     className="h-12 w-full px-8 text-lg sm:w-auto"
                 />
 

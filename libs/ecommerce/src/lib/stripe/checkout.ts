@@ -2,9 +2,12 @@ import { stripe } from './client';
 import { createClient } from '@supabase/supabase-js';
 import { type CartItem } from '../types';
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
+import { resolveShippingOptions, type ShippingDestination } from '../shipping/resolver';
 
 export const createCheckoutSession = async (
-  cartItems: CartItem[]
+  cartItems: CartItem[],
+  userId?: string,
+  destination?: ShippingDestination
 ): Promise<{ url: string | null; error?: string }> => {
   // Use Service Role Key to bypass RLS
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -100,10 +103,8 @@ export const createCheckoutSession = async (
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .insert({
-      status: 'pending',
       total: totalAmount,
-      // currency: 'usd', // Column missing in DB
-      // user_id: userId // Optional: Add if we have auth context
+      user_id: userId
     })
     .select('id')
     .single();
@@ -136,6 +137,44 @@ export const createCheckoutSession = async (
       // For MVP, logging error.
   }
 
+  // 3.8 Resolve Shipping Options
+  let shipping_options: any[] = [];
+  
+  // If no destination provided, try to fetch from user's addresses
+  let resolvedDestination = destination;
+  if (!resolvedDestination && userId) {
+      const { data: addr } = await supabase
+          .from('user_addresses')
+          .select('country_code, state_code, postal_code')
+          .eq('user_id', userId)
+          .eq('address_type', 'shipping')
+          .limit(1)
+          .single();
+          
+      if (addr) {
+          resolvedDestination = {
+              country: addr.country_code,
+              state: addr.state_code,
+              postal_code: addr.postal_code
+          };
+      }
+  }
+
+  if (resolvedDestination) {
+      const methods = await resolveShippingOptions(totalAmount, resolvedDestination);
+      shipping_options = methods.map(m => ({
+          shipping_rate_data: {
+              type: 'fixed_amount',
+              fixed_amount: {
+                  amount: m.amount,
+                  currency: m.currency,
+              },
+              display_name: m.name,
+              // delivery_estimate: { ... } // Could be added in future modules
+          },
+      }));
+  }
+
   // 4. Create Stripe Session
   try {
     const session = await stripe.checkout.sessions.create({
@@ -145,15 +184,16 @@ export const createCheckoutSession = async (
       line_items,
       billing_address_collection: 'required',
       shipping_address_collection: {
-        allowed_countries: [
-           'US', 'CA', 'GB', 'AU', 'NZ', 'IE', 'FR', 'DE', 'IT', 'ES', 
-           'MX', 'BR', 'AR', 'CL', 'CO', 'PE', 'ZA', 'NG', 'KE', 'IN', 
-           'JP', 'KR', 'CN', 'SG', 'MY', 'PH', 'TH', 'VN', 'ID', 'AE', 
-           'SA', 'EG', 'MA', 'DZ', 'TN', 'PT', 'NL', 'BE', 'CH', 'AT', 
-           'SE', 'NO', 'DK', 'FI', 'PL', 'CZ', 'HU', 'RO', 'BG', 'GR', 
-           'TR', 'IL', 'CY', 'MT'
-        ],
+          allowed_countries: [
+             'US', 'CA', 'GB', 'AU', 'NZ', 'IE', 'FR', 'DE', 'IT', 'ES', 
+             'MX', 'BR', 'AR', 'CL', 'CO', 'PE', 'ZA', 'NG', 'KE', 'IN', 
+             'JP', 'KR', 'CN', 'SG', 'MY', 'PH', 'TH', 'VN', 'ID', 'AE', 
+             'SA', 'EG', 'MA', 'DZ', 'TN', 'PT', 'NL', 'BE', 'CH', 'AT', 
+             'SE', 'NO', 'DK', 'FI', 'PL', 'CZ', 'HU', 'RO', 'BG', 'GR', 
+             'TR', 'IL', 'CY', 'MT'
+          ],
       },
+      shipping_options: shipping_options.length > 0 ? shipping_options : undefined,
       metadata: {
         orderId: order.id,
       },

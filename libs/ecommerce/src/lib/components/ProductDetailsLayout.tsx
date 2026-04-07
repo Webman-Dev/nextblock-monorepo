@@ -97,10 +97,7 @@ export const ProductDetailsLayout: React.FC = () => {
                      <SubscriptionSelector product={product} />
                  ) : (
                      <AddToCartButton 
-                        product={{
-                            ...product,
-                            price: salePrice ?? price,
-                        }} 
+                        product={product} 
                         className="w-full h-14 text-lg font-bold shadow-md transition-all hover:shadow-lg active:scale-[0.98]"
                      />
                  )}

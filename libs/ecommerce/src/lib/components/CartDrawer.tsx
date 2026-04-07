@@ -66,7 +66,12 @@ export const CartDrawer = () => {
                       {item.title}
                     </span>
                     <span className="text-sm font-semibold">
-                      ${item.price.toFixed(2)}
+                      {item.sale_price && (
+                        <span className="text-xs text-muted-foreground line-through mr-1.5 font-normal">
+                          ${(item.price / 100).toFixed(2)}
+                        </span>
+                      )}
+                      ${((item.sale_price ?? item.price) / 100).toFixed(2)}
                     </span>
                   </div>
 
@@ -116,7 +121,7 @@ export const CartDrawer = () => {
           <div className="border-t pr-6 pt-4">
              <div className="flex items-center justify-between text-base font-medium">
                 <span>{t('ecommerce.subtotal')}</span>
-                <span>${subtotal?.toFixed(2)}</span>
+                <span>${(subtotal / 100).toFixed(2)}</span>
              </div>
              <p className="mb-4 mt-1 text-xs text-muted-foreground">
                 {t('ecommerce.shipping_taxes_calculated')}

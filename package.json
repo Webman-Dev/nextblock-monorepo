@@ -45,7 +45,8 @@
     "test-create": "node apps/create-nextblock/bin/create-nextblock.js",
     "deploy:supabase": "node tools/scripts/deploy-supabase.js",
     "webhook": "cloudflared tunnel --url http://localhost:4200",
-    "generate:sandbox": "npx tsx tools/scripts/generate-sandbox-reset.ts"
+    "generate:sandbox": "npx tsx tools/scripts/generate-sandbox-reset.ts",
+    "sandbox:reset": "node tools/scripts/reset-sandbox.js"
   },
   "private": true,
   "devDependencies": {

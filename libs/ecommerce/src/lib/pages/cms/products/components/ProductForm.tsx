@@ -144,6 +144,7 @@ export function ProductForm({
 
   const onSubmit = async (data: ProductFormValues) => {
     setIsSubmitting(true);
+    
     try {
       if (isEdit && initialData?.id) {
         await updateProductAction(initialData.id, data);

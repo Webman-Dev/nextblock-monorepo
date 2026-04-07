@@ -10,8 +10,10 @@ export class StripeProvider implements PaymentProvider {
 
   async createCheckoutSession(
     cartItems: CartItem[],
-    customerEmail?: string, // Stripe handles this in checkout or auto-email, but we can prefill
-    _userId?: string
+    customerEmail?: string, 
+    _userId?: string,
+    shippingAddress?: any,
+    shippingMethodId?: string
   ): Promise<{ url: string | null; error?: string }> {
     // Implement Stripe Logic matching existing checkout.ts
     // Use Service Role Key to bypass RLS
@@ -120,6 +122,29 @@ export class StripeProvider implements PaymentProvider {
         console.error('Failed to insert order items:', itemsError);
     }
 
+    // 3.8 Resolve Shipping Rate
+    let shipping_options: any[] = [];
+    if (shippingMethodId) {
+        const { data: method } = await supabase
+            .from('shipping_zone_methods')
+            .select('*')
+            .eq('id', shippingMethodId)
+            .single();
+            
+        if (method) {
+            shipping_options = [{
+                shipping_rate_data: {
+                    type: 'fixed_amount',
+                    fixed_amount: {
+                        amount: method.cost_amount,
+                        currency: method.cost_currency.toLowerCase(),
+                    },
+                    display_name: method.name,
+                }
+            }];
+        }
+    }
+
     // 4. Create Stripe Session
     try {
       const session = await stripe.checkout.sessions.create({
@@ -129,8 +154,15 @@ export class StripeProvider implements PaymentProvider {
         line_items,
         metadata: {
           orderId: order.id,
+          shipping_name: shippingAddress?.name,
+          shipping_address: shippingAddress?.address,
+          shipping_city: shippingAddress?.city,
+          shipping_state: shippingAddress?.state,
+          shipping_zip: shippingAddress?.zip,
+          shipping_country: shippingAddress?.country,
         },
         customer_email: customerEmail,
+        shipping_options: shipping_options.length > 0 ? shipping_options : undefined,
       });
 
       return { url: session.url };

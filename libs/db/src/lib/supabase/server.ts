@@ -1,5 +1,5 @@
-// utils/supabase/server.ts
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { Database } from './types';
 
@@ -94,3 +94,24 @@ export async function getActiveLanguagesServerSide(): Promise<Language[]> {
   }
   return data || [];
 }
+
+/**
+ * Creates a Supabase client with the Service Role key.
+ * ⚠️ WARNING: This bypasses ALL Row Level Security (RLS).
+ * MUST ONLY be used in secure server-side contexts (Server Actions/Route Handlers).
+ */
+export const getServiceRoleSupabaseClient = () => {
+  const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+  const supabaseServiceKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing Supabase Service Role environment variables');
+  }
+
+  return createSupabaseJsClient<Database>(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+};

@@ -72,6 +72,94 @@ export type Database = {
           },
         ]
       }
+      freemius_plans: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          product_id: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          product_id: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          product_id?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "freemius_plans_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      freemius_pricing: {
+        Row: {
+          api_annual_price: number | null
+          api_lifetime_price: number | null
+          api_monthly_price: number | null
+          created_at: string
+          id: string
+          is_active: boolean
+          license_quota: number | null
+          override_annual_price: number | null
+          override_lifetime_price: number | null
+          override_monthly_price: number | null
+          plan_id: string
+          updated_at: string
+        }
+        Insert: {
+          api_annual_price?: number | null
+          api_lifetime_price?: number | null
+          api_monthly_price?: number | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          license_quota?: number | null
+          override_annual_price?: number | null
+          override_lifetime_price?: number | null
+          override_monthly_price?: number | null
+          plan_id: string
+          updated_at?: string
+        }
+        Update: {
+          api_annual_price?: number | null
+          api_lifetime_price?: number | null
+          api_monthly_price?: number | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          license_quota?: number | null
+          override_annual_price?: number | null
+          override_lifetime_price?: number | null
+          override_monthly_price?: number | null
+          plan_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "freemius_pricing_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "freemius_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       languages: {
         Row: {
           code: string
@@ -722,6 +810,108 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string | null
           website?: string | null
+        }
+        Relationships: []
+      }
+      shipping_zone_locations: {
+        Row: {
+          country_code: string
+          created_at: string | null
+          id: string
+          postal_code: string | null
+          state_code: string | null
+          zone_id: string
+        }
+        Insert: {
+          country_code: string
+          created_at?: string | null
+          id?: string
+          postal_code?: string | null
+          state_code?: string | null
+          zone_id: string
+        }
+        Update: {
+          country_code?: string
+          created_at?: string | null
+          id?: string
+          postal_code?: string | null
+          state_code?: string | null
+          zone_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shipping_zone_locations_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "shipping_zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shipping_zone_methods: {
+        Row: {
+          cost_amount: number
+          cost_currency: string
+          created_at: string | null
+          id: string
+          method_type: string
+          min_order_amount: number
+          name: string
+          updated_at: string | null
+          zone_id: string
+        }
+        Insert: {
+          cost_amount?: number
+          cost_currency?: string
+          created_at?: string | null
+          id?: string
+          method_type: string
+          name: string
+          updated_at?: string | null
+          zone_id: string
+        }
+        Update: {
+          cost_amount?: number
+          cost_currency?: string
+          created_at?: string | null
+          id?: string
+          method_type?: string
+          min_order_amount?: number
+          name?: string
+          updated_at?: string | null
+          zone_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shipping_zone_methods_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "shipping_zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shipping_zones: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          priority_order: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          priority_order?: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          priority_order?: number
+          updated_at?: string | null
         }
         Relationships: []
       }

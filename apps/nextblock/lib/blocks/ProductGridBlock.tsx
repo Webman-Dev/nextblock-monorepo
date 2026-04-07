@@ -58,9 +58,10 @@ export const ProductGridBlock = async ({
         id: p.id,
         title: p.title,
         slug: p.slug,
-        sku: p.sku,
-        price: p.price / 100,
-        sale_price: typeof p.sale_price === 'number' ? p.sale_price / 100 : undefined,
+        sku: p.slug, // Fallback to slug if sku is missing (optional logic check)
+        sku_val: p.sku, 
+        price: p.price,
+        sale_price: typeof p.sale_price === 'number' ? p.sale_price : undefined,
         image_url: imageUrl,
         short_description: p.short_description || undefined,
         language_id: p.language_id as number,

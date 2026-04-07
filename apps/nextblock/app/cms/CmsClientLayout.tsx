@@ -278,6 +278,9 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                   <NavItem href="/cms/orders" icon={ListOrdered} isActive={pathname.startsWith("/cms/orders")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                     Orders
                   </NavItem>
+                  <NavItem href="/cms/shipping" icon={Package} isActive={pathname.startsWith("/cms/shipping")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                    Shipping
+                  </NavItem>
                   <NavItem href="/cms/payments" icon={CreditCard} isActive={pathname.startsWith("/cms/payments")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Payments
                   </NavItem>

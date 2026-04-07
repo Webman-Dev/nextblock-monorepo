@@ -32,6 +32,8 @@ export type CartItem = Product & {
   provider?: CartItemProvider;
   /** For Freemius items: the selected billing cycle */
   billing_cycle?: BillingCycle;
+  /** The MSRP/Original price before any sale_price logic */
+  original_price?: number;
 };
 
 /** Helper to check if a cart item is a Freemius digital product */
@@ -40,7 +42,13 @@ export function isDigitalItem(item: Pick<CartItem, 'provider'>): boolean {
 }
 
 export interface PaymentProvider {
-  createCheckoutSession(items: CartItem[], customerEmail?: string, userId?: string): Promise<{ url: string | null; error?: string; customProps?: any }>;
+  createCheckoutSession(
+    items: CartItem[], 
+    customerEmail?: string, 
+    userId?: string,
+    shippingAddress?: any,
+    shippingMethodId?: string
+  ): Promise<{ url: string | null; error?: string; customProps?: any }>;
   getProviderName(): string;
 }
 

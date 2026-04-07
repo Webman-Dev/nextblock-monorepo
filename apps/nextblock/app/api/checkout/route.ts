@@ -9,8 +9,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Ecommerce module license is inactive' }, { status: 403 });
     }
 
-    const { items, customerEmail } = await req.json();
-
+    const { items, customerEmail, shippingAddress, shippingMethodId } = await req.json();
+    
     if (!items || !Array.isArray(items)) {
       return NextResponse.json({ error: 'Invalid items data' }, { status: 400 });
     }
@@ -36,12 +36,18 @@ export async function POST(req: Request) {
     // 2. Get Provider Instance
     const provider = getPaymentProvider(providerName);
 
-    // Get User ID from session for security
+    // 2. Resolve User (if logged in)
     const { data: { user } } = await supabase.auth.getUser();
     const userId = user?.id;
 
     // 3. Create Session
-    const { url, error, customProps } = await provider.createCheckoutSession(items, customerEmail, userId);
+    const { url, error, customProps } = await provider.createCheckoutSession(
+        items, 
+        customerEmail, 
+        userId, 
+        shippingAddress, 
+        shippingMethodId
+    );
 
     if (error) {
       console.error('Checkout Error:', error);

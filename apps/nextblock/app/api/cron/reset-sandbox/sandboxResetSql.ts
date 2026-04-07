@@ -707,9 +707,11 @@ VALUES
   ('github_connected', '{"en": "GitHub Connected", "es": "GitHub Conectado", "fr": "GitHub Connecté"}'::jsonb),
   ('linked_to', '{"en": "Linked to", "es": "Vinculado a", "fr": "Lié à"}'::jsonb),
   ('ecommerce.add_to_cart', '{"en": "Add to Cart", "fr": "Ajouter au panier"}'::jsonb),
+  ('ecommerce.added_to_cart', '{"en": "Added to cart", "fr": "Ajouté au panier"}'::jsonb),
+  ('ecommerce.added_to_cart_success', '{"en": "{item} added to cart", "fr": "{item} ajouté au panier"}'::jsonb),
+  ('ecommerce.added_to_cart_error', '{"en": "Failed to add item to cart", "fr": "Échec de l''ajout au panier"}'::jsonb),
   ('ecommerce.no_image', '{"en": "No Image", "fr": "Pas d''image"}'::jsonb),
   ('ecommerce.view_details', '{"en": "View Details", "fr": "Voir les détails"}'::jsonb),
-  ('ecommerce.added_to_cart', '{"en": "Added to cart", "fr": "Ajouté au panier"}'::jsonb),
   ('ecommerce.item_added_desc', '{"en": "The item has been added to your cart.", "fr": "L''article a été ajouté à votre panier."}'::jsonb),
   ('ecommerce.checkout', '{"en": "Checkout", "fr": "Paiement"}'::jsonb),
   ('ecommerce.cart', '{"en": "Cart", "fr": "Panier"}'::jsonb),
@@ -718,6 +720,7 @@ VALUES
   ('ecommerce.tax', '{"en": "Tax", "fr": "Taxes"}'::jsonb),
   ('ecommerce.total', '{"en": "Total", "fr": "Total"}'::jsonb),
   ('ecommerce.order_summary', '{"en": "Order Summary", "fr": "Résumé de la commande"}'::jsonb),
+  ('ecommerce.order_summary_desc', '{"en": "Review your items before proceeding to payment.", "fr": "Vérifiez vos articles avant de procéder au paiement."}'::jsonb),
   ('ecommerce.payment_details', '{"en": "Payment Details", "fr": "Détails du paiement"}'::jsonb),
   ('ecommerce.shipping_info', '{"en": "Shipping Information", "fr": "Informations de livraison"}'::jsonb),
   ('ecommerce.delivery_notice', '{"en": "Digital product - No shipping required", "fr": "Produit numérique - Aucune livraison requise"}'::jsonb),
@@ -743,7 +746,6 @@ VALUES
   ('ecommerce.sandbox_notice', '{"en": "This is a Sandbox environment. The Freemius checkout is skipped here for demo purposes.", "fr": "Ceci est un environnement de bac à sable. Le paiement Freemius est sauté ici à des fins de démonstration."}'::jsonb),
   ('ecommerce.license_notice', '{"en": "To purchase a real license for your self-hosted NextBlock instance, visit:", "fr": "Pour acheter une vraie licence pour votre instance NextBlock auto-hébergée, visitez :"}'::jsonb),
   ('ecommerce.purchase_at', '{"en": "Purchase at nextblock.ca", "fr": "Acheter sur nextblock.ca"}'::jsonb),
-  ('ecommerce.order_summary_desc', '{"en": "Review your items before proceeding to payment.", "fr": "Vérifiez vos articles avant de procéder au paiement."}'::jsonb),
   ('ecommerce.qty', '{"en": "Qty", "fr": "Qté"}'::jsonb),
   ('ecommerce.quantity', '{"en": "Quantity", "fr": "Quantité"}'::jsonb),
   ('ecommerce.product', '{"en": "Product", "fr": "Produit"}'::jsonb),
@@ -768,7 +770,37 @@ VALUES
   ('ecommerce.secure_checkout', '{"en": "Secure Checkout", "fr": "Paiement sécurisé"}'::jsonb),
   ('ecommerce.no_description', '{"en": "No description available.", "fr": "Aucune description disponible."}'::jsonb),
   ('ecommerce.checkout_overlay_title', '{"en": "Order Checkout", "fr": "Paiement de la commande"}'::jsonb),
-  ('ecommerce.email_placeholder', '{"en": "you@example.com", "fr": "vous@exemple.com"}'::jsonb)
+  ('ecommerce.email_placeholder', '{"en": "you@example.com", "fr": "vous@exemple.com"}'::jsonb),
+  ('ecommerce.contact_information', '{"en": "Contact Information", "fr": "Informations de contact"}'::jsonb),
+  ('ecommerce.shipping_address', '{"en": "Shipping Address", "fr": "Adresse de livraison"}'::jsonb),
+  ('ecommerce.shipping_method', '{"en": "Shipping Method", "fr": "Mode de livraison"}'::jsonb),
+  ('ecommerce.available_rates', '{"en": "Available Rates", "fr": "Tarifs disponibles"}'::jsonb),
+  ('ecommerce.calculating', '{"en": "Calculating...", "fr": "Calcul en cours..."}'::jsonb),
+  ('ecommerce.select_rate', '{"en": "Select a shipping rate", "fr": "Sélectionnez un tarif de livraison"}'::jsonb),
+  ('ecommerce.enter_postal_code', '{"en": "Enter postal code", "fr": "Entrez le code postal"}'::jsonb),
+  ('ecommerce.free', '{"en": "Free", "fr": "Gratuit"}'::jsonb),
+  ('ecommerce.first_last_name', '{"en": "First & Last Name", "fr": "Nom et prénom"}'::jsonb),
+  ('ecommerce.address', '{"en": "Address", "fr": "Adresse"}'::jsonb),
+  ('ecommerce.city', '{"en": "City", "fr": "Ville"}'::jsonb),
+  ('ecommerce.state_province', '{"en": "State / Province", "fr": "État / Province"}'::jsonb),
+  ('ecommerce.zip_postal', '{"en": "ZIP / Postal Code", "fr": "Code postal"}'::jsonb),
+  ('ecommerce.postal_code', '{"en": "Postal Code", "fr": "Code postal"}'::jsonb),
+  ('ecommerce.zip_postal_code', '{"en": "ZIP / Postal Code", "fr": "Code postal"}'::jsonb),
+  ('ecommerce.estimate_shipping', '{"en": "Estimate Shipping", "fr": "Estimer la livraison"}'::jsonb),
+  ('ecommerce.calculate', '{"en": "Calculate", "fr": "Calculer"}'::jsonb),
+  ('ecommerce.no_rates_found', '{"en": "No shipping rates found for this region.", "fr": "Aucun tarif de livraison trouvé pour cette région."}'::jsonb),
+  ('ecommerce.no_rates_for_region', '{"en": "No shipping rates found for this region.", "fr": "Aucun tarif de livraison trouvé pour cette région."}'::jsonb),
+  ('ecommerce.enter_address_for_rates', '{"en": "Enter your address to see shipping rates.", "fr": "Entrez votre adresse pour voir les tarifs de livraison."}'::jsonb),
+  ('ecommerce.secure_checkout_guarantee', '{"en": "Secure checkout guaranteed", "fr": "Paiement sécurisé garanti"}'::jsonb),
+  ('ecommerce.pricing_unavailable', '{"en": "Pricing unavailable", "fr": "Prix non disponible"}'::jsonb),
+  ('ecommerce.monthly', '{"en": "Monthly", "fr": "Mensuel"}'::jsonb),
+  ('ecommerce.annual', '{"en": "Annual", "fr": "Annuel"}'::jsonb),
+  ('ecommerce.lifetime', '{"en": "Lifetime", "fr": "À vie"}'::jsonb),
+  ('ecommerce.year', '{"en": "year", "fr": "an"}'::jsonb),
+  ('ecommerce.month', '{"en": "month", "fr": "mois"}'::jsonb),
+  ('ecommerce.get_license', '{"en": "Get License", "fr": "Obtenir la licence"}'::jsonb),
+  ('ecommerce.full_name', '{"en": "Full Name", "fr": "Nom complet"}'::jsonb),
+  ('ecommerce.country', '{"en": "Country", "fr": "Pays"}'::jsonb)
 ON CONFLICT (key) DO UPDATE
 SET translations = EXCLUDED.translations;
 
@@ -2276,6 +2308,115 @@ INSERT INTO public.translations (key, translations) VALUES
   ('ecommerce.added_to_cart_error', '{"en": "Could not add item to cart.", "es": "No se pudo añadir el artículo al carrito."}')
 ON CONFLICT (key) DO UPDATE
 SET translations = excluded.translations;
+
+
+-- >>> FROM: 20260408000000_setup_shipping.sql <<<
+-- 20260408000000_setup_shipping.sql
+-- Setup Shipping Zones, Locations, and Methods
+
+-- 1. Create shipping_zones table
+CREATE TABLE IF NOT EXISTS public.shipping_zones (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name text NOT NULL,
+    priority_order integer NOT NULL DEFAULT 0,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+-- 2. Create shipping_zone_locations table
+CREATE TABLE IF NOT EXISTS public.shipping_zone_locations (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    zone_id uuid NOT NULL REFERENCES public.shipping_zones(id) ON DELETE CASCADE,
+    country_code text NOT NULL, -- ISO 3166-1 alpha-2
+    state_code text,            -- ISO 3166-2
+    postal_code text,           -- Exact postal code or wildcard pattern
+    created_at timestamptz DEFAULT now()
+);
+
+-- 3. Create shipping_zone_methods table
+CREATE TABLE IF NOT EXISTS public.shipping_zone_methods (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    zone_id uuid NOT NULL REFERENCES public.shipping_zones(id) ON DELETE CASCADE,
+    method_type text NOT NULL CHECK (method_type IN ('flat_rate', 'free_shipping')),
+    cost_amount integer NOT NULL DEFAULT 0, -- In cents
+    cost_currency text NOT NULL DEFAULT 'usd',
+    name text NOT NULL, -- e.g. "Standard Shipping"
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+-- 4. RLS Policies
+ALTER TABLE public.shipping_zones ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.shipping_zone_locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.shipping_zone_methods ENABLE ROW LEVEL SECURITY;
+
+-- Admins can do everything
+CREATE POLICY "Admins manage shipping_zones" ON public.shipping_zones FOR ALL TO authenticated USING (public.is_admin());
+CREATE POLICY "Admins manage shipping_zone_locations" ON public.shipping_zone_locations FOR ALL TO authenticated USING (public.is_admin());
+CREATE POLICY "Admins manage shipping_zone_methods" ON public.shipping_zone_methods FOR ALL TO authenticated USING (public.is_admin());
+
+-- Public (Anonymous/Authenticated) can read for checkout
+CREATE POLICY "Public read shipping_zones" ON public.shipping_zones FOR SELECT USING (true);
+CREATE POLICY "Public read shipping_zone_locations" ON public.shipping_zone_locations FOR SELECT USING (true);
+CREATE POLICY "Public read shipping_zone_methods" ON public.shipping_zone_methods FOR SELECT USING (true);
+
+-- 5. Seed Initial Data (example: North America)
+DO $$
+DECLARE
+    v_zone_id uuid;
+BEGIN
+    INSERT INTO public.shipping_zones (name, priority_order)
+    VALUES ('North America', 10)
+    RETURNING id INTO v_zone_id;
+
+    INSERT INTO public.shipping_zone_locations (zone_id, country_code)
+    VALUES 
+        (v_zone_id, 'US'),
+        (v_zone_id, 'CA'),
+        (v_zone_id, 'MX');
+
+    INSERT INTO public.shipping_zone_methods (zone_id, method_type, cost_amount, name)
+    VALUES 
+        (v_zone_id, 'flat_rate', 1500, 'Standard Shipping'),
+        (v_zone_id, 'free_shipping', 0, 'Free Shipping (Orders over $100)');
+END $$;
+
+-- 6. Grants
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+
+
+-- >>> FROM: 20260408000001_update_shipping_constraints.sql <<<
+-- 20260408000001_update_shipping_constraints.sql
+-- Add minimum order amount and refine RLS
+
+-- 1. Add min_order_amount to shipping_zone_methods
+ALTER TABLE public.shipping_zone_methods 
+ADD COLUMN IF NOT EXISTS min_order_amount integer NOT NULL DEFAULT 0;
+
+-- 2. Refine RLS Policies
+-- Drop existing policies first to ensures a clean state
+DROP POLICY IF EXISTS "Admins manage shipping_zones" ON public.shipping_zones;
+DROP POLICY IF EXISTS "Admins manage shipping_zone_locations" ON public.shipping_zone_locations;
+DROP POLICY IF EXISTS "Admins manage shipping_zone_methods" ON public.shipping_zone_methods;
+
+-- Robust Admin Access: Using service_role bypasses RLS anyway, 
+-- but for specific authenticated admins, we explicitly allow all.
+CREATE POLICY "Admins manage shipping_zones" ON public.shipping_zones FOR ALL TO authenticated USING (public.is_admin());
+CREATE POLICY "Admins manage shipping_zone_locations" ON public.shipping_zone_locations FOR ALL TO authenticated USING (public.is_admin());
+CREATE POLICY "Admins manage shipping_zone_methods" ON public.shipping_zone_methods FOR ALL TO authenticated USING (public.is_admin());
+
+-- Ensure SELECT is truly public for resolution engine
+DROP POLICY IF EXISTS "Public read shipping_zones" ON public.shipping_zones;
+DROP POLICY IF EXISTS "Public read shipping_zone_locations" ON public.shipping_zone_locations;
+DROP POLICY IF EXISTS "Public read shipping_zone_methods" ON public.shipping_zone_methods;
+
+CREATE POLICY "Public read shipping_zones" ON public.shipping_zones FOR SELECT USING (true);
+CREATE POLICY "Public read shipping_zone_locations" ON public.shipping_zone_locations FOR SELECT USING (true);
+CREATE POLICY "Public read shipping_zone_methods" ON public.shipping_zone_methods FOR SELECT USING (true);
+
+-- 3. Update Existing Data (Optional cleanup)
+COMMENT ON COLUMN public.shipping_zone_methods.min_order_amount IS 'Minimum order total (in cents) required for this shipping method to be available.';
 
 
   -- Step D: Anchor demo profile
