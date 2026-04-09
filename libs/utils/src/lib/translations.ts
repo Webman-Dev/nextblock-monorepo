@@ -8,7 +8,7 @@ if (typeof window !== 'undefined') {
 // A placeholder implementation to break the circular dependency.
 // The actual implementation needs to be found or recreated.
 export const getTranslator = async (locale: string): Promise<(key: string) => string> => {
-  console.log(`Fetching translations for locale: ${locale}`);
+  void locale;
   // In a real app, you would fetch translations from a DB or a file
   const translations: { [key: string]: string } = {
     'cms_dashboard': 'CMS Dashboard (EN)',

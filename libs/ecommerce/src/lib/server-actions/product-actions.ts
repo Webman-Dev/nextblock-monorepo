@@ -16,10 +16,6 @@ export async function getTranslatedProductsForCart(
     skus
   );
   
-  if (data) {
-    console.log("[getTranslatedProductsForCart] Found", data.length, "results.");
-  }
-
   if (error) {
     console.error("[getTranslatedProductsForCart] Error:", error);
     return [];

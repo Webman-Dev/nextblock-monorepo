@@ -100,12 +100,6 @@ export async function createProduct(supabase: SupabaseClient<Database>, data: Pr
     translation_group_id: rest.translation_group_id || undefined,
   };
 
-  console.log(`[Product Create Debug]`);
-  console.log(`   - Input Price ($): ${rest.price} -> Cents: ${productData.price}`);
-  if (rest.sale_price !== undefined) {
-      console.log(`   - Input Sale Price ($): ${rest.sale_price} -> Cents: ${productData.sale_price}`);
-  }
-
   const { data: product, error } = await supabase.from('products').insert(productData).select().single();
 
   if (error) throw error;
@@ -149,12 +143,6 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
     translation_group_id: rest.translation_group_id,
     updated_at: new Date().toISOString(),
   };
-
-  console.log(`[Product Update Debug] ID: ${id}`);
-  console.log(`   - Input Price ($): ${rest.price} -> Cents: ${productData.price}`);
-  if (rest.sale_price !== undefined) {
-      console.log(`   - Input Sale Price ($): ${rest.sale_price} -> Cents: ${productData.sale_price}`);
-  }
 
   const { data: currentProductMedia } = await supabase
     .from('product_media')

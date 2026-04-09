@@ -69,7 +69,6 @@ export async function revalidateAndLog(path: string): Promise<{ success: boolean
       throw new Error(`Failed to log revalidation: ${response.status} ${response.statusText} - ${errorBody.error}`);
     }
 
-    console.log(`Successfully revalidated and logged path: ${path}`);
     return { success: true };
 
   } catch (error) {

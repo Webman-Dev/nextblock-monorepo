@@ -45,11 +45,6 @@ export const createCheckoutSession = async (
     return { error: 'Failed to validate product prices', url: null };
   }
 
-  // Debug logging
-  console.log('Cart Items:', cartItems.length);
-  console.log('Product IDs to validate:', productIds);
-  console.log('Found products:', products.length);
-
   // Map for quick lookup
   const productMap = new Map(products.map((p) => [p.id, p]));
 
@@ -72,11 +67,6 @@ export const createCheckoutSession = async (
     const unitAmount = (product.sale_price !== null && product.sale_price !== undefined) 
         ? product.sale_price 
         : product.price; 
-
-    console.log(`[Checkout Session Debug] Product: ${product.title} (${product.id})`);
-    console.log(`   - DB MSRP (cents): ${product.price}`);
-    console.log(`   - DB Sale Price (cents): ${product.sale_price}`);
-    console.log(`   - Final Unit Amount (cents): ${unitAmount}`);
 
     if (unitAmount <= 0) {
         console.warn(`[Checkout Session Warning] Product ${product.title} has zero or negative price!`);

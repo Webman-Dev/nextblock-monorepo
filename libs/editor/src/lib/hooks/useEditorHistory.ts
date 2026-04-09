@@ -85,10 +85,7 @@ export const useEditorHistory = (editor: Editor | null): EditorHistoryState & Ed
     if (!editor || !historyState.canUndo) return false;
     
     try {
-      console.log('useEditorHistory - Attempting undo operation');
-      const result = editor.chain().focus().undo().run();
-      console.log('useEditorHistory - Undo result:', result);
-      return result;
+      return editor.chain().focus().undo().run();
     } catch (error) {
       console.error('useEditorHistory - Undo operation failed:', error);
       return false;
@@ -99,10 +96,7 @@ export const useEditorHistory = (editor: Editor | null): EditorHistoryState & Ed
     if (!editor || !historyState.canRedo) return false;
     
     try {
-      console.log('useEditorHistory - Attempting redo operation');
-      const result = editor.chain().focus().redo().run();
-      console.log('useEditorHistory - Redo result:', result);
-      return result;
+      return editor.chain().focus().redo().run();
     } catch (error) {
       console.error('useEditorHistory - Redo operation failed:', error);
       return false;

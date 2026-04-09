@@ -20,14 +20,11 @@ export default function CheckoutSuccessPage() {
     // If we landed here from Freemius with a session ID, we definitely finished checkout. Empty cart!
     if (sessionId) {
       if (clearCart) {
-         console.log('Checkout success page hit with Session ID! Emptying LocalStorage Cart...');
          clearCart();
       }
       
       // Attempt to immediately mark the order as paid in the DB safely
-      fulfillOrderAction(sessionId).then((res) => {
-         if (res?.success) console.log('Order marked as paid successfully!');
-      });
+      void fulfillOrderAction(sessionId);
     }
   }, [clearCart, sessionId]);
 

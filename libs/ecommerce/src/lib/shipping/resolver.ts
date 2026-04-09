@@ -43,7 +43,6 @@ export async function resolveShippingOptions(
         .order('shipping_zones(priority_order)', { ascending: true });
 
     if (error || !matches || matches.length === 0) {
-        console.log(`No shipping zones found for country ${destination.country}`);
         return [];
     }
 

@@ -74,7 +74,6 @@ export async function activatePackage(key: string) {
       });
 
       const responseData = await response.json();
-      console.log('Freemius Activation Attempt for Product', p.fm_product_id, 'Response:', response.status, responseData);
       
       // Freemius returns the license object directly if successful, or an error/api_response
       if (response.ok && responseData.install_id) {
