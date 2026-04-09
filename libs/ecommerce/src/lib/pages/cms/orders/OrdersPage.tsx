@@ -72,10 +72,12 @@ export async function OrdersPage({
               </tr>
             ) : (
               orders.map((order) => {
+                const details = order.customer_details as any;
                 const customerEmail =
-                  (order.customer_details as any)?.email ||
+                  details?.name ||
+                  details?.email ||
                   order.customer?.full_name ||
-                  'Unknown';
+                  'Guest Customer';
                 
                 return (
                   <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50">

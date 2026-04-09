@@ -20,11 +20,6 @@ export async function OrderDetailPage({ params }: { params: Promise<{ id: string
     notFound();
   }
 
-  const customerEmail =
-        (order.customer_details as any)?.email ||
-        order.customer?.full_name ||
-        'Unknown';
-
 
 
   return (
@@ -129,12 +124,59 @@ export async function OrderDetailPage({ params }: { params: Promise<{ id: string
             
             {/* Customer Card */}
             <div className="border rounded-lg p-4 bg-white dark:bg-slate-900 dark:border-slate-800">
-                <h3 className="font-medium text-gray-900 mb-2 dark:text-gray-100">Customer</h3>
-                <div className="text-sm space-y-1">
-                    <p className="font-medium">{customerEmail}</p>
-                    {order.user_id && (
-                        <p className="text-gray-500 text-xs">User ID: {order.user_id}</p>
-                    )}
+                <h3 className="font-medium text-gray-900 mb-3 dark:text-gray-100 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Customer
+                </h3>
+                <div className="text-sm space-y-2">
+                    {(() => {
+                        const details = order.customer_details as any;
+                        const name = details?.name || order.customer?.full_name;
+                        const email = details?.email;
+                        const phone = details?.phone;
+                        
+                        return (
+                            <>
+                                {name && <p className="font-semibold text-gray-900 dark:text-white">{name}</p>}
+                                {email && <p className="text-gray-600 dark:text-gray-400 overflow-hidden text-ellipsis">{email}</p>}
+                                {phone && <p className="text-gray-600 dark:text-gray-400">{phone}</p>}
+                                {!name && !email && !phone && <p className="text-gray-400 italic">No contact info captured</p>}
+                                {order.user_id && (
+                                    <p className="text-gray-400 text-[10px] pt-1 font-mono uppercase tracking-wider">User ID: {order.user_id.slice(0, 13)}...</p>
+                                )}
+                            </>
+                        );
+                    })()}
+                </div>
+            </div>
+
+            {/* Shipping Card */}
+            <div className="border rounded-lg p-4 bg-white dark:bg-slate-900 dark:border-slate-800">
+                <h3 className="font-medium text-gray-900 mb-3 dark:text-gray-100 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Shipping Address
+                </h3>
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                    {(() => {
+                        const shipping = (order.customer_details as any)?.shipping;
+                        if (!shipping || !shipping.address) return <p className="italic text-gray-400 text-xs">No shipping address provided (Digital download or pickup?)</p>;
+                        
+                        const addr = shipping.address;
+                        return (
+                            <address className="not-italic space-y-0.5">
+                                <p className="font-medium text-gray-900 dark:text-gray-200">{shipping.name}</p>
+                                <p>{addr.line1}</p>
+                                {addr.line2 && <p>{addr.line2}</p>}
+                                <p>{addr.city}, {addr.state || ''} {addr.postal_code}</p>
+                                <p className="uppercase text-xs font-semibold tracking-wide pt-1">{addr.country}</p>
+                            </address>
+                        );
+                    })()}
                 </div>
             </div>
 

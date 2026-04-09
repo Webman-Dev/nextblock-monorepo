@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS public.shipping_zone_methods (
     method_type text NOT NULL CHECK (method_type IN ('flat_rate', 'free_shipping')),
     cost_amount integer NOT NULL DEFAULT 0, -- In cents
     cost_currency text NOT NULL DEFAULT 'usd',
+    min_order_amount integer NOT NULL DEFAULT 0, -- Minimum order required (in cents)
     name text NOT NULL, -- e.g. "Standard Shipping"
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
@@ -62,10 +63,10 @@ BEGIN
         (v_zone_id, 'CA'),
         (v_zone_id, 'MX');
 
-    INSERT INTO public.shipping_zone_methods (zone_id, method_type, cost_amount, name)
+    INSERT INTO public.shipping_zone_methods (zone_id, method_type, cost_amount, name, min_order_amount)
     VALUES 
-        (v_zone_id, 'flat_rate', 1500, 'Standard Shipping'),
-        (v_zone_id, 'free_shipping', 0, 'Free Shipping (Orders over $100)');
+        (v_zone_id, 'flat_rate', 1500, 'Standard Shipping', 0),
+        (v_zone_id, 'free_shipping', 0, 'Free Shipping (Orders over $100)', 10000);
 END $$;
 
 -- 6. Grants

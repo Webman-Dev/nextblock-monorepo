@@ -12,7 +12,7 @@ export async function fulfillOrderAction(sessionId: string) {
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .select('id, status')
-      .eq('id', sessionId)
+      .eq('stripe_session_id', sessionId)
       .single();
 
     if (orderError || !order) {
@@ -28,7 +28,7 @@ export async function fulfillOrderAction(sessionId: string) {
     const { error: updateError } = await supabase
       .from('orders')
       .update({ status: 'paid' })
-      .eq('id', sessionId);
+      .eq('stripe_session_id', sessionId);
 
     if (updateError) {
       console.error('Failed to update order status:', updateError);

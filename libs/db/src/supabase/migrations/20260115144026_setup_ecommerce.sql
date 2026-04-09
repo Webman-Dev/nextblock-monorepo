@@ -82,6 +82,7 @@ create table public.orders (
   status text not null check (status in ('pending', 'paid', 'shipped', 'cancelled', 'refunded')) default 'pending',
   total integer not null,
   stripe_session_id text unique,
+  payment_intent_id text,
   customer_details jsonb,
   provider text check (provider in ('stripe', 'freemius')) default 'stripe',
   created_at timestamptz default now()
@@ -95,6 +96,19 @@ create policy "Users can view own orders"
   for select
   to authenticated
   using (auth.uid() = user_id);
+
+create policy "Admins can view all orders"
+  on public.orders
+  for select
+  to authenticated
+  using (public.is_admin());
+
+create policy "Admins can manage all orders"
+  on public.orders
+  for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
 
 create policy "Service Role manages orders"
   on public.orders
@@ -126,6 +140,19 @@ create policy "Users can view own order items"
       and orders.user_id = auth.uid()
     )
   );
+
+create policy "Admins can view all order items"
+  on public.order_items
+  for select
+  to authenticated
+  using (public.is_admin());
+
+create policy "Admins can manage all order items"
+  on public.order_items
+  for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
 
 create policy "Service Role manages order items"
   on public.order_items

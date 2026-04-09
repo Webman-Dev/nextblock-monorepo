@@ -276,9 +276,18 @@ async function syncSingleFreemiusProductInternal(
                 fullPricing = pricingData.pricing || [];
                 if (fullPricing.length > 0) {
                     // Base price calculation for the main products table fallback
-                    price = Math.round((fullPricing[0].annual_price || fullPricing[0].monthly_price || 0) * 100);
+                    const rawPrice = fullPricing[0].annual_price || fullPricing[0].monthly_price || 0;
+                    
+                    // Defensive check: If rawPrice > 5000, it's probably already in cents (or it's a very expensive plugin).
+                    // Most plugins are not $5,000/year. Freemius sometimes returns cents in certain API versions or configs.
+                    if (rawPrice > 5000) {
+                        console.warn(`[Freemius Sync] Suspiciously high price detected: ${rawPrice}. Assuming it is already in cents.`);
+                        price = Math.round(rawPrice);
+                    } else {
+                        price = Math.round(rawPrice * 100);
+                    }
                 }
-                console.log(`[Freemius Sync] Found ${fullPricing.length} pricing configs for plan ${planIdStr}`);
+                console.log(`[Freemius Sync] Plan: ${plan.title || plan.name} -> Resolved Price (cents): ${price}`);
             } catch (pricingErr) {
                 console.warn(`[Freemius Sync] Could not fetch pricing for plan ${planIdStr}:`, pricingErr instanceof Error ? pricingErr.message : pricingErr);
             }

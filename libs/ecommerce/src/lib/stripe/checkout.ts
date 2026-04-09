@@ -37,7 +37,7 @@ export const createCheckoutSession = async (
   
   const { data: products, error: productsError } = await supabase
     .from('products')
-    .select('id, title, price')
+    .select('id, title, price, sale_price')
     .in('id', productIds);
 
   if (productsError || !products) {
@@ -69,7 +69,18 @@ export const createCheckoutSession = async (
     // Verify price
     // Note: Stripe expects amount in cents for 'usd'. 
     // The DB stores price in cents (integer), so we use it directly.
-    const unitAmount = product.price; 
+    const unitAmount = (product.sale_price !== null && product.sale_price !== undefined) 
+        ? product.sale_price 
+        : product.price; 
+
+    console.log(`[Checkout Session Debug] Product: ${product.title} (${product.id})`);
+    console.log(`   - DB MSRP (cents): ${product.price}`);
+    console.log(`   - DB Sale Price (cents): ${product.sale_price}`);
+    console.log(`   - Final Unit Amount (cents): ${unitAmount}`);
+
+    if (unitAmount <= 0) {
+        console.warn(`[Checkout Session Warning] Product ${product.title} has zero or negative price!`);
+    }
 
     line_items.push({
       price_data: {
@@ -86,12 +97,12 @@ export const createCheckoutSession = async (
       quantity: cartItem.quantity,
     });
 
-    totalAmount += product.price * cartItem.quantity;
+    totalAmount += unitAmount * cartItem.quantity;
     
     verifiedItems.push({
         product_id: product.id,
         quantity: cartItem.quantity,
-        price_at_purchase: product.price
+        price_at_purchase: unitAmount
     });
   }
 
@@ -198,6 +209,12 @@ export const createCheckoutSession = async (
         orderId: order.id,
       },
     });
+
+    // 4.1 Immediately save the session ID so success page can find it before webhook
+    await supabase
+      .from('orders')
+      .update({ stripe_session_id: session.id })
+      .eq('id', order.id);
 
     return { url: session.url };
   } catch (err: any) {

@@ -2120,6 +2120,7 @@ create table public.orders (
   status text not null check (status in ('pending', 'paid', 'shipped', 'cancelled', 'refunded')) default 'pending',
   total integer not null,
   stripe_session_id text unique,
+  payment_intent_id text,
   customer_details jsonb,
   provider text check (provider in ('stripe', 'freemius')) default 'stripe',
   created_at timestamptz default now()
@@ -2133,6 +2134,19 @@ create policy "Users can view own orders"
   for select
   to authenticated
   using (auth.uid() = user_id);
+
+create policy "Admins can view all orders"
+  on public.orders
+  for select
+  to authenticated
+  using (public.is_admin());
+
+create policy "Admins can manage all orders"
+  on public.orders
+  for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
 
 create policy "Service Role manages orders"
   on public.orders
@@ -2164,6 +2178,19 @@ create policy "Users can view own order items"
       and orders.user_id = auth.uid()
     )
   );
+
+create policy "Admins can view all order items"
+  on public.order_items
+  for select
+  to authenticated
+  using (public.is_admin());
+
+create policy "Admins can manage all order items"
+  on public.order_items
+  for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
 
 create policy "Service Role manages order items"
   on public.order_items
@@ -2340,6 +2367,7 @@ CREATE TABLE IF NOT EXISTS public.shipping_zone_methods (
     method_type text NOT NULL CHECK (method_type IN ('flat_rate', 'free_shipping')),
     cost_amount integer NOT NULL DEFAULT 0, -- In cents
     cost_currency text NOT NULL DEFAULT 'usd',
+    min_order_amount integer NOT NULL DEFAULT 0, -- Minimum order required (in cents)
     name text NOT NULL, -- e.g. "Standard Shipping"
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
@@ -2375,10 +2403,10 @@ BEGIN
         (v_zone_id, 'CA'),
         (v_zone_id, 'MX');
 
-    INSERT INTO public.shipping_zone_methods (zone_id, method_type, cost_amount, name)
+    INSERT INTO public.shipping_zone_methods (zone_id, method_type, cost_amount, name, min_order_amount)
     VALUES 
-        (v_zone_id, 'flat_rate', 1500, 'Standard Shipping'),
-        (v_zone_id, 'free_shipping', 0, 'Free Shipping (Orders over $100)');
+        (v_zone_id, 'flat_rate', 1500, 'Standard Shipping', 0),
+        (v_zone_id, 'free_shipping', 0, 'Free Shipping (Orders over $100)', 10000);
 END $$;
 
 -- 6. Grants
@@ -2386,37 +2414,89 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
 
 
--- >>> FROM: 20260408000001_update_shipping_constraints.sql <<<
--- 20260408000001_update_shipping_constraints.sql
--- Add minimum order amount and refine RLS
+-- >>> FROM: 20260408120000_harden_ecommerce_fulfillment.sql <<<
+-- 20260408120000_harden_ecommerce_fulfillment.sql
+-- Foundation for physical goods fulfillment: tables, functions, and RLS
 
--- 1. Add min_order_amount to shipping_zone_methods
-ALTER TABLE public.shipping_zone_methods 
-ADD COLUMN IF NOT EXISTS min_order_amount integer NOT NULL DEFAULT 0;
+-- 1. Helper Function: is_admin
+-- Used by multiple modules for RLS checks
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT role = 'ADMIN' FROM public.profiles WHERE id = auth.uid();
+$$;
 
--- 2. Refine RLS Policies
--- Drop existing policies first to ensures a clean state
-DROP POLICY IF EXISTS "Admins manage shipping_zones" ON public.shipping_zones;
-DROP POLICY IF EXISTS "Admins manage shipping_zone_locations" ON public.shipping_zone_locations;
-DROP POLICY IF EXISTS "Admins manage shipping_zone_methods" ON public.shipping_zone_methods;
+-- 2. Table: user_addresses
+-- Stores multiple addresses per user (billing/shipping)
+CREATE TABLE IF NOT EXISTS public.user_addresses (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    address_type text NOT NULL CHECK (address_type IN ('billing', 'shipping')),
+    is_default boolean DEFAULT false,
+    line1 text,
+    line2 text,
+    city text,
+    state text,
+    postal_code text,
+    country_code text, -- ISO 3166-1 alpha-2
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
 
--- Robust Admin Access: Using service_role bypasses RLS anyway, 
--- but for specific authenticated admins, we explicitly allow all.
-CREATE POLICY "Admins manage shipping_zones" ON public.shipping_zones FOR ALL TO authenticated USING (public.is_admin());
-CREATE POLICY "Admins manage shipping_zone_locations" ON public.shipping_zone_locations FOR ALL TO authenticated USING (public.is_admin());
-CREATE POLICY "Admins manage shipping_zone_methods" ON public.shipping_zone_methods FOR ALL TO authenticated USING (public.is_admin());
+-- Indices for performance
+CREATE INDEX IF NOT EXISTS idx_user_addresses_user_id ON public.user_addresses(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_addresses_type ON public.user_addresses(address_type);
 
--- Ensure SELECT is truly public for resolution engine
-DROP POLICY IF EXISTS "Public read shipping_zones" ON public.shipping_zones;
-DROP POLICY IF EXISTS "Public read shipping_zone_locations" ON public.shipping_zone_locations;
-DROP POLICY IF EXISTS "Public read shipping_zone_methods" ON public.shipping_zone_methods;
+-- RLS for user_addresses
+ALTER TABLE public.user_addresses ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Public read shipping_zones" ON public.shipping_zones FOR SELECT USING (true);
-CREATE POLICY "Public read shipping_zone_locations" ON public.shipping_zone_locations FOR SELECT USING (true);
-CREATE POLICY "Public read shipping_zone_methods" ON public.shipping_zone_methods FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Users can manage own addresses" ON public.user_addresses;
+CREATE POLICY "Users can manage own addresses"
+  ON public.user_addresses
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
 
--- 3. Update Existing Data (Optional cleanup)
-COMMENT ON COLUMN public.shipping_zone_methods.min_order_amount IS 'Minimum order total (in cents) required for this shipping method to be available.';
+DROP POLICY IF EXISTS "Service role manages all addresses" ON public.user_addresses;
+CREATE POLICY "Service role manages all addresses"
+  ON public.user_addresses
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- 3. Harden Orders Table
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='payment_intent_id') THEN
+        ALTER TABLE public.orders ADD COLUMN payment_intent_id text;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='customer_details') THEN
+        ALTER TABLE public.orders ADD COLUMN customer_details jsonb;
+    END IF;
+END $$;
+
+-- 4. Unified Service Role Access
+-- Ensure background processes (webhooks) are never blocked
+DROP POLICY IF EXISTS "Service Role manages orders" ON public.orders;
+CREATE POLICY "Service Role manages orders" ON public.orders FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Service Role manages order items" ON public.order_items;
+CREATE POLICY "Service Role manages order items" ON public.order_items FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- 5. Grants
+GRANT ALL ON TABLE public.user_addresses TO service_role;
+GRANT ALL ON TABLE public.orders TO service_role;
+GRANT ALL ON TABLE public.order_items TO service_role;
+GRANT ALL ON TABLE public.products TO service_role;
+
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
 
 
   -- Step D: Anchor demo profile

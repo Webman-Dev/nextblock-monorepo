@@ -91,12 +91,20 @@ export async function createProduct(supabase: SupabaseClient<Database>, data: Pr
     description_json: rest.description_json ?? null,
     metadata: {},
     price: toCents(rest.price),
-    sale_price: (typeof rest.sale_price === 'number') ? toCents(rest.sale_price) : null,
+    sale_price: (typeof rest.sale_price === 'number' && !isNaN(rest.sale_price)) 
+        ? toCents(rest.sale_price) 
+        : null,
     freemius_plan_id: rest.freemius_plan_id ?? null,
     freemius_product_id: rest.freemius_product_id ?? null,
     language_id: rest.language_id,
     translation_group_id: rest.translation_group_id || undefined,
   };
+
+  console.log(`[Product Create Debug]`);
+  console.log(`   - Input Price ($): ${rest.price} -> Cents: ${productData.price}`);
+  if (rest.sale_price !== undefined) {
+      console.log(`   - Input Sale Price ($): ${rest.sale_price} -> Cents: ${productData.sale_price}`);
+  }
 
   const { data: product, error } = await supabase.from('products').insert(productData).select().single();
 
@@ -132,13 +140,21 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
     short_description: rest.short_description ?? null,
     description_json: rest.description_json ?? null,
     price: toCents(rest.price),
-    sale_price: (typeof rest.sale_price === 'number') ? toCents(rest.sale_price) : null,
+    sale_price: (typeof rest.sale_price === 'number' && !isNaN(rest.sale_price)) 
+        ? toCents(rest.sale_price) 
+        : null,
     freemius_plan_id: rest.freemius_plan_id ?? null,
     freemius_product_id: rest.freemius_product_id ?? null,
     language_id: rest.language_id,
     translation_group_id: rest.translation_group_id,
     updated_at: new Date().toISOString(),
   };
+
+  console.log(`[Product Update Debug] ID: ${id}`);
+  console.log(`   - Input Price ($): ${rest.price} -> Cents: ${productData.price}`);
+  if (rest.sale_price !== undefined) {
+      console.log(`   - Input Sale Price ($): ${rest.sale_price} -> Cents: ${productData.sale_price}`);
+  }
 
   const { data: currentProductMedia } = await supabase
     .from('product_media')
