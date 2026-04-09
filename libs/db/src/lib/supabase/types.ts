@@ -389,6 +389,7 @@ export type Database = {
           created_at: string | null
           customer_details: Json | null
           id: string
+          payment_intent_id: string | null
           provider: string | null
           status: string
           stripe_session_id: string | null
@@ -399,6 +400,7 @@ export type Database = {
           created_at?: string | null
           customer_details?: Json | null
           id?: string
+          payment_intent_id?: string | null
           provider?: string | null
           status?: string
           stripe_session_id?: string | null
@@ -409,6 +411,7 @@ export type Database = {
           created_at?: string | null
           customer_details?: Json | null
           id?: string
+          payment_intent_id?: string | null
           provider?: string | null
           status?: string
           stripe_session_id?: string | null
@@ -780,7 +783,6 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
-          billing_address: Json | null
           full_name: string | null
           github_username: string | null
           id: string
@@ -791,7 +793,6 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
-          billing_address?: Json | null
           full_name?: string | null
           github_username?: string | null
           id: string
@@ -802,7 +803,6 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
-          billing_address?: Json | null
           full_name?: string | null
           github_username?: string | null
           id?: string
@@ -812,6 +812,62 @@ export type Database = {
           website?: string | null
         }
         Relationships: []
+      }
+      user_addresses: {
+        Row: {
+          address_type: string
+          city: string | null
+          country_code: string | null
+          created_at: string | null
+          id: string
+          is_default: boolean | null
+          line1: string | null
+          line2: string | null
+          postal_code: string | null
+          recipient_name: string | null
+          state: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          address_type: string
+          city?: string | null
+          country_code?: string | null
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          line1?: string | null
+          line2?: string | null
+          postal_code?: string | null
+          recipient_name?: string | null
+          state?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          address_type?: string
+          city?: string | null
+          country_code?: string | null
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          line1?: string | null
+          line2?: string | null
+          postal_code?: string | null
+          recipient_name?: string | null
+          state?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_addresses_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shipping_zone_locations: {
         Row: {

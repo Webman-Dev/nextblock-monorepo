@@ -4,6 +4,7 @@ import { encodedRedirect } from "@nextblock-cms/utils/server";
 import { createClient } from "@nextblock-cms/db/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { resolvePostAuthRedirect } from "../lib/auth-redirects";
 
 export const signUpAction = async (formData: FormData) => {
   const email = formData.get("email")?.toString();
@@ -29,18 +30,35 @@ export const signUpAction = async (formData: FormData) => {
     email,
     password,
     options: {
-      emailRedirectTo: `${redirectBase}/auth/callback`,
+      emailRedirectTo: `${redirectBase}/auth/callback?redirect_to=/profile`,
     },
   });
 
   if (error) {
     console.error(error.code + " " + error.message);
+
+    if (error.message.toLowerCase().includes("rate limit")) {
+      return encodedRedirect(
+        "error",
+        "/sign-up",
+        "auth.signup_rate_limit"
+      );
+    }
+
+    if (error.message.toLowerCase().includes("already")) {
+      return encodedRedirect(
+        "error",
+        "/sign-up",
+        "auth.signup_existing_account_hint"
+      );
+    }
+
     return encodedRedirect("error", "/sign-up", error.message);
   } else {
     return encodedRedirect(
       "success",
       "/sign-up",
-      "Thanks for signing up! Please check your email for a verification link.",
+      "auth.signup_check_email_profile",
     );
   }
 };
@@ -48,6 +66,7 @@ export const signUpAction = async (formData: FormData) => {
 export const signInAction = async (formData: FormData) => {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
+  const requestedRedirect = formData.get("redirect")?.toString();
   const supabase = await createClient();
 
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -62,13 +81,12 @@ export const signInAction = async (formData: FormData) => {
   if (data.user) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, full_name')
       .eq('id', data.user.id)
       .single();
 
-    if (profile && (profile.role === 'ADMIN' || profile.role === 'WRITER')) {
-      return redirect("/post-sign-in?redirect_to=/cms/dashboard");
-    }
+    const nextPath = resolvePostAuthRedirect(profile ?? null, requestedRedirect);
+    return redirect(`/post-sign-in?redirect_to=${encodeURIComponent(nextPath)}`);
   }
 
   return redirect("/post-sign-in");

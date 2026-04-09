@@ -127,6 +127,24 @@ export default async function proxy(request: NextRequest) {
     }
   }
 
+  if (
+    user &&
+    !pathname.startsWith('/cms') &&
+    pathname !== '/profile' &&
+    pathname !== '/reset-password' &&
+    pathname !== '/checkout/success'
+  ) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, full_name')
+      .eq('id', user.id)
+      .single<Pick<Profile, 'role' | 'full_name'>>();
+
+    if (profile?.role === 'USER' && !profile.full_name?.trim()) {
+      return NextResponse.redirect(new URL('/profile', request.url));
+    }
+  }
+
   if (response.headers.get('location')) {
     return response;
   }

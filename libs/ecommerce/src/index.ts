@@ -14,6 +14,7 @@ export * from './lib/components/SubscriptionSelector';
 
 export * from './lib/cart-store';
 export * from './lib/use-cart';
+export * from './lib/customer';
 export * from './lib/types';
 
 export * from './lib/product-schema';

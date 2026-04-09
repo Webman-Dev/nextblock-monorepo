@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Confirm it's you</title>
+  </head>
+  <body style="margin:0;background:#f5f7fb;font-family:Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;overflow:hidden;">
+            <tr>
+              <td style="padding:32px 32px 8px;text-align:center;">
+                <img src="{{ .SiteURL }}/images/nextblock-logo-small.webp" alt="Site logo" width="88" style="display:block;margin:0 auto 20px;" />
+                <p style="margin:0 0 12px;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:#64748b;">Security check</p>
+                <h1 style="margin:0;font-size:30px;line-height:1.2;">Confirm it's really you</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 32px 0;">
+                <p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#334155;">
+                  Use the one-time verification code below to continue your sensitive account action.
+                </p>
+                <p style="margin:0 0 28px;font-size:36px;line-height:1.2;font-weight:700;letter-spacing:0.24em;text-align:center;color:#0f172a;">
+                  {{ .Token }}
+                </p>
+                <p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#64748b;">
+                  Enter this code back on the site. Never share it with anyone.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 32px 32px;border-top:1px solid #e2e8f0;">
+                <p style="margin:0;font-size:13px;line-height:1.7;color:#64748b;">
+                  If you did not request this code, ignore this email and review your account security.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

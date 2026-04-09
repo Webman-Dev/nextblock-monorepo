@@ -11,7 +11,6 @@ CREATE TABLE public.profiles (
   website text,
   github_username text, -- Added from 20260116124500
   phone text,           -- Added from 20260116124500
-  billing_address jsonb, -- Added from 20260116124500
   role public.user_role NOT NULL DEFAULT 'USER'
 );
 
@@ -26,7 +25,48 @@ COMMENT ON TABLE public.profiles IS 'Profile information for each user, extendin
 COMMENT ON COLUMN public.profiles.id IS 'References auth.users.id';
 COMMENT ON COLUMN public.profiles.role IS 'User role for RBAC.';
 
--- 2. Helper Function: get_current_user_role
+-- 2. Create user_addresses table
+CREATE TABLE public.user_addresses (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  address_type text NOT NULL CHECK (address_type IN ('billing', 'shipping')),
+  is_default boolean NOT NULL DEFAULT false,
+  recipient_name text,
+  line1 text,
+  line2 text,
+  city text,
+  state text,
+  postal_code text,
+  country_code text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_user_addresses_user_id ON public.user_addresses(user_id);
+CREATE INDEX idx_user_addresses_type ON public.user_addresses(address_type);
+CREATE UNIQUE INDEX idx_user_addresses_one_default_per_type
+ON public.user_addresses (user_id, address_type)
+WHERE is_default = true;
+
+ALTER TABLE public.user_addresses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own addresses"
+  ON public.user_addresses
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Service role manages all addresses"
+  ON public.user_addresses
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+GRANT ALL ON TABLE public.user_addresses TO service_role;
+
+-- 3. Helper Function: get_current_user_role
 -- Now that profiles table exists, we can define this function.
 CREATE OR REPLACE FUNCTION public.get_current_user_role()
 RETURNS public.user_role
@@ -40,7 +80,7 @@ $$;
 
 COMMENT ON FUNCTION public.get_current_user_role() IS 'Fetches the role of the currently authenticated user. SECURITY DEFINER to prevent RLS recursion issues.';
 
--- 3. Trigger: handle_new_user
+-- 4. Trigger: handle_new_user
 -- Automatically creates a profile when a new user signs up.
 -- Assigns 'ADMIN' to the first user, 'USER' to subsequent users.
 -- Extracts GitHub metadata if available.
@@ -129,7 +169,7 @@ CREATE TRIGGER on_auth_user_created
 
 -- Translations are now handled in 00000000000010_setup_translations.sql
 
--- 4. Backfill missing profiles for existing auth.users
+-- 5. Backfill missing profiles for existing auth.users
 -- This ensures that if the public schema is reset but auth users persist, profiles are recreated.
 DO $$
 DECLARE

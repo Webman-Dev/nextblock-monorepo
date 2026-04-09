@@ -41,12 +41,13 @@
     "db:repair": "dotenv -e .env.local -- npx supabase migration repair --status reverted 20260115163000 --workdir libs/db/src",
     "db:reset": "dotenv -e .env.local -- npx supabase db reset --workdir libs/db/src",
     "db:push": "dotenv -e .env.local -- npx supabase db push --workdir libs/db/src --include-all && dotenv -e .env.local -- npx supabase config push --workdir libs/db/src && dotenv -e .env.local -- npx tsx tools/scripts/seed-sandbox-images.ts",
+    "configure:supabase-auth": "dotenv -e .env.local -- node apps/nextblock/tools/configure-supabase-auth.js",
     "sync:create-nextblock": "npm --prefix apps/create-nextblock run sync-template",
     "test-create": "node apps/create-nextblock/bin/create-nextblock.js",
     "deploy:supabase": "node tools/scripts/deploy-supabase.js",
-    "webhook": "cloudflared tunnel --url http://localhost:4200",
     "generate:sandbox": "npx tsx tools/scripts/generate-sandbox-reset.ts",
-    "sandbox:reset": "node tools/scripts/reset-sandbox.js"
+    "sandbox:reset": "node tools/scripts/reset-sandbox.js",
+    "stripe": "stripe listen --forward-to localhost:4200/api/webhooks/stripe"
   },
   "private": true,
   "devDependencies": {

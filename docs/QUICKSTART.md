@@ -85,6 +85,7 @@ The wizard will guide you through the process. Here is what to expect:
     - Enter your `Bucket Name`, `Account ID`, `Access Key`, `Secret Key`, and `Public R2 URL`.
 4.  **SMTP Setup (Optional)**:
     - If you have an SMTP provider (like SMTP2GO or Resend), enter those details now. If not, you can skip and add them to `.env` later.
+    - When `SUPABASE_PROJECT_ID`, `SUPABASE_ACCESS_TOKEN`, and your SMTP values are present, NextBlock will also sync Supabase Auth SMTP plus the branded email templates for signup, password reset, magic links, invites, and email changes.
 
 Once finished, enter your new folder:
 
@@ -127,6 +128,13 @@ Now let's put it on the internet.
 
     > **Why the custom build command?**
     > It syncs your Supabase "Site URL" to your production domain. **This is critical for Auth Verification Emails** (Sign Up / Forgot Password) to redirect users back to your live site instead of `localhost`. This step is not needed for local development.
+    > It also syncs your custom SMTP and branded Supabase Auth email templates when those env vars are present.
+
+If you change your SMTP provider or your auth email branding later, rerun:
+
+```bash
+npm run configure:supabase-auth
+```
 
 ## Troubleshooting
 

@@ -10,6 +10,9 @@ const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 import { Badge } from '@nextblock-cms/ui';
 import { getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
 
+const formatPrice = (amount?: number | null) =>
+  typeof amount === 'number' ? `$${(amount / 100).toFixed(2)}` : 'N/A';
+
 export async function ProductsPage({ 
   searchParams, 
   languageFilterNode 
@@ -77,7 +80,18 @@ export async function ProductsPage({
                     </Link>
                   </TableCell>
                   <TableCell>{product.sku}</TableCell>
-                  <TableCell>${(product.price / 100).toFixed(2)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-baseline gap-2">
+                      <span className={product.sale_price ? 'font-semibold text-primary' : ''}>
+                        {formatPrice(product.sale_price ?? product.price)}
+                      </span>
+                      {product.sale_price && (
+                        <span className="text-sm text-muted-foreground line-through">
+                          {formatPrice(product.price)}
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline">
                       {langMap.get(product.language_id) || 'N/A'}
@@ -109,7 +123,7 @@ export async function ProductsPage({
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-10">
+                <TableCell colSpan={8} className="text-center py-10">
                   No products found.
                 </TableCell>
               </TableRow>

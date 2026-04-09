@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { MarkPaidButton } from './MarkPaidButton';
 import Link from 'next/link';
 import Image from 'next/image';
+import type { OrderCustomerDetails } from './types';
 
 // Helper to format currency
 const formatPrice = (amount: number, currency = 'usd') => {
@@ -20,7 +21,7 @@ export async function OrderDetailPage({ params }: { params: Promise<{ id: string
     notFound();
   }
 
-
+  const customerDetails = order.customer_details as OrderCustomerDetails | null;
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8">
@@ -132,10 +133,9 @@ export async function OrderDetailPage({ params }: { params: Promise<{ id: string
                 </h3>
                 <div className="text-sm space-y-2">
                     {(() => {
-                        const details = order.customer_details as any;
-                        const name = details?.name || order.customer?.full_name;
-                        const email = details?.email;
-                        const phone = details?.phone;
+                        const name = customerDetails?.name || order.customer?.full_name;
+                        const email = customerDetails?.email;
+                        const phone = customerDetails?.phone;
                         
                         return (
                             <>
@@ -152,33 +152,17 @@ export async function OrderDetailPage({ params }: { params: Promise<{ id: string
                 </div>
             </div>
 
-            {/* Shipping Card */}
-            <div className="border rounded-lg p-4 bg-white dark:bg-slate-900 dark:border-slate-800">
-                <h3 className="font-medium text-gray-900 mb-3 dark:text-gray-100 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Shipping Address
-                </h3>
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                    {(() => {
-                        const shipping = (order.customer_details as any)?.shipping;
-                        if (!shipping || !shipping.address) return <p className="italic text-gray-400 text-xs">No shipping address provided (Digital download or pickup?)</p>;
-                        
-                        const addr = shipping.address;
-                        return (
-                            <address className="not-italic space-y-0.5">
-                                <p className="font-medium text-gray-900 dark:text-gray-200">{shipping.name}</p>
-                                <p>{addr.line1}</p>
-                                {addr.line2 && <p>{addr.line2}</p>}
-                                <p>{addr.city}, {addr.state || ''} {addr.postal_code}</p>
-                                <p className="uppercase text-xs font-semibold tracking-wide pt-1">{addr.country}</p>
-                            </address>
-                        );
-                    })()}
-                </div>
-            </div>
+            <AddressCard
+              title="Billing Address"
+              emptyMessage="No billing address was captured for this order."
+              address={customerDetails?.billing || null}
+            />
+
+            <AddressCard
+              title="Shipping Address"
+              emptyMessage="No shipping address was captured for this order."
+              address={customerDetails?.shipping || null}
+            />
 
             {/* Payment Info */}
              <div className="border rounded-lg p-4 bg-white dark:bg-slate-900 dark:border-slate-800">
@@ -211,6 +195,43 @@ export async function OrderDetailPage({ params }: { params: Promise<{ id: string
         </div>
       </div>
 
+    </div>
+  );
+}
+
+function AddressCard({
+  title,
+  emptyMessage,
+  address,
+}: {
+  title: string;
+  emptyMessage: string;
+  address: OrderCustomerDetails['billing'];
+}) {
+  return (
+    <div className="border rounded-lg p-4 bg-white dark:bg-slate-900 dark:border-slate-800">
+      <h3 className="font-medium text-gray-900 mb-3 dark:text-gray-100 flex items-center gap-2">
+        <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        {title}
+      </h3>
+      <div className="text-sm text-gray-600 dark:text-gray-400">
+        {!address ? (
+          <p className="italic text-gray-400 text-xs">{emptyMessage}</p>
+        ) : (
+          <address className="not-italic space-y-0.5">
+            <p className="font-medium text-gray-900 dark:text-gray-200">{address.recipient_name}</p>
+            <p>{address.line1}</p>
+            {address.line2 && <p>{address.line2}</p>}
+            <p>
+              {address.city}, {address.state || ''} {address.postal_code}
+            </p>
+            <p className="uppercase text-xs font-semibold tracking-wide pt-1">{address.country_code}</p>
+          </address>
+        )}
+      </div>
     </div>
   );
 }

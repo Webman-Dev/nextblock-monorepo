@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getPaymentProvider } from '@nextblock-cms/ecommerce/server';
 import { createClient, verifyPackageOnline } from '@nextblock-cms/db/server';
+import { normalizeCustomerAddress } from '@nextblock-cms/ecommerce';
 
 export async function POST(req: Request) {
   try {
@@ -9,10 +10,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Ecommerce module license is inactive' }, { status: 403 });
     }
 
-    const { items, customerEmail, shippingAddress, shippingMethodId } = await req.json();
+    const { items, customerEmail, customerPhone, billingAddress, shippingAddress, shippingMethodId } = await req.json();
     
     if (!items || !Array.isArray(items)) {
       return NextResponse.json({ error: 'Invalid items data' }, { status: 400 });
+    }
+
+    if (!billingAddress) {
+      return NextResponse.json({ error: 'Billing address is required' }, { status: 400 });
     }
     
     // 1. Get Selected Provider from Settings
@@ -39,15 +44,18 @@ export async function POST(req: Request) {
     // 2. Resolve User (if logged in)
     const { data: { user } } = await supabase.auth.getUser();
     const userId = user?.id;
+    const resolvedCustomerEmail = user?.email || customerEmail || null;
 
     // 3. Create Session
-    const { url, error, customProps } = await provider.createCheckoutSession(
-        items, 
-        customerEmail, 
-        userId, 
-        shippingAddress, 
-        shippingMethodId
-    );
+    const { url, error, customProps } = await provider.createCheckoutSession({
+      items,
+      customerEmail: resolvedCustomerEmail,
+      customerPhone,
+      userId,
+      billingAddress: normalizeCustomerAddress(billingAddress) ?? billingAddress,
+      shippingAddress: normalizeCustomerAddress(shippingAddress),
+      shippingMethodId,
+    });
 
     if (error) {
       console.error('Checkout Error:', error);

@@ -22,6 +22,14 @@ Choose your path based on what you want to achieve.
 
 ---
 
+## 🤖 AI / Agent Notes
+
+- Check `.agent/skills` first for task-specific instructions, project guardrails, and subsystem workflows.
+- Start with this file, then read [**Architecture & Internals**](./ARCHITECTURE.md) and the most relevant linked docs before making broad changes.
+- Use the `context7` MCP tool whenever you need the latest framework or library documentation instead of guessing.
+
+---
+
 ## 📖 Architecture & Reference
 
 Deep dives into the internal workings.

@@ -1,3 +1,4 @@
+import type { CheckoutSessionInput } from './customer';
 
 // Basic Product interface for UI components
 // In a real app, this might come from database types, but we define the UI requirement here.
@@ -42,13 +43,7 @@ export function isDigitalItem(item: Pick<CartItem, 'provider'>): boolean {
 }
 
 export interface PaymentProvider {
-  createCheckoutSession(
-    items: CartItem[], 
-    customerEmail?: string, 
-    userId?: string,
-    shippingAddress?: any,
-    shippingMethodId?: string
-  ): Promise<{ url: string | null; error?: string; customProps?: any }>;
+  createCheckoutSession(input: CheckoutSessionInput): Promise<{ url: string | null; error?: string; customProps?: any }>;
   getProviderName(): string;
 }
 

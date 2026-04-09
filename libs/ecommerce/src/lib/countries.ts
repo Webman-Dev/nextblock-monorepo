@@ -54,3 +54,36 @@ export const countries = [
   { code: 'CY', name: 'Cyprus' },
   { code: 'MT', name: 'Malta' },
 ];
+
+const countryCodeAliases: Record<string, string> = {
+  USA: 'US',
+  'UNITED STATES OF AMERICA': 'US',
+  UK: 'GB',
+  'GREAT BRITAIN': 'GB',
+};
+
+export function normalizeCountryCode(value?: string | null) {
+  const normalized = value?.trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const upperValue = normalized.toUpperCase();
+  const aliasMatch = countryCodeAliases[upperValue];
+
+  if (aliasMatch) {
+    return aliasMatch;
+  }
+
+  const codeMatch = countries.find((country) => country.code === upperValue);
+  if (codeMatch) {
+    return codeMatch.code;
+  }
+
+  const nameMatch = countries.find(
+    (country) => country.name.toUpperCase() === upperValue
+  );
+
+  return nameMatch?.code ?? null;
+}

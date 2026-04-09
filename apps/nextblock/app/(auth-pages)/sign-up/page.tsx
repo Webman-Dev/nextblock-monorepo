@@ -3,12 +3,12 @@
 import { signUpAction } from "../../actions";
 import { FormMessage, Message } from "../../../components/form-message";
 import { SubmitButton } from "../../../components/submit-button";
-import { Input } from "@nextblock-cms/ui";
-import { Label } from "@nextblock-cms/ui";
+import { Button, Input, Label } from "@nextblock-cms/ui";
 import Link from "next/link";
 import { useTranslations } from "@nextblock-cms/utils";
 import { useSearchParams } from "next/navigation";
 import { GitHubLoginButton } from "../../../components/GitHubLoginButton";
+import { ArrowRight, CheckCircle2, Mail } from "lucide-react";
 
 import { SandboxCredentialsAlert } from "../../../components/SandboxCredentialsAlert";
 
@@ -32,35 +32,76 @@ export default function Signup() {
   const { t } = useTranslations();
   const searchParams = useSearchParams();
   const formMessage = getMessage(searchParams);
+  const successKey = searchParams.get('success');
 
-  if (formMessage && 'message' in formMessage) {
+  if (successKey) {
     return (
-      <div className="w-full flex-1 flex items-center h-screen sm:max-w-md justify-center gap-2 p-4">
-        <FormMessage message={formMessage} />
+      <div className="flex-1 flex flex-col w-full max-w-160 mx-auto">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <CheckCircle2 className="h-5 w-5" />
+        </div>
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          {t('auth.signup_success_badge')}
+        </p>
+        <h1 className="mt-3 text-2xl font-medium">{t('auth.signup_success_title')}</h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          {t(successKey)}
+        </p>
+
+        <div className="mt-8 rounded-lg border p-5">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 rounded-full bg-muted p-2 text-muted-foreground">
+              <Mail className="h-4 w-4" />
+            </div>
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>{t('auth.signup_success_step_confirm')}</p>
+              <p>{t('auth.signup_success_step_profile')}</p>
+              <p>{t('auth.signup_success_step_spam')}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <Button asChild>
+            <Link href="/sign-in">
+              {t('auth.back_to_sign_in')}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/sign-up">{t('auth.signup_use_different_email')}</Link>
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
-    <>
-      <form className="flex flex-col w-full max-w-160 mx-auto">
+    <div className="flex-1 flex flex-col w-full max-w-160 mx-auto">
+      <form className="flex flex-col">
         <SandboxCredentialsAlert />
         <h1 className="text-2xl font-medium">{t('sign_up')}</h1>
-        <p className="text-sm text text-foreground">
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          {t('auth.signup_form_description')}
+        </p>
+        <p className="text-sm text-foreground">
           {t('already_have_account')}{" "}
-          <Link className="text-primary font-medium underline" href="/sign-in">
+          <Link className="text-foreground font-medium underline" href="/sign-in">
             {t('sign_in')}
           </Link>
         </p>
-        <div className="flex flex-col gap-2 mt-8">
-          <GitHubLoginButton t={t} />
+
+        <div className="mt-8 flex flex-col gap-2">
+          <GitHubLoginButton t={t} redirectTo="/profile" />
 
           <div className="relative py-2">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">{t('or_continue_with') || "Or continue with"}</span>
+              <span className="bg-background px-2 text-muted-foreground">
+                {t('or_continue_with') || "Or continue with"}
+              </span>
             </div>
           </div>
 
@@ -82,6 +123,6 @@ export default function Signup() {
           </div>
         </div>
       </form>
-    </>
+    </div>
   );
 }

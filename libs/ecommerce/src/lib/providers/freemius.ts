@@ -1,19 +1,21 @@
-import { PaymentProvider, CartItem } from '../types';
+import { PaymentProvider } from '../types';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { CheckoutSessionInput, normalizeOrderCustomerDetails } from '../customer';
 
 export class FreemiusProvider implements PaymentProvider {
     getProviderName(): string {
         return 'Freemius';
     }
 
-    async createCheckoutSession(
-      cartItems: CartItem[],
-      customerEmail?: string,
-      userId?: string,
-      _shippingAddress?: any,
-      _shippingMethodId?: string
-    ): Promise<{ url: string | null; error?: string; customProps?: any }> {
+    async createCheckoutSession({
+      items: cartItems,
+      customerEmail,
+      customerPhone,
+      userId,
+      billingAddress,
+      shippingAddress,
+    }: CheckoutSessionInput): Promise<{ url: string | null; error?: string; customProps?: any }> {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   
@@ -59,7 +61,13 @@ export class FreemiusProvider implements PaymentProvider {
           total: totalAmount,
           provider: 'freemius',
           user_id: userId || null,
-          customer_details: customerEmail ? { email: customerEmail } : null
+          customer_details: normalizeOrderCustomerDetails({
+            email: customerEmail,
+            phone: customerPhone,
+            name: billingAddress?.recipient_name,
+            billing: billingAddress,
+            shipping: shippingAddress,
+          }),
         })
         .select('id')
         .single();

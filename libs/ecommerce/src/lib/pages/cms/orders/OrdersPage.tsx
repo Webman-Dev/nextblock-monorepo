@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getOrders } from './actions';
+import type { OrderCustomerDetails } from './types';
 
 // Helper to format currency if utils missing
 const formatPrice = (amount: number, currency = 'usd') => {
@@ -72,7 +73,7 @@ export async function OrdersPage({
               </tr>
             ) : (
               orders.map((order) => {
-                const details = order.customer_details as any;
+                const details = order.customer_details as OrderCustomerDetails | null;
                 const customerEmail =
                   details?.name ||
                   details?.email ||

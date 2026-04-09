@@ -1,22 +1,23 @@
 import { PaymentProvider } from '../types';
 import { stripe } from '../stripe/client';
 import { createClient } from '@supabase/supabase-js';
-import { type CartItem } from '../types';
+import { CheckoutSessionInput, normalizeOrderCustomerDetails } from '../customer';
+import { upsertDefaultUserAddresses } from '../customer-addresses';
 
 export class StripeProvider implements PaymentProvider {
   getProviderName(): string {
     return 'Stripe';
   }
 
-  async createCheckoutSession(
-    cartItems: CartItem[],
-    customerEmail?: string, 
-    _userId?: string,
-    shippingAddress?: any,
-    shippingMethodId?: string
-  ): Promise<{ url: string | null; error?: string }> {
-    // Implement Stripe Logic matching existing checkout.ts
-    // Use Service Role Key to bypass RLS
+  async createCheckoutSession({
+    items: cartItems,
+    customerEmail,
+    customerPhone,
+    userId,
+    billingAddress,
+    shippingAddress,
+    shippingMethodId,
+  }: CheckoutSessionInput): Promise<{ url: string | null; error?: string }> {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -32,12 +33,10 @@ export class StripeProvider implements PaymentProvider {
       return { error: 'Cart is empty', url: null };
     }
 
-    // 1. Validate Prices against DB
     const productIds = cartItems.map((item) => item.product_id);
-
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, title, price')
+      .select('id, title, price, sale_price')
       .in('id', productIds);
 
     if (productsError || !products) {
@@ -45,12 +44,14 @@ export class StripeProvider implements PaymentProvider {
       return { error: 'Failed to validate product prices', url: null };
     }
 
-    const productMap = new Map(products.map((p) => [p.id, p]));
-
-    // 2. Build Line Items
-    const line_items = [];
+    const productMap = new Map(products.map((product) => [product.id, product]));
+    const lineItems: any[] = [];
+    const verifiedItems: Array<{
+      product_id: string;
+      quantity: number;
+      price_at_purchase: number;
+    }> = [];
     let totalAmount = 0;
-    const verifiedItems = [];
 
     for (const cartItem of cartItems) {
       const product = productMap.get(cartItem.product_id);
@@ -60,9 +61,10 @@ export class StripeProvider implements PaymentProvider {
         continue;
       }
 
-      const unitAmount = product.price;
+      const unitAmount =
+        typeof product.sale_price === 'number' ? product.sale_price : product.price;
 
-      line_items.push({
+      lineItems.push({
         price_data: {
           currency: 'usd',
           product_data: {
@@ -76,99 +78,130 @@ export class StripeProvider implements PaymentProvider {
         quantity: cartItem.quantity,
       });
 
-      totalAmount += product.price * cartItem.quantity;
-      
+      totalAmount += unitAmount * cartItem.quantity;
       verifiedItems.push({
-          product_id: product.id,
-          quantity: cartItem.quantity,
-          price_at_purchase: product.price
+        product_id: product.id,
+        quantity: cartItem.quantity,
+        price_at_purchase: unitAmount,
       });
     }
 
-    if (line_items.length === 0) {
+    if (lineItems.length === 0) {
       return { error: 'No valid items in cart', url: null };
     }
 
-    // 3. Create Pending Order in DB
+    let shippingAmount = 0;
+    if (shippingMethodId) {
+      const { data: method, error: methodError } = await supabase
+        .from('shipping_zone_methods')
+        .select('id, name, cost_amount, cost_currency')
+        .eq('id', shippingMethodId)
+        .single();
+
+      if (methodError) {
+        console.error('Failed to load shipping method:', methodError);
+        return { error: 'Failed to load shipping method', url: null };
+      }
+
+      shippingAmount = method.cost_amount ?? 0;
+
+      if (shippingAmount > 0) {
+        lineItems.push({
+          price_data: {
+            currency: (method.cost_currency || 'USD').toLowerCase(),
+            product_data: {
+              name: `Shipping - ${method.name}`,
+            },
+            unit_amount: shippingAmount,
+          },
+          quantity: 1,
+        });
+      }
+    }
+
+    const initialCustomerDetails = normalizeOrderCustomerDetails({
+      email: customerEmail,
+      phone: customerPhone,
+      name: billingAddress?.recipient_name,
+      billing: billingAddress,
+      shipping: shippingAddress,
+    });
+
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert({
         status: 'pending',
-        total: totalAmount,
+        total: totalAmount + shippingAmount,
         provider: 'stripe',
-        // user_id: userId // Optional
+        user_id: userId,
+        customer_details: initialCustomerDetails,
       })
       .select('id')
       .single();
 
     if (orderError || !order) {
       console.error('Failed to create pending order:', orderError);
-      return { error: `Failed to initiate order`, url: null };
+      return { error: 'Failed to initiate order', url: null };
     }
-    
-    // 3.5 Insert Order Items
-    const orderItemsData = verifiedItems.map(item => ({
-        order_id: order.id,
+
+    const orderId = order.id;
+
+    const { error: itemsError } = await supabase.from('order_items').insert(
+      verifiedItems.map((item) => ({
+        order_id: orderId,
         product_id: item.product_id,
         quantity: item.quantity,
-        price_at_purchase: item.price_at_purchase
-    }));
+        price_at_purchase: item.price_at_purchase,
+      }))
+    );
 
-    const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItemsData);
-        
     if (itemsError) {
-        console.error('Failed to insert order items:', itemsError);
+      console.error('Failed to insert order items:', itemsError);
+      await supabase.from('orders').update({ status: 'failed' }).eq('id', orderId);
+      return { error: 'Failed to record order items', url: null };
     }
 
-    // 3.8 Resolve Shipping Rate
-    let shipping_options: any[] = [];
-    if (shippingMethodId) {
-        const { data: method } = await supabase
-            .from('shipping_zone_methods')
-            .select('*')
-            .eq('id', shippingMethodId)
-            .single();
-            
-        if (method) {
-            shipping_options = [{
-                shipping_rate_data: {
-                    type: 'fixed_amount',
-                    fixed_amount: {
-                        amount: method.cost_amount,
-                        currency: method.cost_currency.toLowerCase(),
-                    },
-                    display_name: method.name,
-                }
-            }];
-        }
+    if (userId) {
+      try {
+        await upsertDefaultUserAddresses({
+          userId,
+          billingAddress,
+          shippingAddress,
+          client: supabase as any,
+        });
+      } catch (addressError) {
+        console.error('Failed to sync default customer addresses before checkout:', addressError);
+      }
     }
 
-    // 4. Create Stripe Session
     try {
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         success_url: `${siteUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${siteUrl}/`,
-        line_items,
+        cancel_url: `${siteUrl}/checkout`,
+        line_items: lineItems,
+        billing_address_collection: 'auto',
+        customer_email: customerEmail || undefined,
+        customer_creation: 'if_required',
         metadata: {
-          orderId: order.id,
-          shipping_name: shippingAddress?.name,
-          shipping_address: shippingAddress?.address,
-          shipping_city: shippingAddress?.city,
-          shipping_state: shippingAddress?.state,
-          shipping_zip: shippingAddress?.zip,
-          shipping_country: shippingAddress?.country,
+          orderId,
         },
-        customer_email: customerEmail,
-        shipping_options: shipping_options.length > 0 ? shipping_options : undefined,
       });
 
+      const { error: updateOrderError } = await supabase
+        .from('orders')
+        .update({ stripe_session_id: session.id })
+        .eq('id', orderId);
+
+      if (updateOrderError) {
+        console.error('Failed to save Stripe session ID on order:', updateOrderError);
+      }
+
       return { url: session.url };
-    } catch (err: any) {
-      console.error('Stripe session creation failed:', err);
-      return { error: err.message, url: null };
+    } catch (error: any) {
+      console.error('Stripe session creation failed:', error);
+      await supabase.from('orders').update({ status: 'failed' }).eq('id', orderId);
+      return { error: error.message, url: null };
     }
   }
 }

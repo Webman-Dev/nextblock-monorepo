@@ -1,8 +1,36 @@
-import { Database } from '@nextblock-cms/db';
+import type { OrderCustomerDetails } from '../../../customer';
 
-export type Order = Database['public']['Tables']['orders']['Row'];
-export type OrderItem = Database['public']['Tables']['order_items']['Row'];
-export type Profile = Database['public']['Tables']['profiles']['Row'];
+export type Order = {
+  created_at: string | null;
+  customer_details: OrderCustomerDetails | null;
+  id: string;
+  payment_intent_id: string | null;
+  provider: string | null;
+  status: string;
+  stripe_session_id: string | null;
+  total: number;
+  user_id: string | null;
+};
+
+export type OrderItem = {
+  id: string;
+  order_id: string;
+  price_at_purchase: number;
+  product_id: string | null;
+  quantity: number;
+};
+
+export type Profile = {
+  avatar_url: string | null;
+  full_name: string | null;
+  github_username?: string | null;
+  id: string;
+  phone?: string | null;
+  role?: string | null;
+  website?: string | null;
+};
+
+export type { OrderCustomerDetails };
 
 export interface OrderItemWithProduct extends OrderItem {
     product?: {
@@ -15,6 +43,4 @@ export interface OrderItemWithProduct extends OrderItem {
 export interface OrderWithDetails extends Order {
   order_items: OrderItemWithProduct[];
   customer?: Profile | null; // Joined from profiles table if user_id exists
-  // We can also compute a display name/email helper if needed, 
-  // but for now we'll use the raw data + customer_details
 }

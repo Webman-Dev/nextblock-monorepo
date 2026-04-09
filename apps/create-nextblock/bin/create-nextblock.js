@@ -199,7 +199,7 @@ async function handleCommand(projectDirectory, options) {
   }
 }
 
-async function handleActivateCommand(moduleName, _options) {
+async function handleActivateCommand(moduleName) {
   if (!moduleName || moduleName !== 'ecommerce') {
     console.error(
       chalk.red('Invalid module name. Supported modules: ecommerce'),
@@ -723,7 +723,7 @@ async function runSetupWizard(projectDir, projectName) {
   }
 
   clack.note(
-    'Optional SMTP Setup:\nProvide the host, port, credentials, and from details for your email provider (e.g., Resend, Postmark) to send transactional emails immediately.',
+    'Optional SMTP Setup:\nProvide the host, port, credentials, and from details for your email provider (e.g., Resend, Postmark) to send transactional emails immediately. If Supabase is already configured, we will also sync branded Auth emails for you.',
   );
   const setupSMTP = await clack.confirm({
     message: 'Do you want to set up an SMTP server for emails now? (Optional)',
@@ -822,10 +822,18 @@ async function runSetupWizard(projectDir, projectName) {
     `SMTP_PASS=${smtpValues.pass}`,
     `SMTP_FROM_EMAIL=${smtpValues.fromEmail}`,
     `SMTP_FROM_NAME=${smtpValues.fromName}`,
+    'SUPABASE_AUTH_RATE_LIMIT_EMAIL_SENT=30',
     '',
   ]);
   if (setupSMTP) {
     clack.note('SMTP configuration saved!');
+    await enableSupabaseSmtpConfig(projectPath);
+    await configureHostedSupabaseAuth(projectPath, {
+      projectId,
+      siteUrl,
+      accessToken: supabaseKeys.accessToken,
+      smtpValues,
+    });
   } else if (canWriteEnv) {
     clack.note(
       'SMTP placeholders added to .env. Configure them later when ready.',
@@ -835,6 +843,92 @@ async function runSetupWizard(projectDir, projectName) {
   clack.outro(
     `🎉 Your NextBlock project ${projectName ? `"${projectName}" ` : ''}is ready!`,
   );
+}
+
+async function enableSupabaseSmtpConfig(projectDir) {
+  const configPath = resolve(projectDir, 'supabase', 'config.toml');
+
+  if (!(await fs.pathExists(configPath))) {
+    return;
+  }
+
+  const smtpBlock = `# [auth.email.smtp]
+# host = "env(SMTP_HOST)"
+# port = 587
+# user = "env(SMTP_USER)"
+# pass = "env(SMTP_PASS)"
+# admin_email = "env(SMTP_FROM_EMAIL)"
+# sender_name = "env(SMTP_FROM_NAME)"`;
+
+  const enabledSmtpBlock = `[auth.email.smtp]
+host = "env(SMTP_HOST)"
+port = 587
+user = "env(SMTP_USER)"
+pass = "env(SMTP_PASS)"
+admin_email = "env(SMTP_FROM_EMAIL)"
+sender_name = "env(SMTP_FROM_NAME)"`;
+
+  const configContents = await fs.readFile(configPath, 'utf8');
+
+  if (configContents.includes(enabledSmtpBlock)) {
+    return;
+  }
+
+  if (!configContents.includes(smtpBlock)) {
+    throw new Error(
+      `Could not find the SMTP placeholder block in ${configPath}.`,
+    );
+  }
+
+  await fs.writeFile(
+    configPath,
+    configContents.replace(smtpBlock, enabledSmtpBlock),
+    'utf8',
+  );
+}
+
+async function configureHostedSupabaseAuth(
+  projectDir,
+  { projectId, siteUrl, accessToken, smtpValues },
+) {
+  if (!projectId || !siteUrl || !accessToken) {
+    clack.note(
+      'Skipped hosted Supabase Auth sync because the project ref, site URL, or access token is missing.',
+    );
+    return;
+  }
+
+  const spinner = clack.spinner();
+  spinner.start('Syncing hosted Supabase Auth SMTP and branded email templates...');
+
+  try {
+    await execa('node', ['tools/configure-supabase-auth.js'], {
+      cwd: projectDir,
+      env: {
+        ...process.env,
+        SUPABASE_PROJECT_ID: projectId,
+        NEXT_PUBLIC_URL: siteUrl,
+        SUPABASE_ACCESS_TOKEN: accessToken,
+        SMTP_HOST: smtpValues.host,
+        SMTP_PORT: smtpValues.port,
+        SMTP_USER: smtpValues.user,
+        SMTP_PASS: smtpValues.pass,
+        SMTP_FROM_EMAIL: smtpValues.fromEmail,
+        SMTP_FROM_NAME: smtpValues.fromName,
+        SUPABASE_AUTH_RATE_LIMIT_EMAIL_SENT:
+          process.env.SUPABASE_AUTH_RATE_LIMIT_EMAIL_SENT || '30',
+      },
+    });
+    spinner.stop('Hosted Supabase Auth configured.');
+  } catch (error) {
+    spinner.stop(
+      'Hosted Supabase Auth sync skipped. You can rerun it later with npm run configure:supabase-auth.',
+    );
+    clack.note(
+      error instanceof Error ? error.message : String(error),
+      'Supabase Auth Sync',
+    );
+  }
 }
 
 function handleWizardCancel(message) {

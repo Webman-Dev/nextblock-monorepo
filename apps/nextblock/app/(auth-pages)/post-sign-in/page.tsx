@@ -1,28 +1,27 @@
-'use client';
+import { createClient } from '@nextblock-cms/db/server';
+import { redirect } from 'next/navigation';
+import { resolvePostAuthRedirect } from '../../../lib/auth-redirects';
 
-import { useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+export default async function PostSignIn({
+  searchParams,
+}: {
+  searchParams: Promise<{ redirect_to?: string }>;
+}) {
+  const params = await searchParams;
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-export default function PostSignIn() {
-  const searchParams = useSearchParams();
-  const redirectTo = searchParams.get('redirect_to');
+  if (!user) {
+    redirect('/sign-in');
+  }
 
-  useEffect(() => {
-    if (redirectTo) {
-      window.location.href = redirectTo;
-    } else {
-      window.location.href = '/';
-    }
-  }, [redirectTo]);
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role, full_name')
+    .eq('id', user.id)
+    .single();
 
-  return (
-    <div className="flex justify-center items-center h-full w-full py-20">
-      <div className="relative">
-        <div className="h-16 w-16 rounded-full border-t-4 border-b-4 border-primary animate-spin"></div>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="h-10 w-10 rounded-full bg-background"></div>
-        </div>
-      </div>
-    </div>
-  );
+  redirect(resolvePostAuthRedirect(profile ?? null, params.redirect_to));
 }

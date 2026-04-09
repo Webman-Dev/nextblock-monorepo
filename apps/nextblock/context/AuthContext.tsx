@@ -37,8 +37,7 @@ export const AuthProvider = ({ children, serverUser, serverProfile }: AuthProvid
   const [isLoading] = useState(false);
   const [authSubscription, setAuthSubscription] = useState<Subscription | null>(null);
 
-  const handleAuthStateChange = useCallback(async (event: string, session: unknown) => {
-    const currentUser = (session && typeof session === 'object' && 'user' in session) ? (session as any).user : null;
+  const applyUserState = useCallback(async (currentUser: User | null) => {
     setUser(currentUser);
 
     if (currentUser) {
@@ -56,6 +55,46 @@ export const AuthProvider = ({ children, serverUser, serverProfile }: AuthProvid
       setRole(null);
     }
   }, [supabase]);
+
+  const handleAuthStateChange = useCallback(async (_event: string, session: unknown) => {
+    const currentUser =
+      session && typeof session === 'object' && 'user' in session
+        ? (session as any).user
+        : null;
+
+    await applyUserState(currentUser);
+  }, [applyUserState]);
+
+  useEffect(() => {
+    setUser(serverUser);
+    setProfile(serverProfile);
+    setRole(serverProfile?.role ?? null);
+  }, [serverUser, serverProfile]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const syncBrowserSession = async () => {
+      const { data, error } = await supabase.auth.getUser();
+
+      if (isCancelled || error) {
+        return;
+      }
+
+      const browserUser = data.user ?? null;
+      const currentServerUserId = serverUser?.id ?? null;
+
+      if (browserUser?.id !== currentServerUserId || (!serverProfile && browserUser)) {
+        await applyUserState(browserUser);
+      }
+    };
+
+    void syncBrowserSession();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [applyUserState, serverProfile, serverUser, supabase]);
 
   const subscribeToAuth = useCallback(() => {
     if (authSubscription) return; // Already subscribed
