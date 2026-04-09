@@ -82,7 +82,6 @@ export const DragHandle: React.FC<DragHandleProps> = ({
         <button
           type="button"
           className="tiptap-drag-handle__button tiptap-drag-handle__button--ghost tiptap-drag-handle__grip"
-          role="button"
           aria-label="Drag to reorder"
           title="Drag to reorder"
           tabIndex={0}

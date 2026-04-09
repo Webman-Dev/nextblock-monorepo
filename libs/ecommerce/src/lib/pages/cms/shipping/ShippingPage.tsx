@@ -74,7 +74,7 @@ export async function ShippingPage() {
                                                     countries: zone.shipping_zone_locations?.map((l: any) => l.country_code) || []
                                                 }} 
                                             />
-                                            <form action={async (formData: FormData) => {
+                                            <form action={async () => {
                                                 "use server";
                                                 await deleteShippingZone(zone.id);
                                             }}>
@@ -150,7 +150,7 @@ export async function ShippingPage() {
                                                                         mode="edit" 
                                                                         initialData={method} 
                                                                     />
-                                                                    <form action={async (formData: FormData) => {
+                                                                    <form action={async () => {
                                                                         "use server";
                                                                         await deleteShippingRate(method.id);
                                                                     }}>

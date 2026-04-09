@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
 export async function POST(req: Request) {
@@ -29,11 +28,6 @@ export async function POST(req: Request) {
     if (event.type !== 'install.upgraded' && event.type !== 'license.activated') {
       return NextResponse.json({ received: true, ignored: true, type: event.type });
     }
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
 
     // Freemius doesn't elegantly pass custom metadata to webhooks out of the box. 
     // In a production app, we would match on user_email or sync the license directly.
