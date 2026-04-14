@@ -2,8 +2,16 @@ import { verifyPackageOnline, getActiveLanguagesServerSide } from '@nextblock-cm
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, ChevronDown, ExternalLink } from 'lucide-react';
-import { Button } from '@nextblock-cms/ui';
-import { mapRawVariantRelations } from '@nextblock-cms/ecommerce';
+import {
+  Badge,
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@nextblock-cms/ui';
 import ProductFormClientShell from '../../ProductFormClientShell';
 import {
   getProduct,
@@ -12,6 +20,10 @@ import {
 } from '../../../../../../../libs/ecommerce/src/lib/pages/cms/products/actions';
 import { updateProductAction } from '../../../../../../../libs/ecommerce/src/lib/pages/cms/products/server-actions';
 import { getPaymentSettings } from '../../../../../../../libs/ecommerce/src/lib/pages/cms/payments/queries';
+import {
+  buildGlobalAttributesForForm,
+  buildProductFormInitialData,
+} from '../../productFormData';
 
 export default async function EditProductPage({
   params,
@@ -20,19 +32,20 @@ export default async function EditProductPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ missing_lang_id?: string }>;
 }) {
-  const isOnline = await verifyPackageOnline('ecommerce');
-  const { id } = await params;
-  const { missing_lang_id } = await searchParams;
+  const [{ id }, { missing_lang_id }, isOnline, languages, paymentProvider] =
+    await Promise.all([
+      params,
+      searchParams,
+      verifyPackageOnline('ecommerce'),
+      getActiveLanguagesServerSide(),
+      getPaymentSettings(),
+    ]);
 
   if (!isOnline) {
     redirect('/cms/settings/packages');
   }
 
-  const [product, languages, paymentProvider] = await Promise.all([
-    getProduct(id),
-    getActiveLanguagesServerSide(),
-    getPaymentSettings(),
-  ]);
+  const product = await getProduct(id);
 
   if (!product) {
     notFound();
@@ -43,8 +56,6 @@ export default async function EditProductPage({
     product.translation_group_id ? getProductTranslations(product.translation_group_id) : Promise.resolve([]),
   ]);
 
-  const currentLanguageCode =
-    languages.find((language) => language.id === product.language_id)?.code;
   const missingLanguageId = missing_lang_id ? parseInt(missing_lang_id, 10) : null;
   const missingLanguage =
     missingLanguageId && Number.isFinite(missingLanguageId)
@@ -68,22 +79,10 @@ export default async function EditProductPage({
   const additionalCreateLanguages = missingLanguages.filter(
     (language) => language.id !== primaryCreateLanguage?.id
   );
-
-  const { attributes: productAttributes, variants } = mapRawVariantRelations(
-    (product as any).product_variants || [],
-    currentLanguageCode
-  );
-
-  const globalAttributes = (globalAttributesRaw || []).map((attribute: any) => ({
-    id: attribute.id,
-    name: attribute.name,
-    name_translations: attribute.name_translations || {},
-    slug: attribute.slug,
-    terms: (attribute.product_attribute_terms || []).map((term: any) => ({
-      ...term,
-      value_translations: term.value_translations || {},
-    })),
-  }));
+  const buildTranslationCreateHref = (languageId: number) =>
+    `/cms/products/new?from_group=${product.translation_group_id}&target_lang_id=${languageId}`;
+  const globalAttributes = buildGlobalAttributesForForm(globalAttributesRaw || []);
+  const normalizedInitialData = buildProductFormInitialData(product, languages);
 
   return (
     <div className="space-y-8 w-full max-w-[1400px] mx-auto px-6 py-8">
@@ -121,34 +120,35 @@ export default async function EditProductPage({
 
           {primaryCreateLanguage && product.translation_group_id ? (
             <Button asChild variant="secondary" size="sm">
-              <Link
-                href={`/cms/products/new?from_group=${product.translation_group_id}&target_lang_id=${primaryCreateLanguage.id}`}
-              >
+              <Link href={buildTranslationCreateHref(primaryCreateLanguage.id)}>
                 Create {primaryCreateLanguage.name} Translation
               </Link>
             </Button>
           ) : null}
 
           {additionalCreateLanguages.length > 0 && product.translation_group_id ? (
-            <details className="relative">
-              <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground">
-                Create Translation
-                <ChevronDown className="h-4 w-4" />
-              </summary>
-              <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] rounded-md border bg-popover p-2 shadow-md">
-                <div className="space-y-1">
-                  {additionalCreateLanguages.map((language) => (
-                    <Link
-                      key={language.id}
-                      href={`/cms/products/new?from_group=${product.translation_group_id}&target_lang_id=${language.id}`}
-                      className="block rounded-sm px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
-                    >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  Create Translation
+                  <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-[10px]">
+                    {additionalCreateLanguages.length}
+                  </Badge>
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel>Missing Languages</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {additionalCreateLanguages.map((language) => (
+                  <DropdownMenuItem key={language.id} asChild>
+                    <Link href={buildTranslationCreateHref(language.id)}>
                       Create {language.name}
                     </Link>
-                  ))}
-                </div>
-              </div>
-            </details>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null}
 
           {product.slug && product.status === 'active' && (
@@ -163,37 +163,7 @@ export default async function EditProductPage({
       </div>
 
       <ProductFormClientShell
-        initialData={{
-          id: product.id,
-          title: product.title,
-          slug: product.slug,
-          sku: product.sku,
-          upc: product.upc ?? undefined,
-          stock: product.stock || 0,
-          price: product.price || 0,
-          status: product.status as 'draft' | 'active' | 'archived',
-          short_description: product.short_description ?? undefined,
-          description_json: product.description_json,
-          sale_price: typeof product.sale_price === 'number' ? product.sale_price : undefined,
-          freemius_plan_id: product.freemius_plan_id ?? undefined,
-          freemius_product_id: product.freemius_product_id ?? undefined,
-          language_id: product.language_id,
-          translation_group_id: product.translation_group_id,
-          product_media: product.product_media,
-          variation_attributes: productAttributes.map((attribute) => ({
-            attribute_id: attribute.id,
-            term_ids: attribute.terms.map((term) => term.id),
-          })),
-          variants: variants.map((variant) => ({
-            ...variant,
-            upc: variant.upc ?? null,
-            price: variant.price / 100,
-            sale_price:
-              typeof variant.sale_price === 'number' ? variant.sale_price / 100 : null,
-            main_media_id: variant.main_media_id ?? null,
-            main_image_url: variant.image_url ?? null,
-          })),
-        }}
+        initialData={normalizedInitialData}
         isEdit
         availableLanguagesProp={languages}
         globalAttributesProp={globalAttributes}

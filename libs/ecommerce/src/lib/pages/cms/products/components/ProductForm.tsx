@@ -2,7 +2,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui';
+import {
+  Badge,
+  Button,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@nextblock-cms/ui';
 // Use dependency injection for NotionEditor to avoid SSR/lazy-loading issues
 import { ProductFormValues, productSchema } from '../../../../product-schema';
 import { useForm } from 'react-hook-form';
@@ -10,17 +20,45 @@ import { ProductMediaManager } from './ProductMediaManager';
 import { SyncFreemiusPricingButton } from './SyncFreemiusPricingButton';
 import { VariationsEditor } from './VariationsEditor';
 import { ProductAttribute } from '../../../../types';
+
+type ProductLanguageOption = {
+  id: number;
+  name: string;
+  code: string;
+  is_default?: boolean;
+};
+
+type ProductMediaRelation = {
+  id?: string;
+  media_id: string;
+  sort_order?: number | null;
+  media?: {
+    file_path?: string | null;
+    alt_text?: string | null;
+  } | null;
+};
+
+type ProductMediaManagerItem = {
+  id: string;
+  media_id: string;
+  file_path: string;
+  alt: string;
+  sort_order: number;
+};
+
+type ProductFormInitialData = Omit<ProductFormValues, 'product_media'> & {
+  id?: string;
+  product_media?: ProductMediaRelation[];
+  language_id?: number;
+  translation_group_id?: string;
+};
+
 interface ProductFormProps {
-  initialData?: ProductFormValues & { 
-    id?: string; 
-    product_media?: { media_id: string }[] ;
-    language_id?: number;
-    translation_group_id?: string;
-  };
+  initialData?: ProductFormInitialData;
   isEdit?: boolean;
   mediaPickerNode?: React.ReactNode;
   editorNode?: React.ReactNode;
-  availableLanguagesProp: any[]; // Or a specific Language type if imported
+  availableLanguagesProp: ProductLanguageOption[];
   globalAttributesProp: ProductAttribute[];
   translationGroupId?: string;
   targetLanguageId?: string;
@@ -28,6 +66,118 @@ interface ProductFormProps {
   paymentProvider: 'stripe' | 'freemius';
   createAction?: (data: ProductFormValues) => Promise<void>;
   updateAction?: (data: ProductFormValues) => Promise<void>;
+}
+
+interface FormSectionProps {
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}
+
+function FormSection({ title, description, action, children }: FormSectionProps) {
+  return (
+    <section className="rounded-lg border bg-card p-6 shadow-sm space-y-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          {description ? (
+            <p className="text-sm text-muted-foreground max-w-3xl">{description}</p>
+          ) : null}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function resolveDefaultLanguageId(
+  initialData: ProductFormInitialData | undefined,
+  targetLanguageId: string | undefined,
+  availableLanguages: ProductLanguageOption[]
+) {
+  const parsedTargetLanguageId = targetLanguageId
+    ? Number.parseInt(targetLanguageId, 10)
+    : undefined;
+
+  return (
+    initialData?.language_id ||
+    (Number.isFinite(parsedTargetLanguageId) ? parsedTargetLanguageId : undefined) ||
+    availableLanguages.find((language) => language.is_default)?.id ||
+    availableLanguages[0]?.id ||
+    1
+  );
+}
+
+function buildProductFormDefaults(
+  initialData: ProductFormInitialData | undefined,
+  targetLanguageId: string | undefined,
+  availableLanguages: ProductLanguageOption[],
+  translationGroupId?: string
+): ProductFormValues {
+  return {
+    title: initialData?.title || '',
+    slug: initialData?.slug || '',
+    sku: initialData?.sku || '',
+    upc: initialData?.upc || '',
+    price: typeof initialData?.price === 'number' ? initialData.price / 100 : 0,
+    sale_price:
+      typeof initialData?.sale_price === 'number' ? initialData.sale_price / 100 : null,
+    stock: initialData?.stock || 0,
+    short_description: initialData?.short_description || '',
+    description_json:
+      initialData?.description_json || {
+        type: 'doc',
+        content: [{ type: 'paragraph' }],
+      },
+    freemius_product_id: initialData?.freemius_product_id || '',
+    freemius_plan_id: initialData?.freemius_plan_id || '',
+    status: initialData?.status || 'draft',
+    language_id: resolveDefaultLanguageId(
+      initialData,
+      targetLanguageId,
+      availableLanguages
+    ),
+    translation_group_id:
+      initialData?.translation_group_id || translationGroupId || undefined,
+    product_media:
+      initialData?.product_media?.map((productMedia) => ({
+        media_id: productMedia.media_id,
+      })) || [],
+    variation_attributes: initialData?.variation_attributes || [],
+    variants: initialData?.variants || [],
+  };
+}
+
+function buildMediaManagerItems(
+  productMedia: ProductFormInitialData['product_media']
+): ProductMediaManagerItem[] {
+  if (!productMedia) {
+    return [];
+  }
+
+  return productMedia
+    .map((item) => ({
+      id: item.id || item.media_id,
+      media_id: item.media_id,
+      file_path: item.media?.file_path || '',
+      alt: item.media?.alt_text || '',
+      sort_order: item.sort_order ?? 0,
+    }))
+    .sort((left, right) => left.sort_order - right.sort_order);
+}
+
+function serializeProductMedia(items: ProductMediaManagerItem[]) {
+  return items.map((item) => ({ media_id: item.media_id }));
+}
+
+function buildVariantImageOptions(items: ProductMediaManagerItem[]) {
+  return items.map((item) => ({
+    media_id: item.media_id,
+    file_path: item.file_path,
+    alt: item.alt,
+  }));
 }
 
 // Simple slugify helper
@@ -61,32 +211,19 @@ export function ProductForm({
   const [showVariations, setShowVariations] = useState(() => Boolean(initialData?.variants?.length));
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
-    defaultValues: {
-      title: initialData?.title || '',
-      slug: initialData?.slug || '',
-      sku: initialData?.sku || '',
-      upc: initialData?.upc || '',
-      price: typeof initialData?.price === 'number' ? initialData.price / 100 : 0, // Convert cents to dollars for input
-      sale_price: typeof initialData?.sale_price === 'number' ? initialData.sale_price / 100 : null,
-      stock: initialData?.stock || 0,
-      short_description: initialData?.short_description || '',
-      description_json: initialData?.description_json || { type: 'doc', content: [{ type: 'paragraph' }] },
-      freemius_product_id: initialData?.freemius_product_id || '',
-      freemius_plan_id: initialData?.freemius_plan_id || '',
-      status: initialData?.status || 'draft',
-      language_id: initialData?.language_id || (targetLanguageId ? parseInt(targetLanguageId, 10) : (availableLanguagesProp.find(l => l.is_default)?.id || availableLanguagesProp[0]?.id)),
-      translation_group_id: initialData?.translation_group_id || translationGroupId || undefined,
-      // Map initial media relations relative to provided initialData.product_media
-      product_media: initialData?.product_media?.map(pm => ({ media_id: pm.media_id })) || [],
-      variation_attributes: initialData?.variation_attributes || [],
-      variants: initialData?.variants || [],
-    },
+    defaultValues: buildProductFormDefaults(
+      initialData,
+      targetLanguageId,
+      availableLanguagesProp,
+      translationGroupId
+    ),
   });
 
   const {
     register,
     handleSubmit,
     setValue,
+    reset,
     watch,
     setError,
     formState: { errors, dirtyFields },
@@ -113,54 +250,53 @@ export function ProductForm({
     }
   }, [title, dirtyFields.title, setValue, isEdit]);
 
-  // Initial media state for the manager
-  // We need to pass full media objects to the manager, but initialData might only have relation IDs if not typed fully.
-  // The 'initialData' prop in ProductFormProps seems to assume a certain shape. 
-  // Let's rely on what's passed.
-  // Logic to transform provided product_media (which likely has media join) to the shape ProductMediaManager expects
-  
-  const [mediaForManager, setMediaForManager] = useState<any[]>(() => {
-     // Transform db structure to manager structure
-     if (initialData?.product_media) {
-         return initialData.product_media.map((pm: any) => ({
-             id: pm.id || pm.media_id, // unique key
-             media_id: pm.media_id,
-             file_path: pm.media?.file_path || '',
-             alt: pm.media?.alt_text || '',
-             sort_order: pm.sort_order
-         })).sort((a: any, b: any) => a.sort_order - b.sort_order);
-     }
-     return [];
-  });
+  const [mediaForManager, setMediaForManager] = useState<ProductMediaManagerItem[]>(() =>
+    buildMediaManagerItems(initialData?.product_media)
+  );
 
   const [removedMediaIds, setRemovedMediaIds] = useState<Set<string>>(new Set());
 
-  const onMediaUpdate = (updatedMedia: any[]) => {
+  useEffect(() => {
+    reset(
+      buildProductFormDefaults(
+        initialData,
+        targetLanguageId,
+        availableLanguagesProp,
+        translationGroupId
+      )
+    );
+    setMediaForManager(buildMediaManagerItems(initialData?.product_media));
+    setRemovedMediaIds(new Set());
+    setShowVariations(Boolean(initialData?.variants?.length));
+  }, [
+    availableLanguagesProp,
+    initialData,
+    reset,
+    targetLanguageId,
+    translationGroupId,
+  ]);
+
+  const onMediaUpdate = (updatedMedia: ProductMediaManagerItem[]) => {
       // identify items that were in mediaForManager but are not in updatedMedia
       const currentIds = new Set(updatedMedia.map(m => m.id));
       const removed = mediaForManager.filter(m => !currentIds.has(m.id));
-      
-      if (removed.length > 0) {
-          setRemovedMediaIds(prev => {
-              const next = new Set(prev);
-              removed.forEach(m => {
-                  // We only care about the media_id (UUID), not the temp id if it differs
-                  // ProductMediaManager uses 'id' for keying, but 'media_id' is the real DB ID
-                  if (m.media_id) next.add(m.media_id);
-              });
-              return next;
-          });
-      }
 
+      const nextRemovedMediaIds = new Set(removedMediaIds);
+      removed.forEach((mediaItem) => {
+        if (mediaItem.media_id) {
+          nextRemovedMediaIds.add(mediaItem.media_id);
+        }
+      });
+
+      setRemovedMediaIds(nextRemovedMediaIds);
       setMediaForManager(updatedMedia);
-      // Update form value 'product_media' expected by Zod/Action
-      // Schema expects array of { media_id: string }
-      setValue('product_media', updatedMedia.map(m => ({ media_id: m.media_id })));
-      // Also update the explicitly removed field
-      setValue('explicitly_removed_media_ids', Array.from(removedMediaIds));
+      setValue('product_media', serializeProductMedia(updatedMedia), { shouldDirty: true });
+      setValue('explicitly_removed_media_ids', Array.from(nextRemovedMediaIds), {
+        shouldDirty: true,
+      });
   };
 
-  // Sync removedMediaIds to form whenever it changes (due to closure staleness in onMediaUpdate, better to use effect)
+  // Keep the hidden field aligned with the latest gallery removals.
   useEffect(() => {
      setValue('explicitly_removed_media_ids', Array.from(removedMediaIds));
   }, [removedMediaIds, setValue]);
@@ -235,6 +371,7 @@ export function ProductForm({
   const disabledBaseFieldClass = hasVariants
     ? 'bg-muted/60 text-muted-foreground opacity-70'
     : '';
+  const variantImageOptions = buildVariantImageOptions(mediaForManager);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 pb-8">
@@ -242,15 +379,20 @@ export function ProductForm({
       <input type="hidden" {...register('translation_group_id')} />
 
       <div className="space-y-8 w-full">
-        <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Product Information</h2>
-            {isEdit && initialData?.id && (
-              <div className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-1 rounded select-all" title="Internal System ID">
+        <FormSection
+          title="Product Information"
+          description="Set the core catalog details shoppers and integrations rely on."
+          action={
+            isEdit && initialData?.id ? (
+              <div
+                className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-1 rounded select-all"
+                title="Internal System ID"
+              >
                 ID: {initialData.id}
               </div>
-            )}
-          </div>
+            ) : null
+          }
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="title">Title</Label>
@@ -285,18 +427,26 @@ export function ProductForm({
               </div>
             )}
           </div>
-        </div>
+        </FormSection>
 
-        <div className="p-6 bg-card rounded-lg border shadow-sm space-y-5">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <h2 className="text-lg font-semibold">
-              {isStripeMode ? 'Pricing & Inventory' : 'Freemius Configuration'}
-            </h2>
-            {isFreemiusMode && hasFreemiusProductId && (
-              <SyncFreemiusPricingButton productId={watch('freemius_product_id') as string} />
-            )}
-          </div>
-
+        <FormSection
+          title={isStripeMode ? 'Pricing & Inventory' : 'Freemius Configuration'}
+          description={
+            isStripeMode
+              ? 'Keep the parent product simple, or switch to variant-driven pricing and stock when needed.'
+              : 'Connect the product to its Freemius catalog IDs and let synced plan pricing drive the storefront.'
+          }
+          action={
+            <div className="flex items-center gap-2 flex-wrap">
+              {isStripeMode && hasVariants ? (
+                <Badge variant="secondary">Variant-driven pricing active</Badge>
+              ) : null}
+              {isFreemiusMode && hasFreemiusProductId ? (
+                <SyncFreemiusPricingButton productId={watch('freemius_product_id') as string} />
+              ) : null}
+            </div>
+          }
+        >
           {isStripeMode ? (
             <>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -306,6 +456,7 @@ export function ProductForm({
                     id="price"
                     type="number"
                     step="0.01"
+                    min="0"
                     {...register('price', { valueAsNumber: true })}
                     placeholder="0.00"
                     readOnly={hasVariants}
@@ -319,22 +470,30 @@ export function ProductForm({
                     id="sale_price"
                     type="number"
                     step="0.01"
-                    {...register('sale_price', { valueAsNumber: true })}
+                    min="0"
+                    {...register('sale_price', {
+                      setValueAs: (value) => (value === '' ? null : Number(value)),
+                    })}
                     placeholder="0.00"
                     readOnly={hasVariants}
                     className={disabledBaseFieldClass}
                   />
+                  {errors.sale_price && (
+                    <p className="text-destructive text-sm">{errors.sale_price.message as string}</p>
+                  )}
                 </div>
                 <div>
                   <Label htmlFor="stock">Qty</Label>
                   <Input
                     id="stock"
                     type="number"
+                    min="0"
                     {...register('stock', { valueAsNumber: true })}
                     placeholder="0"
                     readOnly={hasVariants}
                     className={disabledBaseFieldClass}
                   />
+                  {errors.stock && <p className="text-destructive text-sm">{errors.stock.message as string}</p>}
                 </div>
               </div>
 
@@ -364,11 +523,7 @@ export function ProductForm({
                     baseSku={watch('sku') || ''}
                     basePrice={watch('price') || 0}
                     baseSalePrice={typeof watch('sale_price') === 'number' ? watch('sale_price') : null}
-                    availableVariantImages={mediaForManager.map((media) => ({
-                      media_id: media.media_id,
-                      file_path: media.file_path,
-                      alt: media.alt,
-                    }))}
+                    availableVariantImages={variantImageOptions}
                     initialVariationAttributes={initialData?.variation_attributes}
                     initialVariants={initialData?.variants}
                     onChange={handleVariationChange}
@@ -398,9 +553,12 @@ export function ProductForm({
               )}
             </>
           )}
-        </div>
+        </FormSection>
 
-        <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
+        <FormSection
+          title="Description"
+          description="Write a short SEO summary and a rich product story for the detail page."
+        >
           <div className="flex flex-col space-y-4 mb-4">
             <div>
               <Label htmlFor="short_description" className="font-semibold text-lg block mb-2">Short Description (SEO)</Label>
@@ -420,25 +578,30 @@ export function ProductForm({
               </div>
             )}
           </div>
-        </div>
+        </FormSection>
 
-        <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
-          <h2 className="text-lg font-semibold">Media Gallery</h2>
+        <FormSection
+          title="Media Gallery"
+          description="Reorder the gallery to control the parent product image and the variant image options."
+        >
           <ProductMediaManager
             initialMedia={mediaForManager}
             onUpdate={onMediaUpdate}
             mediaPickerNode={mediaPickerNode}
           />
           <input type="hidden" {...register('product_media')} />
-        </div>
+        </FormSection>
 
-        <div className="p-6 bg-card rounded-lg border shadow-sm space-y-4">
-          <h2 className="text-lg font-semibold">Publishing</h2>
+        <FormSection
+          title="Publishing"
+          description="Choose the language and publication status for this catalog entry."
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label className="mb-2 block">Status</Label>
               <Select
                 onValueChange={(val) => setValue('status', val as any)}
+                value={watch('status')}
                 defaultValue={watch('status')}
               >
                 <SelectTrigger>
@@ -472,7 +635,7 @@ export function ProductForm({
               {errors.language_id && <p className="text-destructive text-sm">{errors.language_id.message as string}</p>}
             </div>
           </div>
-        </div>
+        </FormSection>
       </div>
 
       {/* Bottom Actions */}

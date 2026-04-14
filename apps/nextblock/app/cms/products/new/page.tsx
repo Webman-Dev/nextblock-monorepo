@@ -2,32 +2,46 @@ import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { redirect } from 'next/navigation';
 import { getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
 import { createClient } from '@nextblock-cms/db/server';
+import Link from 'next/link';
 import { getProduct } from '@nextblock-cms/ecommerce/server';
-import { mapRawVariantRelations } from '@nextblock-cms/ecommerce';
+import { ArrowLeft } from 'lucide-react';
+import { Badge, Button } from '@nextblock-cms/ui';
 import ProductFormClientShell from '../ProductFormClientShell';
 import {
   getGlobalProductAttributes,
 } from '../../../../../../libs/ecommerce/src/lib/pages/cms/products/actions';
 import { createProductAction } from '../../../../../../libs/ecommerce/src/lib/pages/cms/products/server-actions';
 import { getPaymentSettings } from '../../../../../../libs/ecommerce/src/lib/pages/cms/payments/queries';
+import {
+  buildGlobalAttributesForForm,
+  buildProductFormInitialData,
+  buildTranslationSourceInitialData,
+} from '../productFormData';
 
 export default async function NewProductPage({ 
   searchParams 
 }: { 
   searchParams: Promise<{ from_group?: string; target_lang_id?: string }> 
 }) {
-  const isOnline = await verifyPackageOnline('ecommerce');
-  const [languages, { from_group, target_lang_id }] = await Promise.all([
+  const [
+    isOnline,
+    languages,
+    paymentProvider,
+    globalAttributesRaw,
+    { from_group, target_lang_id },
+  ] = await Promise.all([
+    verifyPackageOnline('ecommerce'),
     getActiveLanguagesServerSide(),
-    searchParams
+    getPaymentSettings(),
+    getGlobalProductAttributes(),
+    searchParams,
   ]);
-
 
   if (!isOnline) {
       redirect('/cms/settings/packages');
   }
 
-  let initialData: any = null;
+  let initialData = null;
   if (from_group) {
     try {
       const supabase = createClient();
@@ -40,21 +54,11 @@ export default async function NewProductPage({
       if (groupProducts && groupProducts[0]) {
         const { data: sourceProduct, error: fetchError } = await getProduct(supabase, groupProducts[0].id);
         if (sourceProduct && !fetchError) {
-          // Prepare initialData for translation
-          // We copy SKU and Slug exactly as requested.
-          initialData = {
-            ...sourceProduct,
-            id: undefined,
-            // User requested the same Slug be used by default (now allowed by composite unique constraint)
-            slug: sourceProduct.slug || '',
-            // User requested the same SKU be used by default
-            sku: sourceProduct.sku || '',
-            status: 'draft', // Translations usually start as draft
-            language_id: target_lang_id ? parseInt(target_lang_id, 10) : sourceProduct.language_id,
-            translation_group_id: from_group,
-            created_at: undefined,
-            updated_at: undefined,
-          };
+          initialData = buildTranslationSourceInitialData(
+            sourceProduct,
+            from_group,
+            target_lang_id
+          );
         }
       }
     } catch (e) {
@@ -62,51 +66,47 @@ export default async function NewProductPage({
     }
   }
 
-  const paymentProvider = await getPaymentSettings();
-  const globalAttributesRaw = await getGlobalProductAttributes();
-  const globalAttributes = (globalAttributesRaw || []).map((attribute: any) => ({
-    id: attribute.id,
-    name: attribute.name,
-    name_translations: attribute.name_translations || {},
-    slug: attribute.slug,
-    terms: (attribute.product_attribute_terms || []).map((term: any) => ({
-      ...term,
-      value_translations: term.value_translations || {},
-    })),
-  }));
-  const initialLanguageCode =
-    languages.find((lang) => lang.id === initialData?.language_id)?.code ||
-    languages.find((lang) => lang.id === (target_lang_id ? parseInt(target_lang_id, 10) : undefined))?.code ||
-    languages.find((lang) => lang.is_default)?.code;
-  const { attributes: productAttributes, variants } = mapRawVariantRelations(
-    initialData?.product_variants || [],
-    initialLanguageCode
+  const targetLanguageId = target_lang_id ? Number.parseInt(target_lang_id, 10) : undefined;
+  const targetLanguage =
+    Number.isFinite(targetLanguageId)
+      ? languages.find((language) => language.id === targetLanguageId)
+      : null;
+  const globalAttributes = buildGlobalAttributesForForm(globalAttributesRaw || []);
+  const normalizedInitialData = buildProductFormInitialData(
+    initialData,
+    languages,
+    targetLanguageId
   );
-  const normalizedInitialData: any = initialData
-    ? {
-        ...initialData,
-        variation_attributes:
-          initialData.variation_attributes ||
-          productAttributes.map((attribute) => ({
-            attribute_id: attribute.id,
-            term_ids: attribute.terms.map((term) => term.id),
-          })),
-        variants:
-          initialData.variants ||
-          variants.map((variant) => ({
-            ...variant,
-            upc: variant.upc ?? null,
-            price: variant.price / 100,
-            sale_price:
-              typeof variant.sale_price === 'number' ? variant.sale_price / 100 : null,
-            main_media_id: variant.main_media_id ?? null,
-            main_image_url: variant.image_url ?? null,
-          })),
-      }
-    : undefined;
 
   return (
-    <div className="p-8">
+    <div className="space-y-8 w-full max-w-[1400px] mx-auto px-6 py-8">
+      <div className="flex justify-between items-start flex-wrap gap-4 w-full">
+        <div className="flex items-start gap-3">
+          <Button variant="outline" size="icon" aria-label="Back to products" asChild>
+            <Link href="/cms/products">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold">
+                {targetLanguage ? `Create ${targetLanguage.name} Translation` : 'Create Product'}
+              </h1>
+              {targetLanguage ? (
+                <Badge variant="secondary">
+                  {targetLanguage.code.toUpperCase()}
+                </Badge>
+              ) : null}
+            </div>
+            <p className="text-sm text-muted-foreground max-w-3xl">
+              {targetLanguage
+                ? 'We prefilled this draft from the source product so you can localize the content and fine-tune pricing, media, and variations faster.'
+                : 'Build a catalog-ready product with structured information, media, pricing, inventory, and optional variations.'}
+            </p>
+          </div>
+        </div>
+      </div>
+
       <ProductFormClientShell
         availableLanguagesProp={languages}
         globalAttributesProp={globalAttributes}

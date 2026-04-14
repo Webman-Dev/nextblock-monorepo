@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
-import { Label } from '@nextblock-cms/ui';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, GripVertical, Image as ImageIcon } from 'lucide-react';
 import type { Database } from '@nextblock-cms/db';
 import Image from 'next/image';
@@ -28,6 +27,10 @@ export const ProductMediaManager = ({ initialMedia, onUpdate, mediaPickerNode }:
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(initialMedia);
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
+
+  useEffect(() => {
+    setMediaItems(initialMedia);
+  }, [initialMedia]);
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, position: number) => {
     dragItem.current = position;
@@ -68,6 +71,10 @@ export const ProductMediaManager = ({ initialMedia, onUpdate, mediaPickerNode }:
 
   const addMedia = (selectedMedia: Database['public']['Tables']['media']['Row']) => {
       if (!selectedMedia) return;
+
+      if (mediaItems.some((item) => item.media_id === selectedMedia.id)) {
+          return;
+      }
       
       const newItem: MediaItem = {
           id: `temp-${Date.now()}`, // Temp ID
@@ -93,10 +100,6 @@ export const ProductMediaManager = ({ initialMedia, onUpdate, mediaPickerNode }:
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-          <Label>Product Gallery</Label>
-      </div>
-
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
         {mediaItems.map((item, index) => (
           <div

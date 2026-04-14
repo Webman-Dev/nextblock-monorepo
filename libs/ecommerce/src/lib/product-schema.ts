@@ -60,6 +60,15 @@ export const productSchema = z.object({
   explicitly_removed_media_ids: z.array(z.string()).optional(),
   variation_attributes: z.array(variationAttributeSchema).optional(),
   variants: z.array(variantDraftSchema).optional(),
-});
+}).refine(
+  (product) =>
+    product.sale_price === null ||
+    product.sale_price === undefined ||
+    product.sale_price <= product.price,
+  {
+    message: 'Sale price cannot exceed the regular price',
+    path: ['sale_price'],
+  }
+);
 
 export type ProductFormValues = z.infer<typeof productSchema>;
