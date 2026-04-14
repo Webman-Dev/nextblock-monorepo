@@ -3,46 +3,6 @@
 import { createClient } from '@nextblock-cms/db/server';
 import { revalidatePath } from 'next/cache';
 
-export async function getStoreConfigStatus() {
-  // Check Stripe
-  const stripeMissing = [];
-  if (!process.env.STRIPE_SECRET_KEY) stripeMissing.push('STRIPE_SECRET_KEY');
-  if (!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) stripeMissing.push('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY');
-  if (!process.env.STRIPE_WEBHOOK_SECRET) stripeMissing.push('STRIPE_WEBHOOK_SECRET');
-
-  // Check Freemius
-  const fmMissing = [];
-  if (!process.env.FREEMIUS_PUBLIC_KEY) fmMissing.push('FREEMIUS_PUBLIC_KEY');
-  if (!process.env.FREEMIUS_SECRET_KEY) fmMissing.push('FREEMIUS_SECRET_KEY');
-
-  return {
-    stripe: {
-      hasKeys: stripeMissing.length === 0,
-      missing: stripeMissing
-    },
-    freemius: {
-      hasKeys: fmMissing.length === 0,
-      missing: fmMissing
-    }
-  };
-}
-
-export async function getPaymentSettings() {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-        .from('site_settings')
-        .select('value')
-        .eq('key', 'payment_provider')
-        .single();
-    
-    if (error || !data) {
-        return 'stripe'; // Default
-    }
-    
-    // value is jsonb, typically stored as "stripe" string
-    return data.value; 
-}
-
 export async function updatePaymentSettings(provider: 'stripe' | 'freemius') {
     const supabase = await createClient();
     

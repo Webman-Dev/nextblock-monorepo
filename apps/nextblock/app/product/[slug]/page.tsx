@@ -1,5 +1,5 @@
 import { getProductBySlug, getProducts } from '@nextblock-cms/ecommerce/server';
-import { ProductProvider } from '@nextblock-cms/ecommerce';
+import { ProductProvider, mapRawVariantRelations, getVariantEffectivePriceRange } from '@nextblock-cms/ecommerce';
 import { getSsgSupabaseClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 import { notFound } from 'next/navigation';
 import { Metadata } from 'next';
@@ -142,13 +142,25 @@ export default async function ProductPage({ params }: ProductPageProps) {
       });
   }
 
+  const languageCode = Array.isArray((product as any).languages)
+    ? (product as any).languages[0]?.code
+    : (product as any).languages?.code;
+  const { attributes, variants } = mapRawVariantRelations(
+    (product as any).product_variants || [],
+    languageCode
+  );
+  const variantPriceRange = getVariantEffectivePriceRange(variants);
+
   const contextProduct = {
     id: product.id,
     title: product.title,
     slug: product.slug,
     sku: product.sku,
+    upc: product.upc || undefined,
     price: product.price,
     sale_price: product.sale_price || null,
+    price_range_min: variantPriceRange?.min ?? null,
+    price_range_max: variantPriceRange?.max ?? null,
     image_url: imageUrl,
     images: images,
     short_description: product.short_description || undefined,
@@ -157,6 +169,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
     freemius_product_id: product.freemius_product_id || undefined,
     language_id: product.language_id,
     translation_group_id: product.translation_group_id || "",
+    has_variants: variants.length > 0,
+    attributes,
+    variants,
   };
 
   return (

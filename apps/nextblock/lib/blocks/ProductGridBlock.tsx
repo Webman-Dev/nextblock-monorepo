@@ -1,5 +1,6 @@
 import { ProductGrid } from '@nextblock-cms/ecommerce';
 import { getProducts } from '@nextblock-cms/ecommerce/server';
+import { getVariantEffectivePriceRange } from '@nextblock-cms/ecommerce';
 
 
 import { ProductGridBlockContent } from './ecommerce-block-schemas';
@@ -54,18 +55,28 @@ export const ProductGridBlock = async ({
          imageUrl = `${process.env.NEXT_PUBLIC_R2_BASE_URL}/${mediaItem.file_path}`;
       }
 
+      const variantPriceRange = getVariantEffectivePriceRange(
+        (p.product_variants || []).map((variant: any) => ({
+          price: variant.price,
+          sale_price: variant.sale_price,
+        }))
+      );
+
       return {
         id: p.id,
         title: p.title,
         slug: p.slug,
-        sku: p.slug, // Fallback to slug if sku is missing (optional logic check)
-        sku_val: p.sku, 
+        sku: p.sku,
+        upc: p.upc || undefined,
         price: p.price,
         sale_price: typeof p.sale_price === 'number' ? p.sale_price : undefined,
+        price_range_min: variantPriceRange?.min ?? null,
+        price_range_max: variantPriceRange?.max ?? null,
         image_url: imageUrl,
         short_description: p.short_description || undefined,
         language_id: p.language_id as number,
         translation_group_id: p.translation_group_id || "",
+        has_variants: (p.product_variants?.length || 0) > 0,
       };
   });
 

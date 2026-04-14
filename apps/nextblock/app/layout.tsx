@@ -2,34 +2,183 @@ import '@nextblock-cms/ui/styles/globals.css';
 // eslint-disable-next-line @nx/enforce-module-boundaries
 import '@nextblock-cms/editor/styles/editor.css';
 // app/layout.tsx
-import { EnvVarWarning } from "../components/env-var-warning";
-import { SandboxBanner } from "../components/SandboxBanner";
-import { SpeedInsights } from "@vercel/speed-insights/next"
- 
-import { GoogleTagManager } from '@next/third-parties/google'
+import { EnvVarWarning } from '../components/env-var-warning';
+import { SandboxBanner } from '../components/SandboxBanner';
+import { SpeedInsights } from '@vercel/speed-insights/next';
+
+import { GoogleTagManager } from '@next/third-parties/google';
 import { ThemeSwitcher } from '../components/theme-switcher';
 import type { Metadata } from 'next';
-import Header from "../components/Header";
-import FooterNavigation from "../components/FooterNavigation";
+import Header from '../components/Header';
+import FooterNavigation from '../components/FooterNavigation';
 import { Providers } from './providers';
 import { CartDrawer } from '@nextblock-cms/ecommerce';
 import { ToasterProvider } from './ToasterProvider';
-import { createClient as createSupabaseServerClient, getProfileWithRoleServerSide } from '@nextblock-cms/db/server';
+import {
+  createClient as createSupabaseServerClient,
+  getProfileWithRoleServerSide,
+} from '@nextblock-cms/db/server';
 import { getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
-import { getNavigationMenu } from './cms/navigation/actions';
-import { getActiveLogo } from './cms/settings/logos/actions';
-import { getCopyrightSettings } from './cms/settings/copyright/actions';
-import { getTranslations } from './cms/settings/extra-translations/actions';
 import type { Database } from '@nextblock-cms/db';
 import { headers, cookies } from 'next/headers';
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
+import { unstable_cache } from 'next/cache';
+import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 
-const defaultUrl = process.env.NEXT_PUBLIC_URL || "http://localhost:3000";
+const defaultUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
 
 const DEFAULT_LOCALE_FOR_LAYOUT = 'en';
+const PUBLIC_LAYOUT_REVALIDATE_SECONDS = 60;
 
 type Language = Database['public']['Tables']['languages']['Row'];
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
+type MenuLocation = Database['public']['Enums']['menu_location'];
+type HeaderLogo = Database['public']['Tables']['logos']['Row'] & {
+  site_title?: string | null;
+  media: (Database['public']['Tables']['media']['Row'] & { alt_text: string | null }) | null;
+};
+
+function createStaticSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error('Missing Supabase environment variables for public layout data');
+  }
+
+  return createSupabaseJsClient<Database>(supabaseUrl, supabaseKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+const getCachedLanguages = unstable_cache(
+  async (): Promise<Language[]> => {
+    const supabase = createStaticSupabaseClient();
+    const { data, error } = await supabase
+      .from('languages')
+      .select('id, code, name, is_default, is_active, created_at, updated_at')
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching cached languages:', error.message);
+      return [];
+    }
+
+    return data || [];
+  },
+  ['public-layout-languages'],
+  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
+);
+
+const getCachedCopyrightSettings = unstable_cache(
+  async (): Promise<Record<string, string>> => {
+    const supabase = createStaticSupabaseClient();
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'footer_copyright')
+      .single();
+
+    if (error || !data) {
+      console.error('Error fetching cached copyright settings:', error);
+      return { en: '(c) {year} Nextblock CMS. All rights reserved.' };
+    }
+
+    return data.value as Record<string, string>;
+  },
+  ['public-layout-copyright'],
+  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
+);
+
+const getCachedTranslations = unstable_cache(
+  async () => {
+    const supabase = createStaticSupabaseClient();
+    const { data, error } = await supabase
+      .from('translations')
+      .select('key, translations, created_at, updated_at')
+      .order('key');
+
+    if (error) {
+      console.error('Error fetching cached translations:', error.message);
+      return [];
+    }
+
+    return data || [];
+  },
+  ['public-layout-translations'],
+  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
+);
+
+const getCachedNavigationMenu = unstable_cache(
+  async (menuKey: MenuLocation, languageCode: string): Promise<NavigationItem[]> => {
+    const supabase = createStaticSupabaseClient();
+
+    const { data: language, error: langError } = await supabase
+      .from('languages')
+      .select('id')
+      .eq('code', languageCode)
+      .single();
+
+    if (langError || !language) {
+      console.error(
+        `Error fetching cached navigation language ${languageCode} for ${menuKey}:`,
+        langError
+      );
+      return [];
+    }
+
+    const { data: items, error: itemsError } = await supabase
+      .from('navigation_items')
+      .select('*, pages(slug)')
+      .eq('menu_key', menuKey)
+      .eq('language_id', language.id)
+      .order('parent_id', { nullsFirst: true })
+      .order('order');
+
+    if (itemsError) {
+      console.error(
+        `Error fetching cached navigation items for ${menuKey} (${languageCode}):`,
+        itemsError
+      );
+      return [];
+    }
+
+    return (items || []).map((item) => ({ ...item, id: Number(item.id) }));
+  },
+  ['public-layout-navigation'],
+  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
+);
+
+const getCachedActiveLogo = unstable_cache(
+  async (): Promise<HeaderLogo | null> => {
+    const supabase = createStaticSupabaseClient();
+    const { data, error } = await supabase
+      .from('logos')
+      .select(
+        `
+        *,
+        media:media_id (*)
+      `
+      )
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching cached active logo:', error.message);
+      return null;
+    }
+
+    return data as HeaderLogo | null;
+  },
+  ['public-layout-logo'],
+  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
+);
 
 async function loadLayoutData() {
   const supabase = createSupabaseServerClient();
@@ -47,18 +196,23 @@ async function loadLayoutData() {
     DEFAULT_LOCALE_FOR_LAYOUT;
 
   const [
-    { data: { user } },
+    {
+      data: { user },
+    },
     availableLanguagesResult,
     copyrightSettingsResult,
     translationsResult,
+    isEcommerceActive,
   ] = await Promise.all([
     supabase.auth.getUser(),
-    getActiveLanguagesServerSide().catch(() => []),
-    getCopyrightSettings().catch(() => ({ en: '© {year} Nextblock CMS. All rights reserved.' })),
-    getTranslations().catch(() => []),
+    getCachedLanguages().catch(() => getActiveLanguagesServerSide().catch(() => [])),
+    getCachedCopyrightSettings().catch(() => ({
+      en: '(c) {year} Nextblock CMS. All rights reserved.',
+    })),
+    getCachedTranslations().catch(() => []),
+    verifyPackageOnline('ecommerce').catch(() => false),
   ]);
 
-  const profile = user ? await getProfileWithRoleServerSide(user.id) : null;
   const availableLanguages: Language[] = availableLanguagesResult;
   const defaultLanguage: Language | null =
     availableLanguages.find((lang) => lang.is_default) ?? availableLanguages[0] ?? null;
@@ -71,25 +225,26 @@ async function loadLayoutData() {
 
   const copyrightSettings = copyrightSettingsResult as Record<string, string>;
   const fallbackTemplate =
-    copyrightSettings['en'] ?? '© {year} Nextblock CMS. All rights reserved.';
-  const templateForLocale =
-    copyrightSettings[serverDeterminedLocale] ?? fallbackTemplate;
+    copyrightSettings.en ?? '(c) {year} Nextblock CMS. All rights reserved.';
+  const templateForLocale = copyrightSettings[serverDeterminedLocale] ?? fallbackTemplate;
   const copyrightText = templateForLocale.replace('{year}', new Date().getFullYear().toString());
 
   const translations = Array.isArray(translationsResult) ? translationsResult : [];
 
-  const hasSupabaseEnv =
-    Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const hasSupabaseEnv = Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
 
-  const headerNavItems: NavigationItem[] = await getNavigationMenu('HEADER', serverDeterminedLocale).catch(() => []);
-  const footerNavItems: NavigationItem[] = await getNavigationMenu('FOOTER', serverDeterminedLocale).catch(() => []);
-  const logo = await getActiveLogo().catch(() => null);
+  const [profile, headerNavItems, footerNavItems, logo] = await Promise.all([
+    user ? getProfileWithRoleServerSide(user.id) : Promise.resolve(null),
+    getCachedNavigationMenu('HEADER', serverDeterminedLocale).catch(() => []),
+    getCachedNavigationMenu('FOOTER', serverDeterminedLocale).catch(() => []),
+    getCachedActiveLogo().catch(() => null),
+  ]);
 
   const role = profile?.role ?? null;
   const canAccessCms = role === 'ADMIN' || role === 'WRITER';
   const siteTitle = logo?.site_title ?? 'Nextblock';
-
-  const isEcommerceActive = await verifyPackageOnline('ecommerce');
 
   return {
     user,
@@ -142,9 +297,7 @@ export const metadata: Metadata = {
       { url: '/favicon/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
       { url: '/favicon/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
     ],
-    apple: [
-      { url: '/favicon/apple-touch-icon.png' },
-    ],
+    apple: [{ url: '/favicon/apple-touch-icon.png' }],
   },
   manifest: '/favicon/site.webmanifest',
 };
@@ -157,20 +310,20 @@ export default async function RootLayout({
   const {
     user,
     profile,
-  serverDeterminedLocale,
-  availableLanguages,
-  defaultLanguage,
-  translations,
-  copyrightText,
-  nonce,
-  hasSupabaseEnv,
-  headerNavItems,
-  logo,
-  footerNavItems,
-  canAccessCms,
-  siteTitle,
-  isEcommerceActive,
-} = await loadLayoutData();
+    serverDeterminedLocale,
+    availableLanguages,
+    defaultLanguage,
+    translations,
+    copyrightText,
+    nonce,
+    hasSupabaseEnv,
+    headerNavItems,
+    logo,
+    footerNavItems,
+    canAccessCms,
+    siteTitle,
+    isEcommerceActive,
+  } = await loadLayoutData();
 
   return (
     <html lang={serverDeterminedLocale} suppressHydrationWarning>
@@ -184,7 +337,7 @@ export default async function RootLayout({
         <link rel="dns-prefetch" href="https://realtime.supabase.com" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         {/* @ts-expect-error - SpeedInsights version might have missing nonce in types but supports it in runtime */}
-        <SpeedInsights nonce={nonce}/>
+        <SpeedInsights nonce={nonce} />
       </head>
       <body className="bg-background text-foreground min-h-screen flex flex-col">
         <Providers
@@ -214,9 +367,7 @@ export default async function RootLayout({
                 )}
               </div>
             </nav>
-            <main className="flex-grow w-full">
-              {children}
-            </main>
+            <main className="flex-grow w-full">{children}</main>
             <footer className="w-full border-t py-8">
               <div className="mx-auto flex flex-col items-center justify-center gap-6 text-center text-xs">
                 <FooterNavigation navItems={footerNavItems} />
@@ -230,7 +381,7 @@ export default async function RootLayout({
 
           {isEcommerceActive && <CartDrawer />}
         </Providers>
-        <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID || ""} nonce={nonce} />
+        <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID || ''} nonce={nonce} />
       </body>
     </html>
   );

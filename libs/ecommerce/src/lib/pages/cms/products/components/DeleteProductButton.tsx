@@ -1,7 +1,6 @@
 'use client';
 
 import { Button } from '@nextblock-cms/ui';
-import { deleteProductAction } from '../server-actions';
 import { useTransition } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -12,9 +11,10 @@ interface DeleteProductButtonProps {
   isIcon?: boolean;
   className?: string;
   redirectTo?: string; // Optional redirect after delete
+  deleteAction: () => Promise<void>;
 }
 
-export function DeleteProductButton({ id, productName, isIcon = false, className, redirectTo }: DeleteProductButtonProps) {
+export function DeleteProductButton({ id, productName, isIcon = false, className, redirectTo, deleteAction }: DeleteProductButtonProps) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -25,7 +25,7 @@ export function DeleteProductButton({ id, productName, isIcon = false, className
     if (window.confirm(`Are you sure you want to delete "${productName}"? This action cannot be undone.`)) {
       startTransition(async () => {
         try {
-          await deleteProductAction(id);
+          await deleteAction();
           if (redirectTo) {
             router.push(redirectTo);
           }

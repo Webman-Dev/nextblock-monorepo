@@ -111,12 +111,12 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
   useEffect(() => {
     if (!isLoading) {
       if (!user) {
-        router.push("/sign-in?redirect=/cms/dashboard");
+        router.push(`/sign-in?redirect=${encodeURIComponent(pathname || "/cms/dashboard")}`);
       } else if (!isWriter && !isAdmin) {
         router.push("/unauthorized?reason=insufficient_role_in_layout");
       }
     }
-  }, [user, role, isLoading, router, isAdmin, isWriter]);
+  }, [user, role, isLoading, router, isAdmin, isWriter, pathname]);
 
   useEffect(() => {
     const mainLayoutElement = document.querySelector('body > div > main > div.flex-1.w-full.flex.flex-col.items-center');

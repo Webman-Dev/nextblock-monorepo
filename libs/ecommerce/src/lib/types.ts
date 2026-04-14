@@ -1,14 +1,59 @@
 import type { CheckoutSessionInput } from './customer';
 
+export type TranslationMap = Record<string, string>;
+
 // Basic Product interface for UI components
 // In a real app, this might come from database types, but we define the UI requirement here.
+export interface ProductAttributeTerm {
+  id: string;
+  attribute_id: string;
+  value: string;
+  slug: string;
+  sort_order?: number | null;
+  value_translations?: TranslationMap | null;
+}
+
+export interface ProductAttribute {
+  id: string;
+  name: string;
+  slug: string;
+  name_translations?: TranslationMap | null;
+  terms: ProductAttributeTerm[];
+}
+
+export interface ProductVariantOption {
+  attribute_id: string;
+  attribute_name: string;
+  term_id: string;
+  term_value: string;
+  term_slug?: string;
+}
+
+export interface ProductVariant {
+  id: string;
+  combination_key: string;
+  sku: string;
+  upc?: string | null;
+  price: number;
+  sale_price?: number | null;
+  stock_quantity: number;
+  attribute_term_ids: string[];
+  selected_options: ProductVariantOption[];
+  label: string;
+  main_media_id?: string | null;
+  image_url?: string | null;
+}
+
 export interface Product {
   id: string;
   title: string;
   slug: string;
   sku: string;
+  upc?: string | null;
   price: number;
   sale_price?: number | null;
+  price_range_min?: number | null;
+  price_range_max?: number | null;
   image_url?: string; // Resolved URL of the primary image
   images?: { url: string; alt?: string }[]; // Array of resolved image URLs
   short_description?: string | null;
@@ -20,6 +65,12 @@ export interface Product {
   language_id: number;
   translation_group_id: string;
   language_code?: string;
+  has_variants?: boolean;
+  variant_id?: string;
+  variant_label?: string;
+  selected_options?: ProductVariantOption[];
+  attributes?: ProductAttribute[];
+  variants?: ProductVariant[];
 }
 
 export type BillingCycle = 'monthly' | 'annual' | 'lifetime';

@@ -6,6 +6,47 @@ import { ProductFormValues } from './product-schema';
 // Helper to convert dollars to cents
 const toCents = (dollars: number) => Math.round(dollars * 100);
 
+function serializeVariantsForRpc(variants?: ProductFormValues['variants']) {
+  return (variants || []).map((variant) => ({
+    id: variant.id,
+    sku: variant.sku,
+    upc: variant.upc ?? null,
+    price: toCents(variant.price),
+    sale_price:
+      typeof variant.sale_price === 'number' && !isNaN(variant.sale_price)
+        ? toCents(variant.sale_price)
+        : null,
+    stock_quantity: variant.stock_quantity,
+    main_media_id: variant.main_media_id ?? null,
+    attribute_term_ids: variant.attribute_term_ids,
+  }));
+}
+
+function buildProductRpcPayload(data: ProductFormValues, id?: string) {
+  return {
+    id,
+    title: data.title,
+    slug: data.slug,
+    sku: data.sku,
+    upc: data.upc ?? null,
+    stock: data.stock,
+    status: data.status,
+    short_description: data.short_description ?? null,
+    description_json: data.description_json ?? null,
+    metadata: {},
+    price: toCents(data.price),
+    sale_price:
+      typeof data.sale_price === 'number' && !isNaN(data.sale_price)
+        ? toCents(data.sale_price)
+        : null,
+    freemius_plan_id: data.freemius_plan_id ?? null,
+    freemius_product_id: data.freemius_product_id ?? null,
+    language_id: data.language_id,
+    translation_group_id: data.translation_group_id || undefined,
+    variants: serializeVariantsForRpc(data.variants),
+  };
+}
+
 export async function getProducts(
   supabase: SupabaseClient<Database>,
   { page = 1, limit = 10, search = '', languageId }: { page?: number; limit?: number; search?: string; languageId?: number } = {}
@@ -15,7 +56,10 @@ export async function getProducts(
 
   let query = supabase
     .from('products')
-    .select('id, title, sku, price, sale_price, short_description, stock, status, slug, language_id, translation_group_id, product_media(media(file_path))', { count: 'exact' })
+    .select(
+      'id, title, sku, upc, price, sale_price, short_description, stock, status, slug, language_id, translation_group_id, product_media(media(file_path)), product_variants(id, price, sale_price)',
+      { count: 'exact' }
+    )
     .range(start, end)
     .order('created_at', { ascending: false });
 
@@ -36,6 +80,9 @@ export async function getProduct(supabase: SupabaseClient<Database>, id: string)
     .select(
       `
       *,
+      languages (
+        code
+      ),
       product_media (
         media_id,
         sort_order,
@@ -46,6 +93,38 @@ export async function getProduct(supabase: SupabaseClient<Database>, id: string)
           blur_data_url,
           width,
           height
+        )
+      ),
+      product_variants (
+        id,
+        sku,
+        upc,
+        main_media_id,
+        price,
+        sale_price,
+        stock_quantity,
+        media:main_media_id (
+          id,
+          file_path,
+          object_key,
+          description
+        ),
+        variant_attribute_mapping (
+          attribute_term_id,
+          product_attribute_terms (
+            id,
+            attribute_id,
+            value,
+            slug,
+            sort_order,
+            value_translations,
+            product_attributes (
+              id,
+              name,
+              slug,
+              name_translations
+            )
+          )
         )
       )
     `
@@ -60,6 +139,9 @@ export async function getProductBySlug(supabase: SupabaseClient<Database>, slug:
     .select(
       `
       *,
+      languages (
+        code
+      ),
       product_media (
         media_id,
         sort_order,
@@ -71,6 +153,38 @@ export async function getProductBySlug(supabase: SupabaseClient<Database>, slug:
           width,
           height
         )
+      ),
+      product_variants (
+        id,
+        sku,
+        upc,
+        main_media_id,
+        price,
+        sale_price,
+        stock_quantity,
+        media:main_media_id (
+          id,
+          file_path,
+          object_key,
+          description
+        ),
+        variant_attribute_mapping (
+          attribute_term_id,
+          product_attribute_terms (
+            id,
+            attribute_id,
+            value,
+            slug,
+            sort_order,
+            value_translations,
+            product_attributes (
+              id,
+              name,
+              slug,
+              name_translations
+            )
+          )
+        )
       )
     `
     )
@@ -79,71 +193,32 @@ export async function getProductBySlug(supabase: SupabaseClient<Database>, slug:
 }
 
 export async function createProduct(supabase: SupabaseClient<Database>, data: ProductFormValues) {
-  const { media_id, ...rest } = data;
-  
-  const productData = {
-    title: rest.title,
-    slug: rest.slug,
-    sku: rest.sku,
-    stock: rest.stock,
-    status: rest.status,
-    short_description: rest.short_description ?? null,
-    description_json: rest.description_json ?? null,
-    metadata: {},
-    price: toCents(rest.price),
-    sale_price: (typeof rest.sale_price === 'number' && !isNaN(rest.sale_price)) 
-        ? toCents(rest.sale_price) 
-        : null,
-    freemius_plan_id: rest.freemius_plan_id ?? null,
-    freemius_product_id: rest.freemius_product_id ?? null,
-    language_id: rest.language_id,
-    translation_group_id: rest.translation_group_id || undefined,
-  };
+  const { data: productId, error } = await supabase.rpc('upsert_product_with_variants', {
+    product_payload: buildProductRpcPayload(data),
+  });
 
-  const { data: product, error } = await supabase.from('products').insert(productData).select().single();
+  if (error || !productId) throw error || new Error('Failed to create product');
 
-  if (error) throw error;
-
-  if (data.product_media && data.product_media.length > 0 && product) {
+  if (data.product_media && data.product_media.length > 0) {
       const mediaInserts = data.product_media.map((item, index) => ({
-        product_id: product.id,
+        product_id: productId,
         media_id: item.media_id,
         sort_order: index,
       }));
       await supabase.from('product_media').insert(mediaInserts);
-  } else if (media_id && product) {
+  } else if (data.media_id) {
     await supabase.from('product_media').insert({
-      product_id: product.id,
-      media_id: media_id,
+      product_id: productId,
+      media_id: data.media_id,
       sort_order: 0,
     });
   }
 
+  const { data: product } = await supabase.from('products').select('*').eq('id', productId).single();
   return product;
 }
 
 export async function updateProduct(supabase: SupabaseClient<Database>, id: string, data: ProductFormValues) {
-  const { media_id, ...rest } = data;
-
-  const productData = {
-    title: rest.title,
-    slug: rest.slug,
-    sku: rest.sku,
-    stock: rest.stock,
-    status: rest.status,
-    short_description: rest.short_description ?? null,
-    description_json: rest.description_json ?? null,
-    price: toCents(rest.price),
-    sale_price: (typeof rest.sale_price === 'number' && !isNaN(rest.sale_price)) 
-        ? toCents(rest.sale_price) 
-        : null,
-    freemius_plan_id: rest.freemius_plan_id ?? null,
-    freemius_product_id: rest.freemius_product_id ?? null,
-    language_id: rest.language_id,
-    translation_group_id: rest.translation_group_id,
-    updated_at: new Date().toISOString(),
-  };
-
   const { data: currentProductMedia } = await supabase
     .from('product_media')
     .select('media_id')
@@ -151,14 +226,11 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
 
   const currentMediaIds = currentProductMedia?.map(pm => pm.media_id) || [];
 
-  const { data: product, error } = await supabase
-    .from('products')
-    .update(productData)
-    .eq('id', id)
-    .select()
-    .single();
+  const { data: productId, error } = await supabase.rpc('upsert_product_with_variants', {
+    product_payload: buildProductRpcPayload(data, id),
+  });
 
-  if (error) throw error;
+  if (error || !productId) throw error || new Error('Failed to update product');
 
   if (data.product_media) {
     await supabase.from('product_media').delete().eq('product_id', id);
@@ -170,18 +242,18 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
       }));
       await supabase.from('product_media').insert(mediaInserts);
     }
-  } else if (media_id) {
+  } else if (data.media_id) {
      await supabase.from('product_media').delete().eq('product_id', id);
      await supabase.from('product_media').insert({
       product_id: id,
-      media_id: media_id,
+      media_id: data.media_id,
       sort_order: 0,
     });
   }
 
   const newMediaIds = data.product_media 
     ? data.product_media.map(m => m.media_id)
-    : (media_id ? [media_id] : []);
+    : (data.media_id ? [data.media_id] : []);
     
   const explicitlyRemovedIds = data.explicitly_removed_media_ids || [];
   const calculatedRemovedIds = currentMediaIds.filter(id => !newMediaIds.includes(id));
@@ -210,6 +282,13 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
       
       if (logosUsageCount && logosUsageCount > 0) continue;
 
+      const { count: variantUsageCount } = await supabase
+        .from('product_variants')
+        .select('*', { count: 'exact', head: true })
+        .eq('main_media_id', removedId);
+
+      if (variantUsageCount && variantUsageCount > 0) continue;
+
       const { data: mediaToDelete } = await supabase
         .from('media')
         .select('object_key, variants')
@@ -229,6 +308,7 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
     }
   }
 
+  const { data: product } = await supabase.from('products').select('*').eq('id', productId).single();
   return product;
 }
 

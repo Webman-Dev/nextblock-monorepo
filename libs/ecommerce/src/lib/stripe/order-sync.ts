@@ -135,7 +135,7 @@ export async function syncStripeOrderFromSession(session: Stripe.Checkout.Sessio
   if (!wasAlreadyPaid) {
     const { data: orderItems, error: itemsError } = await supabase
       .from('order_items')
-      .select('product_id, quantity')
+      .select('product_id, quantity, variant_id')
       .eq('order_id', orderRecord.id);
 
     if (itemsError) {
@@ -143,6 +143,39 @@ export async function syncStripeOrderFromSession(session: Stripe.Checkout.Sessio
     }
 
     for (const item of orderItems ?? []) {
+      if (item.variant_id) {
+        const { data: variant, error: variantError } = await supabase
+          .from('product_variants')
+          .select('id, product_id, stock_quantity')
+          .eq('id', item.variant_id)
+          .single();
+
+        if (!variantError && variant) {
+          const nextVariantStock = Math.max(0, (variant.stock_quantity ?? 0) - item.quantity);
+          await supabase
+            .from('product_variants')
+            .update({ stock_quantity: nextVariantStock })
+            .eq('id', item.variant_id);
+
+          const { data: siblingVariants } = await supabase
+            .from('product_variants')
+            .select('stock_quantity')
+            .eq('product_id', variant.product_id);
+
+          const totalStock = (siblingVariants || []).reduce(
+            (accumulator, sibling) => accumulator + (sibling.stock_quantity ?? 0),
+            0
+          );
+
+          await supabase
+            .from('products')
+            .update({ stock: totalStock })
+            .eq('id', variant.product_id);
+        }
+
+        continue;
+      }
+
       const { data: product, error: productError } = await supabase
         .from('products')
         .select('stock')

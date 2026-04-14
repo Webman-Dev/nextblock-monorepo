@@ -27,6 +27,7 @@ export const useCartStore = create<CartState>()(
       isOpen: false,
       addItem: (newItem) => {
         const { items } = get();
+        const availableStock = typeof newItem.stock === 'number' ? newItem.stock : null;
 
         // --- Digital product middleware ---
         if (isDigitalItem(newItem)) {
@@ -52,7 +53,21 @@ export const useCartStore = create<CartState>()(
         // --- Standard physical product logic ---
         const existingItem = items.find((item) => item.id === newItem.id);
 
+        if (availableStock !== null && availableStock <= 0) {
+          return {
+            success: false,
+            error: 'This item is out of stock.',
+          };
+        }
+
         if (existingItem) {
+          if (availableStock !== null && existingItem.quantity >= availableStock) {
+            return {
+              success: false,
+              error: `Only ${availableStock} available for this item.`,
+            };
+          }
+
           set({
             items: items.map((item) =>
               item.id === newItem.id
@@ -82,6 +97,14 @@ export const useCartStore = create<CartState>()(
         // Guard: digital items are locked at qty 1
         if (targetItem && isDigitalItem(targetItem)) {
           return;
+        }
+
+        if (
+          targetItem &&
+          typeof targetItem.stock === 'number' &&
+          quantity > targetItem.stock
+        ) {
+          quantity = targetItem.stock;
         }
 
         if (quantity <= 0) {

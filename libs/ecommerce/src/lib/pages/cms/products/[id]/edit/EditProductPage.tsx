@@ -1,5 +1,5 @@
 import { ProductForm } from '../../components/ProductForm';
-import { getProduct, getFreemiusPricingByProductId } from '../../actions';
+import { getProduct, getFreemiusPricingByProductId, getGlobalProductAttributes } from '../../actions';
 import { FreemiusPricingDashboard } from '../../components/FreemiusPricingDashboard';
 
 import { DeleteProductButton } from '../../components/DeleteProductButton';
@@ -8,6 +8,9 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@nextblock-cms/ui';
+import { mapRawVariantRelations } from '../../../../../variation-utils';
+import { deleteProductAction, updateProductAction } from '../../server-actions';
+import { getPaymentSettings } from '../../../payments/queries';
 
 interface EditProductPageProps {
   params: Promise<{
@@ -16,8 +19,9 @@ interface EditProductPageProps {
   mediaPickerNode?: React.ReactNode;
   editorNode?: React.ReactNode;
   availableLanguagesProp: any[];
-  languageSwitcherNode?: (product: any) => React.ReactNode;
-  copyContentNode?: (product: any) => React.ReactNode;
+  languageSwitcherNode?: React.ReactNode;
+  copyContentNode?: React.ReactNode;
+  translationCtaNode?: React.ReactNode;
 }
 
 export async function EditProductPage({ 
@@ -26,7 +30,8 @@ export async function EditProductPage({
   editorNode, 
   availableLanguagesProp,
   languageSwitcherNode,
-  copyContentNode
+  copyContentNode,
+  translationCtaNode
 }: EditProductPageProps) {
   const { id } = await params;
   const product = await getProduct(id) as any;
@@ -35,7 +40,32 @@ export async function EditProductPage({
     notFound();
   }
 
-  const pricingPlans = product.freemius_product_id ? await getFreemiusPricingByProductId(product.id) : null;
+  const paymentProvider = await getPaymentSettings();
+  const [pricingPlans, globalAttributesRaw] = await Promise.all([
+    paymentProvider === 'freemius' && product.freemius_product_id
+      ? getFreemiusPricingByProductId(product.id)
+      : Promise.resolve(null),
+    getGlobalProductAttributes(),
+  ]);
+
+  const currentLanguageCode =
+    availableLanguagesProp.find((language) => language.id === product.language_id)?.code;
+  const { attributes: productAttributes, variants } = mapRawVariantRelations(
+    product.product_variants || [],
+    currentLanguageCode
+  );
+  const globalAttributes = (globalAttributesRaw || []).map((attribute: any) => ({
+    id: attribute.id,
+    name: attribute.name,
+    name_translations: attribute.name_translations || {},
+    slug: attribute.slug,
+    terms: (attribute.product_attribute_terms || []).map((term: any) => ({
+      ...term,
+      value_translations: term.value_translations || {},
+    })),
+  }));
+  const DeleteProductButtonComponent = DeleteProductButton;
+  const FreemiusPricingDashboardComponent = FreemiusPricingDashboard;
 
   return (
     <div className="space-y-8 w-full max-w-[1400px] mx-auto px-6 py-8">
@@ -59,14 +89,18 @@ export async function EditProductPage({
           </div>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-           {languageSwitcherNode?.(product)}
-           {copyContentNode?.(product)}
-           <DeleteProductButton 
-                id={product.id} 
-                productName={product.title} 
-                redirectTo="/cms/products"
-                className="border-red-200 hover:bg-red-50 hover:text-red-700"
-            />
+           {languageSwitcherNode}
+           {copyContentNode}
+           {translationCtaNode}
+           {DeleteProductButtonComponent ? (
+             <DeleteProductButtonComponent 
+                  id={product.id} 
+                  productName={product.title} 
+                  redirectTo="/cms/products"
+                  className="border-red-200 hover:bg-red-50 hover:text-red-700"
+                  deleteAction={deleteProductAction.bind(null, product.id)}
+              />
+           ) : null}
             {product.slug && product.status === 'active' && (
                  <Button variant="outline" asChild>
                     <Link href={`/product/${product.slug}`} target="_blank">
@@ -84,25 +118,45 @@ export async function EditProductPage({
             title: product.title,
             slug: product.slug,
             sku: product.sku,
+            upc: product.upc ?? undefined,
             stock: product.stock || 0,
             price: product.price || 0,
             status: product.status as 'draft' | 'active' | 'archived',
             short_description: product.short_description ?? undefined,
             description_json: product.description_json,
-            sale_price: product.sale_price || undefined,
+            sale_price: typeof product.sale_price === 'number' ? product.sale_price : undefined,
             freemius_plan_id: product.freemius_plan_id ?? undefined,
             freemius_product_id: product.freemius_product_id ?? undefined,
             language_id: product.language_id,
             translation_group_id: product.translation_group_id,
             product_media: product.product_media,
+            variation_attributes: productAttributes.map((attribute) => ({
+              attribute_id: attribute.id,
+              term_ids: attribute.terms.map((term) => term.id),
+            })),
+            variants: variants.map((variant) => ({
+              ...variant,
+              upc: variant.upc ?? null,
+              price: variant.price / 100,
+              sale_price:
+                typeof variant.sale_price === 'number' ? variant.sale_price / 100 : null,
+              main_media_id: variant.main_media_id ?? null,
+              main_image_url: variant.image_url ?? null,
+            })),
          }} 
         isEdit 
         mediaPickerNode={mediaPickerNode}
         editorNode={editorNode}
         availableLanguagesProp={availableLanguagesProp}
+        globalAttributesProp={globalAttributes}
+        paymentProvider={paymentProvider}
+        updateAction={updateProductAction.bind(null, product.id)}
         freemiusDashboardNode={
-          product.freemius_product_id && pricingPlans ? (
-            <FreemiusPricingDashboard 
+          paymentProvider === 'freemius' &&
+          product.freemius_product_id &&
+          pricingPlans &&
+          FreemiusPricingDashboardComponent ? (
+            <FreemiusPricingDashboardComponent 
               productId={product.id} 
               freemiusProductId={product.freemius_product_id}
               plans={pricingPlans}

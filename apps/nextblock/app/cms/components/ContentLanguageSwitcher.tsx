@@ -124,7 +124,9 @@ export default function ContentLanguageSwitcher({
           const baseUrl = `/cms/${tableMap[itemType]}`;
           const editUrl = version
             ? `${baseUrl}/${version.id}/edit`
-            : `${baseUrl}/new?from_group=${currentItemAny.translation_group_id}&target_lang_id=${lang.id}&base_slug=${currentItemAny.slug}`; // Example URL for creating new translation
+            : itemType === 'product'
+              ? `${baseUrl}/${currentItemAny.id}/edit?missing_lang_id=${lang.id}`
+              : `${baseUrl}/new?from_group=${currentItemAny.translation_group_id}&target_lang_id=${lang.id}&base_slug=${currentItemAny.slug}`; // Example URL for creating new translation
 
           if (version) {
             return (

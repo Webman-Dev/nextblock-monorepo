@@ -15,6 +15,18 @@ interface FeaturedProductProps {
 
 export const FeaturedProduct = ({ product, className, imagePosition = 'left' }: FeaturedProductProps) => {
   const { t } = useTranslations();
+  const hasVariantPriceRange =
+    Boolean(product.has_variants) &&
+    typeof product.price_range_min === 'number' &&
+    typeof product.price_range_max === 'number';
+  const variantPriceMin = hasVariantPriceRange ? product.price_range_min! : null;
+  const variantPriceMax = hasVariantPriceRange ? product.price_range_max! : null;
+  const priceLabel =
+    hasVariantPriceRange && variantPriceMin !== null && variantPriceMax !== null
+      ? variantPriceMin === variantPriceMax
+        ? `$${(variantPriceMin / 100).toFixed(2)}`
+        : `$${(variantPriceMin / 100).toFixed(2)} - $${(variantPriceMax / 100).toFixed(2)}`
+      : `$${((product.sale_price ?? product.price) / 100).toFixed(2)}`;
   
   return (
     <div className={cn("overflow-hidden rounded-xl border bg-card shadow-sm", className)}>
@@ -45,9 +57,9 @@ export const FeaturedProduct = ({ product, className, imagePosition = 'left' }: 
             
             <div className="mb-6 flex items-baseline gap-3">
                 <span className="text-3xl font-bold text-primary">
-                    ${((product.sale_price ?? product.price) / 100).toFixed(2)}
+                    {priceLabel}
                 </span>
-                {product.sale_price && (
+                {!hasVariantPriceRange && product.sale_price && (
                     <span className="text-lg text-muted-foreground line-through">
                         ${(product.price / 100).toFixed(2)}
                     </span>

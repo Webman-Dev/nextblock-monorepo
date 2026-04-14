@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { getProducts } from './actions';
 import { DeleteProductButton } from './components/DeleteProductButton';
 import { SyncFreemiusButton } from './components/SyncFreemiusButton';
+import { deleteProductAction } from './server-actions';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 
@@ -34,6 +35,9 @@ export async function ProductsPage({
         <div className="flex flex-wrap items-center gap-4">
           <div className="h-10 w-[1px] bg-slate-200 dark:bg-slate-800 mx-2 hidden sm:block"></div>
           {languageFilterNode}
+          <Link href="/cms/products/attributes">
+            <Button variant="outline">Attributes</Button>
+          </Link>
           <SyncFreemiusButton title="Sync Full Store" />
           <Link href="/cms/products/new">
             <Button>New Product</Button>
@@ -117,7 +121,12 @@ export async function ProductsPage({
                         Edit
                       </Button>
                     </Link>
-                    <DeleteProductButton id={product.id} productName={product.title} isIcon />
+                    <DeleteProductButton
+                      id={product.id}
+                      productName={product.title}
+                      isIcon
+                      deleteAction={deleteProductAction.bind(null, product.id)}
+                    />
                   </TableCell>
                 </TableRow>
               ))

@@ -2529,6 +2529,784 @@ GRANT ALL ON TABLE public.products TO service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
 
 
+-- >>> FROM: 20260409000000_setup_product_variations.sql <<<
+-- 20260409000000_setup_product_variations.sql
+-- Module 6: product attributes, terms, variants, and transactional persistence
+
+-- 1. Global product attributes
+CREATE TABLE IF NOT EXISTS public.product_attributes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  slug text NOT NULL UNIQUE,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.product_attribute_terms (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  attribute_id uuid NOT NULL REFERENCES public.product_attributes(id) ON DELETE CASCADE,
+  value text NOT NULL,
+  slug text NOT NULL,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT product_attribute_terms_attribute_id_slug_key UNIQUE (attribute_id, slug)
+);
+
+CREATE TABLE IF NOT EXISTS public.product_variants (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+  sku text NOT NULL,
+  price_adjustment integer NOT NULL DEFAULT 0,
+  stock_quantity integer NOT NULL DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT product_variants_product_id_sku_key UNIQUE (product_id, sku)
+);
+
+CREATE TABLE IF NOT EXISTS public.variant_attribute_mapping (
+  variant_id uuid NOT NULL REFERENCES public.product_variants(id) ON DELETE CASCADE,
+  attribute_term_id uuid NOT NULL REFERENCES public.product_attribute_terms(id) ON DELETE CASCADE,
+  PRIMARY KEY (variant_id, attribute_term_id)
+);
+
+-- 2. Variant-aware order items for fulfillment + stock sync
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'order_items'
+      AND column_name = 'variant_id'
+  ) THEN
+    ALTER TABLE public.order_items
+      ADD COLUMN variant_id uuid REFERENCES public.product_variants(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+-- 3. Performance indexes
+CREATE INDEX IF NOT EXISTS idx_product_attribute_terms_attribute_id
+  ON public.product_attribute_terms(attribute_id);
+
+CREATE INDEX IF NOT EXISTS idx_product_variants_product_id
+  ON public.product_variants(product_id);
+
+CREATE INDEX IF NOT EXISTS idx_variant_attribute_mapping_variant_id
+  ON public.variant_attribute_mapping(variant_id);
+
+CREATE INDEX IF NOT EXISTS idx_variant_attribute_mapping_attribute_term_id
+  ON public.variant_attribute_mapping(attribute_term_id);
+
+CREATE INDEX IF NOT EXISTS idx_order_items_variant_id
+  ON public.order_items(variant_id);
+
+-- 4. RLS
+ALTER TABLE public.product_attributes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_attribute_terms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_variants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.variant_attribute_mapping ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read product_attributes" ON public.product_attributes;
+CREATE POLICY "Public read product_attributes"
+  ON public.product_attributes
+  FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Admins manage product_attributes" ON public.product_attributes;
+CREATE POLICY "Admins manage product_attributes"
+  ON public.product_attributes
+  FOR ALL
+  TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Public read product_attribute_terms" ON public.product_attribute_terms;
+CREATE POLICY "Public read product_attribute_terms"
+  ON public.product_attribute_terms
+  FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Admins manage product_attribute_terms" ON public.product_attribute_terms;
+CREATE POLICY "Admins manage product_attribute_terms"
+  ON public.product_attribute_terms
+  FOR ALL
+  TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Public read product_variants" ON public.product_variants;
+CREATE POLICY "Public read product_variants"
+  ON public.product_variants
+  FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Admins manage product_variants" ON public.product_variants;
+CREATE POLICY "Admins manage product_variants"
+  ON public.product_variants
+  FOR ALL
+  TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Public read variant_attribute_mapping" ON public.variant_attribute_mapping;
+CREATE POLICY "Public read variant_attribute_mapping"
+  ON public.variant_attribute_mapping
+  FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Admins manage variant_attribute_mapping" ON public.variant_attribute_mapping;
+CREATE POLICY "Admins manage variant_attribute_mapping"
+  ON public.variant_attribute_mapping
+  FOR ALL
+  TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+-- 5. Transactional RPC for product + variants
+CREATE OR REPLACE FUNCTION public.upsert_product_with_variants(product_payload jsonb)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_product_id uuid := NULLIF(product_payload->>'id', '')::uuid;
+  v_translation_group_id uuid := NULLIF(product_payload->>'translation_group_id', '')::uuid;
+  v_variants jsonb := COALESCE(product_payload->'variants', '[]'::jsonb);
+  v_variant jsonb;
+  v_variant_id uuid;
+  v_term_id text;
+  v_has_variants boolean := jsonb_typeof(v_variants) = 'array' AND jsonb_array_length(v_variants) > 0;
+  v_total_variant_stock integer := 0;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Admin access required';
+  END IF;
+
+  IF v_has_variants THEN
+    SELECT COALESCE(SUM(COALESCE((value->>'stock_quantity')::integer, 0)), 0)
+      INTO v_total_variant_stock
+    FROM jsonb_array_elements(v_variants);
+  END IF;
+
+  IF v_product_id IS NULL THEN
+    INSERT INTO public.products (
+      title,
+      slug,
+      sku,
+      stock,
+      status,
+      short_description,
+      description_json,
+      metadata,
+      price,
+      sale_price,
+      freemius_plan_id,
+      freemius_product_id,
+      language_id,
+      translation_group_id
+    )
+    VALUES (
+      product_payload->>'title',
+      product_payload->>'slug',
+      product_payload->>'sku',
+      CASE
+        WHEN v_has_variants THEN v_total_variant_stock
+        ELSE COALESCE((product_payload->>'stock')::integer, 0)
+      END,
+      COALESCE(product_payload->>'status', 'draft'),
+      NULLIF(product_payload->>'short_description', ''),
+      product_payload->'description_json',
+      COALESCE(product_payload->'metadata', '{}'::jsonb),
+      COALESCE((product_payload->>'price')::integer, 0),
+      CASE
+        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
+          (product_payload->>'sale_price')::integer
+        ELSE
+          NULL
+      END,
+      NULLIF(product_payload->>'freemius_plan_id', ''),
+      NULLIF(product_payload->>'freemius_product_id', ''),
+      (product_payload->>'language_id')::bigint,
+      COALESCE(v_translation_group_id, gen_random_uuid())
+    )
+    RETURNING id INTO v_product_id;
+  ELSE
+    UPDATE public.products
+    SET
+      title = product_payload->>'title',
+      slug = product_payload->>'slug',
+      sku = product_payload->>'sku',
+      stock = CASE
+        WHEN v_has_variants THEN v_total_variant_stock
+        ELSE COALESCE((product_payload->>'stock')::integer, 0)
+      END,
+      status = COALESCE(product_payload->>'status', status),
+      short_description = NULLIF(product_payload->>'short_description', ''),
+      description_json = product_payload->'description_json',
+      metadata = COALESCE(product_payload->'metadata', '{}'::jsonb),
+      price = COALESCE((product_payload->>'price')::integer, 0),
+      sale_price = CASE
+        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
+          (product_payload->>'sale_price')::integer
+        ELSE
+          NULL
+      END,
+      freemius_plan_id = NULLIF(product_payload->>'freemius_plan_id', ''),
+      freemius_product_id = NULLIF(product_payload->>'freemius_product_id', ''),
+      language_id = COALESCE((product_payload->>'language_id')::bigint, language_id),
+      translation_group_id = COALESCE(v_translation_group_id, translation_group_id),
+      updated_at = now()
+    WHERE id = v_product_id;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Product not found';
+    END IF;
+  END IF;
+
+  DELETE FROM public.variant_attribute_mapping
+  WHERE variant_id IN (
+    SELECT id FROM public.product_variants WHERE product_id = v_product_id
+  );
+
+  DELETE FROM public.product_variants
+  WHERE product_id = v_product_id;
+
+  IF v_has_variants THEN
+    FOR v_variant IN
+      SELECT value FROM jsonb_array_elements(v_variants)
+    LOOP
+      INSERT INTO public.product_variants (
+        product_id,
+        sku,
+        price_adjustment,
+        stock_quantity
+      )
+      VALUES (
+        v_product_id,
+        v_variant->>'sku',
+        COALESCE((v_variant->>'price_adjustment')::integer, 0),
+        COALESCE((v_variant->>'stock_quantity')::integer, 0)
+      )
+      RETURNING id INTO v_variant_id;
+
+      FOR v_term_id IN
+        SELECT jsonb_array_elements_text(COALESCE(v_variant->'attribute_term_ids', '[]'::jsonb))
+      LOOP
+        INSERT INTO public.variant_attribute_mapping (variant_id, attribute_term_id)
+        VALUES (v_variant_id, v_term_id::uuid);
+      END LOOP;
+    END LOOP;
+  END IF;
+
+  RETURN v_product_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.upsert_product_with_variants(jsonb) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.upsert_product_with_variants(jsonb) TO service_role;
+
+-- 6. Grants
+GRANT SELECT ON TABLE public.product_attributes TO anon, authenticated;
+GRANT SELECT ON TABLE public.product_attribute_terms TO anon, authenticated;
+GRANT SELECT ON TABLE public.product_variants TO anon, authenticated;
+GRANT SELECT ON TABLE public.variant_attribute_mapping TO anon, authenticated;
+
+GRANT ALL ON TABLE public.product_attributes TO service_role;
+GRANT ALL ON TABLE public.product_attribute_terms TO service_role;
+GRANT ALL ON TABLE public.product_variants TO service_role;
+GRANT ALL ON TABLE public.variant_attribute_mapping TO service_role;
+
+
+-- >>> FROM: 20260413000000_variant_pricing_and_attribute_term_order.sql <<<
+-- 20260413000000_variant_pricing_and_attribute_term_order.sql
+-- Variant pricing uses explicit price/sale_price and attribute terms get merchant-controlled ordering.
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'product_attribute_terms'
+      AND column_name = 'sort_order'
+  ) THEN
+    ALTER TABLE public.product_attribute_terms
+      ADD COLUMN sort_order integer NOT NULL DEFAULT 0;
+  END IF;
+END $$;
+
+WITH ordered_terms AS (
+  SELECT
+    id,
+    ROW_NUMBER() OVER (
+      PARTITION BY attribute_id
+      ORDER BY created_at ASC NULLS LAST, value ASC, id ASC
+    ) - 1 AS sort_position
+  FROM public.product_attribute_terms
+)
+UPDATE public.product_attribute_terms AS terms
+SET sort_order = ordered_terms.sort_position
+FROM ordered_terms
+WHERE terms.id = ordered_terms.id;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'product_variants'
+      AND column_name = 'price'
+  ) THEN
+    ALTER TABLE public.product_variants
+      ADD COLUMN price integer NOT NULL DEFAULT 0;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'product_variants'
+      AND column_name = 'sale_price'
+  ) THEN
+    ALTER TABLE public.product_variants
+      ADD COLUMN sale_price integer NULL;
+  END IF;
+END $$;
+
+UPDATE public.product_variants AS variants
+SET
+  price = GREATEST(0, COALESCE(products.price, 0) + COALESCE(variants.price_adjustment, 0)),
+  sale_price = CASE
+    WHEN products.sale_price IS NOT NULL THEN
+      GREATEST(0, products.sale_price + COALESCE(variants.price_adjustment, 0))
+    ELSE
+      NULL
+  END
+FROM public.products
+WHERE products.id = variants.product_id
+  AND variants.price = 0
+  AND variants.sale_price IS NULL;
+
+CREATE OR REPLACE FUNCTION public.upsert_product_with_variants(product_payload jsonb)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_product_id uuid := NULLIF(product_payload->>'id', '')::uuid;
+  v_translation_group_id uuid := NULLIF(product_payload->>'translation_group_id', '')::uuid;
+  v_variants jsonb := COALESCE(product_payload->'variants', '[]'::jsonb);
+  v_variant jsonb;
+  v_variant_id uuid;
+  v_term_id text;
+  v_has_variants boolean := jsonb_typeof(v_variants) = 'array' AND jsonb_array_length(v_variants) > 0;
+  v_total_variant_stock integer := 0;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Admin access required';
+  END IF;
+
+  IF v_has_variants THEN
+    SELECT COALESCE(SUM(COALESCE((value->>'stock_quantity')::integer, 0)), 0)
+      INTO v_total_variant_stock
+    FROM jsonb_array_elements(v_variants);
+  END IF;
+
+  IF v_product_id IS NULL THEN
+    INSERT INTO public.products (
+      title,
+      slug,
+      sku,
+      stock,
+      status,
+      short_description,
+      description_json,
+      metadata,
+      price,
+      sale_price,
+      freemius_plan_id,
+      freemius_product_id,
+      language_id,
+      translation_group_id
+    )
+    VALUES (
+      product_payload->>'title',
+      product_payload->>'slug',
+      product_payload->>'sku',
+      CASE
+        WHEN v_has_variants THEN v_total_variant_stock
+        ELSE COALESCE((product_payload->>'stock')::integer, 0)
+      END,
+      COALESCE(product_payload->>'status', 'draft'),
+      NULLIF(product_payload->>'short_description', ''),
+      product_payload->'description_json',
+      COALESCE(product_payload->'metadata', '{}'::jsonb),
+      COALESCE((product_payload->>'price')::integer, 0),
+      CASE
+        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
+          (product_payload->>'sale_price')::integer
+        ELSE
+          NULL
+      END,
+      NULLIF(product_payload->>'freemius_plan_id', ''),
+      NULLIF(product_payload->>'freemius_product_id', ''),
+      (product_payload->>'language_id')::bigint,
+      COALESCE(v_translation_group_id, gen_random_uuid())
+    )
+    RETURNING id INTO v_product_id;
+  ELSE
+    UPDATE public.products
+    SET
+      title = product_payload->>'title',
+      slug = product_payload->>'slug',
+      sku = product_payload->>'sku',
+      stock = CASE
+        WHEN v_has_variants THEN v_total_variant_stock
+        ELSE COALESCE((product_payload->>'stock')::integer, 0)
+      END,
+      status = COALESCE(product_payload->>'status', status),
+      short_description = NULLIF(product_payload->>'short_description', ''),
+      description_json = product_payload->'description_json',
+      metadata = COALESCE(product_payload->'metadata', '{}'::jsonb),
+      price = COALESCE((product_payload->>'price')::integer, 0),
+      sale_price = CASE
+        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
+          (product_payload->>'sale_price')::integer
+        ELSE
+          NULL
+      END,
+      freemius_plan_id = NULLIF(product_payload->>'freemius_plan_id', ''),
+      freemius_product_id = NULLIF(product_payload->>'freemius_product_id', ''),
+      language_id = COALESCE((product_payload->>'language_id')::bigint, language_id),
+      translation_group_id = COALESCE(v_translation_group_id, translation_group_id),
+      updated_at = now()
+    WHERE id = v_product_id;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Product not found';
+    END IF;
+  END IF;
+
+  DELETE FROM public.variant_attribute_mapping
+  WHERE variant_id IN (
+    SELECT id FROM public.product_variants WHERE product_id = v_product_id
+  );
+
+  DELETE FROM public.product_variants
+  WHERE product_id = v_product_id;
+
+  IF v_has_variants THEN
+    FOR v_variant IN
+      SELECT value FROM jsonb_array_elements(v_variants)
+    LOOP
+      INSERT INTO public.product_variants (
+        product_id,
+        sku,
+        price,
+        sale_price,
+        stock_quantity
+      )
+      VALUES (
+        v_product_id,
+        v_variant->>'sku',
+        COALESCE((v_variant->>'price')::integer, 0),
+        CASE
+          WHEN v_variant ? 'sale_price' AND v_variant->>'sale_price' <> '' THEN
+            (v_variant->>'sale_price')::integer
+          ELSE
+            NULL
+        END,
+        COALESCE((v_variant->>'stock_quantity')::integer, 0)
+      )
+      RETURNING id INTO v_variant_id;
+
+      FOR v_term_id IN
+        SELECT jsonb_array_elements_text(COALESCE(v_variant->'attribute_term_ids', '[]'::jsonb))
+      LOOP
+        INSERT INTO public.variant_attribute_mapping (variant_id, attribute_term_id)
+        VALUES (v_variant_id, v_term_id::uuid);
+      END LOOP;
+    END LOOP;
+  END IF;
+
+  RETURN v_product_id;
+END;
+$function$;
+
+
+-- >>> FROM: 20260413010000_product_attribute_translations_and_variant_media.sql <<<
+-- 20260413010000_product_attribute_translations_and_variant_media.sql
+-- Adds attribute/term translations, product/variant UPCs, and per-variant main images.
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'product_attributes'
+      AND column_name = 'name_translations'
+  ) THEN
+    ALTER TABLE public.product_attributes
+      ADD COLUMN name_translations jsonb NOT NULL DEFAULT '{}'::jsonb;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'product_attribute_terms'
+      AND column_name = 'value_translations'
+  ) THEN
+    ALTER TABLE public.product_attribute_terms
+      ADD COLUMN value_translations jsonb NOT NULL DEFAULT '{}'::jsonb;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'products'
+      AND column_name = 'upc'
+  ) THEN
+    ALTER TABLE public.products
+      ADD COLUMN upc text;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'product_variants'
+      AND column_name = 'upc'
+  ) THEN
+    ALTER TABLE public.product_variants
+      ADD COLUMN upc text;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'product_variants'
+      AND column_name = 'main_media_id'
+  ) THEN
+    ALTER TABLE public.product_variants
+      ADD COLUMN main_media_id uuid REFERENCES public.media(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_product_variants_main_media_id
+  ON public.product_variants(main_media_id);
+
+CREATE OR REPLACE FUNCTION public.upsert_product_with_variants(product_payload jsonb)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_product_id uuid := NULLIF(product_payload->>'id', '')::uuid;
+  v_translation_group_id uuid := NULLIF(product_payload->>'translation_group_id', '')::uuid;
+  v_variants jsonb := COALESCE(product_payload->'variants', '[]'::jsonb);
+  v_variant jsonb;
+  v_variant_id uuid;
+  v_term_id text;
+  v_has_variants boolean := jsonb_typeof(v_variants) = 'array' AND jsonb_array_length(v_variants) > 0;
+  v_total_variant_stock integer := 0;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Admin access required';
+  END IF;
+
+  IF v_has_variants THEN
+    SELECT COALESCE(SUM(COALESCE((value->>'stock_quantity')::integer, 0)), 0)
+      INTO v_total_variant_stock
+    FROM jsonb_array_elements(v_variants);
+  END IF;
+
+  IF v_product_id IS NULL THEN
+    INSERT INTO public.products (
+      title,
+      slug,
+      sku,
+      upc,
+      stock,
+      status,
+      short_description,
+      description_json,
+      metadata,
+      price,
+      sale_price,
+      freemius_plan_id,
+      freemius_product_id,
+      language_id,
+      translation_group_id
+    )
+    VALUES (
+      product_payload->>'title',
+      product_payload->>'slug',
+      product_payload->>'sku',
+      NULLIF(product_payload->>'upc', ''),
+      CASE
+        WHEN v_has_variants THEN v_total_variant_stock
+        ELSE COALESCE((product_payload->>'stock')::integer, 0)
+      END,
+      COALESCE(product_payload->>'status', 'draft'),
+      NULLIF(product_payload->>'short_description', ''),
+      product_payload->'description_json',
+      COALESCE(product_payload->'metadata', '{}'::jsonb),
+      COALESCE((product_payload->>'price')::integer, 0),
+      CASE
+        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
+          (product_payload->>'sale_price')::integer
+        ELSE
+          NULL
+      END,
+      NULLIF(product_payload->>'freemius_plan_id', ''),
+      NULLIF(product_payload->>'freemius_product_id', ''),
+      (product_payload->>'language_id')::bigint,
+      COALESCE(v_translation_group_id, gen_random_uuid())
+    )
+    RETURNING id INTO v_product_id;
+  ELSE
+    UPDATE public.products
+    SET
+      title = product_payload->>'title',
+      slug = product_payload->>'slug',
+      sku = product_payload->>'sku',
+      upc = NULLIF(product_payload->>'upc', ''),
+      stock = CASE
+        WHEN v_has_variants THEN v_total_variant_stock
+        ELSE COALESCE((product_payload->>'stock')::integer, 0)
+      END,
+      status = COALESCE(product_payload->>'status', status),
+      short_description = NULLIF(product_payload->>'short_description', ''),
+      description_json = product_payload->'description_json',
+      metadata = COALESCE(product_payload->'metadata', '{}'::jsonb),
+      price = COALESCE((product_payload->>'price')::integer, 0),
+      sale_price = CASE
+        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
+          (product_payload->>'sale_price')::integer
+        ELSE
+          NULL
+      END,
+      freemius_plan_id = NULLIF(product_payload->>'freemius_plan_id', ''),
+      freemius_product_id = NULLIF(product_payload->>'freemius_product_id', ''),
+      language_id = COALESCE((product_payload->>'language_id')::bigint, language_id),
+      translation_group_id = COALESCE(v_translation_group_id, translation_group_id),
+      updated_at = now()
+    WHERE id = v_product_id;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Product not found';
+    END IF;
+  END IF;
+
+  DELETE FROM public.variant_attribute_mapping
+  WHERE variant_id IN (
+    SELECT id FROM public.product_variants WHERE product_id = v_product_id
+  );
+
+  DELETE FROM public.product_variants
+  WHERE product_id = v_product_id;
+
+  IF v_has_variants THEN
+    FOR v_variant IN
+      SELECT value FROM jsonb_array_elements(v_variants)
+    LOOP
+      INSERT INTO public.product_variants (
+        product_id,
+        sku,
+        upc,
+        price,
+        sale_price,
+        stock_quantity,
+        main_media_id
+      )
+      VALUES (
+        v_product_id,
+        v_variant->>'sku',
+        NULLIF(v_variant->>'upc', ''),
+        COALESCE((v_variant->>'price')::integer, 0),
+        CASE
+          WHEN v_variant ? 'sale_price' AND v_variant->>'sale_price' <> '' THEN
+            (v_variant->>'sale_price')::integer
+          ELSE
+            NULL
+        END,
+        COALESCE((v_variant->>'stock_quantity')::integer, 0),
+        NULLIF(v_variant->>'main_media_id', '')::uuid
+      )
+      RETURNING id INTO v_variant_id;
+
+      FOR v_term_id IN
+        SELECT jsonb_array_elements_text(COALESCE(v_variant->'attribute_term_ids', '[]'::jsonb))
+      LOOP
+        INSERT INTO public.variant_attribute_mapping (variant_id, attribute_term_id)
+        VALUES (v_variant_id, v_term_id::uuid);
+      END LOOP;
+    END LOOP;
+  END IF;
+
+  RETURN v_product_id;
+END;
+$function$;
+
+
+-- >>> FROM: 20260414000000_add_product_variation_translation_keys.sql <<<
+-- Adds missing storefront translation keys for variable-product UX copy.
+
+INSERT INTO public.translations (key, translations)
+VALUES
+  (
+    'ecommerce.choose_your_options',
+    '{"en": "Choose Your Options", "fr": "Choisissez vos options"}'::jsonb
+  ),
+  (
+    'ecommerce.variant_availability_help',
+    '{"en": "Select a combination to resolve the exact variant price and availability.", "fr": "Selectionnez une combinaison pour afficher le prix exact et la disponibilite de la variante."}'::jsonb
+  ),
+  (
+    'ecommerce.in_stock',
+    '{"en": "{count} in stock", "fr": "{count} en stock"}'::jsonb
+  ),
+  (
+    'ecommerce.out_of_stock',
+    '{"en": "Out of stock", "fr": "Rupture de stock"}'::jsonb
+  ),
+  (
+    'ecommerce.select_options',
+    '{"en": "Select Options", "fr": "Choisir des options"}'::jsonb
+  ),
+  (
+    'ecommerce.variant_selection_required',
+    '{"en": "Select one term from every dropdown to resolve a variation.", "fr": "Selectionnez une valeur dans chaque liste pour afficher la variante correspondante."}'::jsonb
+  )
+ON CONFLICT (key) DO UPDATE
+SET
+  translations = EXCLUDED.translations,
+  updated_at = now();
+
+
   -- Step D: Anchor demo profile
   INSERT INTO public.profiles (id, updated_at, full_name, avatar_url, website, role)
   SELECT '63a8aa07-ef6e-4cc7-bafa-ece023c74366'::uuid, NULL, NULL, NULL, NULL, 'ADMIN'

@@ -12,6 +12,7 @@ import { Minus, Plus, Trash2 } from 'lucide-react';
 import { useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
 import { useTranslations } from '@nextblock-cms/utils';
+import { isDigitalItem } from '../types';
 
 
 
@@ -62,9 +63,14 @@ export const CartDrawer = () => {
 
                 <div className="flex flex-1 flex-col justify-between">
                   <div className="flex justify-between gap-2">
-                    <span className="line-clamp-2 text-sm font-medium leading-tight">
-                      {item.title}
-                    </span>
+                    <div>
+                      <span className="line-clamp-2 text-sm font-medium leading-tight">
+                        {item.title}
+                      </span>
+                      {item.variant_label && (
+                        <div className="mt-1 text-xs text-muted-foreground">{item.variant_label}</div>
+                      )}
+                    </div>
                     <span className="text-sm font-semibold">
                       {item.sale_price && (
                         <span className="text-xs text-muted-foreground line-through mr-1.5 font-normal">
@@ -81,6 +87,7 @@ export const CartDrawer = () => {
                         onClick={() => updateQuantity(item.id, item.quantity - 1)}
                         className="flex h-7 w-7 items-center justify-center border-r"
                         type="button"
+                        disabled={isDigitalItem(item)}
                       >
                         <Minus className="h-3 w-3" />
                       </button>
@@ -91,6 +98,7 @@ export const CartDrawer = () => {
                         onClick={() => updateQuantity(item.id, item.quantity + 1)}
                         className="flex h-7 w-7 items-center justify-center border-l"
                         type="button"
+                        disabled={isDigitalItem(item) || (typeof item.stock === 'number' && item.quantity >= item.stock)}
                       >
                         <Plus className="h-3 w-3" />
                       </button>

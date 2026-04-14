@@ -559,6 +559,11 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                         )}
                         <div className="grid gap-0.5">
                           <span className="font-medium text-xs line-clamp-1">{item.title}</span>
+                          {item.variant_label && (
+                            <span className="text-[10px] text-muted-foreground line-clamp-1">
+                              {item.variant_label}
+                            </span>
+                          )}
                           <span className="text-[10px] text-muted-foreground">
                             {t('ecommerce.qty')}: {item.quantity}
                           </span>

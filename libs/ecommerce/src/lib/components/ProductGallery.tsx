@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@nextblock-cms/utils';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface ProductGalleryProps {
   images?: { url: string; alt?: string }[];
@@ -10,6 +10,10 @@ interface ProductGalleryProps {
 
 export const ProductGallery = ({ images = [], className }: ProductGalleryProps) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [images]);
 
   // Fallback if no images provided
   if (!images.length) {

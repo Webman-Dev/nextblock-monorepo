@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@nextblock-cms/db/server';
+import { createClient, getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
 import { 
   getProduct as getProductLib, 
   getProducts as getProductsLib
@@ -69,6 +69,40 @@ export async function getProductTranslations(translationGroupId: string) {
     
   if (error) throw new Error(error.message);
   return data;
+}
+
+export async function getGlobalProductAttributes() {
+  const supabase = getServiceRoleSupabaseClient();
+  const { data, error } = await supabase
+    .from('product_attributes')
+    .select(`
+      id,
+      name,
+      name_translations,
+      slug,
+      product_attribute_terms (
+        id,
+        attribute_id,
+        value,
+        slug,
+        sort_order,
+        value_translations
+      )
+    `);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data || [])
+    .map((attribute: any) => ({
+      ...attribute,
+      product_attribute_terms: (attribute.product_attribute_terms || []).sort((a: any, b: any) =>
+        (a.sort_order ?? Number.MAX_SAFE_INTEGER) - (b.sort_order ?? Number.MAX_SAFE_INTEGER) ||
+        a.value.localeCompare(b.value)
+      ),
+    }))
+    .sort((a: any, b: any) => a.name.localeCompare(b.name));
 }
 
 export async function getFreemiusPricingByProductId(productId: string) {

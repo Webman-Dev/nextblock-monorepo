@@ -81,6 +81,11 @@ export const Cart = () => {
                         )}
                         <div>
                           <div className="font-medium">{item.title}</div>
+                          {item.variant_label && (
+                             <div className="text-xs text-muted-foreground mt-1">
+                                {item.variant_label}
+                             </div>
+                          )}
                           {isDigitalItem(item) && item.billing_cycle && (
                              <div className="text-xs text-muted-foreground capitalize mt-1">
                                 {item.billing_cycle} Subscription
@@ -110,6 +115,7 @@ export const Cart = () => {
                                     size="icon"
                                     className="h-8 w-8"
                                     onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                    disabled={typeof item.stock === 'number' && item.quantity >= item.stock}
                                 >
                                     <Plus className="h-4 w-4" />
                                 </Button>

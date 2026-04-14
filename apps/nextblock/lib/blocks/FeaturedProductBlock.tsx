@@ -1,5 +1,6 @@
 import { FeaturedProduct } from '@nextblock-cms/ecommerce';
 import { getProduct } from '@nextblock-cms/ecommerce/server';
+import { getVariantEffectivePriceRange } from '@nextblock-cms/ecommerce';
 
 import { FeaturedProductBlockContent } from './ecommerce-block-schemas';
 import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
@@ -20,18 +21,29 @@ export const FeaturedProductBlock = async ({ content }: { content: FeaturedProdu
      imageUrl = `${process.env.NEXT_PUBLIC_R2_BASE_URL}/${mediaItem.file_path}`;
   }
 
+  const variantPriceRange = getVariantEffectivePriceRange(
+    ((product as any).product_variants || []).map((variant: any) => ({
+      price: variant.price,
+      sale_price: variant.sale_price,
+    }))
+  );
+
   const uiProduct = {
     id: product.id,
     title: product.title,
     slug: product.slug,
     sku: product.sku,
+    upc: product.upc || undefined,
     price: product.price,
     sale_price: typeof product.sale_price === 'number' ? product.sale_price : undefined,
+    price_range_min: variantPriceRange?.min ?? null,
+    price_range_max: variantPriceRange?.max ?? null,
     image_url: imageUrl,
     short_description: product.short_description || undefined,
     stock: product.stock,
     language_id: product.language_id,
     translation_group_id: product.translation_group_id || "",
+    has_variants: (product.product_variants?.length || 0) > 0,
   };
 
   return (

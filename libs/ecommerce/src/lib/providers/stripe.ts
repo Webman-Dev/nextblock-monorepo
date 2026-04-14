@@ -34,9 +34,12 @@ export class StripeProvider implements PaymentProvider {
     }
 
     const productIds = cartItems.map((item) => item.product_id);
+    const variantIds = cartItems
+      .map((item) => item.variant_id)
+      .filter((variantId): variantId is string => Boolean(variantId));
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, title, price, sale_price')
+      .select('id, title, price, sale_price, stock')
       .in('id', productIds);
 
     if (productsError || !products) {
@@ -44,12 +47,26 @@ export class StripeProvider implements PaymentProvider {
       return { error: 'Failed to validate product prices', url: null };
     }
 
+    const { data: variants, error: variantsError } = variantIds.length
+      ? await supabase
+          .from('product_variants')
+          .select('id, product_id, sku, price, sale_price, stock_quantity')
+          .in('id', variantIds)
+      : { data: [], error: null };
+
+    if (variantsError) {
+      console.error('Error fetching variants for validation:', variantsError);
+      return { error: 'Failed to validate product variants', url: null };
+    }
+
     const productMap = new Map(products.map((product) => [product.id, product]));
+    const variantMap = new Map((variants || []).map((variant) => [variant.id, variant]));
     const lineItems: any[] = [];
     const verifiedItems: Array<{
       product_id: string;
       quantity: number;
       price_at_purchase: number;
+      variant_id?: string | null;
     }> = [];
     let totalAmount = 0;
 
@@ -61,16 +78,50 @@ export class StripeProvider implements PaymentProvider {
         continue;
       }
 
-      const unitAmount =
+      let unitAmount =
         typeof product.sale_price === 'number' ? product.sale_price : product.price;
+      let lineItemName = product.title;
+      let resolvedVariantId: string | null = null;
+
+      if (cartItem.variant_id) {
+        const variant = variantMap.get(cartItem.variant_id);
+
+        if (!variant || variant.product_id !== cartItem.product_id) {
+          return { error: 'Selected product variation is no longer available.', url: null };
+        }
+
+        if (cartItem.quantity > variant.stock_quantity) {
+          return {
+            error: `Only ${variant.stock_quantity} units remain for ${cartItem.title}.`,
+            url: null,
+          };
+        }
+
+        unitAmount =
+          typeof variant.sale_price === 'number' ? variant.sale_price : variant.price;
+        resolvedVariantId = variant.id;
+        lineItemName = cartItem.variant_label
+          ? `${product.title} - ${cartItem.variant_label}`
+          : `${product.title} - ${variant.sku}`;
+      } else if (typeof product.stock === 'number' && cartItem.quantity > product.stock) {
+        return {
+          error: `Only ${product.stock} units remain for ${cartItem.title}.`,
+          url: null,
+        };
+      }
+
+      if (unitAmount < 0) {
+        return { error: 'A product variation produced an invalid price.', url: null };
+      }
 
       lineItems.push({
         price_data: {
           currency: 'usd',
           product_data: {
-            name: product.title,
+            name: lineItemName,
             metadata: {
               productId: product.id,
+              variantId: resolvedVariantId || '',
             },
           },
           unit_amount: unitAmount,
@@ -83,6 +134,7 @@ export class StripeProvider implements PaymentProvider {
         product_id: product.id,
         quantity: cartItem.quantity,
         price_at_purchase: unitAmount,
+        variant_id: resolvedVariantId,
       });
     }
 
@@ -150,6 +202,7 @@ export class StripeProvider implements PaymentProvider {
       verifiedItems.map((item) => ({
         order_id: orderId,
         product_id: item.product_id,
+        variant_id: item.variant_id ?? null,
         quantity: item.quantity,
         price_at_purchase: item.price_at_purchase,
       }))

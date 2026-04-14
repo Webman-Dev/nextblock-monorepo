@@ -1,12 +1,15 @@
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { redirect } from 'next/navigation';
-import { NewProductPage as NewProductPageUI } from '@nextblock-cms/ecommerce/server';
-import MediaPickerDialog from '../../media/components/MediaPickerDialog';
-import { ClientNotionEditor as NotionEditor } from '../ClientNotionEditor';
-
 import { getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
 import { createClient } from '@nextblock-cms/db/server';
 import { getProduct } from '@nextblock-cms/ecommerce/server';
+import { mapRawVariantRelations } from '@nextblock-cms/ecommerce';
+import ProductFormClientShell from '../ProductFormClientShell';
+import {
+  getGlobalProductAttributes,
+} from '../../../../../../libs/ecommerce/src/lib/pages/cms/products/actions';
+import { createProductAction } from '../../../../../../libs/ecommerce/src/lib/pages/cms/products/server-actions';
+import { getPaymentSettings } from '../../../../../../libs/ecommerce/src/lib/pages/cms/payments/queries';
 
 export default async function NewProductPage({ 
   searchParams 
@@ -24,7 +27,7 @@ export default async function NewProductPage({
       redirect('/cms/settings/packages');
   }
 
-  let initialData = null;
+  let initialData: any = null;
   if (from_group) {
     try {
       const supabase = createClient();
@@ -59,21 +62,61 @@ export default async function NewProductPage({
     }
   }
 
-  return (
-    <NewProductPageUI 
-      mediaPickerNode={
-        <MediaPickerDialog
-          triggerLabel="+ Add Image"
-          triggerVariant="outline"
-          defaultFolder="uploads/products/"
-        />
+  const paymentProvider = await getPaymentSettings();
+  const globalAttributesRaw = await getGlobalProductAttributes();
+  const globalAttributes = (globalAttributesRaw || []).map((attribute: any) => ({
+    id: attribute.id,
+    name: attribute.name,
+    name_translations: attribute.name_translations || {},
+    slug: attribute.slug,
+    terms: (attribute.product_attribute_terms || []).map((term: any) => ({
+      ...term,
+      value_translations: term.value_translations || {},
+    })),
+  }));
+  const initialLanguageCode =
+    languages.find((lang) => lang.id === initialData?.language_id)?.code ||
+    languages.find((lang) => lang.id === (target_lang_id ? parseInt(target_lang_id, 10) : undefined))?.code ||
+    languages.find((lang) => lang.is_default)?.code;
+  const { attributes: productAttributes, variants } = mapRawVariantRelations(
+    initialData?.product_variants || [],
+    initialLanguageCode
+  );
+  const normalizedInitialData: any = initialData
+    ? {
+        ...initialData,
+        variation_attributes:
+          initialData.variation_attributes ||
+          productAttributes.map((attribute) => ({
+            attribute_id: attribute.id,
+            term_ids: attribute.terms.map((term) => term.id),
+          })),
+        variants:
+          initialData.variants ||
+          variants.map((variant) => ({
+            ...variant,
+            upc: variant.upc ?? null,
+            price: variant.price / 100,
+            sale_price:
+              typeof variant.sale_price === 'number' ? variant.sale_price / 100 : null,
+            main_media_id: variant.main_media_id ?? null,
+            main_image_url: variant.image_url ?? null,
+          })),
       }
-      editorNode={<NotionEditor />}
-      availableLanguagesProp={languages}
-      translationGroupId={from_group}
-      targetLanguageId={target_lang_id}
-      initialData={initialData}
-    />
+    : undefined;
+
+  return (
+    <div className="p-8">
+      <ProductFormClientShell
+        availableLanguagesProp={languages}
+        globalAttributesProp={globalAttributes}
+        translationGroupId={from_group}
+        targetLanguageId={target_lang_id}
+        initialData={normalizedInitialData}
+        paymentProvider={paymentProvider}
+        createAction={createProductAction}
+      />
+    </div>
   );
 }
 

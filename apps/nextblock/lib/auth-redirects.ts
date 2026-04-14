@@ -31,7 +31,7 @@ export function resolvePostAuthRedirect(
   }
 
   if (role === 'ADMIN' || role === 'WRITER') {
-    return DASHBOARD_PATH;
+    return safePath ?? DASHBOARD_PATH;
   }
 
   if (!isCustomerProfileComplete(profile)) {

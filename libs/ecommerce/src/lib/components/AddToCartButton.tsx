@@ -3,6 +3,7 @@
 import { Button } from '@nextblock-cms/ui';
 import { ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
+import Link from 'next/link';
 
 import { useCart } from '../use-cart';
 import { useTranslations } from '@nextblock-cms/utils';
@@ -19,6 +20,16 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
   // or use store directly since this action is client-side interaction anyway.
   const store = useCart((state) => state);
   const { t } = useTranslations();
+  const requiresVariantSelection =
+    Boolean(product.has_variants) && !product.variant_id && !(product as any).freemius_product_id;
+
+  if (requiresVariantSelection) {
+    return (
+      <Button asChild className={className}>
+        <Link href={`/product/${product.slug}`}>Select Options</Link>
+      </Button>
+    );
+  }
 
   if (!store) {
     return (
@@ -34,7 +45,7 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
   const handleAddToCart = () => {
 
     const { success, error } = addItem({
-      id: product.id,
+      id: product.variant_id || product.id,
       product_id: product.id,
       title: product.title,
       price: product.price,
@@ -42,9 +53,14 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
       image_url: product.image_url,
       slug: product.slug,
       sku: product.sku,
+      stock: product.stock,
       language_id: product.language_id,
       translation_group_id: product.translation_group_id,
       freemius_product_id: product.freemius_product_id, // include just in case it wasn't intercepted
+      has_variants: product.has_variants,
+      variant_id: product.variant_id,
+      variant_label: product.variant_label,
+      selected_options: product.selected_options,
     });
 
     if (success) {

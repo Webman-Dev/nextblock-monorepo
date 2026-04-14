@@ -20,5 +20,6 @@ export * from './lib/types';
 export * from './lib/product-schema';
 export * from './lib/product-context';
 export * from './lib/components/ProductDetailsLayout';
+export * from './lib/variation-utils';
 // Server-side logic should be imported from @nextblock-cms/ecommerce/server or explicitly skipped here if using barelling limits.
 // We removed server exports from here in the previous step, so this is correct.

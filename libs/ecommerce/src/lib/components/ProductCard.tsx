@@ -11,6 +11,19 @@ interface ProductCardProps {
 }
 
 export const ProductCard = ({ product, className }: ProductCardProps) => {
+  const hasVariantPriceRange =
+    Boolean(product.has_variants) &&
+    typeof product.price_range_min === 'number' &&
+    typeof product.price_range_max === 'number';
+  const variantPriceMin = hasVariantPriceRange ? product.price_range_min! : null;
+  const variantPriceMax = hasVariantPriceRange ? product.price_range_max! : null;
+  const priceLabel =
+    hasVariantPriceRange && variantPriceMin !== null && variantPriceMax !== null
+      ? variantPriceMin === variantPriceMax
+        ? `$${(variantPriceMin / 100).toFixed(2)}`
+        : `$${(variantPriceMin / 100).toFixed(2)} - $${(variantPriceMax / 100).toFixed(2)}`
+      : `$${((product.sale_price ?? product.price) / 100).toFixed(2)}`;
+
   return (
     <div className={cn("group relative flex flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition-all hover:shadow-md", className)}>
       <Link href={`/product/${product.slug}`} className="relative aspect-square overflow-hidden bg-neutral-100">
@@ -36,9 +49,9 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
         
         <div className="mb-4 flex items-baseline gap-2">
           <span className="text-xl font-bold text-primary">
-            ${((product.sale_price ?? product.price) / 100).toFixed(2)}
+            {priceLabel}
           </span>
-          {product.sale_price && (
+          {!hasVariantPriceRange && product.sale_price && (
             <span className="text-sm text-muted-foreground line-through">
               ${(product.price / 100).toFixed(2)}
             </span>
