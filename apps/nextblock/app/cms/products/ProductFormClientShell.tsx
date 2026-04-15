@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
+import { ProductForm } from '@nextblock-cms/ecommerce';
 import MediaPickerDialog from '../media/components/MediaPickerDialog';
 import { ClientNotionEditor as NotionEditor } from './ClientNotionEditor';
-import { ProductForm } from '../../../../../libs/ecommerce/src/lib/pages/cms/products/components/ProductForm';
 type ProductFormClientShellProps = React.ComponentProps<typeof ProductForm>;
 
 export default function ProductFormClientShell(props: ProductFormClientShellProps) {

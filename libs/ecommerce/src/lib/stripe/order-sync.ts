@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@nextblock-cms/db';
 import {
   CustomerAddressInput,
   normalizeCustomerAddress,
@@ -7,6 +8,7 @@ import {
   type OrderCustomerDetails,
 } from '../customer';
 import { upsertDefaultUserAddresses } from '../customer-addresses';
+import { applyOrderInventoryDeduction } from '../order-inventory';
 
 function getServiceRoleSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -16,7 +18,7 @@ function getServiceRoleSupabaseClient() {
     throw new Error('Missing Supabase Service Role environment variables');
   }
 
-  return createSupabaseClient(supabaseUrl, serviceRoleKey, {
+  return createSupabaseClient<Database>(supabaseUrl, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -106,7 +108,7 @@ export async function syncStripeOrderFromSession(session: Stripe.Checkout.Sessio
     payment_intent_id:
       typeof session.payment_intent === 'string' ? session.payment_intent : null,
     provider: 'stripe',
-    customer_details: mergedCustomerDetails,
+    customer_details: mergedCustomerDetails as any,
     total: typeof session.amount_total === 'number' ? session.amount_total : orderRecord.total,
   };
 
@@ -132,64 +134,7 @@ export async function syncStripeOrderFromSession(session: Stripe.Checkout.Sessio
     }
   }
 
-  if (!wasAlreadyPaid) {
-    const { data: orderItems, error: itemsError } = await supabase
-      .from('order_items')
-      .select('product_id, quantity, variant_id')
-      .eq('order_id', orderRecord.id);
-
-    if (itemsError) {
-      throw new Error(itemsError.message);
-    }
-
-    for (const item of orderItems ?? []) {
-      if (item.variant_id) {
-        const { data: variant, error: variantError } = await supabase
-          .from('product_variants')
-          .select('id, product_id, stock_quantity')
-          .eq('id', item.variant_id)
-          .single();
-
-        if (!variantError && variant) {
-          const nextVariantStock = Math.max(0, (variant.stock_quantity ?? 0) - item.quantity);
-          await supabase
-            .from('product_variants')
-            .update({ stock_quantity: nextVariantStock })
-            .eq('id', item.variant_id);
-
-          const { data: siblingVariants } = await supabase
-            .from('product_variants')
-            .select('stock_quantity')
-            .eq('product_id', variant.product_id);
-
-          const totalStock = (siblingVariants || []).reduce(
-            (accumulator, sibling) => accumulator + (sibling.stock_quantity ?? 0),
-            0
-          );
-
-          await supabase
-            .from('products')
-            .update({ stock: totalStock })
-            .eq('id', variant.product_id);
-        }
-
-        continue;
-      }
-
-      const { data: product, error: productError } = await supabase
-        .from('products')
-        .select('stock')
-        .eq('id', item.product_id)
-        .single();
-
-      if (productError || typeof product?.stock !== 'number') {
-        continue;
-      }
-
-      const nextStock = Math.max(0, product.stock - item.quantity);
-      await supabase.from('products').update({ stock: nextStock }).eq('id', item.product_id);
-    }
-  }
+  await applyOrderInventoryDeduction(supabase, orderRecord.id);
 
   return {
     orderId: orderRecord.id,

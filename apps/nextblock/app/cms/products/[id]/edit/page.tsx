@@ -14,12 +14,12 @@ import {
 } from '@nextblock-cms/ui';
 import ProductFormClientShell from '../../ProductFormClientShell';
 import {
-  getProduct,
+  getCmsProduct,
   getGlobalProductAttributes,
   getProductTranslations,
-} from '../../../../../../../libs/ecommerce/src/lib/pages/cms/products/actions';
-import { updateProductAction } from '../../../../../../../libs/ecommerce/src/lib/pages/cms/products/server-actions';
-import { getPaymentSettings } from '../../../../../../../libs/ecommerce/src/lib/pages/cms/payments/queries';
+  getPaymentSettings,
+  updateProductAction,
+} from '@nextblock-cms/ecommerce/server';
 import {
   buildGlobalAttributesForForm,
   buildProductFormInitialData,
@@ -45,7 +45,7 @@ export default async function EditProductPage({
     redirect('/cms/settings/packages');
   }
 
-  const product = await getProduct(id);
+  const product = await getCmsProduct(id);
 
   if (!product) {
     notFound();

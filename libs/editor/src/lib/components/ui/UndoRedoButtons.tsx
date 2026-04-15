@@ -56,6 +56,7 @@ export const UndoRedoButtons: React.FC<UndoRedoButtonsProps> = ({
     <div className={cn('flex items-center gap-1', className)}>
       {/* Undo Button - Enhanced visibility */}
       <Button
+        type="button"
         variant={canUndo ? "outline" : "ghost"}
         size={buttonSize}
         onClick={undo}
@@ -82,6 +83,7 @@ export const UndoRedoButtons: React.FC<UndoRedoButtonsProps> = ({
 
       {/* Redo Button - Enhanced visibility */}
       <Button
+        type="button"
         variant={canRedo ? "outline" : "ghost"}
         size={buttonSize}
         onClick={redo}

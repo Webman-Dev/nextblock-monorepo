@@ -20,6 +20,24 @@ interface CartState {
   setItems: (items: CartItem[]) => void;
 }
 
+function getAllocatedSkuQuantity(
+  items: CartItem[],
+  sku: string,
+  excludedItemId?: string
+) {
+  return items.reduce((accumulator, item) => {
+    if (
+      isDigitalItem(item) ||
+      item.sku !== sku ||
+      (excludedItemId && item.id === excludedItemId)
+    ) {
+      return accumulator;
+    }
+
+    return accumulator + item.quantity;
+  }, 0);
+}
+
 export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
@@ -28,6 +46,8 @@ export const useCartStore = create<CartState>()(
       addItem: (newItem) => {
         const { items } = get();
         const availableStock = typeof newItem.stock === 'number' ? newItem.stock : null;
+        const allocatedSkuQuantity =
+          availableStock !== null ? getAllocatedSkuQuantity(items, newItem.sku) : 0;
 
         // --- Digital product middleware ---
         if (isDigitalItem(newItem)) {
@@ -60,14 +80,14 @@ export const useCartStore = create<CartState>()(
           };
         }
 
-        if (existingItem) {
-          if (availableStock !== null && existingItem.quantity >= availableStock) {
-            return {
-              success: false,
-              error: `Only ${availableStock} available for this item.`,
-            };
-          }
+        if (availableStock !== null && allocatedSkuQuantity >= availableStock) {
+          return {
+            success: false,
+            error: `Only ${availableStock} available for this SKU.`,
+          };
+        }
 
+        if (existingItem) {
           set({
             items: items.map((item) =>
               item.id === newItem.id
@@ -102,9 +122,14 @@ export const useCartStore = create<CartState>()(
         if (
           targetItem &&
           typeof targetItem.stock === 'number' &&
-          quantity > targetItem.stock
+          quantity +
+            getAllocatedSkuQuantity(items, targetItem.sku, itemId) >
+            targetItem.stock
         ) {
-          quantity = targetItem.stock;
+          quantity = Math.max(
+            targetItem.stock - getAllocatedSkuQuantity(items, targetItem.sku, itemId),
+            0
+          );
         }
 
         if (quantity <= 0) {

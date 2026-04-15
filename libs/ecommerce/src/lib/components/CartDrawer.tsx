@@ -25,6 +25,14 @@ export const CartDrawer = () => {
   if (!store) return null;
 
   const { isOpen, setIsOpen, items, updateQuantity, removeItem } = store;
+  const getAllocatedSkuQuantity = (sku: string) =>
+    items.reduce((accumulator, cartItem) => {
+      if (isDigitalItem(cartItem) || cartItem.sku !== sku) {
+        return accumulator;
+      }
+
+      return accumulator + cartItem.quantity;
+    }, 0);
 
   const handleViewCart = () => {
     setIsOpen(false);
@@ -45,76 +53,86 @@ export const CartDrawer = () => {
         
         {items.length > 0 ? (
            <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-1 pr-6 pt-4">
-            {items.map((item) => (
-              <div key={item.id} className="flex gap-4">
-                {item.image_url ? (
-                  <div className="relative aspect-square h-20 w-20 min-w-fit overflow-hidden rounded border bg-neutral-100">
-                    <img 
-                      src={item.image_url} 
-                      alt={item.title}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                ) : (
-                  <div className="flex h-20 w-20 items-center justify-center rounded bg-secondary">
-                     <span className="text-xs text-muted-foreground">{t('ecommerce.no_image')}</span>
-                  </div>
-                )}
+            {items.map((item) => {
+              const allocatedSkuQuantity = getAllocatedSkuQuantity(item.sku);
 
-                <div className="flex flex-1 flex-col justify-between">
-                  <div className="flex justify-between gap-2">
-                    <div>
-                      <span className="line-clamp-2 text-sm font-medium leading-tight">
-                        {item.title}
-                      </span>
-                      {item.variant_label && (
-                        <div className="mt-1 text-xs text-muted-foreground">{item.variant_label}</div>
-                      )}
+              return (
+                <div key={item.id} className="flex gap-4">
+                  {item.image_url ? (
+                    <div className="relative aspect-square h-20 w-20 min-w-fit overflow-hidden rounded border bg-neutral-100">
+                      <img
+                        src={item.image_url}
+                        alt={item.title}
+                        className="h-full w-full object-cover"
+                      />
                     </div>
-                    <span className="text-sm font-semibold">
-                      {item.sale_price && (
-                        <span className="text-xs text-muted-foreground line-through mr-1.5 font-normal">
-                          ${(item.price / 100).toFixed(2)}
+                  ) : (
+                    <div className="flex h-20 w-20 items-center justify-center rounded bg-secondary">
+                      <span className="text-xs text-muted-foreground">{t('ecommerce.no_image')}</span>
+                    </div>
+                  )}
+
+                  <div className="flex flex-1 flex-col justify-between">
+                    <div className="flex justify-between gap-2">
+                      <div>
+                        <span className="line-clamp-2 text-sm font-medium leading-tight">
+                          {item.title}
                         </span>
-                      )}
-                      ${((item.sale_price ?? item.price) / 100).toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center rounded-md border text-xs">
-                      <button
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        className="flex h-7 w-7 items-center justify-center border-r"
-                        type="button"
-                        disabled={isDigitalItem(item)}
-                      >
-                        <Minus className="h-3 w-3" />
-                      </button>
-                      <span className="flex h-7 w-8 items-center justify-center">
-                        {item.quantity}
+                        {item.variant_label && (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {item.variant_label}
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-sm font-semibold">
+                        {item.sale_price && (
+                          <span className="mr-1.5 text-xs font-normal text-muted-foreground line-through">
+                            ${(item.price / 100).toFixed(2)}
+                          </span>
+                        )}
+                        ${((item.sale_price ?? item.price) / 100).toFixed(2)}
                       </span>
-                      <button
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        className="flex h-7 w-7 items-center justify-center border-l"
-                        type="button"
-                        disabled={isDigitalItem(item) || (typeof item.stock === 'number' && item.quantity >= item.stock)}
-                      >
-                        <Plus className="h-3 w-3" />
-                      </button>
                     </div>
 
-                    <button
-                      onClick={() => removeItem(item.id)}
-                      className="text-muted-foreground hover:text-destructive"
-                      type="button"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center rounded-md border text-xs">
+                        <button
+                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          className="flex h-7 w-7 items-center justify-center border-r"
+                          type="button"
+                          disabled={isDigitalItem(item)}
+                        >
+                          <Minus className="h-3 w-3" />
+                        </button>
+                        <span className="flex h-7 w-8 items-center justify-center">
+                          {item.quantity}
+                        </span>
+                        <button
+                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          className="flex h-7 w-7 items-center justify-center border-l"
+                          type="button"
+                          disabled={
+                            isDigitalItem(item) ||
+                            (typeof item.stock === 'number' &&
+                              allocatedSkuQuantity >= item.stock)
+                          }
+                        >
+                          <Plus className="h-3 w-3" />
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => removeItem(item.id)}
+                        className="text-muted-foreground hover:text-destructive"
+                        type="button"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center space-y-2">

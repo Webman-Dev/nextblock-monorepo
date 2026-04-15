@@ -17,6 +17,21 @@ import { ProductAttribute } from '../../../../types';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 const SUPABASE_PUBLIC_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const resolveMediaUrl = (path: string) => {
+  if (path.startsWith('http')) {
+    return path;
+  }
+
+  if (R2_BASE_URL) {
+    return `${R2_BASE_URL.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+  }
+
+  if (SUPABASE_PUBLIC_URL) {
+    return `${SUPABASE_PUBLIC_URL.replace(/\/+$/, '')}/storage/v1/object/public/media/${path.replace(/^\/+/, '')}`;
+  }
+
+  return path;
+};
 
 interface VariationsEditorProps {
   globalAttributes: ProductAttribute[];
@@ -186,13 +201,7 @@ export function VariationsEditor({
     }
 
     const filePath = selectedMedia.file_path;
-    const imageUrl = filePath?.startsWith('http')
-      ? filePath
-      : R2_BASE_URL
-        ? `${R2_BASE_URL}/${filePath}`
-        : SUPABASE_PUBLIC_URL
-          ? `${SUPABASE_PUBLIC_URL}/storage/v1/object/public/media/${filePath}`
-          : filePath;
+    const imageUrl = resolveMediaUrl(filePath);
 
     setVariantDrafts((currentDrafts) =>
       currentDrafts.map((variant) =>
@@ -297,6 +306,10 @@ export function VariationsEditor({
           <h2 className="text-lg font-semibold">Generated Variation Matrix</h2>
           <p className="text-sm text-muted-foreground">
             Each combination gets its own SKU, regular price, sale price, and stock quantity.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Variant inventory is shared by matching variant SKU, even when that SKU appears on
+            translated products.
           </p>
         </div>
 

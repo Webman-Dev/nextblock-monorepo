@@ -7,6 +7,21 @@ import { SyncFreemiusButton } from './components/SyncFreemiusButton';
 import { deleteProductAction } from './server-actions';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
+const resolveMediaUrl = (path?: string | null) => {
+  if (!path) {
+    return null;
+  }
+
+  if (path.startsWith('http')) {
+    return path;
+  }
+
+  if (!R2_BASE_URL) {
+    return path;
+  }
+
+  return `${R2_BASE_URL.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+};
 
 import { Badge } from '@nextblock-cms/ui';
 import { getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
@@ -35,9 +50,6 @@ export async function ProductsPage({
         <div className="flex flex-wrap items-center gap-4">
           <div className="h-10 w-[1px] bg-slate-200 dark:bg-slate-800 mx-2 hidden sm:block"></div>
           {languageFilterNode}
-          <Link href="/cms/products/attributes">
-            <Button variant="outline">Attributes</Button>
-          </Link>
           <SyncFreemiusButton title="Sync Full Store" />
           <Link href="/cms/products/new">
             <Button>New Product</Button>
@@ -64,9 +76,17 @@ export async function ProductsPage({
               products.map((product: any) => (
                 <TableRow key={product.id}>
                   <TableCell>
-                    {product.product_media?.[0]?.media?.file_path ? (
+                    {resolveMediaUrl(
+                      product.product_media?.[0]?.media?.file_path ||
+                        product.product_media?.[0]?.media?.object_key
+                    ) ? (
                       <Image
-                        src={`${R2_BASE_URL}/${product.product_media[0].media.file_path}`}
+                        src={
+                          resolveMediaUrl(
+                            product.product_media[0].media.file_path ||
+                              product.product_media[0].media.object_key
+                          ) as string
+                        }
                         alt={product.title}
                         width={40}
                         height={40}
@@ -116,6 +136,13 @@ export async function ProductsPage({
                     </span>
                   </TableCell>
                   <TableCell className="text-right flex justify-end gap-2 items-center">
+                    {product.slug ? (
+                      <Link href={`/product/${product.slug}`} target="_blank" rel="noopener noreferrer">
+                        <Button variant="outline" size="sm">
+                          View Product
+                        </Button>
+                      </Link>
+                    ) : null}
                     <Link href={`/cms/products/${product.id}/edit`}>
                       <Button variant="ghost" size="sm">
                         Edit

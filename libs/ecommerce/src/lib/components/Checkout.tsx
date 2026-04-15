@@ -158,6 +158,7 @@ function AddressForm({
 
 export const Checkout = ({ initialCustomer }: CheckoutProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [email, setEmail] = useState(initialCustomer?.email || '');
   const [emailError, setEmailError] = useState('');
   const [phone, setPhone] = useState(initialCustomer?.phone || '');
@@ -263,6 +264,8 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
   };
 
   const handlePay = async () => {
+    setCheckoutError(null);
+
     if (!isAuthenticated && (!email || !/^\S+@\S+\.\S+$/.test(email))) {
       setEmailError(t('ecommerce.invalid_email'));
       return;
@@ -313,6 +316,16 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
 
       const data = await res.json();
 
+      if (!res.ok) {
+        const translatedError =
+          data?.errorKey && typeof data.errorKey === 'string'
+            ? t(data.errorKey, data.errorParams)
+            : data?.error || t('ecommerce.generic_error');
+        setCheckoutError(translatedError);
+        setIsProcessing(false);
+        return;
+      }
+
       if (data.customProps && data.customProps.provider === 'freemius') {
         const cp = data.customProps;
         const checkoutConfig = {
@@ -343,12 +356,12 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
       } else if (data.url) {
         window.location.href = data.url;
       } else {
-        alert(t('ecommerce.checkout_failed') + (data.error || 'Unknown error'));
+        setCheckoutError(t('ecommerce.checkout_failed') + (data.error || 'Unknown error'));
         setIsProcessing(false);
       }
     } catch (error) {
       console.error(error);
-      alert(t('ecommerce.generic_error'));
+      setCheckoutError(t('ecommerce.generic_error'));
       setIsProcessing(false);
     }
   };
@@ -606,6 +619,12 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                   {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {isProcessing ? t('ecommerce.processing') : t('ecommerce.pay_now')}
                 </Button>
+
+                {checkoutError ? (
+                  <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {checkoutError}
+                  </div>
+                ) : null}
 
                 <p className="text-[10px] text-center text-muted-foreground">
                   {t('checkout_payment_only_notice')}

@@ -41,6 +41,7 @@ const ToolbarButton: React.FC<{
   
   return (
     <Button
+      type="button"
       variant={isActive ? 'default' : 'ghost'}
       size="sm"
       onClick={onClick}
@@ -63,6 +64,7 @@ const FontSizePicker: React.FC<{ editor: Editor }> = ({ editor }) => {
     <Popover>
       <PopoverTrigger asChild>
         <Button
+          type="button"
           variant="ghost"
           size="sm"
           className="h-8 px-2"
@@ -90,6 +92,7 @@ const ColorPicker: React.FC<{ editor: Editor }> = ({ editor }) => {
     <Popover>
       <PopoverTrigger asChild>
         <Button
+          type="button"
           variant="ghost"
           size="sm"
           className="h-8 w-8 p-0"
@@ -144,7 +147,7 @@ const InsertDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 px-2">
+        <Button type="button" variant="ghost" size="sm" className="h-8 px-2">
           Insert
         </Button>
       </DropdownMenuTrigger>
@@ -271,7 +274,7 @@ const ExportDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 px-2" aria-label="Export menu" title="Export menu">
+        <Button type="button" variant="ghost" size="sm" className="h-8 px-2" aria-label="Export menu" title="Export menu">
           <Download className="h-4 w-4 mr-1" />
         </Button>
       </DropdownMenuTrigger>
@@ -570,9 +573,9 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
               spellCheck={false}
             />
             <div className="p-3 border-t flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setIsSourceOpen(false)}>Cancel</Button>
-              <Button variant="secondary" size="sm" onClick={() => setSourceValue(formatHTML(sourceValue))}>Format</Button>
-              <Button size="sm" onClick={applySource}>Apply</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsSourceOpen(false)}>Cancel</Button>
+              <Button type="button" variant="secondary" size="sm" onClick={() => setSourceValue(formatHTML(sourceValue))}>Format</Button>
+              <Button type="button" size="sm" onClick={applySource}>Apply</Button>
             </div>
           </div>
         </div>
@@ -585,6 +588,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
               <div className="font-semibold">Preview</div>
               <div className="flex gap-2">
                 <Button
+                  type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => {
@@ -593,7 +597,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
                 >
                   Refresh
                 </Button>
-                <Button size="sm" onClick={() => { for (const u of previewBlobUrlsRef.current) { try { URL.revokeObjectURL(u); } catch { /* ignore revoke errors */ } } previewBlobUrlsRef.current = []; if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(null); setIsPreviewOpen(false); }}>Close</Button>
+                <Button type="button" size="sm" onClick={() => { for (const u of previewBlobUrlsRef.current) { try { URL.revokeObjectURL(u); } catch { /* ignore revoke errors */ } } previewBlobUrlsRef.current = []; if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(null); setIsPreviewOpen(false); }}>Close</Button>
               </div>
             </div>
             <div className="flex-1">

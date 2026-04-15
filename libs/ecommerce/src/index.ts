@@ -11,6 +11,7 @@ export * from './lib/components/ProductGallery';
 export * from './lib/components/FeaturedProduct';
 export * from './lib/components/CustomerProfileForm';
 export * from './lib/components/SubscriptionSelector';
+export { ProductForm } from './lib/pages/cms/products/components/ProductForm';
 
 export * from './lib/cart-store';
 export * from './lib/use-cart';

@@ -1,7 +1,11 @@
 'use server';
 
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import { stripe, syncStripeOrderFromSession } from '@nextblock-cms/ecommerce/server';
+import {
+  applyOrderInventoryDeduction,
+  stripe,
+  syncStripeOrderFromSession,
+} from '@nextblock-cms/ecommerce/server';
 
 function getServiceRoleSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -49,6 +53,13 @@ export async function fulfillOrderAction(sessionId: string) {
     }
 
     if (order.status === 'paid') {
+      try {
+        await applyOrderInventoryDeduction(supabase as any, order.id);
+      } catch (inventoryError) {
+        console.error('Failed to reconcile inventory for paid order:', inventoryError);
+        return { success: false, error: 'Failed to update order inventory' };
+      }
+
       return { success: true, alreadyPaid: true };
     }
 
@@ -60,6 +71,13 @@ export async function fulfillOrderAction(sessionId: string) {
     if (updateError) {
       console.error('Failed to update order status:', updateError);
       return { success: false, error: 'Failed to update order status' };
+    }
+
+    try {
+      await applyOrderInventoryDeduction(supabase as any, order.id);
+    } catch (inventoryError) {
+      console.error('Failed to deduct inventory for paid order:', inventoryError);
+      return { success: false, error: 'Failed to update order inventory' };
     }
 
     return { success: true, alreadyPaid: false };

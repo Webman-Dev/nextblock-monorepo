@@ -3,15 +3,15 @@ import { redirect } from 'next/navigation';
 import { getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
 import { createClient } from '@nextblock-cms/db/server';
 import Link from 'next/link';
-import { getProduct } from '@nextblock-cms/ecommerce/server';
+import {
+  createProductAction,
+  getGlobalProductAttributes,
+  getPaymentSettings,
+  getProduct,
+} from '@nextblock-cms/ecommerce/server';
 import { ArrowLeft } from 'lucide-react';
 import { Badge, Button } from '@nextblock-cms/ui';
 import ProductFormClientShell from '../ProductFormClientShell';
-import {
-  getGlobalProductAttributes,
-} from '../../../../../../libs/ecommerce/src/lib/pages/cms/products/actions';
-import { createProductAction } from '../../../../../../libs/ecommerce/src/lib/pages/cms/products/server-actions';
-import { getPaymentSettings } from '../../../../../../libs/ecommerce/src/lib/pages/cms/payments/queries';
 import {
   buildGlobalAttributesForForm,
   buildProductFormInitialData,

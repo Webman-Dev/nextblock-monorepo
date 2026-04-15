@@ -15,7 +15,14 @@ export class FreemiusProvider implements PaymentProvider {
       userId,
       billingAddress,
       shippingAddress,
-    }: CheckoutSessionInput): Promise<{ url: string | null; error?: string; customProps?: any }> {
+    }: CheckoutSessionInput): Promise<{
+      url: string | null;
+      error?: string;
+      errorKey?: string;
+      errorParams?: Record<string, string | number>;
+      errorStatus?: number;
+      customProps?: any;
+    }> {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   

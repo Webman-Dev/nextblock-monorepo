@@ -34,6 +34,7 @@ type ProductMediaRelation = {
   sort_order?: number | null;
   media?: {
     file_path?: string | null;
+    object_key?: string | null;
     alt_text?: string | null;
   } | null;
 };
@@ -161,7 +162,7 @@ function buildMediaManagerItems(
     .map((item) => ({
       id: item.id || item.media_id,
       media_id: item.media_id,
-      file_path: item.media?.file_path || '',
+      file_path: item.media?.file_path || item.media?.object_key || '',
       alt: item.media?.alt_text || '',
       sort_order: item.sort_order ?? 0,
     }))
@@ -493,6 +494,10 @@ export function ProductForm({
                     readOnly={hasVariants}
                     className={disabledBaseFieldClass}
                   />
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Products using this same SKU share inventory. Use Inventory for bulk updates and
+                    CSV imports.
+                  </p>
                   {errors.stock && <p className="text-destructive text-sm">{errors.stock.message as string}</p>}
                 </div>
               </div>

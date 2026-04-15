@@ -3,6 +3,11 @@ import { stripe } from '../stripe/client';
 import { createClient } from '@supabase/supabase-js';
 import { CheckoutSessionInput, normalizeOrderCustomerDetails } from '../customer';
 import { upsertDefaultUserAddresses } from '../customer-addresses';
+import {
+  createInventoryInsufficientError,
+  createInventoryUnavailableError,
+  getEcommerceInventorySettings,
+} from '../inventory-settings';
 
 export class StripeProvider implements PaymentProvider {
   getProviderName(): string {
@@ -17,7 +22,13 @@ export class StripeProvider implements PaymentProvider {
     billingAddress,
     shippingAddress,
     shippingMethodId,
-  }: CheckoutSessionInput): Promise<{ url: string | null; error?: string }> {
+  }: CheckoutSessionInput): Promise<{
+    url: string | null;
+    error?: string;
+    errorKey?: string;
+    errorParams?: Record<string, string | number>;
+    errorStatus?: number;
+  }> {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -33,13 +44,15 @@ export class StripeProvider implements PaymentProvider {
       return { error: 'Cart is empty', url: null };
     }
 
+    const inventorySettings = await getEcommerceInventorySettings(supabase as any);
+
     const productIds = cartItems.map((item) => item.product_id);
     const variantIds = cartItems
       .map((item) => item.variant_id)
       .filter((variantId): variantId is string => Boolean(variantId));
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, title, price, sale_price, stock')
+      .select('id, title, sku, price, sale_price, stock')
       .in('id', productIds);
 
     if (productsError || !products) {
@@ -61,6 +74,49 @@ export class StripeProvider implements PaymentProvider {
 
     const productMap = new Map(products.map((product) => [product.id, product]));
     const variantMap = new Map((variants || []).map((variant) => [variant.id, variant]));
+    const inventorySkus = new Set<string>();
+    const requestedQuantityBySku = new Map<string, number>();
+
+    for (const cartItem of cartItems) {
+      const product = productMap.get(cartItem.product_id);
+
+      if (!product) {
+        continue;
+      }
+
+      const variant = cartItem.variant_id ? variantMap.get(cartItem.variant_id) : null;
+      const inventorySku = variant?.sku || product.sku;
+
+      if (!inventorySku) {
+        continue;
+      }
+
+      inventorySkus.add(inventorySku);
+      requestedQuantityBySku.set(
+        inventorySku,
+        (requestedQuantityBySku.get(inventorySku) ?? 0) + cartItem.quantity
+      );
+    }
+
+    const { data: inventoryRows, error: inventoryError } = inventorySkus.size
+      ? await (supabase as any)
+          .from('inventory_items')
+          .select('sku, quantity')
+          .in('sku', [...inventorySkus])
+      : { data: [], error: null };
+
+    if (inventoryError) {
+      console.error('Error fetching SKU inventory for validation:', inventoryError);
+      return { error: 'Failed to validate SKU inventory', url: null };
+    }
+
+    const inventoryBySku = new Map<string, number>(
+      (inventoryRows || []).map((row: { sku: string; quantity: number | null }) => [
+        row.sku,
+        Math.max(0, row.quantity ?? 0),
+      ])
+    );
+
     const lineItems: any[] = [];
     const verifiedItems: Array<{
       product_id: string;
@@ -74,8 +130,11 @@ export class StripeProvider implements PaymentProvider {
       const product = productMap.get(cartItem.product_id);
 
       if (!product) {
-        console.warn(`Product ${cartItem.product_id} not found in DB, skipping.`);
-        continue;
+        console.warn(`Product ${cartItem.product_id} not found in DB.`);
+        return {
+          url: null,
+          ...createInventoryUnavailableError(cartItem.title),
+        };
       }
 
       let unitAmount =
@@ -87,13 +146,21 @@ export class StripeProvider implements PaymentProvider {
         const variant = variantMap.get(cartItem.variant_id);
 
         if (!variant || variant.product_id !== cartItem.product_id) {
-          return { error: 'Selected product variation is no longer available.', url: null };
+          return {
+            url: null,
+            ...createInventoryUnavailableError(cartItem.title),
+          };
         }
 
-        if (cartItem.quantity > variant.stock_quantity) {
+        const requestedQuantity = requestedQuantityBySku.get(variant.sku) ?? cartItem.quantity;
+        const availableQuantity = inventoryBySku.has(variant.sku)
+          ? inventoryBySku.get(variant.sku) ?? 0
+          : Math.max(0, variant.stock_quantity ?? 0);
+
+        if (inventorySettings.trackQuantities && requestedQuantity > availableQuantity) {
           return {
-            error: `Only ${variant.stock_quantity} units remain for ${cartItem.title}.`,
             url: null,
+            ...createInventoryInsufficientError(cartItem.title, availableQuantity),
           };
         }
 
@@ -103,11 +170,18 @@ export class StripeProvider implements PaymentProvider {
         lineItemName = cartItem.variant_label
           ? `${product.title} - ${cartItem.variant_label}`
           : `${product.title} - ${variant.sku}`;
-      } else if (typeof product.stock === 'number' && cartItem.quantity > product.stock) {
-        return {
-          error: `Only ${product.stock} units remain for ${cartItem.title}.`,
-          url: null,
-        };
+      } else {
+        const requestedQuantity = requestedQuantityBySku.get(product.sku) ?? cartItem.quantity;
+        const availableQuantity = inventoryBySku.has(product.sku)
+          ? inventoryBySku.get(product.sku) ?? 0
+          : Math.max(0, product.stock ?? 0);
+
+        if (inventorySettings.trackQuantities && requestedQuantity > availableQuantity) {
+          return {
+            url: null,
+            ...createInventoryInsufficientError(cartItem.title, availableQuantity),
+          };
+        }
       }
 
       if (unitAmount < 0) {

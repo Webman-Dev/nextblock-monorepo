@@ -27,6 +27,14 @@ export const Cart = () => {
   if (!store) return null;
 
   const { items, updateQuantity, removeItem } = store;
+  const getAllocatedSkuQuantity = (sku: string) =>
+    items.reduce((accumulator, cartItem) => {
+      if (isDigitalItem(cartItem) || cartItem.sku !== sku) {
+        return accumulator;
+      }
+
+      return accumulator + cartItem.quantity;
+    }, 0);
 
   const handleCheckout = () => {
     router.push('/checkout');
@@ -62,93 +70,102 @@ export const Cart = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-4">
-                        {item.image_url ? (
-                          <div className="h-16 w-16 overflow-hidden rounded border bg-neutral-100">
-                             <img
-                               src={item.image_url}
-                               alt={item.title}
-                               className="h-full w-full object-cover"
-                             />
+                {items.map((item) => {
+                  const allocatedSkuQuantity = getAllocatedSkuQuantity(item.sku);
+
+                  return (
+                    <TableRow key={item.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-4">
+                          {item.image_url ? (
+                            <div className="h-16 w-16 overflow-hidden rounded border bg-neutral-100">
+                              <img
+                                src={item.image_url}
+                                alt={item.title}
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex h-16 w-16 items-center justify-center rounded bg-secondary">
+                              <span className="text-[10px] text-muted-foreground">
+                                {t('ecommerce.no_image')}
+                              </span>
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-medium">{item.title}</div>
+                            {item.variant_label && (
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                {item.variant_label}
+                              </div>
+                            )}
+                            {isDigitalItem(item) && item.billing_cycle && (
+                              <div className="mt-1 text-xs capitalize text-muted-foreground">
+                                {item.billing_cycle} Subscription
+                              </div>
+                            )}
                           </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {isDigitalItem(item) ? (
+                          <Badge variant="secondary" className="font-normal text-xs">
+                            1 (License)
+                          </Badge>
                         ) : (
-                          <div className="flex h-16 w-16 items-center justify-center rounded bg-secondary">
-                             <span className="text-[10px] text-muted-foreground">{t('ecommerce.no_image')}</span>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            >
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                            <span className="w-8 text-center">{item.quantity}</span>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                              disabled={
+                                typeof item.stock === 'number' &&
+                                allocatedSkuQuantity >= item.stock
+                              }
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
                           </div>
                         )}
-                        <div>
-                          <div className="font-medium">{item.title}</div>
-                          {item.variant_label && (
-                             <div className="text-xs text-muted-foreground mt-1">
-                                {item.variant_label}
-                             </div>
-                          )}
-                          {isDigitalItem(item) && item.billing_cycle && (
-                             <div className="text-xs text-muted-foreground capitalize mt-1">
-                                {item.billing_cycle} Subscription
-                             </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex flex-col items-end">
+                          <span className="font-medium">
+                            ${((item.sale_price ?? item.price) / 100).toFixed(2)}
+                          </span>
+                          {item.sale_price && (
+                            <span className="text-xs text-muted-foreground line-through">
+                              ${(item.price / 100).toFixed(2)}
+                            </span>
                           )}
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {isDigitalItem(item) ? (
-                            <Badge variant="secondary" className="font-normal text-xs">
-                                1 (License)
-                            </Badge>
-                      ) : (
-                          <div className="flex items-center gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                                >
-                                    <Minus className="h-4 w-4" />
-                                </Button>
-                                <span className="w-8 text-center">{item.quantity}</span>
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                                    disabled={typeof item.stock === 'number' && item.quantity >= item.stock}
-                                >
-                                    <Plus className="h-4 w-4" />
-                                </Button>
-                          </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex flex-col items-end">
-                        <span className="font-medium">
-                          ${((item.sale_price ?? item.price) / 100).toFixed(2)}
-                        </span>
-                        {item.sale_price && (
-                          <span className="text-xs text-muted-foreground line-through">
-                            ${(item.price / 100).toFixed(2)}
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      ${(((item.sale_price ?? item.price) * item.quantity) / 100).toFixed(2)}
-                    </TableCell>
-                     <TableCell>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        ${(((item.sale_price ?? item.price) * item.quantity) / 100).toFixed(2)}
+                      </TableCell>
+                      <TableCell>
                         <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeItem(item.id)}
-                            className="text-muted-foreground hover:text-destructive"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeItem(item.id)}
+                          className="text-muted-foreground hover:text-destructive"
                         >
-                            <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
-                     </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

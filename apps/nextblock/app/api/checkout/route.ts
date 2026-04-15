@@ -47,7 +47,8 @@ export async function POST(req: Request) {
     const resolvedCustomerEmail = user?.email || customerEmail || null;
 
     // 3. Create Session
-    const { url, error, customProps } = await provider.createCheckoutSession({
+    const { url, error, errorKey, errorParams, errorStatus, customProps } =
+      await provider.createCheckoutSession({
       items,
       customerEmail: resolvedCustomerEmail,
       customerPhone,
@@ -59,7 +60,10 @@ export async function POST(req: Request) {
 
     if (error) {
       console.error('Checkout Error:', error);
-      return NextResponse.json({ error }, { status: 500 });
+      return NextResponse.json(
+        { error, errorKey, errorParams },
+        { status: errorStatus ?? 500 }
+      );
     }
 
     return NextResponse.json({ url, customProps });

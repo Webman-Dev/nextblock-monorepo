@@ -88,13 +88,27 @@ export type CartItem = Product & {
   original_price?: number;
 };
 
+export interface CheckoutProviderError {
+  error: string;
+  errorKey?: string;
+  errorParams?: Record<string, string | number>;
+  errorStatus?: number;
+}
+
 /** Helper to check if a cart item is a Freemius digital product */
 export function isDigitalItem(item: Pick<CartItem, 'provider'>): boolean {
   return item.provider === 'freemius';
 }
 
 export interface PaymentProvider {
-  createCheckoutSession(input: CheckoutSessionInput): Promise<{ url: string | null; error?: string; customProps?: any }>;
+  createCheckoutSession(input: CheckoutSessionInput): Promise<{
+    url: string | null;
+    error?: string;
+    errorKey?: string;
+    errorParams?: Record<string, string | number>;
+    errorStatus?: number;
+    customProps?: any;
+  }>;
   getProviderName(): string;
 }
 

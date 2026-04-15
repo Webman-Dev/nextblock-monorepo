@@ -205,6 +205,8 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
 
   else if (pathname.startsWith("/cms/settings/packages")) pageTitle = "Packages";
   else if (pathname.startsWith("/cms/settings")) pageTitle = "Settings";
+  else if (pathname.startsWith("/cms/products/inventory")) pageTitle = "Inventory";
+  else if (pathname.startsWith("/cms/products/settings")) pageTitle = "Product Settings";
   else if (pathname.startsWith("/cms/products/new")) pageTitle = "New Product";
   else if (pathname.startsWith("/cms/products/") && pathname.endsWith("/edit")) pageTitle = "Edit Product";
   else if (pathname.startsWith("/cms/products")) pageTitle = "Products";
@@ -272,9 +274,24 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                       Store
                     </p>
                   </div>
-                  <NavItem href="/cms/products" icon={ShoppingBag} isActive={pathname.startsWith("/cms/products")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
-                    Products
-                  </NavItem>
+                  <CollapsibleNavItem
+                    icon={ShoppingBag}
+                    title="Products"
+                    isActive={pathname.startsWith("/cms/products")}
+                  >
+                    <NavItem href="/cms/products" icon={ShoppingBag} isActive={pathname === "/cms/products" || pathname.startsWith("/cms/products/") && !pathname.startsWith("/cms/products/attributes") && !pathname.startsWith("/cms/products/settings") && !pathname.startsWith("/cms/products/inventory")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                      All Products
+                    </NavItem>
+                    <NavItem href="/cms/products/inventory" icon={Package} isActive={pathname.startsWith("/cms/products/inventory")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                      Inventory
+                    </NavItem>
+                    <NavItem href="/cms/products/attributes" icon={ListTree} isActive={pathname.startsWith("/cms/products/attributes")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                      Attributes
+                    </NavItem>
+                    <NavItem href="/cms/products/settings" icon={Settings} isActive={pathname.startsWith("/cms/products/settings")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                      Settings
+                    </NavItem>
+                  </CollapsibleNavItem>
                   <NavItem href="/cms/orders" icon={ListOrdered} isActive={pathname.startsWith("/cms/orders")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                     Orders
                   </NavItem>

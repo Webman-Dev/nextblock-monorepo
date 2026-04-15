@@ -2,6 +2,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { deleteMediaFiles } from '@nextblock-cms/utils/server';
 import { Database } from '@nextblock-cms/db';
 import { ProductFormValues } from './product-schema';
+import { syncSharedInventoryForSavedProduct } from './shared-inventory';
 
 // Helper to convert dollars to cents
 const toCents = (dollars: number) => Math.round(dollars * 100);
@@ -57,7 +58,7 @@ export async function getProducts(
   let query = supabase
     .from('products')
     .select(
-      'id, title, sku, upc, price, sale_price, short_description, stock, status, slug, language_id, translation_group_id, product_media(media(file_path)), product_variants(id, price, sale_price)',
+      'id, title, sku, upc, price, sale_price, short_description, stock, status, slug, language_id, translation_group_id, product_media(media(file_path, object_key)), product_variants(id, price, sale_price)',
       { count: 'exact' }
     )
     .range(start, end)
@@ -89,6 +90,7 @@ export async function getProduct(supabase: SupabaseClient<Database>, id: string)
         media (
           id,
           file_path,
+          object_key,
           file_name,
           blur_data_url,
           width,
@@ -148,6 +150,7 @@ export async function getProductBySlug(supabase: SupabaseClient<Database>, slug:
         media (
           id,
           file_path,
+          object_key,
           file_name,
           blur_data_url,
           width,
@@ -213,6 +216,8 @@ export async function createProduct(supabase: SupabaseClient<Database>, data: Pr
       sort_order: 0,
     });
   }
+
+  await syncSharedInventoryForSavedProduct(productId, data);
 
   const { data: product } = await supabase.from('products').select('*').eq('id', productId).single();
   return product;
@@ -308,6 +313,8 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
     }
   }
 
+  await syncSharedInventoryForSavedProduct(productId, data);
+
   const { data: product } = await supabase.from('products').select('*').eq('id', productId).single();
   return product;
 }
@@ -400,7 +407,8 @@ export async function fetchTranslatedProductsForCartInternal(
       language_id,
       product_media (
         media (
-          file_path
+          file_path,
+          object_key
         )
       ),
       translation_group_id

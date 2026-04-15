@@ -6,6 +6,17 @@ import type { Database } from '@nextblock-cms/db';
 import Image from 'next/image';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
+const resolveMediaUrl = (path: string) => {
+  if (path.startsWith('http')) {
+    return path;
+  }
+
+  if (!R2_BASE_URL) {
+    return path;
+  }
+
+  return `${R2_BASE_URL.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+};
 
 type MediaItem = {
   id: string; // This is the product_media ID, or temp ID
@@ -135,7 +146,7 @@ export const ProductMediaManager = ({ initialMedia, onUpdate, mediaPickerNode }:
             </div>
 
             <Image
-              src={item.file_path.startsWith('http') ? item.file_path : `${R2_BASE_URL}/${item.file_path}`}
+              src={resolveMediaUrl(item.file_path)}
               alt={item.alt}
               fill
               className="object-cover"
