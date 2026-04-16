@@ -47,6 +47,7 @@ interface CustomerProfileFormProps {
 
 function buildAddressDefaults(address?: ExtendedProfileUpdateData['billing_address']) {
   return {
+    company_name: address?.company_name || '',
     recipient_name: address?.recipient_name || '',
     line1: address?.line1 || '',
     line2: address?.line2 || '',
@@ -67,6 +68,8 @@ function AddressFields({
   register: ReturnType<typeof useForm<ExtendedProfileUpdateData>>['register'];
 }) {
   const { t } = useTranslations();
+  const companyNameLabel =
+    t('company_name') === 'company_name' ? 'Company name' : t('company_name');
 
   return (
     <div className="space-y-4 rounded-xl border p-4">
@@ -77,7 +80,11 @@ function AddressFields({
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-company_name`}>{companyNameLabel}</Label>
+          <Input id={`${prefix}-company_name`} {...register(`${prefix}.company_name`)} />
+        </div>
         <div className="space-y-2">
           <Label htmlFor={`${prefix}-recipient_name`}>{t('full_name')}</Label>
           <Input id={`${prefix}-recipient_name`} {...register(`${prefix}.recipient_name`)} />

@@ -122,6 +122,7 @@ function buildProductFormDefaults(
     slug: initialData?.slug || '',
     sku: initialData?.sku || '',
     upc: initialData?.upc || '',
+    is_taxable: initialData?.is_taxable ?? true,
     price: typeof initialData?.price === 'number' ? initialData.price / 100 : 0,
     sale_price:
       typeof initialData?.sale_price === 'number' ? initialData.sale_price / 100 : null,
@@ -308,6 +309,10 @@ export function ProductForm({
     }
   }, [hasVariants]);
 
+  useEffect(() => {
+    register('is_taxable');
+  }, [register]);
+
   const handleVariationChange = useCallback(
     ({
       variationAttributes,
@@ -331,6 +336,7 @@ export function ProductForm({
         freemius_product_id: isStripeMode ? '' : data.freemius_product_id,
         freemius_plan_id: isStripeMode ? '' : data.freemius_plan_id,
         upc: isStripeMode ? data.upc : null,
+        is_taxable: isStripeMode ? data.is_taxable : true,
         variation_attributes: isStripeMode ? data.variation_attributes : [],
         variants: isStripeMode ? data.variants : [],
       };
@@ -428,6 +434,28 @@ export function ProductForm({
               </div>
             )}
           </div>
+
+          {isStripeMode && (
+            <div className="rounded-lg border bg-muted/20 p-4">
+              <label htmlFor="is-taxable" className="flex cursor-pointer items-start gap-3">
+                <input
+                  id="is-taxable"
+                  type="checkbox"
+                  checked={watch('is_taxable')}
+                  onChange={(event) =>
+                    setValue('is_taxable', event.target.checked, { shouldDirty: true })
+                  }
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                />
+                <span className="space-y-1">
+                  <span className="block font-medium">Charge tax on this product</span>
+                  <span className="block text-sm text-muted-foreground">
+                    Disable this for tax-exempt physical items when Stripe taxes are enabled.
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
         </FormSection>
 
         <FormSection

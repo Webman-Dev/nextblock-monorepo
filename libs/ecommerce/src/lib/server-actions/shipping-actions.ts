@@ -1,20 +1,29 @@
 'use server';
 
 import { resolveShippingOptions, ShippingDestination, ResolvedShippingMethod } from '../shipping/resolver';
+import { normalizeCountryCode } from '../countries';
+import { normalizeSubdivisionCode } from '../states';
 
 /**
  * Server action to fetch shipping estimates from the client components (Cart/Checkout).
  */
 export async function getShippingEstimates(
     cartTotal: number, 
-    destination: ShippingDestination
+    destination: ShippingDestination,
+    languageCode?: string
 ): Promise<{ success: boolean; methods?: ResolvedShippingMethod[]; error?: string }> {
     try {
-        if (!destination.country) {
+        const normalizedCountry = normalizeCountryCode(destination.country);
+
+        if (!normalizedCountry) {
             return { success: false, error: 'Country is required for shipping calculation' };
         }
 
-        const methods = await resolveShippingOptions(cartTotal, destination);
+        const methods = await resolveShippingOptions(cartTotal, {
+            ...destination,
+            country: normalizedCountry,
+            state: normalizeSubdivisionCode(normalizedCountry, destination.state) || undefined,
+        }, languageCode);
         return { success: true, methods };
     } catch (error: any) {
         console.error('Failed to resolve shipping options:', error);

@@ -50,6 +50,7 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
       title: product.title,
       price: product.price,
       sale_price: product.sale_price,
+      is_taxable: product.is_taxable,
       image_url: product.image_url,
       slug: product.slug,
       sku: product.sku,

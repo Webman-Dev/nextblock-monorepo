@@ -1,200 +1,163 @@
-import { getOrderDetails } from './actions';
-import { notFound } from 'next/navigation';
-import { MarkPaidButton } from './MarkPaidButton';
 import Link from 'next/link';
-import Image from 'next/image';
+import { notFound } from 'next/navigation';
+
+import { InvoiceDocument } from '../../../components/InvoiceDocument';
+import { getInvoicePresentationData } from '../../../invoice-server';
+import { getOrderDetails } from './actions';
+import { MarkPaidButton } from './MarkPaidButton';
 import type { OrderCustomerDetails } from './types';
 
-// Helper to format currency
-const formatPrice = (amount: number, currency = 'usd') => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency,
-  }).format(amount / 100);
+const invoiceLabels = {
+  invoice: 'Invoice',
+  invoiceNumber: 'Invoice #',
+  orderNumber: 'Order #',
+  paidOn: 'Paid on',
+  status: 'Status',
+  from: 'From',
+  billTo: 'Bill to',
+  shipTo: 'Ship to',
+  item: 'Item',
+  details: 'Details',
+  quantity: 'Qty',
+  price: 'Price',
+  amount: 'Amount',
+  subtotal: 'Subtotal',
+  shipping: 'Shipping',
+  tax: 'Tax',
+  total: 'Total',
+  taxBreakdown: 'Tax breakdown',
+  taxRegistrations: 'Tax registrations',
 };
 
 export async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const order = await getOrderDetails(id);
+  const [order, invoice] = await Promise.all([
+    getOrderDetails(id),
+    getInvoicePresentationData(id).catch(() => null),
+  ]);
 
   if (!order) {
     notFound();
   }
 
-  const customerDetails = order.customer_details as OrderCustomerDetails | null;
+  const customerDetails = (invoice?.order.customer_details ??
+    order.customer_details) as OrderCustomerDetails | null;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row gap-4 justify-between md:items-center border-b pb-6 dark:border-slate-800">
+    <div className="mx-auto max-w-7xl space-y-8 p-6">
+      <div className="flex flex-col gap-4 border-b pb-6 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-            <Link href="/cms/orders" className="hover:underline">Orders</Link>
+          <div className="mb-2 flex items-center gap-2 text-sm text-gray-500">
+            <Link href="/cms/orders" className="hover:underline">
+              Orders
+            </Link>
             <span>/</span>
             <span className="font-mono">{order.id}</span>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+          <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight">
             Order
             <StatusBadge status={order.status} size="lg" />
           </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Review the final invoice, customer details, and payment metadata for this order.
+          </p>
         </div>
+
         <div className="flex gap-2">
-           {/* Auto-refresh button (just reloads) */}
-           <Link href={`/cms/orders/${id}`} className="px-4 py-2 text-sm border rounded hover:bg-gray-50 dark:hover:bg-slate-800">
-             Sync / Refresh
-           </Link>
-           
-           {order.status !== 'paid' && (
-             <MarkPaidButton orderId={id} />
-           )}
+          <Link
+            href={`/cms/orders/${id}`}
+            className="rounded-md border px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-slate-800"
+          >
+            Sync / Refresh
+          </Link>
+          {order.status !== 'paid' ? <MarkPaidButton orderId={id} /> : null}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        
-        {/* Left Col: Order Items */}
-        <div className="md:col-span-2 space-y-6">
-          <div className="border rounded-lg bg-white overflow-hidden dark:bg-slate-900 dark:border-slate-800">
-            <div className="bg-gray-50 px-4 py-3 border-b font-medium text-sm text-gray-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300">
-              Order Items
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div>
+          {invoice ? (
+            <InvoiceDocument data={invoice} labels={invoiceLabels} locale="en-US" />
+          ) : (
+            <div className="rounded-3xl border bg-background px-6 py-12 text-center text-muted-foreground">
+              The printable invoice will appear here after the order payment metadata is synced.
             </div>
-            <table className="w-full text-sm text-left">
-                <thead className="bg-white border-b text-gray-500 dark:bg-slate-900 dark:border-slate-800">
-                    <tr>
-                        <th className="px-4 py-2 font-normal">Product</th>
-                        <th className="px-4 py-2 font-normal text-right">Qty</th>
-                        <th className="px-4 py-2 font-normal text-right">Price</th>
-                        <th className="px-4 py-2 font-normal text-right">Total</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y dark:divide-slate-800">
-                    {order.order_items.map(item => (
-                        <tr key={item.id}>
-                            <td className="px-4 py-3">
-                                <div className="flex items-center gap-3">
-                                    {/* Thumbnail */}
-                                    <div className="h-10 w-10 bg-gray-100 rounded overflow-hidden flex-shrink-0 border dark:bg-slate-800 dark:border-slate-700">
-                                        {item.product?.image_url ? (
-                                            <Image 
-                                                src={`${process.env.NEXT_PUBLIC_R2_BASE_URL}/${item.product.image_url}`} 
-                                                alt={item.product.title || 'Product Image'}
-                                                width={40}
-                                                height={40}
-                                                className="h-full w-full object-cover"
-                                            />
-                                        ) : (
-                                            <div className="h-full w-full flex items-center justify-center text-gray-300 dark:text-gray-600">
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                </svg>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <div className="font-medium text-gray-900 dark:text-gray-100">
-                                            {item.product?.title || 'Unknown Product'}
-                                        </div>
-                                        {item.product_id && (
-                                            <div className="text-xs text-gray-500 font-mono">
-                                                {item.product_id.slice(0, 8)}...
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </td>
-                            <td className="px-4 py-3 text-right">{item.quantity}</td>
-                            <td className="px-4 py-3 text-right">{formatPrice(item.price_at_purchase)}</td>
-                            <td className="px-4 py-3 text-right font-medium">
-                                {formatPrice(item.price_at_purchase * item.quantity)}
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-                <tfoot className="bg-gray-50 font-medium dark:bg-slate-800">
-                    <tr>
-                        <td colSpan={3} className="px-4 py-3 text-right">Total</td>
-                        <td className="px-4 py-3 text-right">{formatPrice(order.total, 'usd')}</td>
-                    </tr>
-                </tfoot>
-            </table>
+          )}
+        </div>
+
+        <div className="space-y-6">
+          <div className="rounded-lg border bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="mb-3 font-medium text-gray-900 dark:text-gray-100">Customer</h3>
+            <div className="space-y-2 text-sm">
+              {customerDetails?.name ? (
+                <p className="font-semibold text-gray-900 dark:text-white">
+                  {customerDetails.name}
+                </p>
+              ) : null}
+              {customerDetails?.email ? (
+                <p className="text-gray-600 dark:text-gray-400">{customerDetails.email}</p>
+              ) : null}
+              {customerDetails?.phone ? (
+                <p className="text-gray-600 dark:text-gray-400">{customerDetails.phone}</p>
+              ) : null}
+              {!customerDetails?.name && !customerDetails?.email && !customerDetails?.phone ? (
+                <p className="italic text-gray-400">No contact info captured.</p>
+              ) : null}
+              {order.user_id ? (
+                <p className="pt-1 font-mono text-[10px] uppercase tracking-wider text-gray-400">
+                  User ID: {order.user_id.slice(0, 13)}...
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <AddressCard
+            title="Billing Address"
+            emptyMessage="No billing address was captured for this order."
+            address={customerDetails?.billing || null}
+          />
+
+          <AddressCard
+            title="Shipping Address"
+            emptyMessage="No shipping address was captured for this order."
+            address={customerDetails?.shipping || null}
+          />
+
+          <div className="rounded-lg border bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="mb-3 font-medium text-gray-900 dark:text-gray-100">
+              Payment Details
+            </h3>
+            <div className="space-y-2 text-sm">
+              <MetaRow label="Provider" value={order.provider || 'stripe'} capitalize />
+              <MetaRow label="Currency" value={(order.currency || 'usd').toUpperCase()} />
+              <MetaRow
+                label="Created"
+                value={new Date(order.created_at || '').toLocaleDateString()}
+              />
+              <MetaRow
+                label="Invoice #"
+                value={invoice?.order.invoice_number || 'Pending assignment'}
+              />
+              <MetaRow
+                label="Paid on"
+                value={
+                  invoice?.order.paid_at
+                    ? new Date(invoice.order.paid_at).toLocaleString()
+                    : 'Pending payment'
+                }
+              />
+              {order.stripe_session_id ? (
+                <div className="mt-3 border-t pt-3 dark:border-slate-800">
+                  <p className="mb-1 text-xs text-gray-500">Session ID</p>
+                  <p className="break-all rounded bg-gray-50 p-1 font-mono text-xs dark:bg-slate-800">
+                    {order.stripe_session_id}
+                  </p>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
-
-        {/* Right Col: Metadata */}
-        <div className="space-y-6">
-            
-            {/* Customer Card */}
-            <div className="border rounded-lg p-4 bg-white dark:bg-slate-900 dark:border-slate-800">
-                <h3 className="font-medium text-gray-900 mb-3 dark:text-gray-100 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    Customer
-                </h3>
-                <div className="text-sm space-y-2">
-                    {(() => {
-                        const name = customerDetails?.name || order.customer?.full_name;
-                        const email = customerDetails?.email;
-                        const phone = customerDetails?.phone;
-                        
-                        return (
-                            <>
-                                {name && <p className="font-semibold text-gray-900 dark:text-white">{name}</p>}
-                                {email && <p className="text-gray-600 dark:text-gray-400 overflow-hidden text-ellipsis">{email}</p>}
-                                {phone && <p className="text-gray-600 dark:text-gray-400">{phone}</p>}
-                                {!name && !email && !phone && <p className="text-gray-400 italic">No contact info captured</p>}
-                                {order.user_id && (
-                                    <p className="text-gray-400 text-[10px] pt-1 font-mono uppercase tracking-wider">User ID: {order.user_id.slice(0, 13)}...</p>
-                                )}
-                            </>
-                        );
-                    })()}
-                </div>
-            </div>
-
-            <AddressCard
-              title="Billing Address"
-              emptyMessage="No billing address was captured for this order."
-              address={customerDetails?.billing || null}
-            />
-
-            <AddressCard
-              title="Shipping Address"
-              emptyMessage="No shipping address was captured for this order."
-              address={customerDetails?.shipping || null}
-            />
-
-            {/* Payment Info */}
-             <div className="border rounded-lg p-4 bg-white dark:bg-slate-900 dark:border-slate-800">
-                <h3 className="font-medium text-gray-900 mb-2 dark:text-gray-100">Payment Details</h3>
-                <div className="text-sm space-y-2">
-                    <div className="flex justify-between">
-                        <span className="text-gray-500">Provider</span>
-                        <span className="capitalize font-medium">{order.provider || 'Stripe'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-gray-500">Created</span>
-                        <span>{new Date(order.created_at || '').toLocaleDateString()}</span>
-                    </div>
-                     <div className="flex justify-between">
-                        <span className="text-gray-500">Time</span>
-                        <span>{new Date(order.created_at || '').toLocaleTimeString()}</span>
-                    </div>
-                    {/* Add External ID if we had it, typically Stripe ID is in session_id or similar */}
-                    {order.stripe_session_id && (
-                         <div className="pt-2 border-t mt-2 dark:border-slate-800">
-                             <p className="text-xs text-gray-500 mb-0.5">Session ID</p>
-                             <p className="text-xs break-all font-mono bg-gray-50 p-1 rounded dark:bg-slate-800">
-                                 {order.stripe_session_id}
-                             </p>
-                         </div>
-                    )}
-                </div>
-            </div>
-
-        </div>
       </div>
-
     </div>
   );
 }
@@ -209,29 +172,49 @@ function AddressCard({
   address: OrderCustomerDetails['billing'];
 }) {
   return (
-    <div className="border rounded-lg p-4 bg-white dark:bg-slate-900 dark:border-slate-800">
-      <h3 className="font-medium text-gray-900 mb-3 dark:text-gray-100 flex items-center gap-2">
-        <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-        {title}
-      </h3>
+    <div className="rounded-lg border bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <h3 className="mb-3 font-medium text-gray-900 dark:text-gray-100">{title}</h3>
       <div className="text-sm text-gray-600 dark:text-gray-400">
         {!address ? (
-          <p className="italic text-gray-400 text-xs">{emptyMessage}</p>
+          <p className="italic text-xs text-gray-400">{emptyMessage}</p>
         ) : (
           <address className="not-italic space-y-0.5">
-            <p className="font-medium text-gray-900 dark:text-gray-200">{address.recipient_name}</p>
+            {address.company_name ? (
+              <p className="font-medium text-gray-900 dark:text-gray-200">
+                {address.company_name}
+              </p>
+            ) : null}
+            <p className="font-medium text-gray-900 dark:text-gray-200">
+              {address.recipient_name}
+            </p>
             <p>{address.line1}</p>
-            {address.line2 && <p>{address.line2}</p>}
+            {address.line2 ? <p>{address.line2}</p> : null}
             <p>
               {address.city}, {address.state || ''} {address.postal_code}
             </p>
-            <p className="uppercase text-xs font-semibold tracking-wide pt-1">{address.country_code}</p>
+            <p className="pt-1 text-xs font-semibold uppercase tracking-wide">
+              {address.country_code}
+            </p>
           </address>
         )}
       </div>
+    </div>
+  );
+}
+
+function MetaRow({
+  label,
+  value,
+  capitalize = false,
+}: {
+  label: string;
+  value: string;
+  capitalize?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-gray-500">{label}</span>
+      <span className={capitalize ? 'capitalize font-medium' : 'font-medium'}>{value}</span>
     </div>
   );
 }

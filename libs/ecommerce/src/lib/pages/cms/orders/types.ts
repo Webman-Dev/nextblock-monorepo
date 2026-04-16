@@ -1,13 +1,21 @@
 import type { OrderCustomerDetails } from '../../../customer';
+import type { OrderTaxDetails } from '../../../order-tax-details';
 
 export type Order = {
+  currency: string | null;
   created_at: string | null;
   customer_details: OrderCustomerDetails | null;
   id: string;
+  invoice_number: string | null;
+  paid_at: string | null;
   payment_intent_id: string | null;
   provider: string | null;
+  shipping_total: number | null;
   status: string;
+  subtotal: number | null;
   stripe_session_id: string | null;
+  tax_details: OrderTaxDetails | null;
+  tax_total: number | null;
   total: number;
   user_id: string | null;
 };

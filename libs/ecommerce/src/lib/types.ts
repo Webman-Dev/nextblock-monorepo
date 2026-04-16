@@ -52,6 +52,7 @@ export interface Product {
   upc?: string | null;
   price: number;
   sale_price?: number | null;
+  is_taxable?: boolean;
   price_range_min?: number | null;
   price_range_max?: number | null;
   image_url?: string; // Resolved URL of the primary image
@@ -71,6 +72,50 @@ export interface Product {
   selected_options?: ProductVariantOption[];
   attributes?: ProductAttribute[];
   variants?: ProductVariant[];
+}
+
+export interface ShippingZone {
+  id: string;
+  name: string;
+  priority_order: number;
+  countries: string[];
+  states: string[];
+}
+
+export interface TaxRate {
+  id: string;
+  country_code: string;
+  state_code?: string | null;
+  tax_name: string;
+  tax_rate: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export type TaxCalculationMode = 'manual' | 'automatic';
+
+export interface EcommerceSettings {
+  trackQuantities: boolean;
+  enableTaxes: boolean;
+  taxCalculationMode: TaxCalculationMode;
+}
+
+export interface TaxCalculationLine {
+  id?: string;
+  name: string;
+  rate: number;
+  amount: number;
+  country_code: string;
+  state_code?: string | null;
+}
+
+export interface TaxCalculationResult {
+  enabled: boolean;
+  mode: TaxCalculationMode;
+  amount: number;
+  taxableSubtotal: number;
+  lines: TaxCalculationLine[];
+  isPendingExternalCalculation?: boolean;
 }
 
 export type BillingCycle = 'monthly' | 'annual' | 'lifetime';

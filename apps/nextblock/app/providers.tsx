@@ -2,10 +2,26 @@
 
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from '../context/AuthContext';
-import { LanguageProvider } from '../context/LanguageContext';
+import { LanguageProvider, useLanguage } from '../context/LanguageContext';
 import { CurrentContentProvider } from '../context/CurrentContentContext';
 import { CartTranslator } from '../components/CartTranslator';
 import { TranslationsProvider } from '@nextblock-cms/utils';
+
+function TranslationBridge({
+  children,
+  translations,
+}: {
+  children: React.ReactNode;
+  translations: { key: string; translations: Record<string, string> }[];
+}) {
+  const { currentLocale } = useLanguage();
+
+  return (
+    <TranslationsProvider translations={translations} lang={currentLocale}>
+      {children}
+    </TranslationsProvider>
+  );
+}
 
 export function Providers({ children, ...props }: { children: React.ReactNode;[key: string]: any; }) {
   const {
@@ -27,7 +43,7 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
       >
         <CurrentContentProvider>
           <CartTranslator />
-          <TranslationsProvider translations={translations} lang={serverLocale}>
+          <TranslationBridge translations={translations}>
             <ThemeProvider
               attribute="class"
               defaultTheme="system"
@@ -38,7 +54,7 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
             >
               {children}
             </ThemeProvider>
-          </TranslationsProvider>
+          </TranslationBridge>
         </CurrentContentProvider>
       </LanguageProvider>
     </AuthProvider>

@@ -14,6 +14,18 @@ import { useHotkeys } from '../../../../../hooks/use-hotkeys';
 type Media = Database['public']['Tables']['media']['Row'];
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || ''
 
+function resolveLogoSrc(objectKey?: string | null) {
+  if (!objectKey) {
+    return null
+  }
+
+  if (objectKey.startsWith('/') || objectKey.startsWith('http')) {
+    return objectKey
+  }
+
+  return `${R2_BASE_URL}/${objectKey}`
+}
+
 interface LogoDetails {
   id?: string
   name: string
@@ -127,7 +139,7 @@ export default function LogoForm({ logo, action }: LogoFormProps) {
               style={{ maxWidth: logoDetails.width, maxHeight: 200 }}
             >
               <Image
-                src={`${R2_BASE_URL}/${logoDetails.object_key}`}
+                src={resolveLogoSrc(logoDetails.object_key) || ''}
                 alt={logoDetails.name || 'Selected logo'}
                 width={logoDetails.width}
                 height={logoDetails.height}

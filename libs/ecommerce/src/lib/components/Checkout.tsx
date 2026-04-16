@@ -25,8 +25,10 @@ import {
 import { useTranslations } from '@nextblock-cms/utils';
 import { countries, normalizeCountryCode } from '../countries';
 import { getShippingEstimates } from '../server-actions/shipping-actions';
+import { getTaxEstimate } from '../server-actions/tax-actions';
 import { ResolvedShippingMethod } from '../shipping/resolver';
 import { isDigitalItem } from '../types';
+import { countryUsesStructuredStates, getStatesForCountry } from '../states';
 import {
   addressesMatch,
   CheckoutCustomerDefaults,
@@ -46,6 +48,7 @@ interface CheckoutProps {
 function buildAddressState(address?: CustomerAddressInput | null, fallbackName?: string | null) {
   return {
     ...emptyCustomerAddress(),
+    company_name: address?.company_name || '',
     recipient_name: address?.recipient_name || fallbackName || '',
     line1: address?.line1 || '',
     line2: address?.line2 || '',
@@ -70,6 +73,10 @@ function AddressForm({
   onChange: (nextValue: ReturnType<typeof buildAddressState>) => void;
 }) {
   const { t } = useTranslations();
+  const companyNameLabel =
+    t('company_name') === 'company_name' ? 'Company name' : t('company_name');
+  const availableStates = getStatesForCountry(value.country_code);
+  const usesStructuredStates = countryUsesStructuredStates(value.country_code);
 
   return (
     <Card>
@@ -81,7 +88,15 @@ function AddressForm({
         <p className="text-sm text-muted-foreground">{description}</p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor={`${idPrefix}-company`}>{companyNameLabel}</Label>
+            <Input
+              id={`${idPrefix}-company`}
+              value={value.company_name}
+              onChange={(e) => onChange({ ...value, company_name: e.target.value })}
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor={`${idPrefix}-name`}>{t('full_name')}</Label>
             <Input
@@ -96,7 +111,15 @@ function AddressForm({
               id={`${idPrefix}-country`}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={value.country_code}
-              onChange={(e) => onChange({ ...value, country_code: e.target.value })}
+              onChange={(e) => {
+                const nextCountryCode = e.target.value;
+                const nextStates = getStatesForCountry(nextCountryCode);
+                onChange({
+                  ...value,
+                  country_code: nextCountryCode,
+                  state: nextStates.some((entry) => entry.code === value.state) ? value.state : '',
+                });
+              }}
             >
               {countries.map((country) => (
                 <option key={country.code} value={country.code}>
@@ -136,11 +159,27 @@ function AddressForm({
           </div>
           <div className="space-y-2">
             <Label htmlFor={`${idPrefix}-state`}>{t('state_province')}</Label>
-            <Input
-              id={`${idPrefix}-state`}
-              value={value.state}
-              onChange={(e) => onChange({ ...value, state: e.target.value })}
-            />
+            {usesStructuredStates ? (
+              <select
+                id={`${idPrefix}-state`}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={value.state}
+                onChange={(e) => onChange({ ...value, state: e.target.value })}
+              >
+                <option value="">{t('select_an_option') || 'Select a state / province'}</option>
+                {availableStates.map((state) => (
+                  <option key={state.code} value={state.code}>
+                    {state.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <Input
+                id={`${idPrefix}-state`}
+                value={value.state}
+                onChange={(e) => onChange({ ...value, state: e.target.value })}
+              />
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor={`${idPrefix}-postal`}>{t('postal_zip_code')}</Label>
@@ -164,8 +203,12 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
   const [phone, setPhone] = useState(initialCustomer?.phone || '');
   const [showSandboxModal, setShowSandboxModal] = useState(false);
   const [isLoadingRates, setIsLoadingRates] = useState(false);
+  const [isLoadingTaxes, setIsLoadingTaxes] = useState(false);
   const [shippingMethods, setShippingMethods] = useState<ResolvedShippingMethod[]>([]);
   const [selectedMethodId, setSelectedMethodId] = useState<string | null>(null);
+  const [taxEstimate, setTaxEstimate] = useState<Awaited<
+    ReturnType<typeof getTaxEstimate>
+  >['tax'] | null>(null);
   const [billingAddress, setBillingAddress] = useState(() =>
     buildAddressState(initialCustomer?.billingAddress, initialCustomer?.fullName)
   );
@@ -182,9 +225,18 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
 
   const store = useCart((state) => state);
   const subtotal = useCartSubtotal();
-  const { t } = useTranslations();
+  const { t, lang } = useTranslations();
+  const items = store?.items ?? [];
 
   const isAuthenticated = initialCustomer?.isAuthenticated ?? false;
+  const translateOrFallback = (
+    key: string,
+    fallback: string,
+    params?: Record<string, string | number>
+  ) => {
+    const translated = t(key, params);
+    return translated === key ? fallback : translated;
+  };
 
   const hasPhysicalProducts = useMemo(
     () => store?.items.some((item) => !isDigitalItem(item)) ?? false,
@@ -195,6 +247,10 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
     () => (useBillingForShipping ? billingAddress : shippingAddress),
     [billingAddress, shippingAddress, useBillingForShipping]
   );
+  const taxAddress = useMemo(
+    () => (hasPhysicalProducts ? shippingAddressForRates : billingAddress),
+    [billingAddress, hasPhysicalProducts, shippingAddressForRates]
+  );
 
   const selectedMethod = useMemo(
     () => shippingMethods.find((method) => method.id === selectedMethodId),
@@ -202,12 +258,17 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
   );
 
   const total = useMemo(
-    () => subtotal + (selectedMethod?.amount ?? 0),
-    [subtotal, selectedMethod]
+    () =>
+      subtotal +
+      (selectedMethod?.amount ?? 0) +
+      (taxEstimate && !taxEstimate.isPendingExternalCalculation ? taxEstimate.amount : 0),
+    [selectedMethod, subtotal, taxEstimate]
   );
 
   useEffect(() => {
     if (!hasPhysicalProducts) {
+      setShippingMethods([]);
+      setSelectedMethodId(null);
       return;
     }
 
@@ -217,11 +278,15 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
       }
 
       setIsLoadingRates(true);
-      const result = await getShippingEstimates(subtotal, {
-        country: shippingAddressForRates.country_code,
-        state: shippingAddressForRates.state,
-        postal_code: shippingAddressForRates.postal_code,
-      });
+      const result = await getShippingEstimates(
+        subtotal,
+        {
+          country: shippingAddressForRates.country_code,
+          state: shippingAddressForRates.state,
+          postal_code: shippingAddressForRates.postal_code,
+        },
+        lang
+      );
 
       if (result.success && result.methods) {
         setShippingMethods(result.methods);
@@ -248,13 +313,45 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
     shippingAddressForRates.postal_code,
     shippingAddressForRates.state,
     subtotal,
+    lang,
   ]);
+
+  useEffect(() => {
+    const loadTaxes = async () => {
+      if (!taxAddress.country_code) {
+        setIsLoadingTaxes(false);
+        setTaxEstimate(null);
+        return;
+      }
+
+      if (countryUsesStructuredStates(taxAddress.country_code) && !taxAddress.state) {
+        setIsLoadingTaxes(false);
+        setTaxEstimate(null);
+        return;
+      }
+
+      setIsLoadingTaxes(true);
+      const result = await getTaxEstimate(items, {
+        country_code: taxAddress.country_code,
+        state: taxAddress.state,
+      });
+
+      if (result.success && result.tax) {
+        setTaxEstimate(result.tax);
+      } else {
+        setTaxEstimate(null);
+      }
+
+      setIsLoadingTaxes(false);
+    };
+
+    const timer = setTimeout(loadTaxes, 300);
+    return () => clearTimeout(timer);
+  }, [items, taxAddress.country_code, taxAddress.state]);
 
   if (!store) {
     return null;
   }
-
-  const { items } = store;
 
   const closeSandboxModal = () => {
     setShowSandboxModal(false);
@@ -311,6 +408,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
           billingAddress: normalizedBillingAddress,
           shippingAddress: normalizedShippingAddress,
           shippingMethodId: selectedMethodId,
+          locale: lang,
         }),
       });
 
@@ -609,6 +707,35 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                       <span>{selectedMethod ? `$${(selectedMethod.amount / 100).toFixed(2)}` : '-'}</span>
                     </div>
                   )}
+                  <div className="flex justify-between">
+                    <span>{translateOrFallback('ecommerce.tax', 'Tax')}</span>
+                    <span>
+                      {isLoadingTaxes ? (
+                        '...'
+                      ) : taxEstimate?.isPendingExternalCalculation ? (
+                        translateOrFallback(
+                          'ecommerce.tax_calculated_on_stripe',
+                          'Calculated on Stripe'
+                        )
+                      ) : taxEstimate ? (
+                        `$${(taxEstimate.amount / 100).toFixed(2)}`
+                      ) : (
+                        '-'
+                      )}
+                    </span>
+                  </div>
+                  {taxEstimate && taxEstimate.lines.length > 0 ? (
+                    <div className="rounded-lg bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                      {taxEstimate.lines.map((line) => (
+                        <div key={line.id || `${line.name}-${line.rate}`} className="flex justify-between gap-3">
+                          <span>
+                            {line.name} ({line.rate.toFixed(4)}%)
+                          </span>
+                          <span>${(line.amount / 100).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className="flex justify-between font-bold text-lg pt-2 border-t mt-2">
                     <span>{t('ecommerce.total')}</span>
                     <span className="text-primary">${(total / 100).toFixed(2)}</span>
@@ -627,7 +754,12 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                 ) : null}
 
                 <p className="text-[10px] text-center text-muted-foreground">
-                  {t('checkout_payment_only_notice')}
+                  {taxEstimate?.isPendingExternalCalculation
+                    ? translateOrFallback(
+                        'checkout_stripe_tax_finalized_notice',
+                        'Tax will be finalized by Stripe Tax on the payment step.'
+                      )
+                    : t('checkout_payment_only_notice')}
                 </p>
               </CardContent>
             </Card>

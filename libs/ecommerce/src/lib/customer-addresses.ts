@@ -9,6 +9,7 @@ type UserAddressRow = {
   id: string;
   address_type: string;
   is_default: boolean | null;
+  company_name: string | null;
   recipient_name: string | null;
   line1: string | null;
   line2: string | null;
@@ -27,6 +28,7 @@ function mapAddressRow(address?: UserAddressRow | null): CustomerAddressInput | 
   }
 
   return normalizeCustomerAddress({
+    company_name: address.company_name,
     recipient_name: address.recipient_name,
     line1: address.line1,
     line2: address.line2,
@@ -92,6 +94,7 @@ async function setDefaultAddress(
     user_id: userId,
     address_type: addressType,
     is_default: true,
+    company_name: normalized.company_name ?? null,
     recipient_name: normalized.recipient_name ?? null,
     line1: normalized.line1 ?? null,
     line2: normalized.line2 ?? null,

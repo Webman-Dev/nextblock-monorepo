@@ -1,31 +1,63 @@
 "use client"
 
-import React, { useState, useEffect } from 'react';
-import { 
-    Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
-    Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+    Button,
+    Input,
+    Label,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from '@nextblock-cms/ui';
-import { Plus, DollarSign, Gift, Edit2 } from 'lucide-react';
+import { Plus, DollarSign, Gift, Edit2, Languages } from 'lucide-react';
 import { createShippingRate, updateShippingRate } from '../server-actions';
+import type { Database } from '@nextblock-cms/db';
+
+type Language = Pick<
+  Database['public']['Tables']['languages']['Row'],
+  'code' | 'name' | 'is_default'
+>;
 
 interface RateFormProps {
     zoneId: string;
     zoneName: string;
+    languages: Language[];
     mode?: 'create' | 'edit';
     initialData?: {
         id: string;
         name: string;
+        name_translations?: Record<string, string> | null;
         method_type: 'flat_rate' | 'free_shipping';
         cost_amount: number;
         min_order_amount: number;
     };
 }
 
-export function RateForm({ zoneId, zoneName, mode = 'create', initialData }: RateFormProps) {
+export function RateForm({ zoneId, zoneName, languages, mode = 'create', initialData }: RateFormProps) {
     const [open, setOpen] = useState(false);
     const isEdit = mode === 'edit';
+    const defaultLanguage = useMemo(
+      () => languages.find((language) => language.is_default) || languages[0] || null,
+      [languages]
+    );
+    const translatableLanguages = useMemo(
+      () => languages.filter((language) => !language.is_default),
+      [languages]
+    );
     
     const [name, setName] = useState(initialData?.name || '');
+    const [nameTranslations, setNameTranslations] = useState<Record<string, string>>(
+      initialData?.name_translations || {}
+    );
     const [type, setType] = useState<'flat_rate' | 'free_shipping'>(initialData?.method_type || 'flat_rate');
     const [cost, setCost] = useState(initialData ? (initialData.cost_amount / 100).toFixed(2) : '0.00');
     const [minOrder, setMinOrder] = useState(initialData ? (initialData.min_order_amount / 100).toFixed(2) : '0.00');
@@ -34,9 +66,18 @@ export function RateForm({ zoneId, zoneName, mode = 'create', initialData }: Rat
     useEffect(() => {
         if (open && initialData) {
             setName(initialData.name);
+            setNameTranslations(initialData.name_translations || {});
             setType(initialData.method_type);
             setCost((initialData.cost_amount / 100).toFixed(2));
             setMinOrder((initialData.min_order_amount / 100).toFixed(2));
+        }
+
+        if (open && !initialData) {
+            setName('');
+            setNameTranslations({});
+            setType('flat_rate');
+            setCost('0.00');
+            setMinOrder('0.00');
         }
     }, [open, initialData]);
 
@@ -44,20 +85,22 @@ export function RateForm({ zoneId, zoneName, mode = 'create', initialData }: Rat
         e.preventDefault();
         setIsLoading(true);
         
-        const amountCents = Math.round(parseFloat(cost) * 100);
-        const minAmountCents = Math.round(parseFloat(minOrder) * 100);
+        const amountCents = Math.round(parseFloat(cost || '0') * 100);
+        const minAmountCents = Math.round(parseFloat(minOrder || '0') * 100);
         
         let result;
         if (isEdit && initialData?.id) {
             result = await updateShippingRate(initialData.id, { 
-                name, 
+                name,
+                nameTranslations,
                 type, 
                 cost: amountCents,
                 minOrderAmount: minAmountCents
             });
         } else {
             result = await createShippingRate(zoneId, { 
-                name, 
+                name,
+                nameTranslations,
                 type, 
                 cost: amountCents,
                 minOrderAmount: minAmountCents
@@ -67,12 +110,6 @@ export function RateForm({ zoneId, zoneName, mode = 'create', initialData }: Rat
         setIsLoading(false);
         if (result.success) {
             setOpen(false);
-            if (!isEdit) {
-                setName('');
-                setType('flat_rate');
-                setCost('0.00');
-                setMinOrder('0.00');
-            }
         } else if (result.error) {
             alert(result.error);
         }
@@ -92,18 +129,20 @@ export function RateForm({ zoneId, zoneName, mode = 'create', initialData }: Rat
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent className="max-w-md overflow-hidden">
+            <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
                         <DialogTitle>{isEdit ? 'Edit Shipping Rate' : 'Add Shipping Rate'}</DialogTitle>
                         <DialogDescription>
-                            Configure shipping costs and conditions for matching orders in <strong>{zoneName}</strong>.
+                            Configure shipping costs and localized labels for matching orders in <strong>{zoneName}</strong>.
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="grid gap-5 py-6">
                         <div className="space-y-2">
-                            <Label htmlFor="rate-name">Rate Name</Label>
+                            <Label htmlFor="rate-name">
+                              Rate Name{defaultLanguage ? ` (${defaultLanguage.name})` : ''}
+                            </Label>
                             <Input 
                                 id="rate-name" 
                                 value={name} 
@@ -113,11 +152,46 @@ export function RateForm({ zoneId, zoneName, mode = 'create', initialData }: Rat
                             />
                         </div>
 
+                        {translatableLanguages.length > 0 && (
+                          <div className="space-y-4 rounded-xl border bg-slate-50/70 p-4 dark:bg-slate-900/40">
+                            <div className="flex items-center gap-2">
+                              <Languages className="h-4 w-4 text-slate-500" />
+                              <div>
+                                <p className="text-sm font-medium">Translations</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Add translated shipping rate labels for the active storefront languages.
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                              {translatableLanguages.map((language) => (
+                                <div key={language.code} className="space-y-2">
+                                  <Label htmlFor={`rate-name-${language.code}`}>
+                                    {language.name}
+                                  </Label>
+                                  <Input
+                                    id={`rate-name-${language.code}`}
+                                    value={nameTranslations[language.code] || ''}
+                                    onChange={(event) =>
+                                      setNameTranslations((current) => ({
+                                        ...current,
+                                        [language.code]: event.target.value,
+                                      }))
+                                    }
+                                    placeholder={name || 'Translated label'}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         <div className="space-y-2">
                             <Label htmlFor="type">Method Type</Label>
                             <Select 
                                 value={type} 
-                                onValueChange={(val: any) => {
+                                onValueChange={(val: 'flat_rate' | 'free_shipping') => {
                                     setType(val);
                                     if (val === 'free_shipping') setCost('0.00');
                                 }}
@@ -186,7 +260,7 @@ export function RateForm({ zoneId, zoneName, mode = 'create', initialData }: Rat
 
                     <DialogFooter className="bg-slate-50 dark:bg-slate-900/50 -mx-6 -mb-6 p-4 border-t dark:border-slate-800">
                         <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={isLoading}>Cancel</Button>
-                        <Button type="submit" disabled={isLoading || !name}>
+                        <Button type="submit" disabled={isLoading || !name.trim()}>
                             {isLoading 
                                 ? (isEdit ? 'Saving...' : 'Adding...') 
                                 : (isEdit ? 'Save Changes' : 'Add Rate')}

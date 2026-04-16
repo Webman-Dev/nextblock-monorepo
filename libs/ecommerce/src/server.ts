@@ -3,6 +3,9 @@ export * from './lib/stripe/checkout';
 export * from './lib/stripe/order-sync';
 export * from './lib/stripe/webhooks';
 export * from './lib/order-inventory';
+export * from './lib/order-tax-details';
+export * from './lib/invoice';
+export * from './lib/invoice-server';
 export * from './lib/customer';
 export * from './lib/customer-addresses';
 
@@ -28,3 +31,4 @@ export * from './lib/pages/cms/orders';
 export * from './lib/pages/cms/products';
 export * from './lib/pages/cms/payments';
 export * from './lib/pages/cms/shipping';
+export * from './lib/pages/cms/taxes';

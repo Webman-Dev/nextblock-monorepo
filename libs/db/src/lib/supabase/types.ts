@@ -397,34 +397,55 @@ export type Database = {
       orders: {
         Row: {
           created_at: string | null
+          currency: string
           customer_details: Json | null
           id: string
+          invoice_number: string | null
+          paid_at: string | null
           payment_intent_id: string | null
           provider: string | null
+          shipping_total: number | null
           status: string
           stripe_session_id: string | null
+          subtotal: number | null
+          tax_details: Json | null
+          tax_total: number
           total: number
           user_id: string | null
         }
         Insert: {
           created_at?: string | null
+          currency?: string
           customer_details?: Json | null
           id?: string
+          invoice_number?: string | null
+          paid_at?: string | null
           payment_intent_id?: string | null
           provider?: string | null
+          shipping_total?: number | null
           status?: string
           stripe_session_id?: string | null
+          subtotal?: number | null
+          tax_details?: Json | null
+          tax_total?: number
           total: number
           user_id?: string | null
         }
         Update: {
           created_at?: string | null
+          currency?: string
           customer_details?: Json | null
           id?: string
+          invoice_number?: string | null
+          paid_at?: string | null
           payment_intent_id?: string | null
           provider?: string | null
+          shipping_total?: number | null
           status?: string
           stripe_session_id?: string | null
+          subtotal?: number | null
+          tax_details?: Json | null
+          tax_total?: number
           total?: number
           user_id?: string | null
         }
@@ -854,6 +875,7 @@ export type Database = {
           freemius_plan_id: string | null
           freemius_product_id: string | null
           id: string
+          is_taxable: boolean
           language_id: number
           metadata: Json | null
           price: number
@@ -874,6 +896,7 @@ export type Database = {
           freemius_plan_id?: string | null
           freemius_product_id?: string | null
           id?: string
+          is_taxable?: boolean
           language_id: number
           metadata?: Json | null
           price: number
@@ -894,6 +917,7 @@ export type Database = {
           freemius_plan_id?: string | null
           freemius_product_id?: string | null
           id?: string
+          is_taxable?: boolean
           language_id?: number
           metadata?: Json | null
           price?: number
@@ -955,6 +979,7 @@ export type Database = {
         Row: {
           address_type: string
           city: string | null
+          company_name: string | null
           country_code: string | null
           created_at: string | null
           id: string
@@ -970,6 +995,7 @@ export type Database = {
         Insert: {
           address_type: string
           city?: string | null
+          company_name?: string | null
           country_code?: string | null
           created_at?: string | null
           id?: string
@@ -985,6 +1011,7 @@ export type Database = {
         Update: {
           address_type?: string
           city?: string | null
+          company_name?: string | null
           country_code?: string | null
           created_at?: string | null
           id?: string
@@ -1081,6 +1108,7 @@ export type Database = {
           method_type: string
           min_order_amount: number
           name: string
+          name_translations: Json | null
           updated_at: string | null
           zone_id: string
         }
@@ -1090,7 +1118,9 @@ export type Database = {
           created_at?: string | null
           id?: string
           method_type: string
+          min_order_amount?: number
           name: string
+          name_translations?: Json | null
           updated_at?: string | null
           zone_id: string
         }
@@ -1102,6 +1132,7 @@ export type Database = {
           method_type?: string
           min_order_amount?: number
           name?: string
+          name_translations?: Json | null
           updated_at?: string | null
           zone_id?: string
         }
@@ -1136,6 +1167,36 @@ export type Database = {
           name?: string
           priority_order?: number
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      tax_rates: {
+        Row: {
+          country_code: string
+          created_at: string
+          id: string
+          state_code: string | null
+          tax_name: string
+          tax_rate: number
+          updated_at: string
+        }
+        Insert: {
+          country_code: string
+          created_at?: string
+          id?: string
+          state_code?: string | null
+          tax_name: string
+          tax_rate: number
+          updated_at?: string
+        }
+        Update: {
+          country_code?: string
+          created_at?: string
+          id?: string
+          state_code?: string | null
+          tax_name?: string
+          tax_rate?: number
+          updated_at?: string
         }
         Relationships: []
       }

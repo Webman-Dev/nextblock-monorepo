@@ -9,6 +9,15 @@ import {
 } from '../customer';
 import { upsertDefaultUserAddresses } from '../customer-addresses';
 import { applyOrderInventoryDeduction } from '../order-inventory';
+import {
+  buildOrderTaxDetailsFromStripeSession,
+  normalizeOrderTaxDetails,
+} from '../order-tax-details';
+import { assignInvoiceMetadata } from '../invoice-server';
+import { stripe } from './client';
+
+const STRIPE_CHECKOUT_SESSION_TAX_EXPANDS = ['total_details.breakdown'] as const;
+const STRIPE_CHECKOUT_LINE_ITEM_TAX_EXPANDS = ['data.taxes.rate'] as const;
 
 function getServiceRoleSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -59,18 +68,32 @@ function parseStoredCustomerDetails(value: unknown): OrderCustomerDetails {
 
 export async function syncStripeOrderFromSession(session: Stripe.Checkout.Session) {
   const supabase = getServiceRoleSupabaseClient();
-  const orderId = session.metadata?.orderId;
+  let detailedSession = session;
+
+  try {
+    detailedSession = await stripe.checkout.sessions.retrieve(session.id, {
+      expand: [...STRIPE_CHECKOUT_SESSION_TAX_EXPANDS],
+    });
+  } catch (error) {
+    console.error('[Stripe Sync] Failed to rehydrate session tax details:', error);
+  }
+
+  const orderId = detailedSession.metadata?.orderId;
 
   let orderQuery = supabase
     .from('orders')
-    .select('id, user_id, status, total, customer_details')
+    .select(
+      'id, user_id, status, total, currency, subtotal, shipping_total, tax_total, tax_details, customer_details'
+    )
     .eq('stripe_session_id', session.id)
     .maybeSingle();
 
   if (orderId) {
     orderQuery = supabase
       .from('orders')
-      .select('id, user_id, status, total, customer_details')
+      .select(
+        'id, user_id, status, total, currency, subtotal, shipping_total, tax_total, tax_details, customer_details'
+      )
       .eq('id', orderId)
       .maybeSingle();
   }
@@ -82,34 +105,69 @@ export async function syncStripeOrderFromSession(session: Stripe.Checkout.Sessio
   }
 
   const existingDetails = parseStoredCustomerDetails(orderRecord.customer_details);
+  const existingTaxDetails = normalizeOrderTaxDetails(orderRecord.tax_details);
   const stripeBilling = fromStripeAddress(
-    session.customer_details?.address,
-    session.customer_details?.name ?? existingDetails.name
+    detailedSession.customer_details?.address,
+    detailedSession.customer_details?.name ?? existingDetails.name
   );
-  const sessionAny = session as any;
+  const sessionAny = detailedSession as any;
   const stripeShipping = fromStripeAddress(
     sessionAny.shipping_details?.address,
     sessionAny.shipping_details?.name ?? existingDetails.name
   );
 
   const mergedCustomerDetails = normalizeOrderCustomerDetails({
-    email: session.customer_details?.email ?? existingDetails.email,
-    name: session.customer_details?.name ?? existingDetails.name,
-    phone: session.customer_details?.phone ?? existingDetails.phone,
+    email: detailedSession.customer_details?.email ?? existingDetails.email,
+    name: detailedSession.customer_details?.name ?? existingDetails.name,
+    phone: detailedSession.customer_details?.phone ?? existingDetails.phone,
     billing: existingDetails.billing ?? stripeBilling,
     shipping: existingDetails.shipping ?? stripeShipping,
   });
 
   const wasAlreadyPaid = orderRecord.status === 'paid';
+  const lineItemsResponse = await stripe.checkout.sessions.listLineItems(detailedSession.id, {
+    limit: 100,
+    expand: [...STRIPE_CHECKOUT_LINE_ITEM_TAX_EXPANDS],
+  });
+  const finalizedStripeTaxDetails = buildOrderTaxDetailsFromStripeSession({
+    session: detailedSession,
+    lineItems: lineItemsResponse.data,
+    subtotal:
+      typeof orderRecord.subtotal === 'number'
+        ? orderRecord.subtotal
+        : existingTaxDetails?.subtotal ?? 0,
+    shippingTotal:
+      typeof orderRecord.shipping_total === 'number'
+        ? orderRecord.shipping_total
+        : existingTaxDetails?.shipping_total ?? 0,
+    fallbackMode: existingTaxDetails?.mode ?? 'automatic',
+    currency:
+      detailedSession.currency ?? orderRecord.currency ?? existingTaxDetails?.currency ?? 'usd',
+  });
+  const finalizedTaxDetails =
+    finalizedStripeTaxDetails.tax_total > 0 || finalizedStripeTaxDetails.lines.length > 0
+      ? finalizedStripeTaxDetails
+      : existingTaxDetails ?? finalizedStripeTaxDetails;
+  const finalizedTaxTotal =
+    finalizedTaxDetails?.tax_total ??
+    (typeof orderRecord.tax_total === 'number' ? orderRecord.tax_total : 0);
+  const finalizedCurrency =
+    detailedSession.currency ?? orderRecord.currency ?? finalizedTaxDetails?.currency ?? 'usd';
 
   const updateData = {
     status: 'paid',
-    stripe_session_id: session.id,
+    stripe_session_id: detailedSession.id,
     payment_intent_id:
-      typeof session.payment_intent === 'string' ? session.payment_intent : null,
+      typeof detailedSession.payment_intent === 'string' ? detailedSession.payment_intent : null,
     provider: 'stripe',
     customer_details: mergedCustomerDetails as any,
-    total: typeof session.amount_total === 'number' ? session.amount_total : orderRecord.total,
+    total:
+      typeof detailedSession.amount_total === 'number'
+        ? detailedSession.amount_total
+        : orderRecord.total,
+    currency: finalizedCurrency,
+    tax_total: finalizedTaxTotal,
+    tax_details: finalizedTaxDetails as any,
   };
 
   const { error: updateError } = await supabase
@@ -134,11 +192,33 @@ export async function syncStripeOrderFromSession(session: Stripe.Checkout.Sessio
     }
   }
 
+  const invoiceMetadata = await assignInvoiceMetadata({
+    orderId: orderRecord.id,
+    client: supabase,
+  });
+
   await applyOrderInventoryDeduction(supabase, orderRecord.id);
 
   return {
     orderId: orderRecord.id,
     alreadyPaid: wasAlreadyPaid,
     customerDetails: mergedCustomerDetails,
+    order: {
+      id: orderRecord.id,
+      invoice_number: invoiceMetadata.invoiceNumber,
+      paid_at: invoiceMetadata.paidAt,
+      total: updateData.total,
+      currency: finalizedCurrency,
+      subtotal:
+        typeof orderRecord.subtotal === 'number'
+          ? orderRecord.subtotal
+          : finalizedTaxDetails?.subtotal ?? 0,
+      shipping_total:
+        typeof orderRecord.shipping_total === 'number'
+          ? orderRecord.shipping_total
+          : finalizedTaxDetails?.shipping_total ?? 0,
+      tax_total: finalizedTaxTotal,
+      tax_details: finalizedTaxDetails,
+    },
   };
 }

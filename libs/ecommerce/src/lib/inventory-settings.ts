@@ -1,10 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { EcommerceSettings, TaxCalculationMode } from './types';
 
 export const ECOMMERCE_INVENTORY_SETTINGS_KEY = 'ecommerce_inventory_settings';
 
-export interface EcommerceInventorySettings {
-  trackQuantities: boolean;
-}
+export type EcommerceInventorySettings = EcommerceSettings;
 
 export interface CheckoutErrorPayload {
   error: string;
@@ -15,6 +14,8 @@ export interface CheckoutErrorPayload {
 
 export const DEFAULT_ECOMMERCE_INVENTORY_SETTINGS: EcommerceInventorySettings = {
   trackQuantities: true,
+  enableTaxes: false,
+  taxCalculationMode: 'manual',
 };
 
 function toBoolean(value: unknown, fallback = true) {
@@ -35,6 +36,21 @@ function toBoolean(value: unknown, fallback = true) {
   return fallback;
 }
 
+function toTaxCalculationMode(
+  value: unknown,
+  fallback: TaxCalculationMode = DEFAULT_ECOMMERCE_INVENTORY_SETTINGS.taxCalculationMode
+): TaxCalculationMode {
+  if (value === 'automatic') {
+    return 'automatic';
+  }
+
+  if (value === 'manual') {
+    return 'manual';
+  }
+
+  return fallback;
+}
+
 export function normalizeEcommerceInventorySettings(
   value: unknown
 ): EcommerceInventorySettings {
@@ -45,6 +61,14 @@ export function normalizeEcommerceInventorySettings(
         parsed.trackQuantities ?? parsed.track_quantities,
         DEFAULT_ECOMMERCE_INVENTORY_SETTINGS.trackQuantities
       ),
+      enableTaxes: toBoolean(
+        parsed.enableTaxes ?? parsed.enable_taxes,
+        DEFAULT_ECOMMERCE_INVENTORY_SETTINGS.enableTaxes
+      ),
+      taxCalculationMode: toTaxCalculationMode(
+        parsed.taxCalculationMode ?? parsed.tax_calculation_mode,
+        DEFAULT_ECOMMERCE_INVENTORY_SETTINGS.taxCalculationMode
+      ),
     };
   }
 
@@ -53,6 +77,8 @@ export function normalizeEcommerceInventorySettings(
       value,
       DEFAULT_ECOMMERCE_INVENTORY_SETTINGS.trackQuantities
     ),
+    enableTaxes: DEFAULT_ECOMMERCE_INVENTORY_SETTINGS.enableTaxes,
+    taxCalculationMode: DEFAULT_ECOMMERCE_INVENTORY_SETTINGS.taxCalculationMode,
   };
 }
 
@@ -80,6 +106,8 @@ export async function upsertEcommerceInventorySettings(
     key: ECOMMERCE_INVENTORY_SETTINGS_KEY,
     value: {
       track_quantities: settings.trackQuantities,
+      enable_taxes: settings.enableTaxes,
+      tax_calculation_mode: settings.taxCalculationMode,
     },
   });
 }

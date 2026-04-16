@@ -3,6 +3,8 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import {
   applyOrderInventoryDeduction,
+  assignInvoiceMetadata,
+  getInvoicePresentationData,
   stripe,
   syncStripeOrderFromSession,
 } from '@nextblock-cms/ecommerce/server';
@@ -37,13 +39,20 @@ export async function fulfillOrderAction(sessionId: string) {
       }
 
       const result = await syncStripeOrderFromSession(session);
-      return { success: true, alreadyPaid: result.alreadyPaid };
+      const invoice = await getInvoicePresentationData(result.orderId, getServiceRoleSupabaseClient() as any);
+      return {
+        success: true,
+        alreadyPaid: result.alreadyPaid,
+        invoice,
+      };
     }
 
     const supabase = getServiceRoleSupabaseClient();
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id, status, provider')
+      .select(
+        'id, status, provider, total, currency, subtotal, shipping_total, tax_total, tax_details, paid_at'
+      )
       .eq('id', sessionId)
       .single();
 
@@ -60,7 +69,17 @@ export async function fulfillOrderAction(sessionId: string) {
         return { success: false, error: 'Failed to update order inventory' };
       }
 
-      return { success: true, alreadyPaid: true };
+      await assignInvoiceMetadata({
+        orderId: order.id,
+        paidAt: order.paid_at ?? null,
+        client: supabase as any,
+      });
+
+      return {
+        success: true,
+        alreadyPaid: true,
+        invoice: await getInvoicePresentationData(order.id, supabase as any),
+      };
     }
 
     const { error: updateError } = await supabase
@@ -80,7 +99,17 @@ export async function fulfillOrderAction(sessionId: string) {
       return { success: false, error: 'Failed to update order inventory' };
     }
 
-    return { success: true, alreadyPaid: false };
+    await assignInvoiceMetadata({
+      orderId: order.id,
+      paidAt: order.paid_at ?? null,
+      client: supabase as any,
+    });
+
+    return {
+      success: true,
+      alreadyPaid: false,
+      invoice: await getInvoicePresentationData(order.id, supabase as any),
+    };
   } catch (error) {
     console.error('Action error reconciling order:', error);
     return { success: false, error: 'Internal server error' };

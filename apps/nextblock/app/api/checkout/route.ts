@@ -10,7 +10,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Ecommerce module license is inactive' }, { status: 403 });
     }
 
-    const { items, customerEmail, customerPhone, billingAddress, shippingAddress, shippingMethodId } = await req.json();
+    const {
+      items,
+      customerEmail,
+      customerPhone,
+      billingAddress,
+      shippingAddress,
+      shippingMethodId,
+      locale,
+    } = await req.json();
     
     if (!items || !Array.isArray(items)) {
       return NextResponse.json({ error: 'Invalid items data' }, { status: 400 });
@@ -56,6 +64,7 @@ export async function POST(req: Request) {
       billingAddress: normalizeCustomerAddress(billingAddress) ?? billingAddress,
       shippingAddress: normalizeCustomerAddress(shippingAddress),
       shippingMethodId,
+      locale: typeof locale === 'string' ? locale : null,
     });
 
     if (error) {

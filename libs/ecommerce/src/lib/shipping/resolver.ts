@@ -1,4 +1,6 @@
 import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
+import { resolveTranslatedText } from '../variation-utils';
+import type { TranslationMap } from '../types';
 
 export interface ShippingDestination {
     country: string;
@@ -19,7 +21,8 @@ export interface ResolvedShippingMethod {
  */
 export async function resolveShippingOptions(
     cartTotal: number, 
-    destination: ShippingDestination
+    destination: ShippingDestination,
+    languageCode?: string | null
 ): Promise<ResolvedShippingMethod[]> {
     const supabase = getSsgSupabaseClient();
 
@@ -72,7 +75,7 @@ export async function resolveShippingOptions(
     // 3. Fetch methods for the resolved zone
     const { data: methods, error: methodsError } = await supabase
         .from('shipping_zone_methods')
-        .select('*')
+        .select('id, zone_id, method_type, cost_amount, cost_currency, min_order_amount, name, name_translations')
         .eq('zone_id', selectedZoneId);
 
     if (methodsError || !methods) {
@@ -92,7 +95,11 @@ export async function resolveShippingOptions(
 
     return [{
         id: cheapestMethod.id,
-        name: cheapestMethod.name,
+        name: resolveTranslatedText(
+          cheapestMethod.name,
+          (cheapestMethod.name_translations || null) as TranslationMap | null,
+          languageCode
+        ),
         amount: cheapestMethod.cost_amount || 0,
         currency: cheapestMethod.cost_currency || 'USD',
         type: cheapestMethod.method_type as any

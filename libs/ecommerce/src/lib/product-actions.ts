@@ -42,10 +42,29 @@ function buildProductRpcPayload(data: ProductFormValues, id?: string) {
         : null,
     freemius_plan_id: data.freemius_plan_id ?? null,
     freemius_product_id: data.freemius_product_id ?? null,
+    is_taxable: data.is_taxable,
     language_id: data.language_id,
     translation_group_id: data.translation_group_id || undefined,
     variants: serializeVariantsForRpc(data.variants),
   };
+}
+
+async function persistProductTaxability(
+  supabase: SupabaseClient<Database>,
+  productId: string,
+  isTaxable: boolean
+) {
+  const { error } = await supabase
+    .from('products')
+    .update({
+      is_taxable: isTaxable,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', productId);
+
+  if (error) {
+    throw error;
+  }
 }
 
 export async function getProducts(
@@ -58,7 +77,7 @@ export async function getProducts(
   let query = supabase
     .from('products')
     .select(
-      'id, title, sku, upc, price, sale_price, short_description, stock, status, slug, language_id, translation_group_id, product_media(media(file_path, object_key)), product_variants(id, price, sale_price)',
+      'id, title, sku, upc, price, sale_price, is_taxable, short_description, stock, status, slug, language_id, translation_group_id, product_media(media(file_path, object_key)), product_variants(id, price, sale_price)',
       { count: 'exact' }
     )
     .range(start, end)
@@ -217,6 +236,8 @@ export async function createProduct(supabase: SupabaseClient<Database>, data: Pr
     });
   }
 
+  await persistProductTaxability(supabase, productId, data.is_taxable);
+
   await syncSharedInventoryForSavedProduct(productId, data);
 
   const { data: product } = await supabase.from('products').select('*').eq('id', productId).single();
@@ -255,6 +276,8 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
       sort_order: 0,
     });
   }
+
+  await persistProductTaxability(supabase, productId, data.is_taxable);
 
   const newMediaIds = data.product_media 
     ? data.product_media.map(m => m.media_id)
@@ -374,7 +397,8 @@ export async function fetchTranslatedProductsForCartInternal(
   supabase: SupabaseClient,
   translationGroupIds: string[],
   languageCode: string,
-  skus: string[] = []
+  skus: string[] = [],
+  productIds: string[] = []
 ) {
   const { data: language } = await supabase
     .from('languages')
@@ -393,6 +417,9 @@ export async function fetchTranslatedProductsForCartInternal(
   if (skus.length > 0) {
     filters.push(`sku.in.(${skus.map(sku => `"${sku}"`).join(',')})`);
   }
+  if (productIds.length > 0) {
+    filters.push(`id.in.(${productIds.join(',')})`);
+  }
 
 
   let query = supabase
@@ -403,12 +430,45 @@ export async function fetchTranslatedProductsForCartInternal(
       sku, 
       price, 
       sale_price, 
+      stock,
       slug, 
       language_id,
+      is_taxable,
       product_media (
         media (
           file_path,
           object_key
+        )
+      ),
+      product_variants (
+        id,
+        sku,
+        upc,
+        main_media_id,
+        price,
+        sale_price,
+        stock_quantity,
+        media:main_media_id (
+          file_path,
+          object_key,
+          description
+        ),
+        variant_attribute_mapping (
+          attribute_term_id,
+          product_attribute_terms (
+            id,
+            attribute_id,
+            value,
+            slug,
+            sort_order,
+            value_translations,
+            product_attributes (
+              id,
+              name,
+              slug,
+              name_translations
+            )
+          )
         )
       ),
       translation_group_id

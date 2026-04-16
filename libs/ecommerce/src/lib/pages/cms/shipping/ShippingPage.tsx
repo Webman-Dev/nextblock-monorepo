@@ -4,28 +4,96 @@ import {
     Card, CardContent, CardDescription, CardHeader, CardTitle,
     Button, Badge, TooltipProvider, Tooltip, TooltipTrigger, TooltipContent
 } from '@nextblock-cms/ui';
-import { Trash2, Globe, Truck, Info } from 'lucide-react';
+import { Trash2, Globe, Truck, Info, Boxes } from 'lucide-react';
 import { ZoneForm } from './components/ZoneForm';
 import { RateForm } from './components/RateForm';
-import { deleteShippingZone, deleteShippingRate } from './server-actions';
+import { deleteShippingZone, deleteShippingRate, updateInventoryTrackingAction } from './server-actions';
+import { getEcommerceInventorySettings } from '../../../inventory-settings';
+import { resolveSubdivisionName } from '../../../states';
 
-export async function ShippingPage() {
+export async function ShippingPage({
+    searchParams,
+}: {
+    searchParams?: { success?: string };
+}) {
     // Using service role for admin view to ensure all zones are visible and manageable
     const supabase = getServiceRoleSupabaseClient();
     
-    // Fetch Zones with Locations and Methods
-    const { data: zones } = await supabase
-        .from('shipping_zones')
-        .select(`
-            *,
-            shipping_zone_locations (*),
-            shipping_zone_methods (*)
-        `)
-        .order('priority_order', { ascending: true });
+    const [{ data: zones }, settings, { data: languages }] = await Promise.all([
+        supabase
+            .from('shipping_zones')
+            .select(`
+                *,
+                shipping_zone_locations (*),
+                shipping_zone_methods (*)
+            `)
+            .order('priority_order', { ascending: true }),
+        getEcommerceInventorySettings(supabase as any),
+        supabase
+            .from('languages')
+            .select('code, name, is_default')
+            .eq('is_active', true)
+            .order('name', { ascending: true }),
+    ]);
 
     return (
         <TooltipProvider>
             <div className="space-y-6">
+                {searchParams?.success ? (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                        {searchParams.success}
+                    </div>
+                ) : null}
+
+                <Card className="overflow-hidden border-slate-200 dark:border-slate-800 shadow-sm">
+                    <CardContent className="p-4 sm:p-5">
+                        <form action={updateInventoryTrackingAction} className="space-y-3">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="flex items-start gap-3 min-w-0">
+                                    <div className="p-2 bg-primary/10 rounded-lg text-primary shadow-inner shrink-0">
+                                        <Boxes className="h-4 w-4" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <CardTitle className="text-base font-semibold leading-none">
+                                            Inventory Tracking
+                                        </CardTitle>
+                                        <CardDescription className="mt-1 text-sm">
+                                            Control whether checkout enforces stock counts and paid orders deduct inventory.
+                                        </CardDescription>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end lg:justify-start shrink-0">
+                                    <Button type="submit" size="sm" className="w-full sm:w-auto">
+                                        Save Inventory Settings
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div className="rounded-lg border bg-muted/20 px-4 py-3">
+                                <input type="hidden" name="trackQuantities" value="false" />
+                                <label htmlFor="track-quantities" className="flex cursor-pointer items-start gap-3">
+                                    <input
+                                        id="track-quantities"
+                                        name="trackQuantities"
+                                        type="checkbox"
+                                        value="true"
+                                        defaultChecked={settings.trackQuantities}
+                                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                    />
+                                    <span className="space-y-0.5">
+                                        <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+                                            Track product quantities
+                                        </span>
+                                        <span className="block text-sm text-muted-foreground">
+                                            Prevent overselling by checking stock during checkout and decrementing quantities after payment is confirmed.
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
+                        </form>
+                    </CardContent>
+                </Card>
+
                 <div className="flex justify-between items-center">
                     <div>
                         <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Shipping Zones</h2>
@@ -71,7 +139,11 @@ export async function ShippingPage() {
                                                     id: zone.id,
                                                     name: zone.name,
                                                     priority_order: zone.priority_order,
-                                                    countries: zone.shipping_zone_locations?.map((l: any) => l.country_code) || []
+                                                    locations:
+                                                      zone.shipping_zone_locations?.map((location: any) => ({
+                                                        country_code: location.country_code,
+                                                        state_code: location.state_code,
+                                                      })) || []
                                                 }} 
                                             />
                                             <form action={async () => {
@@ -97,7 +169,11 @@ export async function ShippingPage() {
                                                     zone.shipping_zone_locations.map((loc: any) => (
                                                         <Badge key={loc.id} variant="secondary" className="bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:bg-slate-200 border-none px-2 py-0.5 text-[11px] font-medium">
                                                             {loc.country_code}
-                                                            {loc.state_code ? <span className="text-slate-400 ml-1">({loc.state_code})</span> : ''}
+                                                            {loc.state_code ? (
+                                                              <span className="text-slate-400 ml-1">
+                                                                ({resolveSubdivisionName(loc.country_code, loc.state_code)})
+                                                              </span>
+                                                            ) : ''}
                                                         </Badge>
                                                     ))
                                                 ) : (
@@ -112,7 +188,11 @@ export async function ShippingPage() {
                                                 <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
                                                     <Truck className="h-3 w-3" /> Shipping Methods
                                                 </h4>
-                                                <RateForm zoneId={zone.id} zoneName={zone.name} />
+                                                <RateForm
+                                                  zoneId={zone.id}
+                                                  zoneName={zone.name}
+                                                  languages={languages || []}
+                                                />
                                             </div>
                                             <div className="space-y-2">
                                                 {zone.shipping_zone_methods?.length > 0 ? (
@@ -147,6 +227,7 @@ export async function ShippingPage() {
                                                                     <RateForm 
                                                                         zoneId={zone.id} 
                                                                         zoneName={zone.name} 
+                                                                        languages={languages || []}
                                                                         mode="edit" 
                                                                         initialData={method} 
                                                                     />

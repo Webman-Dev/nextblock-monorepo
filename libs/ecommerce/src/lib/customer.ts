@@ -1,9 +1,11 @@
 import type { CartItem } from './types';
 import { normalizeCountryCode } from './countries';
+import { countryUsesStructuredStates, normalizeSubdivisionCode } from './states';
 
 export type CustomerAddressType = 'billing' | 'shipping';
 
 export interface CustomerAddressInput {
+  company_name?: string | null;
   recipient_name?: string | null;
   line1?: string | null;
   line2?: string | null;
@@ -28,6 +30,7 @@ export interface CheckoutSessionInput {
   billingAddress: CustomerAddressInput;
   shippingAddress?: CustomerAddressInput | null;
   shippingMethodId?: string | null;
+  locale?: string | null;
   userId?: string;
 }
 
@@ -41,6 +44,7 @@ export interface CheckoutCustomerDefaults {
 }
 
 export const emptyCustomerAddress = (): CustomerAddressInput => ({
+  company_name: '',
   recipient_name: '',
   line1: '',
   line2: '',
@@ -63,14 +67,18 @@ export function normalizeCustomerAddress(
   }
 
   const normalized: CustomerAddressInput = {
+    company_name: cleanString(address.company_name),
     recipient_name: cleanString(address.recipient_name),
     line1: cleanString(address.line1),
     line2: cleanString(address.line2),
     city: cleanString(address.city),
-    state: cleanString(address.state),
     postal_code: cleanString(address.postal_code),
     country_code: normalizeCountryCode(address.country_code),
   };
+  normalized.state = normalizeSubdivisionCode(
+    normalized.country_code,
+    cleanString(address.state)
+  );
 
   const hasAnyValue = Object.values(normalized).some(Boolean);
 
@@ -89,7 +97,8 @@ export function isCustomerAddressComplete(address?: CustomerAddressInput | null)
       normalized.line1 &&
       normalized.city &&
       normalized.postal_code &&
-      normalized.country_code
+      normalized.country_code &&
+      (!countryUsesStructuredStates(normalized.country_code) || normalized.state)
   );
 }
 

@@ -6,14 +6,16 @@ import { fetchTranslatedProductsForCartInternal } from "../product-actions";
 export async function getTranslatedProductsForCart(
   translationGroupIds: string[],
   languageCode: string,
-  skus: string[] = []
+  skus: string[] = [],
+  productIds: string[] = []
 ) {
   const supabase = createClient();
   const { data, error } = await fetchTranslatedProductsForCartInternal(
     supabase,
     translationGroupIds,
     languageCode,
-    skus
+    skus,
+    productIds
   );
   
   if (error) {

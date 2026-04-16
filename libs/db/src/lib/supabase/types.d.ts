@@ -294,6 +294,8 @@ export type Database = {
                     created_at: string;
                     customer_details: Json | null;
                     id: string;
+                    invoice_number: string | null;
+                    paid_at: string | null;
                     status: string;
                     stripe_session_id: string | null;
                     total: number;
@@ -303,6 +305,8 @@ export type Database = {
                     created_at?: string;
                     customer_details?: Json | null;
                     id?: string;
+                    invoice_number?: string | null;
+                    paid_at?: string | null;
                     status?: string;
                     stripe_session_id?: string | null;
                     total: number;
@@ -312,6 +316,8 @@ export type Database = {
                     created_at?: string;
                     customer_details?: Json | null;
                     id?: string;
+                    invoice_number?: string | null;
+                    paid_at?: string | null;
                     status?: string;
                     stripe_session_id?: string | null;
                     total?: number;

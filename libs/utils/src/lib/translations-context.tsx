@@ -9,6 +9,7 @@ type Translations = {
 };
 
 type TranslationsContextType = {
+  lang: string;
   translations: Translations;
   t: (key: string, params?: Record<string, string | number>) => string;
 };
@@ -49,6 +50,7 @@ export function TranslationsProvider({
   };
 
   const value = {
+    lang,
     translations: processedTranslations,
     t: (key: string, params?: Record<string, string | number>) => translate(key, lang, params),
   };

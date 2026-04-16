@@ -7,6 +7,7 @@ import { countries } from '../countries';
 import { getShippingEstimates } from '../server-actions/shipping-actions';
 import { ResolvedShippingMethod } from '../shipping/resolver';
 import { useTranslations } from '@nextblock-cms/utils';
+import { countryUsesStructuredStates, getStatesForCountry } from '../states';
 
 interface ShippingEstimatorProps {
   cartTotal: number;
@@ -14,26 +15,34 @@ interface ShippingEstimatorProps {
 
 export const ShippingEstimator = ({ cartTotal }: ShippingEstimatorProps) => {
   const [country, setCountry] = useState('CA');
+  const [state, setState] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [isCalculating, setIsCalculating] = useState(false);
   const [rates, setRates] = useState<ResolvedShippingMethod[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { t } = useTranslations();
+  const { t, lang } = useTranslations();
+  const availableStates = getStatesForCountry(country);
+  const usesStructuredStates = countryUsesStructuredStates(country);
 
   const handleCalculate = async () => {
     setIsCalculating(true);
     setError(null);
     setRates(null);
 
-    const result = await getShippingEstimates(cartTotal, {
-      country,
-      postal_code: postalCode,
-    });
+    const result = await getShippingEstimates(
+      cartTotal,
+      {
+        country,
+        state: state || undefined,
+        postal_code: postalCode,
+      },
+      lang
+    );
 
     if (result.success && result.methods) {
       setRates(result.methods);
     } else {
-      setError(result.error || 'No shipping methods available for this destination.');
+      setError(result.error || t('ecommerce.no_rates_found'));
     }
     setIsCalculating(false);
   };
@@ -63,6 +72,26 @@ export const ShippingEstimator = ({ cartTotal }: ShippingEstimatorProps) => {
             </SelectContent>
           </Select>
         </div>
+
+        {usesStructuredStates && (
+          <div className="space-y-1.5">
+            <Label htmlFor="estimate-state" className="text-xs uppercase tracking-wider text-muted-foreground">
+              {t('state_province')}
+            </Label>
+            <Select value={state} onValueChange={setState}>
+              <SelectTrigger id="estimate-state" className="h-9 text-sm bg-background">
+                <SelectValue placeholder="Select state / province" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableStates.map((entry) => (
+                  <SelectItem key={entry.code} value={entry.code}>
+                    {entry.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <Label htmlFor="estimate-postal" className="text-xs uppercase tracking-wider text-muted-foreground">

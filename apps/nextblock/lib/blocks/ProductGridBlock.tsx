@@ -70,6 +70,7 @@ export const ProductGridBlock = async ({
         upc: p.upc || undefined,
         price: p.price,
         sale_price: typeof p.sale_price === 'number' ? p.sale_price : undefined,
+        is_taxable: p.is_taxable ?? true,
         price_range_min: variantPriceRange?.min ?? null,
         price_range_max: variantPriceRange?.max ?? null,
         image_url: imageUrl,

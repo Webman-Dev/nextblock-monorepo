@@ -42,7 +42,7 @@ export default function DeleteLogoButton({ logoId }: DeleteLogoButtonProps) {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onConfirm={handleDeleteConfirm}
-        title="Delete Logo?"
+        title="Delete Brand Logo?"
         description="This will permanently delete the logo. This action cannot be undone."
       />
     </>

@@ -1,13 +1,174 @@
-import { PaymentProvider } from '../types';
+import Stripe from 'stripe';
 import { stripe } from '../stripe/client';
 import { createClient } from '@supabase/supabase-js';
-import { CheckoutSessionInput, normalizeOrderCustomerDetails } from '../customer';
+import { countries } from '../countries';
+import {
+  CheckoutSessionInput,
+  CustomerAddressInput,
+  normalizeOrderCustomerDetails,
+} from '../customer';
 import { upsertDefaultUserAddresses } from '../customer-addresses';
 import {
   createInventoryInsufficientError,
   createInventoryUnavailableError,
   getEcommerceInventorySettings,
 } from '../inventory-settings';
+import {
+  calculateCheckoutTaxes,
+  getStripeTaxCodeForProduct,
+  STRIPE_TAX_CODE_SHIPPING,
+  STRIPE_TAX_CODE_NONTAXABLE,
+} from '../tax-calculation';
+import { buildOrderTaxDetailsFromCalculation } from '../order-tax-details';
+import { isDigitalItem, PaymentProvider, TranslationMap } from '../types';
+import { resolveTranslatedText } from '../variation-utils';
+
+const STRIPE_ALLOWED_COUNTRIES =
+  countries.map((country) => country.code) as Stripe.Checkout.SessionCreateParams.ShippingAddressCollection.AllowedCountry[];
+
+const STRIPE_SUPPORTED_LOCALES = new Set<string>([
+  'bg',
+  'cs',
+  'da',
+  'de',
+  'el',
+  'en',
+  'en-GB',
+  'es',
+  'es-419',
+  'et',
+  'fi',
+  'fil',
+  'fr',
+  'hr',
+  'hu',
+  'id',
+  'it',
+  'ja',
+  'ko',
+  'lt',
+  'lv',
+  'ms',
+  'mt',
+  'nb',
+  'nl',
+  'pl',
+  'pt',
+  'pt-BR',
+  'ro',
+  'ru',
+  'sk',
+  'sl',
+  'sv',
+  'th',
+  'tr',
+  'vi',
+  'zh',
+  'zh-HK',
+  'zh-TW',
+]);
+
+function toStripeAddress(address?: CustomerAddressInput | null): Stripe.AddressParam | undefined {
+  if (!address) {
+    return undefined;
+  }
+
+  return {
+    line1: address.line1 || undefined,
+    line2: address.line2 || undefined,
+    city: address.city || undefined,
+    state: address.state || undefined,
+    postal_code: address.postal_code || undefined,
+    country: address.country_code || undefined,
+  };
+}
+
+function resolveStripeCheckoutLocale(locale?: string | null) {
+  const normalized = locale?.trim().replace('_', '-');
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  const candidates = [normalized, normalized.toLowerCase(), normalized.split('-')[0].toLowerCase()];
+
+  for (const candidate of candidates) {
+    if (STRIPE_SUPPORTED_LOCALES.has(candidate as Stripe.Checkout.SessionCreateParams.Locale)) {
+      return candidate as Stripe.Checkout.SessionCreateParams.Locale;
+    }
+  }
+
+  return undefined;
+}
+
+function resolveShippingMethodName(
+  method: { name: string; name_translations?: TranslationMap | null },
+  locale?: string | null
+) {
+  return resolveTranslatedText(
+    method.name,
+    (method.name_translations || null) as TranslationMap | null,
+    locale
+  );
+}
+
+async function upsertStripeCheckoutCustomer(input: {
+  email?: string | null;
+  phone?: string | null;
+  userId?: string | null;
+  billingAddress?: CustomerAddressInput | null;
+  shippingAddress?: CustomerAddressInput | null;
+}) {
+  if (!input.email) {
+    return null;
+  }
+
+  const customerPayload = {
+    ...(function () {
+      const stripeShippingAddress = toStripeAddress(input.shippingAddress);
+
+      return {
+        shipping: stripeShippingAddress
+          ? {
+              name:
+                input.shippingAddress?.recipient_name ||
+                input.billingAddress?.recipient_name ||
+                undefined,
+              phone: input.phone || undefined,
+              address: stripeShippingAddress,
+            }
+          : undefined,
+      };
+    })(),
+    email: input.email,
+    name:
+      input.billingAddress?.recipient_name ||
+      input.shippingAddress?.recipient_name ||
+      undefined,
+    phone: input.phone || undefined,
+    address: toStripeAddress(input.billingAddress),
+    metadata: input.userId ? { userId: input.userId } : undefined,
+  };
+
+  try {
+    const existingCustomers = await stripe.customers.list({
+      email: input.email,
+      limit: 1,
+    });
+    const existingCustomer = existingCustomers.data[0];
+
+    if (existingCustomer) {
+      await stripe.customers.update(existingCustomer.id, customerPayload);
+      return existingCustomer.id;
+    }
+
+    const createdCustomer = await stripe.customers.create(customerPayload);
+    return createdCustomer.id;
+  } catch (error) {
+    console.error('Failed to upsert Stripe customer for checkout prefill:', error);
+    return null;
+  }
+}
 
 export class StripeProvider implements PaymentProvider {
   getProviderName(): string {
@@ -22,6 +183,7 @@ export class StripeProvider implements PaymentProvider {
     billingAddress,
     shippingAddress,
     shippingMethodId,
+    locale,
   }: CheckoutSessionInput): Promise<{
     url: string | null;
     error?: string;
@@ -39,6 +201,7 @@ export class StripeProvider implements PaymentProvider {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const siteUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:4200';
+    const hasPhysicalProducts = cartItems.some((item) => !isDigitalItem(item));
 
     if (!cartItems.length) {
       return { error: 'Cart is empty', url: null };
@@ -52,7 +215,7 @@ export class StripeProvider implements PaymentProvider {
       .filter((variantId): variantId is string => Boolean(variantId));
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, title, sku, price, sale_price, stock')
+      .select('id, title, sku, price, sale_price, stock, is_taxable')
       .in('id', productIds);
 
     if (productsError || !products) {
@@ -117,7 +280,13 @@ export class StripeProvider implements PaymentProvider {
       ])
     );
 
-    const lineItems: any[] = [];
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+    const taxableItems: Array<{
+      product_id: string;
+      quantity: number;
+      unit_amount: number;
+      is_taxable: boolean;
+    }> = [];
     const verifiedItems: Array<{
       product_id: string;
       quantity: number;
@@ -184,6 +353,8 @@ export class StripeProvider implements PaymentProvider {
         }
       }
 
+      const isTaxable = product.is_taxable ?? true;
+
       if (unitAmount < 0) {
         return { error: 'A product variation produced an invalid price.', url: null };
       }
@@ -193,11 +364,13 @@ export class StripeProvider implements PaymentProvider {
           currency: 'usd',
           product_data: {
             name: lineItemName,
+            tax_code: getStripeTaxCodeForProduct(isTaxable),
             metadata: {
               productId: product.id,
               variantId: resolvedVariantId || '',
             },
           },
+          tax_behavior: 'exclusive',
           unit_amount: unitAmount,
         },
         quantity: cartItem.quantity,
@@ -210,6 +383,12 @@ export class StripeProvider implements PaymentProvider {
         price_at_purchase: unitAmount,
         variant_id: resolvedVariantId,
       });
+      taxableItems.push({
+        product_id: product.id,
+        quantity: cartItem.quantity,
+        unit_amount: unitAmount,
+        is_taxable: isTaxable,
+      });
     }
 
     if (lineItems.length === 0) {
@@ -217,10 +396,12 @@ export class StripeProvider implements PaymentProvider {
     }
 
     let shippingAmount = 0;
+    let resolvedShippingMethodName: string | null = null;
+    let resolvedShippingCurrency = 'usd';
     if (shippingMethodId) {
       const { data: method, error: methodError } = await supabase
         .from('shipping_zone_methods')
-        .select('id, name, cost_amount, cost_currency')
+        .select('id, name, name_translations, cost_amount, cost_currency')
         .eq('id', shippingMethodId)
         .single();
 
@@ -230,19 +411,64 @@ export class StripeProvider implements PaymentProvider {
       }
 
       shippingAmount = method.cost_amount ?? 0;
+      resolvedShippingCurrency = (method.cost_currency || 'USD').toLowerCase();
+      resolvedShippingMethodName = resolveShippingMethodName(method, locale);
+    }
 
-      if (shippingAmount > 0) {
-        lineItems.push({
-          price_data: {
-            currency: (method.cost_currency || 'USD').toLowerCase(),
-            product_data: {
-              name: `Shipping - ${method.name}`,
-            },
-            unit_amount: shippingAmount,
+    const taxDestination = hasPhysicalProducts ? shippingAddress ?? billingAddress : billingAddress;
+    let taxCalculation;
+
+    try {
+      taxCalculation = await calculateCheckoutTaxes(supabase as any, {
+        items: taxableItems,
+        destination: {
+          country_code: taxDestination?.country_code,
+          state: taxDestination?.state,
+        },
+      });
+    } catch (taxError: any) {
+      console.error('Failed to calculate checkout taxes:', taxError);
+      return { error: 'Failed to calculate taxes', url: null };
+    }
+
+    if (shippingAmount > 0 && resolvedShippingMethodName) {
+      lineItems.push({
+        price_data: {
+          currency: resolvedShippingCurrency,
+          product_data: {
+            name: resolvedShippingMethodName,
+            tax_code:
+              taxCalculation.enabled && taxCalculation.mode === 'automatic'
+                ? STRIPE_TAX_CODE_SHIPPING
+                : STRIPE_TAX_CODE_NONTAXABLE,
           },
-          quantity: 1,
-        });
-      }
+          tax_behavior: 'exclusive',
+          unit_amount: shippingAmount,
+        },
+        quantity: 1,
+      });
+    }
+
+    const manualTaxAmount =
+      taxCalculation.enabled &&
+      taxCalculation.mode === 'manual' &&
+      !taxCalculation.isPendingExternalCalculation
+        ? taxCalculation.amount
+        : 0;
+
+    if (manualTaxAmount > 0) {
+      lineItems.push({
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: 'Tax',
+            tax_code: STRIPE_TAX_CODE_NONTAXABLE,
+          },
+          tax_behavior: 'exclusive',
+          unit_amount: manualTaxAmount,
+        },
+        quantity: 1,
+      });
     }
 
     const initialCustomerDetails = normalizeOrderCustomerDetails({
@@ -252,12 +478,25 @@ export class StripeProvider implements PaymentProvider {
       billing: billingAddress,
       shipping: shippingAddress,
     });
+    const currency = 'usd';
+    const orderTaxDetails = buildOrderTaxDetailsFromCalculation({
+      calculation: taxCalculation,
+      subtotal: totalAmount,
+      shippingTotal: shippingAmount,
+      total: totalAmount + shippingAmount + manualTaxAmount,
+      currency,
+    });
 
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert({
         status: 'pending',
-        total: totalAmount + shippingAmount,
+        total: totalAmount + shippingAmount + manualTaxAmount,
+        currency,
+        subtotal: totalAmount,
+        shipping_total: shippingAmount,
+        tax_total: manualTaxAmount,
+        tax_details: orderTaxDetails as any,
         provider: 'stripe',
         user_id: userId,
         customer_details: initialCustomerDetails,
@@ -301,17 +540,44 @@ export class StripeProvider implements PaymentProvider {
       }
     }
 
+    const stripeCustomerId = await upsertStripeCheckoutCustomer({
+      email: customerEmail,
+      phone: customerPhone,
+      userId,
+      billingAddress,
+      shippingAddress,
+    });
+
     try {
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         success_url: `${siteUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${siteUrl}/checkout`,
+        locale: resolveStripeCheckoutLocale(locale),
         line_items: lineItems,
+        automatic_tax:
+          taxCalculation.enabled && taxCalculation.mode === 'automatic'
+            ? { enabled: true }
+            : undefined,
         billing_address_collection: 'auto',
-        customer_email: customerEmail || undefined,
-        customer_creation: 'if_required',
+        customer: stripeCustomerId || undefined,
+        customer_email: stripeCustomerId ? undefined : customerEmail || undefined,
+        customer_creation: stripeCustomerId ? undefined : 'if_required',
+        customer_update: stripeCustomerId
+          ? {
+              name: 'auto',
+              address: 'auto',
+              shipping: 'auto',
+            }
+          : undefined,
+        shipping_address_collection: hasPhysicalProducts
+          ? {
+              allowed_countries: STRIPE_ALLOWED_COUNTRIES,
+            }
+          : undefined,
         metadata: {
           orderId,
+          taxMode: taxCalculation.mode,
         },
       });
 

@@ -1,13 +1,102 @@
 "use server"
 
-import { getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
+import { createClient, getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
+import { normalizeCountryCode } from '../../../countries';
+import {
+    getEcommerceInventorySettings,
+    upsertEcommerceInventorySettings,
+} from '../../../inventory-settings';
+import { normalizeSubdivisionCode } from '../../../states';
+
+export interface ShippingZoneLocationInput {
+    country_code: string;
+    state_code?: string | null;
+}
+
+function sanitizeTranslations(translations?: Record<string, string> | null) {
+    return Object.entries(translations || {}).reduce<Record<string, string>>((accumulator, [code, value]) => {
+        const normalizedCode = code.trim().toLowerCase();
+        const normalizedValue = value.trim();
+
+        if (normalizedCode && normalizedValue) {
+            accumulator[normalizedCode] = normalizedValue;
+        }
+
+        return accumulator;
+    }, {});
+}
+
+export async function updateInventoryTrackingAction(formData: FormData) {
+    const supabase = createClient();
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+        throw new Error('Unauthorized');
+    }
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+    if (!profile || profile.role !== 'ADMIN') {
+        throw new Error('Forbidden');
+    }
+
+    const trackQuantities = formData.getAll('trackQuantities').includes('true');
+    const currentSettings = await getEcommerceInventorySettings(supabase);
+
+    const { error } = await upsertEcommerceInventorySettings(supabase, {
+        trackQuantities,
+        enableTaxes: currentSettings.enableTaxes,
+        taxCalculationMode: currentSettings.taxCalculationMode,
+    });
+
+    if (error) {
+        throw new Error(error.message);
+    }
+
+    revalidatePath('/cms/shipping');
+    redirect('/cms/shipping?success=Inventory settings updated');
+}
+
+function normalizeShippingZoneLocations(locations: ShippingZoneLocationInput[]) {
+    const deduped = new Map<string, ShippingZoneLocationInput>();
+
+    for (const location of locations) {
+        const countryCode = normalizeCountryCode(location.country_code);
+
+        if (!countryCode) {
+            continue;
+        }
+
+        const stateCode = normalizeSubdivisionCode(countryCode, location.state_code) || null;
+        const key = `${countryCode}:${stateCode ?? '*'}`;
+
+        deduped.set(key, {
+            country_code: countryCode,
+            state_code: stateCode,
+        });
+    }
+
+    return [...deduped.values()];
+}
 
 /**
- * Creates a new shipping zone with associated countries.
+ * Creates a new shipping zone with associated countries/states.
  */
-export async function createShippingZone(name: string, priority: number, countries: string[]) {
+export async function createShippingZone(
+    name: string,
+    priority: number,
+    locations: ShippingZoneLocationInput[]
+) {
     const supabase = getServiceRoleSupabaseClient();
+    const normalizedLocations = normalizeShippingZoneLocations(locations);
     
     // 1. Insert Zone
     const { data: zone, error: zoneError } = await supabase
@@ -21,15 +110,16 @@ export async function createShippingZone(name: string, priority: number, countri
     }
     
     // 2. Insert Locations
-    if (countries.length > 0) {
-        const locations = countries.map(code => ({
+    if (normalizedLocations.length > 0) {
+        const locationRows = normalizedLocations.map((location) => ({
             zone_id: zone.id,
-            country_code: code
+            country_code: location.country_code,
+            state_code: location.state_code ?? null,
         }));
         
         const { error: locError } = await supabase
             .from('shipping_zone_locations')
-            .insert(locations);
+            .insert(locationRows);
             
         if (locError) {
             return { error: locError.message };
@@ -41,10 +131,16 @@ export async function createShippingZone(name: string, priority: number, countri
 }
 
 /**
- * Updates an existing shipping zone and its country associations.
+ * Updates an existing shipping zone and its country/state associations.
  */
-export async function updateShippingZone(id: string, name: string, priority: number, countries: string[]) {
+export async function updateShippingZone(
+    id: string,
+    name: string,
+    priority: number,
+    locations: ShippingZoneLocationInput[]
+) {
     const supabase = getServiceRoleSupabaseClient();
+    const normalizedLocations = normalizeShippingZoneLocations(locations);
     
     // 1. Update Zone Metadata
     const { error: zoneError } = await supabase
@@ -66,15 +162,16 @@ export async function updateShippingZone(id: string, name: string, priority: num
         return { error: 'Failed to refresh locations' };
     }
     
-    if (countries.length > 0) {
-        const locations = countries.map(code => ({
+    if (normalizedLocations.length > 0) {
+        const locationRows = normalizedLocations.map((location) => ({
             zone_id: id,
-            country_code: code
+            country_code: location.country_code,
+            state_code: location.state_code ?? null,
         }));
         
         const { error: locError } = await supabase
             .from('shipping_zone_locations')
-            .insert(locations);
+            .insert(locationRows);
             
         if (locError) {
             return { error: locError.message };
@@ -98,6 +195,7 @@ export async function deleteShippingZone(id: string) {
  */
 export async function createShippingRate(zoneId: string, data: { 
     name: string, 
+    nameTranslations?: Record<string, string>,
     type: 'flat_rate' | 'free_shipping', 
     cost: number,
     minOrderAmount?: number
@@ -105,7 +203,8 @@ export async function createShippingRate(zoneId: string, data: {
     const supabase = getServiceRoleSupabaseClient();
     const { error } = await supabase.from('shipping_zone_methods').insert({
         zone_id: zoneId,
-        name: data.name,
+        name: data.name.trim(),
+        name_translations: sanitizeTranslations(data.nameTranslations),
         method_type: data.type,
         cost_amount: data.cost,
         cost_currency: 'usd',
@@ -122,13 +221,15 @@ export async function createShippingRate(zoneId: string, data: {
  */
 export async function updateShippingRate(id: string, data: { 
     name: string, 
+    nameTranslations?: Record<string, string>,
     type: 'flat_rate' | 'free_shipping', 
     cost: number,
     minOrderAmount?: number
 }) {
     const supabase = getServiceRoleSupabaseClient();
     const { error } = await supabase.from('shipping_zone_methods').update({
-        name: data.name,
+        name: data.name.trim(),
+        name_translations: sanitizeTranslations(data.nameTranslations),
         method_type: data.type,
         cost_amount: data.cost,
         min_order_amount: data.minOrderAmount || 0,

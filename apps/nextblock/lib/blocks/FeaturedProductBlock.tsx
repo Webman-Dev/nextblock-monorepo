@@ -36,6 +36,7 @@ export const FeaturedProductBlock = async ({ content }: { content: FeaturedProdu
     upc: product.upc || undefined,
     price: product.price,
     sale_price: typeof product.sale_price === 'number' ? product.sale_price : undefined,
+    is_taxable: product.is_taxable ?? true,
     price_range_min: variantPriceRange?.min ?? null,
     price_range_max: variantPriceRange?.max ?? null,
     image_url: imageUrl,

@@ -4047,6 +4047,697 @@ GRANT EXECUTE ON FUNCTION public.apply_order_inventory_deduction(uuid) TO authen
 GRANT EXECUTE ON FUNCTION public.apply_order_inventory_deduction(uuid) TO service_role;
 
 
+-- >>> FROM: 20260416000000_add_taxes_and_state_shipping.sql <<<
+-- 20260416000000_add_taxes_and_state_shipping.sql
+-- Adds Stripe-oriented tax support and hardens shipping zones for state/province matching.
+
+
+-- 1. Shipping zones: keep the existing relational model and normalize it for state/province use.
+UPDATE public.shipping_zone_locations
+SET
+  country_code = upper(btrim(country_code)),
+  state_code = CASE
+    WHEN state_code IS NULL OR btrim(state_code) = '' THEN NULL
+    ELSE upper(btrim(state_code))
+  END,
+  postal_code = CASE
+    WHEN postal_code IS NULL OR btrim(postal_code) = '' THEN NULL
+    ELSE upper(btrim(postal_code))
+  END;
+
+COMMENT ON COLUMN public.shipping_zone_locations.country_code IS
+  'ISO 3166-1 alpha-2 country code.';
+COMMENT ON COLUMN public.shipping_zone_locations.state_code IS
+  'Optional state/province code within the selected country (for example CA, NY, ON, QC). NULL means the whole country.';
+COMMENT ON COLUMN public.shipping_zone_locations.postal_code IS
+  'Optional exact postal code or wildcard pattern. NULL means all postal codes in the matched country/state.';
+
+CREATE INDEX IF NOT EXISTS idx_shipping_zone_locations_zone_id
+  ON public.shipping_zone_locations (zone_id);
+
+CREATE INDEX IF NOT EXISTS idx_shipping_zone_locations_country_state_postal
+  ON public.shipping_zone_locations (country_code, state_code, postal_code);
+
+CREATE OR REPLACE FUNCTION public.handle_shipping_zone_locations_write()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.country_code = upper(btrim(NEW.country_code));
+  NEW.state_code = CASE
+    WHEN NEW.state_code IS NULL OR btrim(NEW.state_code) = '' THEN NULL
+    ELSE upper(btrim(NEW.state_code))
+  END;
+  NEW.postal_code = CASE
+    WHEN NEW.postal_code IS NULL OR btrim(NEW.postal_code) = '' THEN NULL
+    ELSE upper(btrim(NEW.postal_code))
+  END;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_shipping_zone_locations_write ON public.shipping_zone_locations;
+CREATE TRIGGER on_shipping_zone_locations_write
+  BEFORE INSERT OR UPDATE ON public.shipping_zone_locations
+  FOR EACH ROW
+  EXECUTE PROCEDURE public.handle_shipping_zone_locations_write();
+
+-- 2. Global tax setting: extend the existing ecommerce settings JSON.
+INSERT INTO public.site_settings (key, value)
+VALUES (
+  'ecommerce_inventory_settings',
+  '{"track_quantities": true, "enable_taxes": false}'::jsonb
+)
+ON CONFLICT (key) DO UPDATE
+SET value = CASE
+  WHEN jsonb_typeof(site_settings.value) = 'object' THEN
+    jsonb_set(
+      jsonb_set(
+        site_settings.value,
+        '{track_quantities}',
+        COALESCE(
+          site_settings.value->'track_quantities',
+          site_settings.value->'trackQuantities',
+          'true'::jsonb
+        ),
+        true
+      ),
+      '{enable_taxes}',
+      COALESCE(
+        site_settings.value->'enable_taxes',
+        site_settings.value->'enableTaxes',
+        'false'::jsonb
+      ),
+      true
+    )
+  ELSE
+    jsonb_build_object(
+      'track_quantities',
+      CASE
+        WHEN lower(trim(BOTH '"' FROM site_settings.value::text)) IN ('false', 'f', '0', 'no', 'off') THEN false
+        ELSE true
+      END,
+      'enable_taxes',
+      false
+    )
+END;
+
+-- 3. Product tax toggle: current repo table is public.products.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'products'
+      AND column_name = 'is_taxable'
+  ) THEN
+    ALTER TABLE public.products
+      ADD COLUMN is_taxable boolean;
+  END IF;
+END $$;
+
+UPDATE public.products
+SET is_taxable = true
+WHERE is_taxable IS NULL;
+
+ALTER TABLE public.products
+  ALTER COLUMN is_taxable SET DEFAULT true,
+  ALTER COLUMN is_taxable SET NOT NULL;
+
+COMMENT ON COLUMN public.products.is_taxable IS
+  'When true, this product participates in Stripe tax calculation.';
+
+-- 4. Manual tax rates table.
+-- tax_rate stores a percent value, not a decimal fraction: 5.0000 = 5%.
+CREATE TABLE IF NOT EXISTS public.tax_rates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  country_code text NOT NULL,
+  state_code text,
+  tax_name text NOT NULL CHECK (char_length(btrim(tax_name)) > 0),
+  tax_rate numeric(7,4) NOT NULL CHECK (tax_rate >= 0 AND tax_rate <= 100),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+COMMENT ON TABLE public.tax_rates IS
+  'Manual tax rates used for Stripe storefront orders. Multiple rows can exist per jurisdiction to support combined taxes such as GST + PST.';
+COMMENT ON COLUMN public.tax_rates.country_code IS
+  'ISO 3166-1 alpha-2 country code.';
+COMMENT ON COLUMN public.tax_rates.state_code IS
+  'Optional state/province code within country_code. NULL represents a country-wide or federal tax.';
+COMMENT ON COLUMN public.tax_rates.tax_name IS
+  'Display name for the tax component, for example GST, PST, HST, or State Sales Tax.';
+COMMENT ON COLUMN public.tax_rates.tax_rate IS
+  'Percent value, not decimal fraction. Example: 5.0000 means 5%.';
+
+UPDATE public.tax_rates
+SET
+  country_code = upper(btrim(country_code)),
+  state_code = CASE
+    WHEN state_code IS NULL OR btrim(state_code) = '' THEN NULL
+    ELSE upper(btrim(state_code))
+  END,
+  tax_name = btrim(tax_name);
+
+CREATE UNIQUE INDEX IF NOT EXISTS tax_rates_country_state_name_key
+  ON public.tax_rates (country_code, COALESCE(state_code, ''), lower(tax_name));
+
+CREATE INDEX IF NOT EXISTS idx_tax_rates_country_state
+  ON public.tax_rates (country_code, state_code);
+
+CREATE OR REPLACE FUNCTION public.handle_tax_rates_write()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.country_code = upper(btrim(NEW.country_code));
+  NEW.state_code = CASE
+    WHEN NEW.state_code IS NULL OR btrim(NEW.state_code) = '' THEN NULL
+    ELSE upper(btrim(NEW.state_code))
+  END;
+  NEW.tax_name = btrim(NEW.tax_name);
+  NEW.updated_at = now();
+
+  IF NEW.created_at IS NULL THEN
+    NEW.created_at = now();
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_tax_rates_write ON public.tax_rates;
+CREATE TRIGGER on_tax_rates_write
+  BEFORE INSERT OR UPDATE ON public.tax_rates
+  FOR EACH ROW
+  EXECUTE PROCEDURE public.handle_tax_rates_write();
+
+-- 5. RLS for tax_rates: public read, admin write.
+ALTER TABLE public.tax_rates ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read tax_rates" ON public.tax_rates;
+CREATE POLICY "Public read tax_rates"
+  ON public.tax_rates
+  FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Admins manage tax_rates" ON public.tax_rates;
+CREATE POLICY "Admins manage tax_rates"
+  ON public.tax_rates
+  FOR ALL
+  TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Service Role manages tax_rates" ON public.tax_rates;
+CREATE POLICY "Service Role manages tax_rates"
+  ON public.tax_rates
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- 6. Grants for the new table.
+GRANT SELECT ON TABLE public.tax_rates TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON TABLE public.tax_rates TO authenticated;
+GRANT ALL ON TABLE public.tax_rates TO service_role;
+
+
+
+-- >>> FROM: 20260416010000_add_shipping_rate_translations.sql <<<
+-- 20260416010000_add_shipping_rate_translations.sql
+-- Adds translation support for shipping rate labels and localized Stripe tax copy.
+
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shipping_zone_methods'
+      AND column_name = 'name_translations'
+  ) THEN
+    ALTER TABLE public.shipping_zone_methods
+      ADD COLUMN name_translations jsonb NOT NULL DEFAULT '{}'::jsonb;
+  END IF;
+END $$;
+
+UPDATE public.shipping_zone_methods
+SET name_translations = '{}'::jsonb
+WHERE name_translations IS NULL;
+
+UPDATE public.shipping_zone_methods
+SET name_translations = jsonb_set(
+  COALESCE(name_translations, '{}'::jsonb),
+  '{fr}',
+  to_jsonb(
+    CASE
+      WHEN name = 'Standard Shipping' THEN 'Livraison standard'
+      WHEN name = 'Free Shipping (Orders over $100)' THEN
+        'Livraison gratuite (commandes de plus de 100 $)'
+      ELSE name
+    END
+  ),
+  true
+)
+WHERE name IN ('Standard Shipping', 'Free Shipping (Orders over $100)')
+  AND COALESCE(name_translations->>'fr', '') = '';
+
+COMMENT ON COLUMN public.shipping_zone_methods.name_translations IS
+  'Localized shipping method labels keyed by language code. Example: {"fr": "Livraison standard"}.';
+
+CREATE INDEX IF NOT EXISTS idx_shipping_zone_methods_name_translations
+  ON public.shipping_zone_methods
+  USING gin (name_translations);
+
+INSERT INTO public.translations (key, translations)
+VALUES
+  (
+    'ecommerce.tax_calculated_on_stripe',
+    '{"en": "Calculated on Stripe", "es": "Calculado en Stripe", "fr": "Calculé sur Stripe"}'::jsonb
+  ),
+  (
+    'checkout_stripe_tax_finalized_notice',
+    '{"en": "Tax will be finalized by Stripe Tax on the payment step.", "es": "El impuesto se finalizará con Stripe Tax en el paso de pago.", "fr": "La taxe sera finalisée par Stripe Tax à l''étape du paiement."}'::jsonb
+  )
+ON CONFLICT (key) DO UPDATE
+SET translations = EXCLUDED.translations;
+
+
+
+-- >>> FROM: 20260416020000_add_order_tax_details.sql <<<
+-- 20260416020000_add_order_tax_details.sql
+-- Stores normalized tax totals and finalized Stripe/manual tax breakdowns on orders.
+
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'orders'
+      AND column_name = 'currency'
+  ) THEN
+    ALTER TABLE public.orders
+      ADD COLUMN currency text NOT NULL DEFAULT 'usd';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'orders'
+      AND column_name = 'subtotal'
+  ) THEN
+    ALTER TABLE public.orders
+      ADD COLUMN subtotal integer;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'orders'
+      AND column_name = 'shipping_total'
+  ) THEN
+    ALTER TABLE public.orders
+      ADD COLUMN shipping_total integer;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'orders'
+      AND column_name = 'tax_total'
+  ) THEN
+    ALTER TABLE public.orders
+      ADD COLUMN tax_total integer NOT NULL DEFAULT 0;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'orders'
+      AND column_name = 'tax_details'
+  ) THEN
+    ALTER TABLE public.orders
+      ADD COLUMN tax_details jsonb;
+  END IF;
+END $$;
+
+UPDATE public.orders
+SET
+  currency = COALESCE(NULLIF(lower(currency), ''), 'usd'),
+  tax_total = COALESCE(tax_total, 0);
+
+COMMENT ON COLUMN public.orders.currency IS
+  'ISO currency code used for the order totals.';
+COMMENT ON COLUMN public.orders.subtotal IS
+  'Subtotal before shipping and tax, in the smallest currency unit.';
+COMMENT ON COLUMN public.orders.shipping_total IS
+  'Shipping amount before tax, in the smallest currency unit.';
+COMMENT ON COLUMN public.orders.tax_total IS
+  'Total tax amount collected for the order, in the smallest currency unit.';
+COMMENT ON COLUMN public.orders.tax_details IS
+  'Normalized tax breakdown payload sourced from manual rates or finalized Stripe tax data.';
+
+
+
+-- >>> FROM: 20260416030000_add_invoice_branding_and_company_name.sql <<<
+-- 20260416030000_add_invoice_branding_and_company_name.sql
+-- Adds invoice numbering, branding settings, and optional company names on addresses.
+
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'user_addresses'
+      AND column_name = 'company_name'
+  ) THEN
+    ALTER TABLE public.user_addresses
+      ADD COLUMN company_name text;
+  END IF;
+END $$;
+
+COMMENT ON COLUMN public.user_addresses.company_name IS
+  'Optional company or organization name for the address.';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'orders'
+      AND column_name = 'invoice_number'
+  ) THEN
+    ALTER TABLE public.orders
+      ADD COLUMN invoice_number text;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'orders'
+      AND column_name = 'paid_at'
+  ) THEN
+    ALTER TABLE public.orders
+      ADD COLUMN paid_at timestamptz;
+  END IF;
+END $$;
+
+COMMENT ON COLUMN public.orders.invoice_number IS
+  'Stable printable invoice number assigned once when the order first becomes paid.';
+COMMENT ON COLUMN public.orders.paid_at IS
+  'Timestamp when the order was first marked as paid.';
+
+CREATE SEQUENCE IF NOT EXISTS public.order_invoice_number_seq
+  START WITH 1
+  INCREMENT BY 1
+  MINVALUE 1
+  NO MAXVALUE
+  CACHE 1;
+
+CREATE OR REPLACE FUNCTION public.format_order_invoice_number(p_value bigint)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT 'INV-' || lpad(p_value::text, 6, '0');
+$$;
+
+CREATE OR REPLACE FUNCTION public.generate_order_invoice_number()
+RETURNS text
+LANGUAGE sql
+VOLATILE
+AS $$
+  SELECT public.format_order_invoice_number(nextval('public.order_invoice_number_seq'));
+$$;
+
+CREATE OR REPLACE FUNCTION public.assign_order_invoice_metadata(
+  p_order_id uuid,
+  p_paid_at timestamptz DEFAULT now()
+)
+RETURNS TABLE(invoice_number text, paid_at timestamptz)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_order public.orders%ROWTYPE;
+  v_effective_paid_at timestamptz;
+BEGIN
+  SELECT *
+    INTO v_order
+  FROM public.orders
+  WHERE id = p_order_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Order % not found', p_order_id;
+  END IF;
+
+  v_effective_paid_at := COALESCE(v_order.paid_at, p_paid_at, now(), v_order.created_at);
+
+  UPDATE public.orders
+  SET
+    invoice_number = COALESCE(v_order.invoice_number, public.generate_order_invoice_number()),
+    paid_at = v_effective_paid_at
+  WHERE id = p_order_id
+  RETURNING orders.invoice_number, orders.paid_at
+  INTO invoice_number, paid_at;
+
+  RETURN NEXT;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.generate_order_invoice_number() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.generate_order_invoice_number() TO service_role;
+GRANT EXECUTE ON FUNCTION public.assign_order_invoice_metadata(uuid, timestamptz) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.assign_order_invoice_metadata(uuid, timestamptz) TO service_role;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_invoice_number_unique
+  ON public.orders (invoice_number)
+  WHERE invoice_number IS NOT NULL;
+
+DO $$
+DECLARE
+  v_existing_max bigint;
+  v_order record;
+BEGIN
+  SELECT MAX(NULLIF(regexp_replace(invoice_number, '[^0-9]', '', 'g'), '')::bigint)
+    INTO v_existing_max
+  FROM public.orders
+  WHERE invoice_number IS NOT NULL;
+
+  IF v_existing_max IS NOT NULL THEN
+    PERFORM setval('public.order_invoice_number_seq', GREATEST(v_existing_max, 1), true);
+  END IF;
+
+  FOR v_order IN
+    SELECT
+      id,
+      COALESCE(paid_at, created_at, now()) AS effective_paid_at
+    FROM public.orders
+    WHERE status = 'paid'
+      AND invoice_number IS NULL
+    ORDER BY COALESCE(paid_at, created_at, now()), created_at, id
+  LOOP
+    UPDATE public.orders
+    SET
+      invoice_number = public.generate_order_invoice_number(),
+      paid_at = COALESCE(orders.paid_at, v_order.effective_paid_at)
+    WHERE id = v_order.id;
+  END LOOP;
+END $$;
+
+UPDATE public.orders
+SET paid_at = COALESCE(paid_at, created_at)
+WHERE status = 'paid'
+  AND paid_at IS NULL;
+
+INSERT INTO public.site_settings (key, value)
+VALUES (
+  'invoice_settings',
+  '{
+    "business_name": "",
+    "email": "",
+    "phone": "",
+    "address": {
+      "line1": "",
+      "line2": "",
+      "city": "",
+      "state": "",
+      "postal_code": "",
+      "country_code": "CA"
+    },
+    "tax_registrations": []
+  }'::jsonb
+)
+ON CONFLICT (key) DO UPDATE
+SET value = CASE
+  WHEN jsonb_typeof(site_settings.value) = 'object' THEN
+    jsonb_build_object(
+      'business_name', COALESCE(site_settings.value->>'business_name', ''),
+      'email', COALESCE(site_settings.value->>'email', ''),
+      'phone', COALESCE(site_settings.value->>'phone', ''),
+      'address', CASE
+        WHEN jsonb_typeof(site_settings.value->'address') = 'object' THEN
+          jsonb_build_object(
+            'line1', COALESCE(site_settings.value->'address'->>'line1', ''),
+            'line2', COALESCE(site_settings.value->'address'->>'line2', ''),
+            'city', COALESCE(site_settings.value->'address'->>'city', ''),
+            'state', COALESCE(site_settings.value->'address'->>'state', ''),
+            'postal_code', COALESCE(site_settings.value->'address'->>'postal_code', ''),
+            'country_code', COALESCE(NULLIF(site_settings.value->'address'->>'country_code', ''), 'CA')
+          )
+        ELSE
+          jsonb_build_object(
+            'line1', '',
+            'line2', '',
+            'city', '',
+            'state', '',
+            'postal_code', '',
+            'country_code', 'CA'
+          )
+      END,
+      'tax_registrations', CASE
+        WHEN jsonb_typeof(site_settings.value->'tax_registrations') = 'array' THEN
+          site_settings.value->'tax_registrations'
+        ELSE
+          '[]'::jsonb
+      END
+    )
+  ELSE
+    '{
+      "business_name": "",
+      "email": "",
+      "phone": "",
+      "address": {
+        "line1": "",
+        "line2": "",
+        "city": "",
+        "state": "",
+        "postal_code": "",
+        "country_code": "CA"
+      },
+      "tax_registrations": []
+    }'::jsonb
+END;
+
+INSERT INTO public.translations (key, translations)
+VALUES
+  (
+    'branding',
+    '{"en": "Branding", "fr": "Image de marque"}'::jsonb
+  ),
+  (
+    'company_name',
+    '{"en": "Company name", "fr": "Nom de l''entreprise"}'::jsonb
+  ),
+  (
+    'invoice',
+    '{"en": "Invoice", "fr": "Facture"}'::jsonb
+  ),
+  (
+    'invoice_number',
+    '{"en": "Invoice #", "fr": "Facture no"}'::jsonb
+  ),
+  (
+    'paid_on',
+    '{"en": "Paid on", "fr": "Paye le"}'::jsonb
+  ),
+  (
+    'bill_to',
+    '{"en": "Bill to", "fr": "Facturer a"}'::jsonb
+  ),
+  (
+    'ship_to',
+    '{"en": "Ship to", "fr": "Livrer a"}'::jsonb
+  ),
+  (
+    'print_invoice',
+    '{"en": "Print / Save as PDF", "fr": "Imprimer / Enregistrer en PDF"}'::jsonb
+  ),
+  (
+    'tax_registrations',
+    '{"en": "Tax registrations", "fr": "Inscriptions fiscales"}'::jsonb
+  ),
+  (
+    'invoice_settings',
+    '{"en": "Invoice settings", "fr": "Parametres de facture"}'::jsonb
+  ),
+  (
+    'business_name',
+    '{"en": "Business name", "fr": "Nom de l''entreprise"}'::jsonb
+  ),
+  (
+    'order_number',
+    '{"en": "Order #", "fr": "Commande no"}'::jsonb
+  ),
+  (
+    'print_invoice_help',
+    '{"en": "Use your browser print dialog to save this invoice as a PDF.", "fr": "Utilisez la boite de dialogue d''impression de votre navigateur pour enregistrer cette facture en PDF."}'::jsonb
+  ),
+  (
+    'return_home',
+    '{"en": "Return to Home", "fr": "Retour a l''accueil"}'::jsonb
+  ),
+  (
+    'receipt_finalizing',
+    '{"en": "Finalizing your invoice and payment details...", "fr": "Finalisation de votre facture et des details du paiement..."}'::jsonb
+  ),
+  (
+    'receipt_not_ready',
+    '{"en": "Your invoice will appear here once the payment sync is complete.", "fr": "Votre facture apparaitra ici une fois la synchronisation du paiement terminee."}'::jsonb
+  ),
+  (
+    'tax_breakdown',
+    '{"en": "Tax breakdown", "fr": "Detail des taxes"}'::jsonb
+  ),
+  (
+    'amount',
+    '{"en": "Amount", "fr": "Montant"}'::jsonb
+  ),
+  (
+    'price',
+    '{"en": "Price", "fr": "Prix"}'::jsonb
+  ),
+  (
+    'from',
+    '{"en": "From", "fr": "De"}'::jsonb
+  )
+ON CONFLICT (key) DO UPDATE
+SET
+  translations = EXCLUDED.translations,
+  updated_at = now();
+
+
+
   -- Step D: Anchor demo profile
   INSERT INTO public.profiles (id, updated_at, full_name, avatar_url, website, role)
   SELECT '63a8aa07-ef6e-4cc7-bafa-ece023c74366'::uuid, NULL, NULL, NULL, NULL, 'ADMIN'

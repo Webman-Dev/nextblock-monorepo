@@ -159,6 +159,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     upc: product.upc || undefined,
     price: product.price,
     sale_price: product.sale_price || null,
+    is_taxable: product.is_taxable ?? true,
     price_range_min: variantPriceRange?.min ?? null,
     price_range_max: variantPriceRange?.max ?? null,
     image_url: imageUrl,

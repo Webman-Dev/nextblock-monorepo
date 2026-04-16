@@ -198,15 +198,15 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
   else if (pathname.startsWith("/cms/settings/languages") && pathname.includes("/edit")) pageTitle = "Edit Language";
   else if (pathname.startsWith("/cms/settings/languages")) pageTitle = "Language Settings";
   // Fallback for general /cms/settings if no more specific language path matches
-  else if (pathname.startsWith("/cms/settings/logos")) pageTitle = "Logos";
+  else if (pathname.startsWith("/cms/settings/logos")) pageTitle = "Branding";
   else if (pathname.startsWith("/cms/settings/copyright")) pageTitle = "Copyright Settings";
   else if (pathname.startsWith("/cms/settings/extra-translations")) pageTitle = "Extra Translations";
+  else if (pathname.startsWith("/cms/settings/taxes")) pageTitle = "Tax Settings";
   else if (pathname.startsWith("/cms/payments")) pageTitle = "Payment Settings";
 
   else if (pathname.startsWith("/cms/settings/packages")) pageTitle = "Packages";
   else if (pathname.startsWith("/cms/settings")) pageTitle = "Settings";
   else if (pathname.startsWith("/cms/products/inventory")) pageTitle = "Inventory";
-  else if (pathname.startsWith("/cms/products/settings")) pageTitle = "Product Settings";
   else if (pathname.startsWith("/cms/products/new")) pageTitle = "New Product";
   else if (pathname.startsWith("/cms/products/") && pathname.endsWith("/edit")) pageTitle = "Edit Product";
   else if (pathname.startsWith("/cms/products")) pageTitle = "Products";
@@ -279,7 +279,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                     title="Products"
                     isActive={pathname.startsWith("/cms/products")}
                   >
-                    <NavItem href="/cms/products" icon={ShoppingBag} isActive={pathname === "/cms/products" || pathname.startsWith("/cms/products/") && !pathname.startsWith("/cms/products/attributes") && !pathname.startsWith("/cms/products/settings") && !pathname.startsWith("/cms/products/inventory")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                    <NavItem href="/cms/products" icon={ShoppingBag} isActive={pathname === "/cms/products" || pathname.startsWith("/cms/products/") && !pathname.startsWith("/cms/products/attributes") && !pathname.startsWith("/cms/products/inventory")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                       All Products
                     </NavItem>
                     <NavItem href="/cms/products/inventory" icon={Package} isActive={pathname.startsWith("/cms/products/inventory")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
@@ -287,9 +287,6 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                     </NavItem>
                     <NavItem href="/cms/products/attributes" icon={ListTree} isActive={pathname.startsWith("/cms/products/attributes")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                       Attributes
-                    </NavItem>
-                    <NavItem href="/cms/products/settings" icon={Settings} isActive={pathname.startsWith("/cms/products/settings")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
-                      Settings
                     </NavItem>
                   </CollapsibleNavItem>
                   <NavItem href="/cms/orders" icon={ListOrdered} isActive={pathname.startsWith("/cms/orders")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
@@ -300,6 +297,9 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                   </NavItem>
                   <NavItem href="/cms/payments" icon={CreditCard} isActive={pathname.startsWith("/cms/payments")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Payments
+                  </NavItem>
+                  <NavItem href="/cms/settings/taxes" icon={Settings} isActive={pathname.startsWith("/cms/settings/taxes")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                    Taxes
                   </NavItem>
                 </>
               )}
@@ -323,7 +323,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                   <CollapsibleNavItem
                     icon={Settings}
                     title="Settings"
-                    isActive={pathname.startsWith("/cms/settings")}
+                    isActive={pathname.startsWith("/cms/settings") && !pathname.startsWith("/cms/settings/taxes")}
                     adminOnly
                     isAdmin={isAdmin}
                   >
@@ -331,7 +331,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                       Languages
                    </NavItem>
                    <NavItem href="/cms/settings/logos" icon={ImageIconLucide} isActive={pathname.startsWith("/cms/settings/logos")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                     Logos
+                     Branding
                    </NavItem>
                     <NavItem href="/cms/settings/copyright" icon={CopyrightIcon} isActive={pathname.startsWith("/cms/settings/copyright")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Copyright
@@ -339,7 +339,6 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                     <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Extra Translations
                     </NavItem>
-
                  </CollapsibleNavItem>
                 </>
               )}

@@ -1,0 +1,182 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+import { normalizeCountryCode } from './countries';
+import { getEcommerceInventorySettings } from './inventory-settings';
+import { normalizeSubdivisionCode } from './states';
+import type { CartItem, TaxCalculationResult, TaxRate } from './types';
+
+export interface CheckoutTaxableItem {
+  product_id: string;
+  quantity: number;
+  unit_amount: number;
+  is_taxable: boolean;
+}
+
+export interface TaxDestinationInput {
+  country_code?: string | null;
+  state?: string | null;
+}
+
+export const STRIPE_TAX_CODE_TAXABLE_GOODS = 'txcd_99999999';
+export const STRIPE_TAX_CODE_NONTAXABLE = 'txcd_00000000';
+export const STRIPE_TAX_CODE_SHIPPING = 'txcd_92010001';
+
+export function getStripeTaxCodeForProduct(isTaxable: boolean) {
+  return isTaxable ? STRIPE_TAX_CODE_TAXABLE_GOODS : STRIPE_TAX_CODE_NONTAXABLE;
+}
+
+export async function buildCheckoutTaxableItemsFromCart(
+  supabase: SupabaseClient<any>,
+  cartItems: CartItem[]
+): Promise<CheckoutTaxableItem[]> {
+  if (!cartItems.length) {
+    return [];
+  }
+
+  const productIds = [...new Set(cartItems.map((item) => item.product_id))];
+  const variantIds = [
+    ...new Set(
+      cartItems
+        .map((item) => item.variant_id)
+        .filter((variantId): variantId is string => Boolean(variantId))
+    ),
+  ];
+
+  const [{ data: products, error: productsError }, { data: variants, error: variantsError }] =
+    await Promise.all([
+      supabase
+        .from('products')
+        .select('id, price, sale_price, is_taxable')
+        .in('id', productIds),
+      variantIds.length
+        ? supabase
+            .from('product_variants')
+            .select('id, product_id, price, sale_price')
+            .in('id', variantIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+  if (productsError) {
+    throw new Error(productsError.message);
+  }
+
+  if (variantsError) {
+    throw new Error(variantsError.message);
+  }
+
+  const productMap = new Map(
+    (products || []).map((product) => [product.id, product])
+  );
+  const variantMap = new Map((variants || []).map((variant) => [variant.id, variant]));
+
+  return cartItems.reduce<CheckoutTaxableItem[]>((accumulator, cartItem) => {
+    const product = productMap.get(cartItem.product_id);
+
+    if (!product) {
+      return accumulator;
+    }
+
+    const variant = cartItem.variant_id ? variantMap.get(cartItem.variant_id) : null;
+    const unitAmount =
+      variant
+        ? typeof variant.sale_price === 'number'
+          ? variant.sale_price
+          : variant.price
+        : typeof product.sale_price === 'number'
+          ? product.sale_price
+          : product.price;
+
+    accumulator.push({
+      product_id: product.id,
+      quantity: cartItem.quantity,
+      unit_amount: unitAmount,
+      is_taxable: product.is_taxable ?? true,
+    });
+
+    return accumulator;
+  }, []);
+}
+
+export async function calculateCheckoutTaxes(
+  supabase: SupabaseClient<any>,
+  input: {
+    items: CheckoutTaxableItem[];
+    destination?: TaxDestinationInput | null;
+  }
+): Promise<TaxCalculationResult> {
+  const settings = await getEcommerceInventorySettings(supabase);
+  const taxableSubtotal = input.items.reduce((sum, item) => {
+    if (!item.is_taxable) {
+      return sum;
+    }
+
+    return sum + item.unit_amount * item.quantity;
+  }, 0);
+
+  if (!settings.enableTaxes || taxableSubtotal <= 0) {
+    return {
+      enabled: false,
+      mode: settings.taxCalculationMode,
+      amount: 0,
+      taxableSubtotal,
+      lines: [],
+    };
+  }
+
+  if (settings.taxCalculationMode === 'automatic') {
+    return {
+      enabled: true,
+      mode: 'automatic',
+      amount: 0,
+      taxableSubtotal,
+      lines: [],
+      isPendingExternalCalculation: true,
+    };
+  }
+
+  const countryCode = normalizeCountryCode(input.destination?.country_code);
+  const stateCode = normalizeSubdivisionCode(countryCode, input.destination?.state) || null;
+
+  if (!countryCode) {
+    return {
+      enabled: true,
+      mode: 'manual',
+      amount: 0,
+      taxableSubtotal,
+      lines: [],
+    };
+  }
+
+  let query = supabase
+    .from('tax_rates')
+    .select('id, country_code, state_code, tax_name, tax_rate, created_at, updated_at')
+    .eq('country_code', countryCode);
+
+  query = stateCode
+    ? query.or(`state_code.is.null,state_code.eq.${stateCode}`)
+    : query.is('state_code', null);
+
+  const { data: rates, error } = await query;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const normalizedRates = (rates || []) as TaxRate[];
+  const lines = normalizedRates.map((rate) => ({
+    id: rate.id,
+    name: rate.tax_name,
+    rate: Number(rate.tax_rate),
+    amount: Math.round((taxableSubtotal * Number(rate.tax_rate)) / 100),
+    country_code: rate.country_code,
+    state_code: rate.state_code ?? null,
+  }));
+
+  return {
+    enabled: true,
+    mode: 'manual',
+    amount: lines.reduce((sum, line) => sum + line.amount, 0),
+    taxableSubtotal,
+    lines,
+  };
+}
