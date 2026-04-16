@@ -121,6 +121,8 @@ export async function EditProductPage({
             upc: product.upc ?? undefined,
             stock: product.stock || 0,
             price: product.price || 0,
+            is_taxable:
+              typeof product.is_taxable === 'boolean' ? product.is_taxable : true,
             status: product.status as 'draft' | 'active' | 'archived',
             short_description: product.short_description ?? undefined,
             description_json: product.description_json,

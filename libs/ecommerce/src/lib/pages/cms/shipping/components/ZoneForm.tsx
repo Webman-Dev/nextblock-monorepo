@@ -55,8 +55,8 @@ function buildSelectedStates(locations: ShippingZoneLocationInput[] = []) {
 function buildLocationsPayload(
     selectedCountries: string[],
     selectedStatesByCountry: Record<string, string[]>
-) {
-    return selectedCountries.flatMap((countryCode) => {
+): ShippingZoneLocationInput[] {
+    return selectedCountries.flatMap<ShippingZoneLocationInput>((countryCode) => {
         const selectedStates = selectedStatesByCountry[countryCode] || [];
 
         if (selectedStates.length === 0) {

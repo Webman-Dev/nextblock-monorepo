@@ -123,23 +123,13 @@ async function upsertStripeCheckoutCustomer(input: {
     return null;
   }
 
-  const customerPayload = {
-    ...(function () {
-      const stripeShippingAddress = toStripeAddress(input.shippingAddress);
+  const stripeShippingAddress = toStripeAddress(input.shippingAddress);
+  const shippingName =
+    input.shippingAddress?.recipient_name ||
+    input.billingAddress?.recipient_name ||
+    undefined;
 
-      return {
-        shipping: stripeShippingAddress
-          ? {
-              name:
-                input.shippingAddress?.recipient_name ||
-                input.billingAddress?.recipient_name ||
-                undefined,
-              phone: input.phone || undefined,
-              address: stripeShippingAddress,
-            }
-          : undefined,
-      };
-    })(),
+  const customerPayload = {
     email: input.email,
     name:
       input.billingAddress?.recipient_name ||
@@ -148,6 +138,15 @@ async function upsertStripeCheckoutCustomer(input: {
     phone: input.phone || undefined,
     address: toStripeAddress(input.billingAddress),
     metadata: input.userId ? { userId: input.userId } : undefined,
+    ...(stripeShippingAddress && shippingName
+      ? {
+          shipping: {
+            name: shippingName,
+            phone: input.phone || undefined,
+            address: stripeShippingAddress,
+          },
+        }
+      : {}),
   };
 
   try {

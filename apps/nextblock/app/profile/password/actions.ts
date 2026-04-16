@@ -5,6 +5,10 @@ import { encodedRedirect } from '@nextblock-cms/utils/server';
 import { redirect } from 'next/navigation';
 
 export async function changePasswordAction(formData: FormData) {
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+    redirect('/profile');
+  }
+
   const supabase = createClient();
   const {
     data: { user },
