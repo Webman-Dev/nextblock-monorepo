@@ -5,6 +5,7 @@ import { getDefaultUserAddresses } from "@nextblock-cms/ecommerce/server";
 import MediaPickerDialog from "../cms/media/components/MediaPickerDialog";
 import { ProfilePageHeader } from "./ProfilePageHeader";
 import { ProfilePageMissingState } from "./ProfilePageMissingState";
+import { profileAccountLinks } from "./account-links";
 
 export default async function ProfilePage() {
   const supabase = createClient();
@@ -43,6 +44,7 @@ export default async function ProfilePage() {
         }} 
         MediaPickerComponent={MediaPickerDialog}
         email={user.email}
+        accountLinks={profileAccountLinks}
       />
     </div>
   );

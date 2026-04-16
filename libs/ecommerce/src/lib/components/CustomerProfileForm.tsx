@@ -3,6 +3,10 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
+  AccountNavigationLink,
+  AccountNavigationMenu,
+} from './AccountNavigationMenu';
+import {
   Avatar,
   AvatarFallback,
   AvatarImage,
@@ -41,6 +45,7 @@ interface CustomerProfileFormProps {
   MediaPickerComponent?: React.ComponentType<any>;
   isAdmin?: boolean;
   email?: string;
+  accountLinks?: AccountNavigationLink[];
   onAction?: (data: ExtendedProfileUpdateData) => Promise<{ error?: string } | void>;
   initialSuccessMessage?: string | null;
 }
@@ -138,6 +143,7 @@ export function CustomerProfileForm({
   MediaPickerComponent,
   isAdmin,
   email,
+  accountLinks,
   onAction,
   initialSuccessMessage,
 }: CustomerProfileFormProps) {
@@ -365,6 +371,13 @@ export function CustomerProfileForm({
               </Badge>
             )}
           </div>
+
+          {accountLinks?.length ? (
+            <AccountNavigationMenu
+              links={accountLinks}
+              className="mt-2 text-left"
+            />
+          ) : null}
         </CardContent>
       </Card>
 

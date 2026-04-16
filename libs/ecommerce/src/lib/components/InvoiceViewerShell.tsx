@@ -1,0 +1,146 @@
+'use client';
+
+import type { ReactNode } from 'react';
+
+import Link from 'next/link';
+import { Printer } from 'lucide-react';
+
+import { Button } from '@nextblock-cms/ui';
+
+import {
+  InvoiceDocument,
+  type InvoiceDocumentLabels,
+} from './InvoiceDocument';
+import type { InvoicePresentationData } from '../invoice';
+
+interface InvoiceViewerAction {
+  href: string;
+  label: string;
+  variant?: 'default' | 'outline';
+}
+
+interface InvoiceViewerShellProps {
+  invoice?: InvoicePresentationData | null;
+  labels: InvoiceDocumentLabels;
+  locale: string;
+  title: string;
+  description?: string;
+  printLabel: string;
+  headerVisual?: ReactNode;
+  action?: InvoiceViewerAction;
+  loading?: boolean;
+  loadingMessage?: string;
+  error?: string | null;
+  emptyMessage?: string;
+  className?: string;
+}
+
+export function InvoiceViewerShell({
+  invoice,
+  labels,
+  locale,
+  title,
+  description,
+  printLabel,
+  headerVisual,
+  action,
+  loading = false,
+  loadingMessage,
+  error,
+  emptyMessage,
+  className = '',
+}: InvoiceViewerShellProps) {
+  return (
+    <>
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: portrait;
+            margin: 12mm;
+          }
+
+          body {
+            background: white !important;
+          }
+
+          body * {
+            visibility: hidden;
+          }
+
+          [data-print-invoice-root],
+          [data-print-invoice-root] * {
+            visibility: visible;
+          }
+
+          [data-print-invoice-root] {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+          }
+        }
+      `}</style>
+
+      <div
+        className={`mx-auto max-w-6xl px-4 py-10 md:px-6 print:max-w-none print:px-0 print:py-0 ${className}`}
+      >
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between print:hidden">
+          <div className="flex items-center gap-4">
+            {headerVisual ? <div className="shrink-0">{headerVisual}</div> : null}
+            <div>
+              <h1 className="text-3xl font-bold">{title}</h1>
+              {description ? (
+                <p className="text-sm text-muted-foreground">{description}</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => window.print()}
+              disabled={!invoice}
+            >
+              <Printer className="mr-2 h-4 w-4" />
+              {printLabel}
+            </Button>
+
+            {action ? (
+              <Button asChild variant={action.variant || 'default'}>
+                <Link href={action.href}>{action.label}</Link>
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="mb-6 flex items-center justify-center gap-3 rounded-2xl border bg-background px-5 py-4 text-sm text-muted-foreground print:hidden">
+            {loadingMessage}
+          </div>
+        ) : null}
+
+        {error ? (
+          <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-700 print:hidden">
+            {error}
+          </div>
+        ) : null}
+
+        {invoice ? (
+          <div data-print-invoice-root>
+            <InvoiceDocument
+              data={invoice}
+              labels={labels}
+              locale={locale}
+            />
+          </div>
+        ) : !loading && !error ? (
+          <div className="rounded-2xl border bg-background px-6 py-12 text-center text-muted-foreground print:hidden">
+            {emptyMessage}
+          </div>
+        ) : null}
+      </div>
+    </>
+  );
+}

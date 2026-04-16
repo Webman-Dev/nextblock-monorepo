@@ -12,6 +12,8 @@ export * from './lib/components/FeaturedProduct';
 export * from './lib/components/CustomerProfileForm';
 export * from './lib/components/SubscriptionSelector';
 export * from './lib/components/InvoiceDocument';
+export * from './lib/components/InvoiceViewerShell';
+export * from './lib/components/AccountNavigationMenu';
 export { ProductForm } from './lib/pages/cms/products/components/ProductForm';
 
 export * from './lib/cart-store';
@@ -20,6 +22,7 @@ export * from './lib/customer';
 export * from './lib/types';
 export * from './lib/order-tax-details';
 export * from './lib/invoice';
+export * from './lib/invoice-ui';
 
 export * from './lib/product-schema';
 export * from './lib/product-context';

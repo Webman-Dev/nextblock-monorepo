@@ -6,6 +6,7 @@ export * from './lib/order-inventory';
 export * from './lib/order-tax-details';
 export * from './lib/invoice';
 export * from './lib/invoice-server';
+export * from './lib/customer-orders';
 export * from './lib/customer';
 export * from './lib/customer-addresses';
 
