@@ -33,6 +33,7 @@ interface InvoiceViewerShellProps {
   error?: string | null;
   emptyMessage?: string;
   className?: string;
+  showHeader?: boolean;
 }
 
 export function InvoiceViewerShell({
@@ -49,6 +50,7 @@ export function InvoiceViewerShell({
   error,
   emptyMessage,
   className = '',
+  showHeader = true,
 }: InvoiceViewerShellProps) {
   return (
     <>
@@ -85,35 +87,37 @@ export function InvoiceViewerShell({
       <div
         className={`mx-auto max-w-6xl px-4 py-10 md:px-6 print:max-w-none print:px-0 print:py-0 ${className}`}
       >
-        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between print:hidden">
-          <div className="flex items-center gap-4">
-            {headerVisual ? <div className="shrink-0">{headerVisual}</div> : null}
-            <div>
-              <h1 className="text-3xl font-bold">{title}</h1>
-              {description ? (
-                <p className="text-sm text-muted-foreground">{description}</p>
+        {showHeader ? (
+          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between print:hidden">
+            <div className="flex items-center gap-4">
+              {headerVisual ? <div className="shrink-0">{headerVisual}</div> : null}
+              <div>
+                <h1 className="text-3xl font-bold">{title}</h1>
+                {description ? (
+                  <p className="text-sm text-muted-foreground">{description}</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => window.print()}
+                disabled={!invoice}
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                {printLabel}
+              </Button>
+
+              {action ? (
+                <Button asChild variant={action.variant || 'default'}>
+                  <Link href={action.href}>{action.label}</Link>
+                </Button>
               ) : null}
             </div>
           </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => window.print()}
-              disabled={!invoice}
-            >
-              <Printer className="mr-2 h-4 w-4" />
-              {printLabel}
-            </Button>
-
-            {action ? (
-              <Button asChild variant={action.variant || 'default'}>
-                <Link href={action.href}>{action.label}</Link>
-              </Button>
-            ) : null}
-          </div>
-        </div>
+        ) : null}
 
         {loading ? (
           <div className="mb-6 flex items-center justify-center gap-3 rounded-2xl border bg-background px-5 py-4 text-sm text-muted-foreground print:hidden">

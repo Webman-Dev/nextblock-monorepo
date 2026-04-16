@@ -5,39 +5,90 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { applyOrderInventoryDeduction } from '../../../order-inventory';
 import { assignInvoiceMetadata } from '../../../invoice-server';
 
-export async function markOrderAsPaid(orderId: string): Promise<{ success: boolean; error?: string }> {
-    const supabase = await createClient();
-    
-    // 1. Verify Authentication (using user session)
+const MANAGEABLE_ORDER_STATUSES = [
+    'pending',
+    'paid',
+    'shipped',
+    'cancelled',
+    'refunded',
+] as const;
+
+export type ManageableOrderStatus = (typeof MANAGEABLE_ORDER_STATUSES)[number];
+
+async function requireOrderManager() {
+    const supabase = createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
-        return { success: false, error: 'Unauthorized' };
+        return { error: 'Unauthorized' as const };
     }
 
-    // 2. Perform Update using Service Role (Bypass RLS)
+    const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+    if (profileError || !profile || !['ADMIN', 'WRITER'].includes(profile.role)) {
+        return { error: 'Forbidden' as const };
+    }
+
+    return { supabase, user };
+}
+
+function createAdminSupabaseClient() {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
     if (!serviceRoleKey || !supabaseUrl) {
-         return { success: false, error: 'Server configuration error' };
+        throw new Error('Server configuration error');
     }
 
-    const adminSupabase = createSupabaseClient(supabaseUrl, serviceRoleKey, {
+    return createSupabaseClient(supabaseUrl, serviceRoleKey, {
         auth: {
             autoRefreshToken: false,
             persistSession: false
         }
     });
+}
+
+export async function markOrderAsPaid(orderId: string): Promise<{ success: boolean; error?: string }> {
+    return updateOrderStatus(orderId, 'paid');
+}
+
+export async function updateOrderStatus(
+    orderId: string,
+    nextStatus: ManageableOrderStatus
+): Promise<{ success: boolean; error?: string }> {
+    const auth = await requireOrderManager();
+
+    if ('error' in auth) {
+        return { success: false, error: auth.error };
+    }
+
+    if (!MANAGEABLE_ORDER_STATUSES.includes(nextStatus)) {
+        return { success: false, error: 'Invalid order status' };
+    }
+
+    let adminSupabase;
+
+    try {
+        adminSupabase = createAdminSupabaseClient();
+    } catch (error) {
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Server configuration error',
+        };
+    }
 
     const { data: updatedData, error } = await adminSupabase
         .from('orders')
-        .update({ status: 'paid' })
+        .update({ status: nextStatus })
         .eq('id', orderId)
         .select();
 
     if (error) {
-        console.error('Mark Paid DB Error:', error);
+        console.error('Order status update error:', error);
         return { success: false, error: error.message };
     }
 
@@ -45,11 +96,13 @@ export async function markOrderAsPaid(orderId: string): Promise<{ success: boole
         return { success: false, error: 'Order not found or update failed.' };
     }
 
-    await assignInvoiceMetadata({
-        orderId,
-        client: adminSupabase as any,
-    });
-    await applyOrderInventoryDeduction(adminSupabase as any, orderId);
+    if (nextStatus === 'paid') {
+        await assignInvoiceMetadata({
+            orderId,
+            client: adminSupabase as any,
+        });
+        await applyOrderInventoryDeduction(adminSupabase as any, orderId);
+    }
 
     return { success: true };
 }
