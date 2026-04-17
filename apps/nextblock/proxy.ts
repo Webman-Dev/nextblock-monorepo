@@ -83,6 +83,8 @@ export default async function proxy(request: NextRequest) {
     error: userError,
   } = await supabase.auth.getUser();
   const { pathname } = request.nextUrl;
+  requestHeaders.set('x-current-pathname', pathname);
+  requestHeaders.set('x-is-cms-request', pathname.startsWith('/cms') ? 'true' : 'false');
 
   if (pathname.startsWith('/cms')) {
     if (userError || !user) {

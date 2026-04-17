@@ -215,7 +215,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
 
 
   return (
-    <div className="w-full flex flex-col md:flex-row bg-slate-50 dark:bg-slate-950 min-h-screen">
+    <div className="w-full h-[100dvh] overflow-hidden flex flex-col md:flex-row bg-slate-50 dark:bg-slate-950">
       <div className="fixed bottom-4 right-4 z-[60] md:hidden">
         <Button
           variant="outline"
@@ -229,7 +229,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
 
       <aside
         className={cn(
-          "fixed md:sticky top-0 left-0 h-screen w-64 bg-white shadow-lg transition-transform duration-300 ease-in-out dark:bg-slate-900 dark:border-r dark:border-slate-700/60",
+          "fixed md:sticky top-0 left-0 h-[100dvh] w-64 bg-white shadow-lg transition-transform duration-300 ease-in-out dark:bg-slate-900 dark:border-r dark:border-slate-700/60",
           "md:translate-x-0",
           cmsSidebarOpen ? "translate-x-0" : "-translate-x-full",
           "z-30"
@@ -252,7 +252,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
             </Link>
           </div>
 
-          <nav className="px-3 py-4 flex-1 overflow-y-auto">
+          <nav className="px-3 py-4 flex-1 overflow-y-auto overscroll-contain">
             <ul className="space-y-1.5">
               <NavItem href="/cms/dashboard" icon={LayoutDashboard} isActive={pathname === "/cms/dashboard"} isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Dashboard
@@ -371,7 +371,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
         </div>
       </aside>
 
-      <div className="flex-1 transition-all duration-300 ease-in-out w-full">
+      <div className="flex min-w-0 flex-1 flex-col transition-all duration-300 ease-in-out w-full">
         <header className="bg-background dark:bg-slate-800/30 border-b border-border h-16 flex items-center px-6 sticky top-0 z-20 w-full shrink-0">
             <Button variant="ghost" size="icon" className="md:hidden mr-3 -ml-2" onClick={() => setCmsSidebarOpen(!cmsSidebarOpen)}>
                 <Menu className="h-5 w-5" />
@@ -380,7 +380,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
               {pageTitle}
             </h1>
         </header>
-        <main className="p-6 w-full overflow-y-auto h-[calc(100vh-4rem)]">
+        <main className="flex-1 min-h-0 px-6 pt-6 pb-20 md:pb-24 w-full overflow-y-auto overscroll-contain scroll-pb-24">
             {children}
         </main>
       </div>
