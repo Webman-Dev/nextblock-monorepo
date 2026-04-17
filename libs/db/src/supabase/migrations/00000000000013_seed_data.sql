@@ -65,7 +65,7 @@ BEGIN
     v_logo_media_id,
     v_admin_id,
     'nextblock-logo-small.webp',
-    '/images/nextblock-logo-small.webp',
+    'images/nextblock-logo-small.webp',
     'image/webp',
     10000,
     'NextBlock Site Logo'
@@ -137,7 +137,7 @@ BEGIN
   -- Seed Featured Image
   v_feature_media_id := gen_random_uuid();
   INSERT INTO public.media (id, file_name, object_key, file_type, size_bytes)
-  VALUES (v_feature_media_id, 'programmer-upscaled.webp', '/images/programmer-upscaled.webp', 'image/webp', 100000)
+  VALUES (v_feature_media_id, 'programmer-upscaled.webp', 'images/programmer-upscaled.webp', 'image/webp', 100000)
   ON CONFLICT (object_key) DO UPDATE
     SET file_name = EXCLUDED.file_name
   RETURNING id INTO v_feature_media_id;

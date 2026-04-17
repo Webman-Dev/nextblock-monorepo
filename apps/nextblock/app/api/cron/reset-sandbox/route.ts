@@ -30,6 +30,12 @@ type UploadedSeedAsset = SeedAsset & {
   sizeBytes: number;
 };
 
+type MediaStorageRow = {
+  id: string;
+  object_key: string;
+  file_path: string | null;
+};
+
 type DescriptionContent = {
   headline: string;
   lead: string;
@@ -116,6 +122,24 @@ const SIZE_TERM_DEFINITIONS: Array<{
   { slug: 'medium', value: 'Medium', sortOrder: 1, frValue: 'Moyen' },
   { slug: 'large', value: 'Large', sortOrder: 2, frValue: 'Grand' },
 ];
+
+const CORE_MEDIA_RECORDS: Array<{
+  assetKey: string;
+  description?: string | null;
+}> = [
+  {
+    assetKey: 'images/nextblock-logo-small.webp',
+    description: 'NextBlock Site Logo',
+  },
+  {
+    assetKey: 'images/programmer-upscaled.webp',
+    description: undefined,
+  },
+];
+
+function getFolderFromObjectKey(objectKey: string) {
+  return objectKey.includes('/') ? objectKey.slice(0, objectKey.lastIndexOf('/')) : null;
+}
 
 function buildStructuredDescription(content: DescriptionContent) {
   return {
@@ -333,7 +357,8 @@ async function upsertMediaRecord(
   asset: UploadedSeedAsset,
   description?: string | null
 ) {
-  const folder = asset.dest.includes('/') ? asset.dest.slice(0, asset.dest.lastIndexOf('/')) : null;
+  const folder = getFolderFromObjectKey(asset.dest);
+  const recordDescription = description === undefined ? asset.description ?? null : description;
   const [mediaRecord] = await sql`
     INSERT INTO public.media (
       file_name,
@@ -351,7 +376,7 @@ async function upsertMediaRecord(
       ${asset.contentType},
       ${asset.sizeBytes},
       ${folder},
-      ${description ?? asset.description ?? null}
+      ${recordDescription}
     )
     ON CONFLICT (object_key) DO UPDATE
     SET
@@ -370,6 +395,46 @@ async function upsertMediaRecord(
   }
 
   return mediaRecord.id as string;
+}
+
+async function normalizeMediaStorageKeys(sql: SqlClient) {
+  const rows = (await sql`
+    SELECT id, object_key, file_path
+    FROM public.media
+    WHERE object_key LIKE '/%' OR file_path LIKE '/%'
+  `) as MediaStorageRow[];
+
+  for (const row of rows) {
+    const normalizedObjectKey = row.object_key.replace(/^\/+/, '');
+    const normalizedFilePath = (row.file_path || row.object_key).replace(/^\/+/, '');
+    const folder = getFolderFromObjectKey(normalizedFilePath);
+
+    await sql`
+      UPDATE public.media
+      SET
+        object_key = ${normalizedObjectKey},
+        file_path = ${normalizedFilePath},
+        folder = ${folder},
+        updated_at = now()
+      WHERE id = ${row.id}
+    `;
+  }
+
+  return rows.length;
+}
+
+async function ensureCoreMediaRecords(params: {
+  sql: SqlClient;
+  uploadedAssets: Map<string, UploadedSeedAsset>;
+}) {
+  for (const record of CORE_MEDIA_RECORDS) {
+    const asset = params.uploadedAssets.get(record.assetKey);
+    if (!asset) {
+      throw new Error(`Missing uploaded asset for ${record.assetKey}.`);
+    }
+
+    await upsertMediaRecord(params.sql, asset, record.description);
+  }
 }
 
 async function attachProductMedia(sql: SqlClient, productId: string, mediaId: string) {
@@ -1316,6 +1381,18 @@ export async function GET(request: NextRequest) {
         console.error('[Sandbox Reset] DB Error:', dbError);
         throw dbError;
       }
+
+      const normalizedMediaCount = await normalizeMediaStorageKeys(db);
+      if (normalizedMediaCount > 0) {
+        console.log(
+          `[Sandbox Reset] Normalized ${normalizedMediaCount} media storage key(s) after SQL reset.`
+        );
+      }
+
+      await ensureCoreMediaRecords({
+        sql: db,
+        uploadedAssets,
+      });
 
       console.log('[Sandbox Reset] Pre-activating premium packages...');
       const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
