@@ -3,13 +3,13 @@
 
 import React, { useState, useRef, useTransition, useEffect } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { Button } from "@nextblock-cms/ui";
 import { Spinner, Alert, AlertDescription } from "@nextblock-cms/ui";
 import { Input } from "@nextblock-cms/ui";
 import { Label } from "@nextblock-cms/ui";
 import { Progress } from "@nextblock-cms/ui"; // Assuming you have this shadcn/ui component
 import { UploadCloud, XCircle, CheckCircle2 } from "lucide-react";
-import { recordMediaUpload } from "../actions"; // Server action
 import type { Database } from "@nextblock-cms/db"; // Import Media type
 
 type Media = Database['public']['Tables']['media']['Row'];
@@ -26,6 +26,7 @@ interface MediaUploadFormProps {
 import { useUploadFolder } from "../UploadFolderContext";
 
 export default function MediaUploadForm({ onUploadSuccess, returnJustData, defaultFolder }: MediaUploadFormProps) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null); // For image preview
@@ -232,57 +233,67 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData, defau
           r2OriginalKey: objectKey,
           r2Variants: processData.processedVariants || [],
           originalImageDetails: processData.originalImage,
-          blurDataURL: processData.blurDataURL || null,
+          blurDataUrl: processData.blurDataURL || null,
         };
 
-        const recordResult = await recordMediaUpload(finalMediaPayload, returnJustData);
+        const recordResponse = await fetch('/api/media/record', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(finalMediaPayload),
+        });
+
+        const recordResult = await recordResponse.json();
+
+        if (!recordResponse.ok) {
+          throw new Error(recordResult?.error || 'Media record action failed.');
+        }
 
         const handleSuccess = (newMedia?: Media) => {
           setUploadStatus("success");
-          if (returnJustData && newMedia) {
-            onUploadSuccess?.(newMedia);
-          }
+          if (newMedia) onUploadSuccess?.(newMedia);
           // Reset form state
           resetFileSelection();
           if (processingStatus !== "processed_error") {
             setProcessingStatus("idle");
           }
+          if (!returnJustData) {
+            router.refresh();
+          }
         };
 
-        if (returnJustData) {
-          if (recordResult && 'success' in recordResult && recordResult.success && recordResult.data) {
-            handleSuccess(recordResult.data);
-          } else {
-            throw new Error((recordResult && 'error' in recordResult && recordResult.error) || "Media record action failed.");
-          }
+        if (recordResult?.success && recordResult.data) {
+          handleSuccess(recordResult.data);
         } else {
-          handleSuccess();
+          throw new Error(recordResult?.error || "Media record action failed.");
         }
 
       } catch (err: unknown) {
-        const isRedirect = (err instanceof Error && err.message === 'NEXT_REDIRECT') || (typeof (err as any)?.digest === 'string' && (err as any).digest.startsWith('NEXT_REDIRECT'));
-
-        if (isRedirect && !returnJustData) {
-          setUploadStatus("success");
-          resetFileSelection();
-        } else {
-          console.error("Upload process error:", err);
-          setUploadStatus("error");
-          setErrorMessage(err instanceof Error ? err.message : "An unknown error occurred during upload.");
-          setUploadProgress(0);
-        }
+        console.error("Upload process error:", err);
+        setUploadStatus("error");
+        setErrorMessage(err instanceof Error ? err.message : "An unknown error occurred during upload.");
+        setUploadProgress(0);
       }
     });
   };
 
-  const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleFolderKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+
     event.preventDefault();
-    performUpload();
+    event.stopPropagation();
+
+    if (file) {
+      void performUpload();
+    }
   };
 
   return (
     <div className="p-6 border rounded-lg shadow-sm bg-card mb-6">
-      <form onSubmit={handleFormSubmit} className="space-y-4">
+      <div role="group" aria-label="Upload new media" className="space-y-4">
         <div>
           <Label htmlFor="media-file" className="text-base font-medium">Upload New Media</Label>
           <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -293,6 +304,7 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData, defau
                 placeholder="uploads/"
                 value={folder}
                 onChange={(e) => setFolder(e.target.value)}
+                onKeyDown={handleFolderKeyDown}
               />
             </div>
           </div>
@@ -367,7 +379,7 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData, defau
              "Upload File"
            )}
         </Button>
-      </form>
+      </div>
     </div>
   );
 }
