@@ -5,6 +5,7 @@ import { AuthProvider } from '../context/AuthContext';
 import { LanguageProvider, useLanguage } from '../context/LanguageContext';
 import { CurrentContentProvider } from '../context/CurrentContentContext';
 import { CartTranslator } from '../components/CartTranslator';
+import { CurrencyProvider } from '@nextblock-cms/ecommerce';
 import { TranslationsProvider } from '@nextblock-cms/utils';
 
 function TranslationBridge({
@@ -28,6 +29,8 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
     serverUser,
     serverProfile,
     serverLocale,
+    initialCurrencies,
+    initialCurrencyCode,
     initialAvailableLanguages,
     initialDefaultLanguage,
     translations,
@@ -41,21 +44,27 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
         initialAvailableLanguages={initialAvailableLanguages}
         initialDefaultLanguage={initialDefaultLanguage}
       >
-        <CurrentContentProvider>
-          <CartTranslator />
-          <TranslationBridge translations={translations}>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-              nonce={nonce}
-              themes={['light', 'dark', 'vibrant']}
-            >
-              {children}
-            </ThemeProvider>
-          </TranslationBridge>
-        </CurrentContentProvider>
+        <CurrencyProvider
+          initialCurrencies={initialCurrencies}
+          initialCurrencyCode={initialCurrencyCode}
+          locale={serverLocale}
+        >
+          <CurrentContentProvider>
+            <CartTranslator />
+            <TranslationBridge translations={translations}>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+                nonce={nonce}
+                themes={['light', 'dark', 'vibrant']}
+              >
+                {children}
+              </ThemeProvider>
+            </TranslationBridge>
+          </CurrentContentProvider>
+        </CurrencyProvider>
       </LanguageProvider>
     </AuthProvider>
   );

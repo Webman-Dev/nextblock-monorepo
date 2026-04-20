@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/reset-sandbox",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/sync-currencies",
+      "schedule": "0 18 * * *"
     }
   ]
 }

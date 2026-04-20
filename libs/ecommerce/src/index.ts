@@ -4,6 +4,7 @@ export * from './lib/components/CartDrawer';
 export * from './lib/components/Cart';
 export * from './lib/components/Checkout';
 export * from './lib/components/CartIcon';
+export * from './lib/components/CurrencySwitcher';
 export * from './lib/components/AddToCartButton';
 export * from './lib/components/ProductCard';
 export * from './lib/components/ProductGrid';
@@ -17,6 +18,9 @@ export * from './lib/components/AccountNavigationMenu';
 export { ProductForm } from './lib/pages/cms/products/components/ProductForm';
 
 export * from './lib/cart-store';
+export * from './lib/CurrencyProvider';
+export * from './lib/currency';
+export * from './lib/currency-store';
 export * from './lib/use-cart';
 export * from './lib/customer';
 export * from './lib/types';

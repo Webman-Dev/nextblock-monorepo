@@ -1,6 +1,12 @@
 import type { CheckoutSessionInput } from './customer';
+import type {
+  CurrencyRecord,
+  PriceMap,
+  SalePriceMap,
+} from './currency';
 
 export type TranslationMap = Record<string, string>;
+export type { CurrencyRecord, PriceMap, SalePriceMap };
 
 // Basic Product interface for UI components
 // In a real app, this might come from database types, but we define the UI requirement here.
@@ -35,7 +41,9 @@ export interface ProductVariant {
   sku: string;
   upc?: string | null;
   price: number;
+  prices?: PriceMap | null;
   sale_price?: number | null;
+  sale_prices?: SalePriceMap | null;
   stock_quantity: number;
   attribute_term_ids: string[];
   selected_options: ProductVariantOption[];
@@ -51,7 +59,9 @@ export interface Product {
   sku: string;
   upc?: string | null;
   price: number;
+  prices?: PriceMap | null;
   sale_price?: number | null;
+  sale_prices?: SalePriceMap | null;
   is_taxable?: boolean;
   price_range_min?: number | null;
   price_range_max?: number | null;
@@ -72,6 +82,13 @@ export interface Product {
   selected_options?: ProductVariantOption[];
   attributes?: ProductAttribute[];
   variants?: ProductVariant[];
+  product_variants?: Array<{
+    id: string;
+    price: number;
+    prices?: PriceMap | null;
+    sale_price?: number | null;
+    sale_prices?: SalePriceMap | null;
+  }>;
 }
 
 export interface ShippingZone {
@@ -125,6 +142,7 @@ export type CartItemProvider = 'stripe' | 'freemius';
 export type CartItem = Product & {
   quantity: number;
   product_id: string;
+  currency_code?: string;
   /** Which payment provider handles this cart item */
   provider?: CartItemProvider;
   /** For Freemius items: the selected billing cycle */

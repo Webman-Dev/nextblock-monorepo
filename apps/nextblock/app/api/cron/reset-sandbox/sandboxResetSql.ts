@@ -4842,6 +4842,1071 @@ SET translations = EXCLUDED.translations;
 
 
 
+-- >>> FROM: 20260417000000_setup_currencies.sql <<<
+-- 20260417000000_setup_currencies.sql
+-- Adds multi-currency foundations with compatibility sync for legacy price columns.
+
+
+CREATE TABLE IF NOT EXISTS public.currencies (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  code text NOT NULL UNIQUE CHECK (code ~ '^[A-Z]{3}$'),
+  symbol text NOT NULL,
+  exchange_rate numeric(20,10) NOT NULL CHECK (exchange_rate > 0),
+  is_default boolean NOT NULL DEFAULT false,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT currencies_default_must_be_active CHECK (NOT is_default OR is_active)
+);
+
+COMMENT ON TABLE public.currencies IS
+  'Store currencies available for storefront display and conversion.';
+COMMENT ON COLUMN public.currencies.exchange_rate IS
+  'Relative to the current store default currency. The default currency should have exchange_rate = 1.';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_currencies_single_default
+  ON public.currencies (is_default)
+  WHERE is_default = true;
+
+ALTER TABLE public.currencies ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read active currencies" ON public.currencies;
+CREATE POLICY "Public read active currencies"
+  ON public.currencies
+  FOR SELECT
+  TO anon, authenticated
+  USING (is_active = true);
+
+DROP POLICY IF EXISTS "Admins manage currencies" ON public.currencies;
+CREATE POLICY "Admins manage currencies"
+  ON public.currencies
+  FOR ALL
+  TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Service role manages currencies" ON public.currencies;
+CREATE POLICY "Service role manages currencies"
+  ON public.currencies
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+GRANT SELECT ON TABLE public.currencies TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON TABLE public.currencies TO authenticated;
+GRANT ALL ON TABLE public.currencies TO service_role;
+
+CREATE OR REPLACE FUNCTION public.get_default_currency_code()
+RETURNS text
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT COALESCE(
+    (
+      SELECT upper(code)
+      FROM public.currencies
+      WHERE is_default = true
+      ORDER BY updated_at DESC, created_at DESC, code ASC
+      LIMIT 1
+    ),
+    'USD'
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.normalize_currency_amount_map(amounts jsonb)
+RETURNS jsonb
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT CASE
+    WHEN amounts IS NULL THEN '{}'::jsonb
+    WHEN jsonb_typeof(amounts) <> 'object' THEN amounts
+    ELSE COALESCE(
+      (
+        SELECT jsonb_object_agg(
+          upper(trim(entry.key)),
+          CASE
+            WHEN jsonb_typeof(entry.value) = 'number'
+                 AND entry.value::text ~ '^[0-9]+$' THEN
+              to_jsonb((entry.value::text)::bigint)
+            ELSE
+              entry.value
+          END
+        )
+        FROM jsonb_each(amounts) AS entry
+      ),
+      '{}'::jsonb
+    )
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_valid_currency_amount_map(amounts jsonb)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT CASE
+    WHEN amounts IS NULL THEN false
+    WHEN jsonb_typeof(amounts) <> 'object' THEN false
+    WHEN amounts = '{}'::jsonb THEN false
+    ELSE NOT EXISTS (
+      SELECT 1
+      FROM jsonb_each(amounts) AS entry
+      WHERE entry.key !~ '^[A-Z]{3}$'
+        OR jsonb_typeof(entry.value) <> 'number'
+        OR entry.value::text !~ '^[0-9]+$'
+    )
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_valid_sale_price_map(prices jsonb, sale_prices jsonb)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT CASE
+    WHEN sale_prices IS NULL THEN true
+    WHEN jsonb_typeof(sale_prices) <> 'object' THEN false
+    WHEN sale_prices = '{}'::jsonb THEN true
+    WHEN prices IS NULL OR jsonb_typeof(prices) <> 'object' THEN false
+    ELSE NOT EXISTS (
+      SELECT 1
+      FROM jsonb_each(sale_prices) AS entry
+      WHERE entry.key !~ '^[A-Z]{3}$'
+        OR NOT (prices ? entry.key)
+        OR jsonb_typeof(entry.value) <> 'number'
+        OR entry.value::text !~ '^[0-9]+$'
+        OR entry.value::text::numeric > (prices ->> entry.key)::numeric
+    )
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.sync_currency_price_maps()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_default_currency text := public.get_default_currency_code();
+  v_price_map_changed boolean := false;
+  v_legacy_changed boolean := false;
+BEGIN
+  NEW.prices := public.normalize_currency_amount_map(COALESCE(NEW.prices, '{}'::jsonb));
+  NEW.sale_prices := public.normalize_currency_amount_map(COALESCE(NEW.sale_prices, '{}'::jsonb));
+
+  IF NEW.sale_prices = '{}'::jsonb THEN
+    NEW.sale_prices := NULL;
+  END IF;
+
+  IF TG_OP = 'UPDATE' THEN
+    v_price_map_changed :=
+      NEW.prices IS DISTINCT FROM OLD.prices
+      OR NEW.sale_prices IS DISTINCT FROM OLD.sale_prices;
+    v_legacy_changed :=
+      NEW.price IS DISTINCT FROM OLD.price
+      OR NEW.sale_price IS DISTINCT FROM OLD.sale_price;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.prices ? v_default_currency THEN
+      NEW.price := (NEW.prices ->> v_default_currency)::integer;
+    ELSE
+      NEW.prices := NEW.prices || jsonb_build_object(v_default_currency, GREATEST(COALESCE(NEW.price, 0), 0));
+    END IF;
+
+    IF NEW.sale_prices IS NOT NULL AND NEW.sale_prices ? v_default_currency THEN
+      NEW.sale_price := (NEW.sale_prices ->> v_default_currency)::integer;
+    ELSIF NEW.sale_price IS NOT NULL THEN
+      NEW.sale_prices := COALESCE(NEW.sale_prices, '{}'::jsonb)
+        || jsonb_build_object(v_default_currency, GREATEST(NEW.sale_price, 0));
+    END IF;
+
+    RETURN NEW;
+  END IF;
+
+  IF v_price_map_changed AND NOT v_legacy_changed THEN
+    IF NOT (NEW.prices ? v_default_currency) THEN
+      NEW.prices := NEW.prices || jsonb_build_object(
+        v_default_currency,
+        GREATEST(COALESCE(OLD.price, NEW.price, 0), 0)
+      );
+    END IF;
+
+    NEW.price := (NEW.prices ->> v_default_currency)::integer;
+    NEW.sale_price := CASE
+      WHEN NEW.sale_prices IS NOT NULL AND NEW.sale_prices ? v_default_currency THEN
+        (NEW.sale_prices ->> v_default_currency)::integer
+      ELSE
+        NULL
+    END;
+
+    RETURN NEW;
+  END IF;
+
+  NEW.prices := NEW.prices || jsonb_build_object(v_default_currency, GREATEST(COALESCE(NEW.price, 0), 0));
+
+  IF NEW.sale_price IS NULL THEN
+    IF NEW.sale_prices IS NOT NULL THEN
+      NEW.sale_prices := NEW.sale_prices - v_default_currency;
+      IF NEW.sale_prices = '{}'::jsonb THEN
+        NEW.sale_prices := NULL;
+      END IF;
+    END IF;
+  ELSE
+    NEW.sale_prices := COALESCE(NEW.sale_prices, '{}'::jsonb)
+      || jsonb_build_object(v_default_currency, GREATEST(NEW.sale_price, 0));
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.sync_legacy_price_columns_for_currency(target_currency text)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  UPDATE public.products
+  SET
+    prices = CASE
+      WHEN prices ? upper(target_currency) THEN prices
+      ELSE prices || jsonb_build_object(upper(target_currency), price)
+    END,
+    sale_prices = CASE
+      WHEN sale_price IS NULL THEN sale_prices
+      WHEN sale_prices IS NOT NULL AND sale_prices ? upper(target_currency) THEN sale_prices
+      ELSE COALESCE(sale_prices, '{}'::jsonb) || jsonb_build_object(upper(target_currency), sale_price)
+    END,
+    price = CASE
+      WHEN prices ? upper(target_currency) THEN (prices ->> upper(target_currency))::integer
+      ELSE price
+    END,
+    sale_price = CASE
+      WHEN sale_prices IS NOT NULL AND sale_prices ? upper(target_currency) THEN
+        (sale_prices ->> upper(target_currency))::integer
+      ELSE
+        sale_price
+    END,
+    updated_at = now();
+
+  UPDATE public.product_variants
+  SET
+    prices = CASE
+      WHEN prices ? upper(target_currency) THEN prices
+      ELSE prices || jsonb_build_object(upper(target_currency), price)
+    END,
+    sale_prices = CASE
+      WHEN sale_price IS NULL THEN sale_prices
+      WHEN sale_prices IS NOT NULL AND sale_prices ? upper(target_currency) THEN sale_prices
+      ELSE COALESCE(sale_prices, '{}'::jsonb) || jsonb_build_object(upper(target_currency), sale_price)
+    END,
+    price = CASE
+      WHEN prices ? upper(target_currency) THEN (prices ->> upper(target_currency))::integer
+      ELSE price
+    END,
+    sale_price = CASE
+      WHEN sale_prices IS NOT NULL AND sale_prices ? upper(target_currency) THEN
+        (sale_prices ->> upper(target_currency))::integer
+      ELSE
+        sale_price
+    END,
+    updated_at = now();
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.set_currency_defaults()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.code := upper(trim(NEW.code));
+  NEW.updated_at := now();
+
+  IF NEW.is_default THEN
+    UPDATE public.currencies
+    SET is_default = false,
+        updated_at = now()
+    WHERE id IS DISTINCT FROM NEW.id
+      AND is_default = true;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_default_currency_change()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.is_default THEN
+      PERFORM public.sync_legacy_price_columns_for_currency(NEW.code);
+    END IF;
+  ELSIF NEW.is_default
+        AND (
+          OLD.is_default IS DISTINCT FROM NEW.is_default
+          OR OLD.code IS DISTINCT FROM NEW.code
+        ) THEN
+    PERFORM public.sync_legacy_price_columns_for_currency(NEW.code);
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_set_currency_defaults ON public.currencies;
+CREATE TRIGGER trg_set_currency_defaults
+BEFORE INSERT OR UPDATE ON public.currencies
+FOR EACH ROW
+EXECUTE FUNCTION public.set_currency_defaults();
+
+ALTER TABLE public.products
+  ADD COLUMN IF NOT EXISTS prices jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS sale_prices jsonb;
+
+ALTER TABLE public.product_variants
+  ADD COLUMN IF NOT EXISTS prices jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS sale_prices jsonb;
+
+ALTER TABLE public.products
+  DROP CONSTRAINT IF EXISTS products_prices_is_valid,
+  ADD CONSTRAINT products_prices_is_valid
+    CHECK (public.is_valid_currency_amount_map(prices));
+
+ALTER TABLE public.products
+  DROP CONSTRAINT IF EXISTS products_sale_prices_are_valid,
+  ADD CONSTRAINT products_sale_prices_are_valid
+    CHECK (public.is_valid_sale_price_map(prices, sale_prices));
+
+ALTER TABLE public.product_variants
+  DROP CONSTRAINT IF EXISTS product_variants_prices_is_valid,
+  ADD CONSTRAINT product_variants_prices_is_valid
+    CHECK (public.is_valid_currency_amount_map(prices));
+
+ALTER TABLE public.product_variants
+  DROP CONSTRAINT IF EXISTS product_variants_sale_prices_are_valid,
+  ADD CONSTRAINT product_variants_sale_prices_are_valid
+    CHECK (public.is_valid_sale_price_map(prices, sale_prices));
+
+COMMENT ON COLUMN public.products.prices IS
+  'Regular prices by ISO 4217 code in the smallest currency unit.';
+COMMENT ON COLUMN public.products.sale_prices IS
+  'Sale prices by ISO 4217 code in the smallest currency unit.';
+COMMENT ON COLUMN public.product_variants.prices IS
+  'Variant regular prices by ISO 4217 code in the smallest currency unit.';
+COMMENT ON COLUMN public.product_variants.sale_prices IS
+  'Variant sale prices by ISO 4217 code in the smallest currency unit.';
+
+CREATE INDEX IF NOT EXISTS idx_products_prices_gin
+  ON public.products
+  USING gin (prices jsonb_path_ops);
+
+CREATE INDEX IF NOT EXISTS idx_product_variants_prices_gin
+  ON public.product_variants
+  USING gin (prices jsonb_path_ops);
+
+INSERT INTO public.currencies (code, symbol, exchange_rate, is_default, is_active)
+VALUES ('USD', '$', 1, true, true)
+ON CONFLICT (code) DO UPDATE
+SET symbol = EXCLUDED.symbol,
+    exchange_rate = EXCLUDED.exchange_rate,
+    is_default = EXCLUDED.is_default,
+    is_active = EXCLUDED.is_active,
+    updated_at = now();
+
+UPDATE public.products
+SET
+  prices = jsonb_build_object('USD', GREATEST(price, 0)),
+  sale_prices = CASE
+    WHEN sale_price IS NOT NULL THEN
+      jsonb_build_object('USD', GREATEST(sale_price, 0))
+    ELSE
+      NULL
+  END
+WHERE prices = '{}'::jsonb OR prices IS NULL;
+
+UPDATE public.product_variants
+SET
+  prices = jsonb_build_object('USD', GREATEST(price, 0)),
+  sale_prices = CASE
+    WHEN sale_price IS NOT NULL THEN
+      jsonb_build_object('USD', GREATEST(sale_price, 0))
+    ELSE
+      NULL
+  END
+WHERE prices = '{}'::jsonb OR prices IS NULL;
+
+DROP TRIGGER IF EXISTS trg_sync_products_currency_prices ON public.products;
+CREATE TRIGGER trg_sync_products_currency_prices
+BEFORE INSERT OR UPDATE OF price, sale_price, prices, sale_prices
+ON public.products
+FOR EACH ROW
+EXECUTE FUNCTION public.sync_currency_price_maps();
+
+DROP TRIGGER IF EXISTS trg_sync_product_variants_currency_prices ON public.product_variants;
+CREATE TRIGGER trg_sync_product_variants_currency_prices
+BEFORE INSERT OR UPDATE OF price, sale_price, prices, sale_prices
+ON public.product_variants
+FOR EACH ROW
+EXECUTE FUNCTION public.sync_currency_price_maps();
+
+DROP TRIGGER IF EXISTS trg_handle_default_currency_change ON public.currencies;
+CREATE TRIGGER trg_handle_default_currency_change
+AFTER INSERT OR UPDATE ON public.currencies
+FOR EACH ROW
+EXECUTE FUNCTION public.handle_default_currency_change();
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'orders'
+      AND column_name = 'exchange_rate_at_purchase'
+  ) THEN
+    ALTER TABLE public.orders
+      ADD COLUMN exchange_rate_at_purchase numeric(20,10) NOT NULL DEFAULT 1;
+  END IF;
+END $$;
+
+ALTER TABLE public.orders
+  DROP CONSTRAINT IF EXISTS orders_exchange_rate_at_purchase_positive,
+  ADD CONSTRAINT orders_exchange_rate_at_purchase_positive
+    CHECK (exchange_rate_at_purchase > 0);
+
+ALTER TABLE public.orders
+  ALTER COLUMN currency SET DEFAULT 'USD';
+
+UPDATE public.orders
+SET
+  currency = upper(COALESCE(NULLIF(currency, ''), 'USD')),
+  exchange_rate_at_purchase = COALESCE(exchange_rate_at_purchase, 1);
+
+COMMENT ON COLUMN public.orders.currency IS
+  'ISO currency code used for the order totals.';
+COMMENT ON COLUMN public.orders.exchange_rate_at_purchase IS
+  'Exchange rate locked at purchase time relative to the store default currency.';
+
+
+
+-- >>> FROM: 20260417010000_update_product_rpc_for_currency_prices.sql <<<
+-- 20260417010000_update_product_rpc_for_currency_prices.sql
+-- Extends the product upsert RPC to persist prices/sale_prices JSONB maps.
+
+CREATE OR REPLACE FUNCTION public.upsert_product_with_variants(product_payload jsonb)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_product_id uuid := NULLIF(product_payload->>'id', '')::uuid;
+  v_translation_group_id uuid := NULLIF(product_payload->>'translation_group_id', '')::uuid;
+  v_variants jsonb := COALESCE(product_payload->'variants', '[]'::jsonb);
+  v_variant jsonb;
+  v_variant_id uuid;
+  v_term_id text;
+  v_has_variants boolean := jsonb_typeof(v_variants) = 'array' AND jsonb_array_length(v_variants) > 0;
+  v_total_variant_stock integer := 0;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Admin access required';
+  END IF;
+
+  IF v_has_variants THEN
+    SELECT COALESCE(SUM(COALESCE((value->>'stock_quantity')::integer, 0)), 0)
+      INTO v_total_variant_stock
+    FROM jsonb_array_elements(v_variants);
+  END IF;
+
+  IF v_product_id IS NULL THEN
+    INSERT INTO public.products (
+      title,
+      slug,
+      sku,
+      upc,
+      stock,
+      status,
+      short_description,
+      description_json,
+      metadata,
+      price,
+      prices,
+      sale_price,
+      sale_prices,
+      freemius_plan_id,
+      freemius_product_id,
+      language_id,
+      translation_group_id
+    )
+    VALUES (
+      product_payload->>'title',
+      product_payload->>'slug',
+      product_payload->>'sku',
+      NULLIF(product_payload->>'upc', ''),
+      CASE
+        WHEN v_has_variants THEN v_total_variant_stock
+        ELSE COALESCE((product_payload->>'stock')::integer, 0)
+      END,
+      COALESCE(product_payload->>'status', 'draft'),
+      NULLIF(product_payload->>'short_description', ''),
+      product_payload->'description_json',
+      COALESCE(product_payload->'metadata', '{}'::jsonb),
+      COALESCE((product_payload->>'price')::integer, 0),
+      COALESCE(product_payload->'prices', '{}'::jsonb),
+      CASE
+        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
+          (product_payload->>'sale_price')::integer
+        ELSE
+          NULL
+      END,
+      CASE
+        WHEN product_payload ? 'sale_prices' THEN COALESCE(product_payload->'sale_prices', '{}'::jsonb)
+        ELSE NULL
+      END,
+      NULLIF(product_payload->>'freemius_plan_id', ''),
+      NULLIF(product_payload->>'freemius_product_id', ''),
+      (product_payload->>'language_id')::bigint,
+      COALESCE(v_translation_group_id, gen_random_uuid())
+    )
+    RETURNING id INTO v_product_id;
+  ELSE
+    UPDATE public.products
+    SET
+      title = product_payload->>'title',
+      slug = product_payload->>'slug',
+      sku = product_payload->>'sku',
+      upc = NULLIF(product_payload->>'upc', ''),
+      stock = CASE
+        WHEN v_has_variants THEN v_total_variant_stock
+        ELSE COALESCE((product_payload->>'stock')::integer, 0)
+      END,
+      status = COALESCE(product_payload->>'status', status),
+      short_description = NULLIF(product_payload->>'short_description', ''),
+      description_json = product_payload->'description_json',
+      metadata = COALESCE(product_payload->'metadata', '{}'::jsonb),
+      price = COALESCE((product_payload->>'price')::integer, 0),
+      prices = COALESCE(product_payload->'prices', '{}'::jsonb),
+      sale_price = CASE
+        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
+          (product_payload->>'sale_price')::integer
+        ELSE
+          NULL
+      END,
+      sale_prices = CASE
+        WHEN product_payload ? 'sale_prices' THEN COALESCE(product_payload->'sale_prices', '{}'::jsonb)
+        ELSE NULL
+      END,
+      freemius_plan_id = NULLIF(product_payload->>'freemius_plan_id', ''),
+      freemius_product_id = NULLIF(product_payload->>'freemius_product_id', ''),
+      language_id = COALESCE((product_payload->>'language_id')::bigint, language_id),
+      translation_group_id = COALESCE(v_translation_group_id, translation_group_id),
+      updated_at = now()
+    WHERE id = v_product_id;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Product not found';
+    END IF;
+  END IF;
+
+  DELETE FROM public.variant_attribute_mapping
+  WHERE variant_id IN (
+    SELECT id FROM public.product_variants WHERE product_id = v_product_id
+  );
+
+  DELETE FROM public.product_variants
+  WHERE product_id = v_product_id;
+
+  IF v_has_variants THEN
+    FOR v_variant IN
+      SELECT value FROM jsonb_array_elements(v_variants)
+    LOOP
+      INSERT INTO public.product_variants (
+        product_id,
+        sku,
+        upc,
+        price,
+        prices,
+        sale_price,
+        sale_prices,
+        stock_quantity,
+        main_media_id
+      )
+      VALUES (
+        v_product_id,
+        v_variant->>'sku',
+        NULLIF(v_variant->>'upc', ''),
+        COALESCE((v_variant->>'price')::integer, 0),
+        COALESCE(v_variant->'prices', '{}'::jsonb),
+        CASE
+          WHEN v_variant ? 'sale_price' AND v_variant->>'sale_price' <> '' THEN
+            (v_variant->>'sale_price')::integer
+          ELSE
+            NULL
+        END,
+        CASE
+          WHEN v_variant ? 'sale_prices' THEN COALESCE(v_variant->'sale_prices', '{}'::jsonb)
+          ELSE NULL
+        END,
+        COALESCE((v_variant->>'stock_quantity')::integer, 0),
+        NULLIF(v_variant->>'main_media_id', '')::uuid
+      )
+      RETURNING id INTO v_variant_id;
+
+      FOR v_term_id IN
+        SELECT jsonb_array_elements_text(COALESCE(v_variant->'attribute_term_ids', '[]'::jsonb))
+      LOOP
+        INSERT INTO public.variant_attribute_mapping (variant_id, attribute_term_id)
+        VALUES (v_variant_id, v_term_id::uuid);
+      END LOOP;
+    END LOOP;
+  END IF;
+
+  RETURN v_product_id;
+END;
+$function$;
+
+
+-- >>> FROM: 20260420000000_add_currency_sync_and_rounding.sql <<<
+-- 20260420000000_add_currency_sync_and_rounding.sql
+-- Adds automated FX sync metadata and merchant-friendly rounding rules.
+
+
+ALTER TABLE public.currencies
+  ADD COLUMN IF NOT EXISTS rounding_mode text NOT NULL DEFAULT 'none',
+  ADD COLUMN IF NOT EXISTS rounding_increment integer NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS rounding_charm_amount integer,
+  ADD COLUMN IF NOT EXISTS auto_update_exchange_rate boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS exchange_rate_updated_at timestamptz,
+  ADD COLUMN IF NOT EXISTS exchange_rate_source text;
+
+UPDATE public.currencies
+SET
+  rounding_mode = COALESCE(rounding_mode, 'none'),
+  rounding_increment = COALESCE(rounding_increment, 1),
+  auto_update_exchange_rate = CASE
+    WHEN is_default THEN false
+    ELSE COALESCE(auto_update_exchange_rate, true)
+  END,
+  exchange_rate = CASE
+    WHEN is_default THEN 1
+    ELSE exchange_rate
+  END,
+  exchange_rate_source = CASE
+    WHEN is_default THEN COALESCE(NULLIF(exchange_rate_source, ''), 'store-default')
+    WHEN NULLIF(exchange_rate_source, '') IS NULL THEN 'manual'
+    ELSE exchange_rate_source
+  END,
+  exchange_rate_updated_at = CASE
+    WHEN is_default THEN COALESCE(exchange_rate_updated_at, now())
+    ELSE COALESCE(exchange_rate_updated_at, now())
+  END,
+  updated_at = now();
+
+ALTER TABLE public.currencies
+  DROP CONSTRAINT IF EXISTS currencies_rounding_mode_valid,
+  ADD CONSTRAINT currencies_rounding_mode_valid
+    CHECK (rounding_mode IN ('none', 'nearest', 'up', 'down', 'charm'));
+
+ALTER TABLE public.currencies
+  DROP CONSTRAINT IF EXISTS currencies_rounding_increment_positive,
+  ADD CONSTRAINT currencies_rounding_increment_positive
+    CHECK (rounding_increment > 0);
+
+ALTER TABLE public.currencies
+  DROP CONSTRAINT IF EXISTS currencies_rounding_charm_nonnegative,
+  ADD CONSTRAINT currencies_rounding_charm_nonnegative
+    CHECK (rounding_charm_amount IS NULL OR rounding_charm_amount >= 0);
+
+ALTER TABLE public.currencies
+  DROP CONSTRAINT IF EXISTS currencies_charm_requires_amount,
+  ADD CONSTRAINT currencies_charm_requires_amount
+    CHECK (rounding_mode <> 'charm' OR rounding_charm_amount IS NOT NULL);
+
+ALTER TABLE public.currencies
+  DROP CONSTRAINT IF EXISTS currencies_default_exchange_rate_is_one,
+  ADD CONSTRAINT currencies_default_exchange_rate_is_one
+    CHECK (NOT is_default OR exchange_rate = 1);
+
+ALTER TABLE public.currencies
+  DROP CONSTRAINT IF EXISTS currencies_default_auto_update_disabled,
+  ADD CONSTRAINT currencies_default_auto_update_disabled
+    CHECK (NOT is_default OR auto_update_exchange_rate = false);
+
+COMMENT ON COLUMN public.currencies.rounding_mode IS
+  'Rounding strategy applied when prices are auto-converted into this currency.';
+COMMENT ON COLUMN public.currencies.rounding_increment IS
+  'Rounding step in the currency smallest unit. Example: 5 means 0.05 for USD/CAD.';
+COMMENT ON COLUMN public.currencies.rounding_charm_amount IS
+  'Charm ending in the currency smallest unit. Example: 90 means prices like 29.90.';
+COMMENT ON COLUMN public.currencies.auto_update_exchange_rate IS
+  'Whether scheduled FX sync jobs should refresh this currency.';
+COMMENT ON COLUMN public.currencies.exchange_rate_updated_at IS
+  'When this currency exchange rate was last refreshed or manually set.';
+COMMENT ON COLUMN public.currencies.exchange_rate_source IS
+  'Human-readable source for the current exchange rate, such as a provider host or manual override.';
+
+CREATE OR REPLACE FUNCTION public.set_currency_defaults()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.code := upper(trim(NEW.code));
+  NEW.updated_at := now();
+
+  IF NEW.is_default THEN
+    NEW.is_active := true;
+    NEW.exchange_rate := 1;
+    NEW.auto_update_exchange_rate := false;
+    NEW.exchange_rate_source := COALESCE(NULLIF(NEW.exchange_rate_source, ''), 'store-default');
+    NEW.exchange_rate_updated_at := COALESCE(NEW.exchange_rate_updated_at, now());
+
+    UPDATE public.currencies
+    SET is_default = false,
+        updated_at = now()
+    WHERE id IS DISTINCT FROM NEW.id
+      AND is_default = true;
+  ELSIF NULLIF(NEW.exchange_rate_source, '') IS NULL THEN
+    NEW.exchange_rate_source := NULL;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+
+
+-- >>> FROM: 20260420010000_fix_currency_safeupdate_trigger.sql <<<
+-- 20260420010000_fix_currency_safeupdate_trigger.sql
+-- Avoids safe-update errors when a default currency sync touches legacy price columns.
+
+
+CREATE OR REPLACE FUNCTION public.sync_legacy_price_columns_for_currency(target_currency text)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_target_currency text := upper(trim(target_currency));
+BEGIN
+  UPDATE public.products
+  SET
+    prices = CASE
+      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN prices
+      ELSE COALESCE(prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, price)
+    END,
+    sale_prices = CASE
+      WHEN sale_price IS NULL THEN sale_prices
+      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN sale_prices
+      ELSE COALESCE(sale_prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, sale_price)
+    END,
+    price = CASE
+      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN
+        (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
+      ELSE
+        price
+    END,
+    sale_price = CASE
+      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN
+        (sale_prices ->> v_target_currency)::integer
+      ELSE
+        sale_price
+    END,
+    updated_at = now()
+  WHERE
+    NOT (COALESCE(prices, '{}'::jsonb) ? v_target_currency)
+    OR (
+      sale_price IS NOT NULL
+      AND (sale_prices IS NULL OR NOT (sale_prices ? v_target_currency))
+    )
+    OR (
+      COALESCE(prices, '{}'::jsonb) ? v_target_currency
+      AND price IS DISTINCT FROM (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
+    )
+    OR (
+      sale_prices IS NOT NULL
+      AND sale_prices ? v_target_currency
+      AND sale_price IS DISTINCT FROM (sale_prices ->> v_target_currency)::integer
+    );
+
+  UPDATE public.product_variants
+  SET
+    prices = CASE
+      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN prices
+      ELSE COALESCE(prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, price)
+    END,
+    sale_prices = CASE
+      WHEN sale_price IS NULL THEN sale_prices
+      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN sale_prices
+      ELSE COALESCE(sale_prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, sale_price)
+    END,
+    price = CASE
+      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN
+        (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
+      ELSE
+        price
+    END,
+    sale_price = CASE
+      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN
+        (sale_prices ->> v_target_currency)::integer
+      ELSE
+        sale_price
+    END,
+    updated_at = now()
+  WHERE
+    NOT (COALESCE(prices, '{}'::jsonb) ? v_target_currency)
+    OR (
+      sale_price IS NOT NULL
+      AND (sale_prices IS NULL OR NOT (sale_prices ? v_target_currency))
+    )
+    OR (
+      COALESCE(prices, '{}'::jsonb) ? v_target_currency
+      AND price IS DISTINCT FROM (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
+    )
+    OR (
+      sale_prices IS NOT NULL
+      AND sale_prices ? v_target_currency
+      AND sale_price IS DISTINCT FROM (sale_prices ->> v_target_currency)::integer
+    );
+END;
+$$;
+
+
+
+-- >>> FROM: 20260420020000_add_auto_sync_product_prices.sql <<<
+-- 20260420020000_add_auto_sync_product_prices.sql
+-- Lets currencies opt into store-managed product and variant pricing.
+
+
+ALTER TABLE public.currencies
+  ADD COLUMN IF NOT EXISTS auto_sync_product_prices boolean NOT NULL DEFAULT false;
+
+UPDATE public.currencies
+SET
+  auto_sync_product_prices = CASE
+    WHEN is_default THEN false
+    ELSE COALESCE(auto_sync_product_prices, false)
+  END,
+  updated_at = now();
+
+ALTER TABLE public.currencies
+  DROP CONSTRAINT IF EXISTS currencies_default_product_price_sync_disabled,
+  ADD CONSTRAINT currencies_default_product_price_sync_disabled
+    CHECK (NOT is_default OR auto_sync_product_prices = false);
+
+COMMENT ON COLUMN public.currencies.auto_sync_product_prices IS
+  'Whether storefront product and variant prices in this currency are derived automatically from the store default currency using FX and rounding rules.';
+
+CREATE OR REPLACE FUNCTION public.set_currency_defaults()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.code := upper(trim(NEW.code));
+  NEW.updated_at := now();
+
+  IF NEW.is_default THEN
+    NEW.is_active := true;
+    NEW.exchange_rate := 1;
+    NEW.auto_update_exchange_rate := false;
+    NEW.auto_sync_product_prices := false;
+    NEW.exchange_rate_source := COALESCE(NULLIF(NEW.exchange_rate_source, ''), 'store-default');
+    NEW.exchange_rate_updated_at := COALESCE(NEW.exchange_rate_updated_at, now());
+
+    UPDATE public.currencies
+    SET is_default = false,
+        updated_at = now()
+    WHERE id IS DISTINCT FROM NEW.id
+      AND is_default = true;
+  ELSIF NULLIF(NEW.exchange_rate_source, '') IS NULL THEN
+    NEW.exchange_rate_source := NULL;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.clear_currency_price_overrides(target_currency text)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_target_currency text := upper(trim(target_currency));
+BEGIN
+  IF v_target_currency = '' THEN
+    RETURN;
+  END IF;
+
+  UPDATE public.products
+  SET
+    prices = COALESCE(prices, '{}'::jsonb) - v_target_currency,
+    sale_prices = CASE
+      WHEN sale_prices IS NULL THEN NULL
+      WHEN sale_prices - v_target_currency = '{}'::jsonb THEN NULL
+      ELSE sale_prices - v_target_currency
+    END,
+    updated_at = now()
+  WHERE COALESCE(prices, '{}'::jsonb) ? v_target_currency
+     OR COALESCE(sale_prices, '{}'::jsonb) ? v_target_currency;
+
+  UPDATE public.product_variants
+  SET
+    prices = COALESCE(prices, '{}'::jsonb) - v_target_currency,
+    sale_prices = CASE
+      WHEN sale_prices IS NULL THEN NULL
+      WHEN sale_prices - v_target_currency = '{}'::jsonb THEN NULL
+      ELSE sale_prices - v_target_currency
+    END,
+    updated_at = now()
+  WHERE COALESCE(prices, '{}'::jsonb) ? v_target_currency
+     OR COALESCE(sale_prices, '{}'::jsonb) ? v_target_currency;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.clear_currency_price_overrides(text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.clear_currency_price_overrides(text) TO service_role;
+
+
+
+-- >>> FROM: 20260420030000_add_multi_currency_shipping_rates.sql <<<
+-- 20260420030000_add_multi_currency_shipping_rates.sql
+-- Adds manual-vs-auto multi-currency support for shipping rates.
+
+
+ALTER TABLE public.shipping_zone_methods
+  ADD COLUMN IF NOT EXISTS currency_pricing_mode text NOT NULL DEFAULT 'auto',
+  ADD COLUMN IF NOT EXISTS cost_amounts jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS min_order_amounts jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+UPDATE public.shipping_zone_methods
+SET
+  cost_currency = upper(trim(COALESCE(NULLIF(cost_currency, ''), public.get_default_currency_code()))),
+  currency_pricing_mode = COALESCE(NULLIF(lower(trim(currency_pricing_mode)), ''), 'auto'),
+  cost_amounts = CASE
+    WHEN cost_amounts IS NULL OR cost_amounts = '{}'::jsonb THEN
+      jsonb_build_object(
+        upper(trim(COALESCE(NULLIF(cost_currency, ''), public.get_default_currency_code()))),
+        GREATEST(cost_amount, 0)
+      )
+    ELSE
+      public.normalize_currency_amount_map(cost_amounts)
+  END,
+  min_order_amounts = CASE
+    WHEN min_order_amounts IS NULL OR min_order_amounts = '{}'::jsonb THEN
+      jsonb_build_object(
+        upper(trim(COALESCE(NULLIF(cost_currency, ''), public.get_default_currency_code()))),
+        GREATEST(min_order_amount, 0)
+      )
+    ELSE
+      public.normalize_currency_amount_map(min_order_amounts)
+  END,
+  updated_at = now();
+
+ALTER TABLE public.shipping_zone_methods
+  DROP CONSTRAINT IF EXISTS shipping_zone_methods_currency_pricing_mode_valid,
+  ADD CONSTRAINT shipping_zone_methods_currency_pricing_mode_valid
+    CHECK (currency_pricing_mode IN ('auto', 'manual'));
+
+ALTER TABLE public.shipping_zone_methods
+  DROP CONSTRAINT IF EXISTS shipping_zone_methods_cost_currency_format,
+  ADD CONSTRAINT shipping_zone_methods_cost_currency_format
+    CHECK (cost_currency ~ '^[A-Z]{3}$');
+
+ALTER TABLE public.shipping_zone_methods
+  DROP CONSTRAINT IF EXISTS shipping_zone_methods_cost_amounts_valid,
+  ADD CONSTRAINT shipping_zone_methods_cost_amounts_valid
+    CHECK (public.is_valid_currency_amount_map(cost_amounts));
+
+ALTER TABLE public.shipping_zone_methods
+  DROP CONSTRAINT IF EXISTS shipping_zone_methods_min_order_amounts_valid,
+  ADD CONSTRAINT shipping_zone_methods_min_order_amounts_valid
+    CHECK (public.is_valid_currency_amount_map(min_order_amounts));
+
+ALTER TABLE public.shipping_zone_methods
+  DROP CONSTRAINT IF EXISTS shipping_zone_methods_cost_amounts_include_source,
+  ADD CONSTRAINT shipping_zone_methods_cost_amounts_include_source
+    CHECK (cost_amounts ? upper(cost_currency));
+
+ALTER TABLE public.shipping_zone_methods
+  DROP CONSTRAINT IF EXISTS shipping_zone_methods_min_order_amounts_include_source,
+  ADD CONSTRAINT shipping_zone_methods_min_order_amounts_include_source
+    CHECK (min_order_amounts ? upper(cost_currency));
+
+COMMENT ON COLUMN public.shipping_zone_methods.currency_pricing_mode IS
+  'Whether this rate uses auto FX conversion from a single source currency or exact manual amounts per currency.';
+COMMENT ON COLUMN public.shipping_zone_methods.cost_amounts IS
+  'Shipping costs by ISO 4217 code in the smallest currency unit.';
+COMMENT ON COLUMN public.shipping_zone_methods.min_order_amounts IS
+  'Minimum order thresholds by ISO 4217 code in the smallest currency unit.';
+
+CREATE OR REPLACE FUNCTION public.sync_shipping_method_currency_maps()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_source_currency text;
+BEGIN
+  v_source_currency := upper(trim(COALESCE(NULLIF(NEW.cost_currency, ''), public.get_default_currency_code())));
+
+  NEW.cost_currency := v_source_currency;
+  NEW.currency_pricing_mode := COALESCE(NULLIF(lower(trim(NEW.currency_pricing_mode)), ''), 'auto');
+  NEW.cost_amounts := public.normalize_currency_amount_map(COALESCE(NEW.cost_amounts, '{}'::jsonb));
+  NEW.min_order_amounts := public.normalize_currency_amount_map(COALESCE(NEW.min_order_amounts, '{}'::jsonb));
+
+  IF NEW.currency_pricing_mode NOT IN ('auto', 'manual') THEN
+    RAISE EXCEPTION 'Unsupported shipping currency pricing mode: %', NEW.currency_pricing_mode;
+  END IF;
+
+  IF NEW.cost_amounts = '{}'::jsonb THEN
+    NEW.cost_amounts := jsonb_build_object(v_source_currency, GREATEST(COALESCE(NEW.cost_amount, 0), 0));
+  ELSIF NOT (NEW.cost_amounts ? v_source_currency) THEN
+    NEW.cost_amounts := NEW.cost_amounts || jsonb_build_object(
+      v_source_currency,
+      GREATEST(COALESCE(NEW.cost_amount, 0), 0)
+    );
+  END IF;
+
+  IF NEW.min_order_amounts = '{}'::jsonb THEN
+    NEW.min_order_amounts := jsonb_build_object(
+      v_source_currency,
+      GREATEST(COALESCE(NEW.min_order_amount, 0), 0)
+    );
+  ELSIF NOT (NEW.min_order_amounts ? v_source_currency) THEN
+    NEW.min_order_amounts := NEW.min_order_amounts || jsonb_build_object(
+      v_source_currency,
+      GREATEST(COALESCE(NEW.min_order_amount, 0), 0)
+    );
+  END IF;
+
+  IF NEW.currency_pricing_mode = 'auto' THEN
+    NEW.cost_amounts := jsonb_build_object(
+      v_source_currency,
+      GREATEST((NEW.cost_amounts ->> v_source_currency)::integer, 0)
+    );
+    NEW.min_order_amounts := jsonb_build_object(
+      v_source_currency,
+      GREATEST((NEW.min_order_amounts ->> v_source_currency)::integer, 0)
+    );
+  END IF;
+
+  NEW.cost_amount := GREATEST((NEW.cost_amounts ->> v_source_currency)::integer, 0);
+  NEW.min_order_amount := GREATEST((NEW.min_order_amounts ->> v_source_currency)::integer, 0);
+  NEW.updated_at := now();
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_sync_shipping_method_currency_maps ON public.shipping_zone_methods;
+CREATE TRIGGER trg_sync_shipping_method_currency_maps
+BEFORE INSERT OR UPDATE OF cost_amount, cost_currency, min_order_amount, currency_pricing_mode, cost_amounts, min_order_amounts
+ON public.shipping_zone_methods
+FOR EACH ROW
+EXECUTE FUNCTION public.sync_shipping_method_currency_maps();
+
+
+
   -- Step D: Anchor demo profile
   INSERT INTO public.profiles (id, updated_at, full_name, avatar_url, website, role)
   SELECT '63a8aa07-ef6e-4cc7-bafa-ece023c74366'::uuid, NULL, NULL, NULL, NULL, 'ADMIN'

@@ -9,6 +9,9 @@ export * from './lib/invoice-server';
 export * from './lib/customer-orders';
 export * from './lib/customer';
 export * from './lib/customer-addresses';
+export * from './lib/currency';
+export * from './lib/currency-constants';
+export * from './lib/currency-sync';
 
 export * from './lib/product-actions'; // Assuming product actions are also server-side
 export * from './lib/factory';

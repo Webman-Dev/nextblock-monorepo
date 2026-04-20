@@ -1,6 +1,7 @@
 import { ProductGrid } from '@nextblock-cms/ecommerce';
 import { getProducts } from '@nextblock-cms/ecommerce/server';
 import { getVariantEffectivePriceRange } from '@nextblock-cms/ecommerce';
+import { normalizePriceMap, normalizeSalePriceMap } from '@nextblock-cms/ecommerce';
 
 
 import { ProductGridBlockContent } from './ecommerce-block-schemas';
@@ -69,7 +70,9 @@ export const ProductGridBlock = async ({
         sku: p.sku,
         upc: p.upc || undefined,
         price: p.price,
+        prices: normalizePriceMap(p.prices),
         sale_price: typeof p.sale_price === 'number' ? p.sale_price : undefined,
+        sale_prices: normalizeSalePriceMap(p.sale_prices),
         is_taxable: p.is_taxable ?? true,
         price_range_min: variantPriceRange?.min ?? null,
         price_range_max: variantPriceRange?.max ?? null,
@@ -78,6 +81,13 @@ export const ProductGridBlock = async ({
         language_id: p.language_id as number,
         translation_group_id: p.translation_group_id || "",
         has_variants: (p.product_variants?.length || 0) > 0,
+        product_variants: (p.product_variants || []).map((variant: any) => ({
+          id: variant.id,
+          price: variant.price,
+          prices: normalizePriceMap(variant.prices),
+          sale_price: variant.sale_price,
+          sale_prices: normalizeSalePriceMap(variant.sale_prices),
+        })),
       };
   });
 

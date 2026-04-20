@@ -1,5 +1,11 @@
 import { getProductBySlug, getProducts } from '@nextblock-cms/ecommerce/server';
-import { ProductProvider, mapRawVariantRelations, getVariantEffectivePriceRange } from '@nextblock-cms/ecommerce';
+import {
+  ProductProvider,
+  mapRawVariantRelations,
+  getVariantEffectivePriceRange,
+  normalizePriceMap,
+  normalizeSalePriceMap,
+} from '@nextblock-cms/ecommerce';
 import { getSsgSupabaseClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 import { notFound } from 'next/navigation';
 import { Metadata } from 'next';
@@ -158,7 +164,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
     sku: product.sku,
     upc: product.upc || undefined,
     price: product.price,
+    prices: normalizePriceMap(product.prices),
     sale_price: product.sale_price || null,
+    sale_prices: normalizeSalePriceMap(product.sale_prices),
     is_taxable: product.is_taxable ?? true,
     price_range_min: variantPriceRange?.min ?? null,
     price_range_max: variantPriceRange?.max ?? null,
@@ -173,6 +181,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
     has_variants: variants.length > 0,
     attributes,
     variants,
+    product_variants: ((product as any).product_variants || []).map((variant: any) => ({
+      id: variant.id,
+      price: variant.price,
+      prices: normalizePriceMap(variant.prices),
+      sale_price: variant.sale_price,
+      sale_prices: normalizeSalePriceMap(variant.sale_prices),
+    })),
   };
 
   return (

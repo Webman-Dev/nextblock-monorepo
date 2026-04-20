@@ -2,10 +2,15 @@
 
 import { Product } from '../types';
 import { AddToCartButton } from './AddToCartButton';
-import { cn } from '@nextblock-cms/utils';
+import { cn, formatPrice } from '@nextblock-cms/utils';
 import Link from 'next/link';
 
 import { useTranslations } from '@nextblock-cms/utils';
+import { useCurrency } from '../CurrencyProvider';
+import {
+  resolvePriceForCurrency,
+  resolvePriceRangeForCurrency,
+} from '../currency';
 
 interface FeaturedProductProps {
   product: Product;
@@ -15,18 +20,35 @@ interface FeaturedProductProps {
 
 export const FeaturedProduct = ({ product, className, imagePosition = 'left' }: FeaturedProductProps) => {
   const { t } = useTranslations();
-  const hasVariantPriceRange =
-    Boolean(product.has_variants) &&
-    typeof product.price_range_min === 'number' &&
-    typeof product.price_range_max === 'number';
-  const variantPriceMin = hasVariantPriceRange ? product.price_range_min! : null;
-  const variantPriceMax = hasVariantPriceRange ? product.price_range_max! : null;
+  const { activeCurrencyCode, currencies } = useCurrency();
+  const variantRange = resolvePriceRangeForCurrency({
+    entries:
+      product.variants?.length
+        ? product.variants
+        : product.product_variants?.length
+          ? product.product_variants
+          : [],
+    currencyCode: activeCurrencyCode,
+    currencies,
+  });
+  const hasVariantPriceRange = Boolean(product.has_variants && variantRange);
+  const resolvedPrice = resolvePriceForCurrency({
+    prices: product.prices,
+    salePrices: product.sale_prices,
+    fallbackPrice: product.price,
+    fallbackSalePrice: product.sale_price,
+    currencyCode: activeCurrencyCode,
+    currencies,
+  });
   const priceLabel =
-    hasVariantPriceRange && variantPriceMin !== null && variantPriceMax !== null
-      ? variantPriceMin === variantPriceMax
-        ? `$${(variantPriceMin / 100).toFixed(2)}`
-        : `$${(variantPriceMin / 100).toFixed(2)} - $${(variantPriceMax / 100).toFixed(2)}`
-      : `$${((product.sale_price ?? product.price) / 100).toFixed(2)}`;
+    hasVariantPriceRange && variantRange
+      ? variantRange.min === variantRange.max
+        ? formatPrice(variantRange.min, activeCurrencyCode)
+        : `${formatPrice(variantRange.min, activeCurrencyCode)} - ${formatPrice(
+            variantRange.max,
+            activeCurrencyCode
+          )}`
+      : formatPrice(resolvedPrice.sale_price ?? resolvedPrice.price, activeCurrencyCode);
   
   return (
     <div className={cn("overflow-hidden rounded-xl border bg-card shadow-sm", className)}>
@@ -59,9 +81,9 @@ export const FeaturedProduct = ({ product, className, imagePosition = 'left' }: 
                 <span className="text-3xl font-bold text-primary">
                     {priceLabel}
                 </span>
-                {!hasVariantPriceRange && product.sale_price && (
+                {!hasVariantPriceRange && resolvedPrice.sale_price && (
                     <span className="text-lg text-muted-foreground line-through">
-                        ${(product.price / 100).toFixed(2)}
+                        {formatPrice(resolvedPrice.price, activeCurrencyCode)}
                     </span>
                 )}
             </div>

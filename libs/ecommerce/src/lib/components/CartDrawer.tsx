@@ -9,10 +9,11 @@ import {
 } from '@nextblock-cms/ui';
 import { useRouter } from 'next/navigation';
 import { Minus, Plus, Trash2 } from 'lucide-react';
-import { useCartSubtotal } from '../cart-store';
+import { getCartItemActivePrice, useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
-import { useTranslations } from '@nextblock-cms/utils';
+import { formatPrice, useTranslations } from '@nextblock-cms/utils';
 import { isDigitalItem } from '../types';
+import { useCurrency } from '../CurrencyProvider';
 
 
 
@@ -21,6 +22,7 @@ export const CartDrawer = () => {
   const store = useCart((state) => state);
   const subtotal = useCartSubtotal();
   const { t } = useTranslations();
+  const { activeCurrencyCode, currencies } = useCurrency();
 
   if (!store) return null;
 
@@ -58,6 +60,14 @@ export const CartDrawer = () => {
 
               return (
                 <div key={item.id} className="flex gap-4">
+                  {(() => {
+                    const activePrice = getCartItemActivePrice(item, {
+                      currencyCode: activeCurrencyCode,
+                      currencies,
+                    });
+
+                    return (
+                      <>
                   {item.image_url ? (
                     <div className="relative aspect-square h-20 w-20 min-w-fit overflow-hidden rounded border bg-neutral-100">
                       <img
@@ -85,12 +95,12 @@ export const CartDrawer = () => {
                         )}
                       </div>
                       <span className="text-sm font-semibold">
-                        {item.sale_price && (
+                        {activePrice.sale_price && (
                           <span className="mr-1.5 text-xs font-normal text-muted-foreground line-through">
-                            ${(item.price / 100).toFixed(2)}
+                            {formatPrice(activePrice.price, activeCurrencyCode)}
                           </span>
                         )}
-                        ${((item.sale_price ?? item.price) / 100).toFixed(2)}
+                        {formatPrice(activePrice.sale_price ?? activePrice.price, activeCurrencyCode)}
                       </span>
                     </div>
 
@@ -130,6 +140,9 @@ export const CartDrawer = () => {
                       </button>
                     </div>
                   </div>
+                      </>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -147,7 +160,7 @@ export const CartDrawer = () => {
           <div className="border-t pr-6 pt-4">
              <div className="flex items-center justify-between text-base font-medium">
                 <span>{t('ecommerce.subtotal')}</span>
-                <span>${(subtotal / 100).toFixed(2)}</span>
+                <span>{formatPrice(subtotal, activeCurrencyCode)}</span>
              </div>
              <p className="mb-4 mt-1 text-xs text-muted-foreground">
                 {t('ecommerce.shipping_taxes_calculated')}

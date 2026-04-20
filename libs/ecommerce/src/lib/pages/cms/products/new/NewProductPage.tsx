@@ -3,6 +3,9 @@ import { getGlobalProductAttributes } from '../actions';
 import { mapRawVariantRelations } from '../../../../variation-utils';
 import { createProductAction } from '../server-actions';
 import { getPaymentSettings } from '../../payments/queries';
+import { getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
+import { minorUnitAmountToMajor } from '@nextblock-cms/utils';
+import { normalizeCurrencyRecord } from '../../../../currency';
 
 interface NewProductPageProps {
   mediaPickerNode?: React.ReactNode;
@@ -22,7 +25,20 @@ export async function NewProductPage({
   initialData
 }: NewProductPageProps) {
   const paymentProvider = await getPaymentSettings();
-  const globalAttributesRaw = await getGlobalProductAttributes();
+  const [globalAttributesRaw, currenciesResult] = await Promise.all([
+    getGlobalProductAttributes(),
+    getServiceRoleSupabaseClient()
+      .from('currencies')
+      .select(
+        'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
+      )
+      .eq('is_active', true)
+      .order('code', { ascending: true })
+      .then((result) => result.data || []),
+  ]);
+  const currencies = (currenciesResult || []).map((currency) =>
+    normalizeCurrencyRecord(currency)
+  );
   const globalAttributes = (globalAttributesRaw || []).map((attribute: any) => ({
     id: attribute.id,
     name: attribute.name,
@@ -56,8 +72,24 @@ export async function NewProductPage({
             ...variant,
             upc: variant.upc ?? null,
             price: variant.price / 100,
+            prices: Object.entries(variant.prices || {}).reduce<Record<string, number>>(
+              (accumulator, [currencyCode, amount]) => {
+                accumulator[currencyCode] = minorUnitAmountToMajor(amount, currencyCode);
+                return accumulator;
+              },
+              {}
+            ),
             sale_price:
               typeof variant.sale_price === 'number' ? variant.sale_price / 100 : null,
+            sale_prices: Object.entries(variant.sale_prices || {}).reduce<
+              Record<string, number | null>
+            >((accumulator, [currencyCode, amount]) => {
+              accumulator[currencyCode] =
+                typeof amount === 'number'
+                  ? minorUnitAmountToMajor(amount, currencyCode)
+                  : null;
+              return accumulator;
+            }, {}),
             main_media_id: variant.main_media_id ?? null,
             main_image_url: variant.image_url ?? null,
           })),
@@ -71,6 +103,7 @@ export async function NewProductPage({
          editorNode={editorNode}
          availableLanguagesProp={availableLanguagesProp}
          globalAttributesProp={globalAttributes}
+         currenciesProp={currencies}
          translationGroupId={translationGroupId}
          targetLanguageId={targetLanguageId}
          initialData={normalizedInitialData}

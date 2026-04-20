@@ -11,18 +11,20 @@ import {
   Badge,
 } from '@nextblock-cms/ui';
 import { Minus, Plus, Trash2 } from 'lucide-react';
-import { useCartSubtotal } from '../cart-store';
+import { getCartItemActivePrice, useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
 import { isDigitalItem } from '../types';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from '@nextblock-cms/utils';
+import { formatPrice, useTranslations } from '@nextblock-cms/utils';
 import { ShippingEstimator } from './ShippingEstimator';
+import { useCurrency } from '../CurrencyProvider';
 
 export const Cart = () => {
   const router = useRouter();
   const store = useCart((state) => state);
   const subtotal = useCartSubtotal();
   const { t } = useTranslations();
+  const { activeCurrencyCode, currencies } = useCurrency();
 
   if (!store) return null;
 
@@ -72,6 +74,10 @@ export const Cart = () => {
               <TableBody>
                 {items.map((item) => {
                   const allocatedSkuQuantity = getAllocatedSkuQuantity(item.sku);
+                  const activePrice = getCartItemActivePrice(item, {
+                    currencyCode: activeCurrencyCode,
+                    currencies,
+                  });
 
                   return (
                     <TableRow key={item.id}>
@@ -141,17 +147,20 @@ export const Cart = () => {
                       <TableCell className="text-right">
                         <div className="flex flex-col items-end">
                           <span className="font-medium">
-                            ${((item.sale_price ?? item.price) / 100).toFixed(2)}
+                            {formatPrice(activePrice.sale_price ?? activePrice.price, activeCurrencyCode)}
                           </span>
-                          {item.sale_price && (
+                          {activePrice.sale_price && (
                             <span className="text-xs text-muted-foreground line-through">
-                              ${(item.price / 100).toFixed(2)}
+                              {formatPrice(activePrice.price, activeCurrencyCode)}
                             </span>
                           )}
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        ${(((item.sale_price ?? item.price) * item.quantity) / 100).toFixed(2)}
+                        {formatPrice(
+                          (activePrice.sale_price ?? activePrice.price) * item.quantity,
+                          activeCurrencyCode
+                        )}
                       </TableCell>
                       <TableCell>
                         <Button
@@ -176,7 +185,7 @@ export const Cart = () => {
                 <h2 className="mb-4 text-lg font-semibold">{t('ecommerce.order_summary')}</h2>
                 <div className="flex justify-between border-b pb-4">
                     <span>{t('ecommerce.subtotal')}</span>
-                    <span className="font-medium">${(subtotal / 100).toFixed(2)}</span>
+                    <span className="font-medium">{formatPrice(subtotal, activeCurrencyCode)}</span>
                 </div>
                  <div className="mt-4 flex flex-col gap-4">
                     <p className="text-sm text-muted-foreground">

@@ -17,6 +17,7 @@ export async function POST(req: Request) {
       billingAddress,
       shippingAddress,
       shippingMethodId,
+      currencyCode,
       locale,
     } = await req.json();
     
@@ -64,6 +65,7 @@ export async function POST(req: Request) {
       billingAddress: normalizeCustomerAddress(billingAddress) ?? billingAddress,
       shippingAddress: normalizeCustomerAddress(shippingAddress),
       shippingMethodId,
+      currencyCode: typeof currencyCode === 'string' ? currencyCode : null,
       locale: typeof locale === 'string' ? locale : null,
     });
 

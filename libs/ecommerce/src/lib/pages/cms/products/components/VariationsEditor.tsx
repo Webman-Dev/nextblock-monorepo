@@ -14,6 +14,22 @@ import {
   resolveTermValue,
 } from '../../../../variation-utils';
 import { ProductAttribute } from '../../../../types';
+import { CurrencyPriceFields } from './CurrencyPriceFields';
+import {
+  convertMinorUnitAmount,
+  normalizePriceMap,
+  normalizeSalePriceMap,
+  type CurrencyRecord,
+} from '../../../../currency';
+import {
+  getStoreManagedPriceCurrencyCodes,
+  resolveEditorCurrencyPriceMaps,
+  sanitizeVariantDraftsForStoreManagedCurrencies,
+} from '../product-price-sync';
+import {
+  majorUnitAmountToMinor,
+  minorUnitAmountToMajor,
+} from '@nextblock-cms/utils';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 const SUPABASE_PUBLIC_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -38,7 +54,10 @@ interface VariationsEditorProps {
   currentLanguageCode?: string;
   baseSku: string;
   basePrice: number;
+  basePrices?: Record<string, number | null | undefined>;
   baseSalePrice?: number | null;
+  baseSalePrices?: Record<string, number | null | undefined>;
+  currencies: CurrencyRecord[];
   availableVariantImages?: Array<{
     media_id: string;
     file_path: string;
@@ -52,8 +71,11 @@ interface VariationsEditorProps {
   }) => void;
 }
 
-function formatCurrency(value: number) {
-  return `$${value.toFixed(2)}`;
+function formatCurrency(value: number, currencyCode = 'USD') {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currencyCode,
+  }).format(value);
 }
 
 function buildVariationAttributes(selectedTermsByAttribute: Record<string, string[]>) {
@@ -67,7 +89,10 @@ export function VariationsEditor({
   currentLanguageCode,
   baseSku,
   basePrice,
+  basePrices,
   baseSalePrice,
+  baseSalePrices,
+  currencies,
   availableVariantImages = [],
   initialVariationAttributes,
   initialVariants,
@@ -84,7 +109,10 @@ export function VariationsEditor({
     return extractSelectedTermsByAttribute(initialVariants || []);
   });
   const [variantDrafts, setVariantDrafts] = useState<ProductVariantDraft[]>(
-    (initialVariants as ProductVariantDraft[]) || []
+    sanitizeVariantDraftsForStoreManagedCurrencies(
+      (initialVariants as ProductVariantDraft[]) || [],
+      currencies
+    ) as ProductVariantDraft[]
   );
 
   const selectedAttributes = useMemo<VariationSelectionGroup[]>(
@@ -111,15 +139,20 @@ export function VariationsEditor({
     }
 
     setVariantDrafts((currentDrafts) =>
-      generateVariantDrafts({
-        baseSku,
-        basePrice,
-        baseSalePrice,
-        selectedAttributes,
-        previousVariants: currentDrafts,
-      })
+      sanitizeVariantDraftsForStoreManagedCurrencies(
+        generateVariantDrafts({
+          baseSku,
+          basePrice,
+          basePrices: normalizePriceMap(basePrices),
+          baseSalePrice,
+          baseSalePrices: normalizeSalePriceMap(baseSalePrices),
+          selectedAttributes,
+          previousVariants: currentDrafts,
+        }) as ProductFormValues['variants'],
+        currencies
+      ) as ProductVariantDraft[]
     );
-  }, [basePrice, baseSalePrice, baseSku, selectedAttributes]);
+  }, [basePrice, basePrices, baseSalePrice, baseSalePrices, baseSku, currencies, selectedAttributes]);
 
   useEffect(() => {
     onChange({
@@ -131,6 +164,11 @@ export function VariationsEditor({
   const totalVariantStock = variantDrafts.reduce(
     (accumulator, variant) => accumulator + (variant.stock_quantity || 0),
     0
+  );
+  const defaultCurrency = currencies.find((currency) => currency.is_default) ?? currencies[0];
+  const storeManagedPriceCurrencyCodes = useMemo(
+    () => getStoreManagedPriceCurrencyCodes(currencies),
+    [currencies]
   );
 
   const handleToggleTerm = (attributeId: string, termId: string) => {
@@ -151,7 +189,14 @@ export function VariationsEditor({
 
   const handleVariantChange = (
     combinationKey: string,
-    field: 'sku' | 'upc' | 'price' | 'sale_price' | 'stock_quantity',
+    field:
+      | 'sku'
+      | 'upc'
+      | 'price'
+      | 'sale_price'
+      | 'stock_quantity'
+      | 'prices'
+      | 'sale_prices',
     value: string
   ) => {
     setVariantDrafts((currentDrafts) =>
@@ -181,11 +226,116 @@ export function VariationsEditor({
           };
         }
 
+        if (field === 'prices' || field === 'sale_prices') {
+          return variant;
+        }
+
         const numericValue = value === '' ? 0 : Number(value);
 
         return {
           ...variant,
           [field]: Number.isFinite(numericValue) ? numericValue : 0,
+        };
+      })
+    );
+  };
+
+  const handleVariantCurrencyChange = (
+    combinationKey: string,
+    currencyCode: string,
+    field: 'prices' | 'sale_prices',
+    value: number | null
+  ) => {
+    const defaultCurrency = currencies.find((currency) => currency.is_default) ?? currencies[0];
+
+    setVariantDrafts((currentDrafts) =>
+      currentDrafts.map((variant) => {
+        if (variant.combination_key !== combinationKey) {
+          return variant;
+        }
+
+        const nextMap = {
+          ...(field === 'prices' ? variant.prices : variant.sale_prices),
+          [currencyCode]: value,
+        };
+
+        return {
+          ...variant,
+          [field]: nextMap,
+          ...(currencyCode === defaultCurrency?.code
+            ? field === 'prices'
+              ? { price: value ?? 0 }
+              : { sale_price: value }
+            : {}),
+        };
+      })
+    );
+  };
+
+  const autoFillVariantCurrencies = (combinationKey: string) => {
+    const defaultCurrency = currencies.find((currency) => currency.is_default) ?? currencies[0];
+    const storeManagedCurrencyCodeSet = new Set(storeManagedPriceCurrencyCodes);
+
+    if (!defaultCurrency) {
+      return;
+    }
+
+    setVariantDrafts((currentDrafts) =>
+      currentDrafts.map((variant) => {
+        if (variant.combination_key !== combinationKey) {
+          return variant;
+        }
+
+        const nextPrices = currencies.reduce<Record<string, number>>((accumulator, currency) => {
+          if (
+            currency.code !== defaultCurrency.code &&
+            storeManagedCurrencyCodeSet.has(currency.code)
+          ) {
+            return accumulator;
+          }
+
+          const convertedMinor = convertMinorUnitAmount({
+            amount: majorUnitAmountToMinor(variant.price, defaultCurrency.code),
+            fromCurrencyCode: defaultCurrency.code,
+            toCurrencyCode: currency.code,
+            currencies,
+            applyRounding: true,
+          });
+          accumulator[currency.code] = minorUnitAmountToMajor(convertedMinor, currency.code);
+          return accumulator;
+        }, {});
+
+        const nextSalePrices = currencies.reduce<Record<string, number | null>>(
+          (accumulator, currency) => {
+            if (
+              currency.code !== defaultCurrency.code &&
+              storeManagedCurrencyCodeSet.has(currency.code)
+            ) {
+              return accumulator;
+            }
+
+            if (typeof variant.sale_price !== 'number') {
+              accumulator[currency.code] = null;
+              return accumulator;
+            }
+
+            const convertedMinor = convertMinorUnitAmount({
+              amount: majorUnitAmountToMinor(variant.sale_price, defaultCurrency.code),
+              fromCurrencyCode: defaultCurrency.code,
+              toCurrencyCode: currency.code,
+              currencies,
+              applyRounding: true,
+            });
+            accumulator[currency.code] = minorUnitAmountToMajor(convertedMinor, currency.code);
+            return accumulator;
+          },
+          {}
+        );
+
+        return {
+          ...variant,
+          prices: nextPrices,
+          sale_prices: nextSalePrices,
         };
       })
     );
@@ -320,6 +470,14 @@ export function VariationsEditor({
         ) : (
           <div className="mt-6 space-y-4">
             {variantDrafts.map((variant) => {
+              const resolvedVariantPriceMaps = resolveEditorCurrencyPriceMaps({
+                currencies,
+                prices: variant.prices || {},
+                salePrices: variant.sale_prices || {},
+                fallbackPrice: variant.price,
+                fallbackSalePrice: variant.sale_price,
+              });
+
               return (
                 <div key={variant.combination_key} className="rounded-lg border p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -332,12 +490,20 @@ export function VariationsEditor({
                       </p>
                     </div>
                     <div className="text-right text-xs text-muted-foreground">
-                      <div>Regular: {formatCurrency(variant.price)}</div>
-                      <div>Sale: {variant.sale_price !== null && variant.sale_price !== undefined ? formatCurrency(variant.sale_price) : 'No sale price'}</div>
+                      <div>
+                        Regular:{' '}
+                        {formatCurrency(variant.price, defaultCurrency?.code || 'USD')}
+                      </div>
+                      <div>
+                        Sale:{' '}
+                        {variant.sale_price !== null && variant.sale_price !== undefined
+                          ? formatCurrency(variant.sale_price, defaultCurrency?.code || 'USD')
+                          : 'No sale price'}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-4 md:grid-cols-5">
+                  <div className="mt-4 grid gap-4 md:grid-cols-3">
                     <div className="space-y-2">
                       <Label htmlFor={`variant-sku-${variant.combination_key}`}>SKU</Label>
                       <Input
@@ -363,43 +529,6 @@ export function VariationsEditor({
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor={`variant-price-${variant.combination_key}`}>Price ($)</Label>
-                      <Input
-                        id={`variant-price-${variant.combination_key}`}
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={variant.price}
-                        onChange={(event) =>
-                          handleVariantChange(
-                            variant.combination_key,
-                            'price',
-                            event.target.value
-                          )
-                        }
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor={`variant-sale-price-${variant.combination_key}`}>Sale Price ($)</Label>
-                      <Input
-                        id={`variant-sale-price-${variant.combination_key}`}
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={variant.sale_price ?? ''}
-                        onChange={(event) =>
-                          handleVariantChange(
-                            variant.combination_key,
-                            'sale_price',
-                            event.target.value
-                          )
-                        }
-                        placeholder="Optional"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
                       <Label htmlFor={`variant-stock-${variant.combination_key}`}>Stock Quantity</Label>
                       <Input
                         id={`variant-stock-${variant.combination_key}`}
@@ -415,6 +544,38 @@ export function VariationsEditor({
                         }
                         />
                     </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <CurrencyPriceFields
+                      idPrefix={`variant-${variant.combination_key}`}
+                      currencies={currencies}
+                      prices={resolvedVariantPriceMaps.prices}
+                      salePrices={resolvedVariantPriceMaps.salePrices}
+                      managedCurrencyCodes={storeManagedPriceCurrencyCodes}
+                      onPriceChange={(currencyCode, value) =>
+                        handleVariantCurrencyChange(
+                          variant.combination_key,
+                          currencyCode,
+                          'prices',
+                          value
+                        )
+                      }
+                      onSalePriceChange={(currencyCode, value) =>
+                        handleVariantCurrencyChange(
+                          variant.combination_key,
+                          currencyCode,
+                          'sale_prices',
+                          value
+                        )
+                      }
+                      onAutoFill={() => autoFillVariantCurrencies(variant.combination_key)}
+                      helperText={
+                        storeManagedPriceCurrencyCodes.length > 0
+                          ? `Store-managed currencies derive from ${defaultCurrency?.code || 'the base currency'}. Manual FX fill only affects editable currencies.`
+                          : undefined
+                      }
+                    />
                   </div>
 
                   <div className="mt-4 rounded-lg border bg-muted/20 p-4">

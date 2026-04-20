@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Download, Package, ShieldCheck } from 'lucide-react';
 import { Badge, Button, Label, Separator } from '@nextblock-cms/ui';
-import { useTranslations } from '@nextblock-cms/utils';
+import { formatPrice, useTranslations } from '@nextblock-cms/utils';
 
 import { useProduct } from '../product-context';
 import { ProductGallery } from './ProductGallery';
@@ -16,10 +16,13 @@ import {
   getAvailableTermIdsForAttribute,
   normalizeSelectionsToAvailableVariants,
 } from '../variation-utils';
+import { useCurrency } from '../CurrencyProvider';
+import { resolvePriceForCurrency } from '../currency';
 
 export const ProductDetailsLayout: React.FC = () => {
   const product = useProduct();
   const { t } = useTranslations();
+  const { activeCurrencyCode, currencies } = useCurrency();
 
   const translateOrFallback = (
     key: string,
@@ -29,9 +32,6 @@ export const ProductDetailsLayout: React.FC = () => {
     const translated = t(key, params);
     return translated === key ? fallback : translated;
   };
-
-  const basePrice = product.price / 100;
-  const baseSalePrice = typeof product.sale_price === 'number' ? product.sale_price / 100 : null;
 
   const images =
     product.images && product.images.length > 0
@@ -82,13 +82,28 @@ export const ProductDetailsLayout: React.FC = () => {
     return findMatchingVariant(variants, normalizedSelections);
   }, [hasVariants, normalizedSelections, variants]);
 
-  const effectivePrice = hasVariants && selectedVariant ? selectedVariant.price / 100 : basePrice;
-  const effectiveSalePrice =
+  const resolvedBasePrice = resolvePriceForCurrency({
+    prices: product.prices,
+    salePrices: product.sale_prices,
+    fallbackPrice: product.price,
+    fallbackSalePrice: product.sale_price,
+    currencyCode: activeCurrencyCode,
+    currencies,
+  });
+  const resolvedVariantPrice =
     hasVariants && selectedVariant
-      ? typeof selectedVariant.sale_price === 'number'
-        ? selectedVariant.sale_price / 100
-        : null
-      : baseSalePrice;
+      ? resolvePriceForCurrency({
+          prices: selectedVariant.prices,
+          salePrices: selectedVariant.sale_prices,
+          fallbackPrice: selectedVariant.price,
+          fallbackSalePrice: selectedVariant.sale_price,
+          currencyCode: activeCurrencyCode,
+          currencies,
+        })
+      : null;
+  const effectivePrice = resolvedVariantPrice?.price ?? resolvedBasePrice.price;
+  const effectiveSalePrice =
+    resolvedVariantPrice?.sale_price ?? resolvedBasePrice.sale_price;
   const effectiveStock = hasVariants ? selectedVariant?.stock_quantity ?? 0 : product.stock ?? 0;
 
   const displayImages = useMemo(() => {
@@ -115,15 +130,21 @@ export const ProductDetailsLayout: React.FC = () => {
           ...product,
           sku: selectedVariant.sku,
           price: selectedVariant.price,
+          prices: selectedVariant.prices,
           sale_price:
             typeof selectedVariant.sale_price === 'number' ? selectedVariant.sale_price : null,
+          sale_prices: selectedVariant.sale_prices,
           image_url: selectedVariant.image_url || product.image_url,
           stock: selectedVariant.stock_quantity,
           variant_id: selectedVariant.id,
           variant_label: selectedVariant.label,
           selected_options: selectedVariant.selected_options,
+          currency_code: activeCurrencyCode,
         }
-      : product;
+      : {
+          ...product,
+          currency_code: activeCurrencyCode,
+        };
 
   const handleSelectionChange = (attributeId: string, termId: string) => {
     setSelectedTerms((current) =>
@@ -206,11 +227,11 @@ export const ProductDetailsLayout: React.FC = () => {
                 <div className="flex items-baseline gap-4">
                   <div className="flex items-baseline gap-3">
                     <span className="text-4xl font-bold text-primary">
-                      ${(effectiveSalePrice ?? effectivePrice).toFixed(2)}
+                      {formatPrice(effectiveSalePrice ?? effectivePrice, activeCurrencyCode)}
                     </span>
                     {typeof effectiveSalePrice === 'number' && (
                       <span className="text-2xl text-muted-foreground line-through decoration-destructive/30 decoration-2">
-                        ${effectivePrice.toFixed(2)}
+                        {formatPrice(effectivePrice, activeCurrencyCode)}
                       </span>
                     )}
                   </div>

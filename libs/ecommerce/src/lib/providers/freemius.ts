@@ -2,6 +2,10 @@ import { PaymentProvider } from '../types';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { CheckoutSessionInput, normalizeOrderCustomerDetails } from '../customer';
+import {
+  getDefaultCurrency,
+  resolvePriceForCurrency,
+} from '../currency';
 
 export class FreemiusProvider implements PaymentProvider {
     getProviderName(): string {
@@ -15,6 +19,7 @@ export class FreemiusProvider implements PaymentProvider {
       userId,
       billingAddress,
       shippingAddress,
+      currencyCode,
     }: CheckoutSessionInput): Promise<{
       url: string | null;
       error?: string;
@@ -35,6 +40,24 @@ export class FreemiusProvider implements PaymentProvider {
       if (!cartItems || cartItems.length === 0) {
           return { error: 'Cart is empty', url: null };
       }
+
+      const { data: currenciesResult, error: currenciesError } = await supabase
+        .from('currencies')
+        .select(
+          'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
+        )
+        .eq('is_active', true)
+        .order('code', { ascending: true });
+      const currencies = currenciesResult ?? [];
+
+      if (currenciesError || currencies.length === 0) {
+        return { error: 'Failed to resolve store currencies', url: null };
+      }
+
+      const defaultCurrency = getDefaultCurrency(currencies);
+      const selectedCurrency =
+        currencies.find((currency) => currency.code === (currencyCode || '').toUpperCase()) ??
+        defaultCurrency;
       
       // Freemius checkout is typically one product/plan at a time.
       // We will check out the first item in the cart.
@@ -43,7 +66,7 @@ export class FreemiusProvider implements PaymentProvider {
       
       const { data: product, error: productError } = await supabase
         .from('products')
-        .select('id, title, price, freemius_plan_id, freemius_product_id')
+        .select('id, title, price, prices, sale_price, sale_prices, freemius_plan_id, freemius_product_id')
         .eq('id', item.product_id)
         .single();
         
@@ -58,7 +81,16 @@ export class FreemiusProvider implements PaymentProvider {
           return { error: 'Product is not configured for Freemius checkout (missing Plan ID or Product ID)', url: null };
       }
       
-      const totalAmount = product.price * item.quantity;
+      const resolvedPrice = resolvePriceForCurrency({
+        prices: product.prices || {},
+        salePrices: product.sale_prices || {},
+        fallbackPrice: product.price,
+        fallbackSalePrice: product.sale_price,
+        currencyCode: selectedCurrency.code,
+        currencies,
+      });
+      const unitAmount = resolvedPrice.sale_price ?? resolvedPrice.price;
+      const totalAmount = unitAmount * item.quantity;
       
       // 3. Create Pending Order in DB
       const { data: order, error: orderError } = await supabase
@@ -66,6 +98,8 @@ export class FreemiusProvider implements PaymentProvider {
         .insert({
           status: 'pending',
           total: totalAmount,
+          currency: selectedCurrency.code,
+          exchange_rate_at_purchase: selectedCurrency.exchange_rate,
           provider: 'freemius',
           user_id: userId || null,
           customer_details: normalizeOrderCustomerDetails({
@@ -91,7 +125,7 @@ export class FreemiusProvider implements PaymentProvider {
             order_id: order.id,
             product_id: product.id,
             quantity: item.quantity,
-            price_at_purchase: product.price
+            price_at_purchase: unitAmount
         }]);
           
       if (itemsError) {
@@ -136,6 +170,7 @@ export class FreemiusProvider implements PaymentProvider {
       }
       
       if (customerEmail) url.searchParams.append('user_email', customerEmail);
+      url.searchParams.append('currency', selectedCurrency.code.toLowerCase());
       
       return { 
           url: url.toString(),

@@ -7,6 +7,8 @@ import {
   updateProduct as updateProductLib, 
   deleteProduct as deleteProductLib 
 } from '../../../product-actions';
+import { normalizeCurrencyRecord } from '../../../currency';
+import { sanitizeProductFormValuesForStoreManagedCurrencies } from './product-price-sync';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
@@ -22,14 +24,38 @@ function slugify(value: string) {
 
 export async function createProductAction(data: ProductFormValues) {
   const supabase = createClient();
-  await createProductLib(supabase, data);
+  const { data: currencies } = await supabase
+    .from('currencies')
+    .select(
+      'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
+    )
+    .eq('is_active', true)
+    .order('code', { ascending: true });
+  const sanitizedData = sanitizeProductFormValuesForStoreManagedCurrencies(
+    data,
+    (currencies || []).map((currency) => normalizeCurrencyRecord(currency))
+  );
+
+  await createProductLib(supabase, sanitizedData);
   revalidatePath('/cms/products');
   redirect('/cms/products');
 }
 
 export async function updateProductAction(id: string, data: ProductFormValues) {
   const supabase = createClient();
-  await updateProductLib(supabase, id, data);
+  const { data: currencies } = await supabase
+    .from('currencies')
+    .select(
+      'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
+    )
+    .eq('is_active', true)
+    .order('code', { ascending: true });
+  const sanitizedData = sanitizeProductFormValuesForStoreManagedCurrencies(
+    data,
+    (currencies || []).map((currency) => normalizeCurrencyRecord(currency))
+  );
+
+  await updateProductLib(supabase, id, sanitizedData);
   revalidatePath('/cms/products');
   revalidatePath(`/cms/products/${id}/edit`);
   redirect('/cms/products');

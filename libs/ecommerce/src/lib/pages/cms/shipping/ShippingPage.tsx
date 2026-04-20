@@ -8,8 +8,10 @@ import { Trash2, Globe, Truck, Info, Boxes } from 'lucide-react';
 import { ZoneForm } from './components/ZoneForm';
 import { RateForm } from './components/RateForm';
 import { deleteShippingZone, deleteShippingRate, updateInventoryTrackingAction } from './server-actions';
+import { normalizeCurrencyRecord } from '../../../currency';
 import { getEcommerceInventorySettings } from '../../../inventory-settings';
 import { resolveSubdivisionName } from '../../../states';
+import { formatPrice } from '@nextblock-cms/utils';
 
 export async function ShippingPage({
     searchParams,
@@ -19,7 +21,7 @@ export async function ShippingPage({
     // Using service role for admin view to ensure all zones are visible and manageable
     const supabase = getServiceRoleSupabaseClient();
     
-    const [{ data: zones }, settings, { data: languages }] = await Promise.all([
+    const [{ data: zones }, settings, { data: languages }, { data: currencies }] = await Promise.all([
         supabase
             .from('shipping_zones')
             .select(`
@@ -34,7 +36,20 @@ export async function ShippingPage({
             .select('code, name, is_default')
             .eq('is_active', true)
             .order('name', { ascending: true }),
+        supabase
+            .from('currencies')
+            .select(
+                'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
+            )
+            .eq('is_active', true)
+            .order('is_default', { ascending: false })
+            .order('code', { ascending: true }),
     ]);
+    const defaultCurrencyCode =
+        currencies?.find((currency) => currency.is_default)?.code || currencies?.[0]?.code || 'USD';
+    const shippingCurrencies = (currencies || []).map((currency) =>
+        normalizeCurrencyRecord(currency)
+    );
 
     return (
         <TooltipProvider>
@@ -192,6 +207,8 @@ export async function ShippingPage({
                                                   zoneId={zone.id}
                                                   zoneName={zone.name}
                                                   languages={languages || []}
+                                                  currencies={shippingCurrencies}
+                                                  defaultCurrencyCode={defaultCurrencyCode}
                                                 />
                                             </div>
                                             <div className="space-y-2">
@@ -201,16 +218,25 @@ export async function ShippingPage({
                                                             <div className="flex-1 min-w-0">
                                                                 <div className="flex items-center gap-2">
                                                                     <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{method.name}</p>
+                                                                    <Badge variant="outline" className="h-4 px-1 text-[9px]">
+                                                                        {method.currency_pricing_mode === 'manual' ? 'Manual FX' : 'Auto FX'}
+                                                                    </Badge>
                                                                     {(method.min_order_amount || 0) > 0 && (
                                                                         <Tooltip>
                                                                             <TooltipTrigger asChild>
                                                                                 <Badge variant="outline" className="h-4 px-1 text-[9px] bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/50">
                                                                                     <Info className="h-2 w-2 mr-0.5" />
-                                                                                    ${(method.min_order_amount / 100).toFixed(0)}+
+                                                                                    {formatPrice(
+                                                                                        method.min_order_amount,
+                                                                                        method.cost_currency?.toUpperCase() || defaultCurrencyCode
+                                                                                    )}
                                                                                 </Badge>
                                                                             </TooltipTrigger>
                                                                             <TooltipContent>
-                                                                                Available for orders over ${(method.min_order_amount / 100).toFixed(2)}
+                                                                                Available for orders over {formatPrice(
+                                                                                    method.min_order_amount,
+                                                                                    method.cost_currency?.toUpperCase() || defaultCurrencyCode
+                                                                                )}
                                                                             </TooltipContent>
                                                                         </Tooltip>
                                                                     )}
@@ -221,13 +247,20 @@ export async function ShippingPage({
                                                             </div>
                                                             <div className="flex items-center gap-1">
                                                                 <p className="text-sm font-black text-primary px-2">
-                                                                    {method.method_type === 'free_shipping' ? 'FREE' : `$${(method.cost_amount / 100).toFixed(2)}`}
+                                                                    {method.method_type === 'free_shipping'
+                                                                        ? 'FREE'
+                                                                        : formatPrice(
+                                                                              method.cost_amount,
+                                                                              method.cost_currency?.toUpperCase() || defaultCurrencyCode
+                                                                          )}
                                                                 </p>
                                                                 <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
                                                                     <RateForm 
                                                                         zoneId={zone.id} 
                                                                         zoneName={zone.name} 
                                                                         languages={languages || []}
+                                                                        currencies={shippingCurrencies}
+                                                                        defaultCurrencyCode={defaultCurrencyCode}
                                                                         mode="edit" 
                                                                         initialData={method} 
                                                                     />

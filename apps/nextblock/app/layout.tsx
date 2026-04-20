@@ -13,6 +13,7 @@ import Header from '../components/Header';
 import FooterNavigation from '../components/FooterNavigation';
 import { Providers } from './providers';
 import { CartDrawer } from '@nextblock-cms/ecommerce';
+import { CURRENCY_COOKIE_NAME } from '@nextblock-cms/ecommerce/server';
 import { ToasterProvider } from './ToasterProvider';
 import {
   createClient as createSupabaseServerClient,
@@ -32,6 +33,7 @@ const DEFAULT_LOCALE_FOR_LAYOUT = 'en';
 const PUBLIC_LAYOUT_REVALIDATE_SECONDS = 60;
 
 type Language = Database['public']['Tables']['languages']['Row'];
+type StoreCurrency = Database['public']['Tables']['currencies']['Row'];
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
 type MenuLocation = Database['public']['Enums']['menu_location'];
 type HeaderLogo = Database['public']['Tables']['logos']['Row'] & {
@@ -115,6 +117,28 @@ const getCachedTranslations = unstable_cache(
   { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
 );
 
+const getCachedCurrencies = unstable_cache(
+  async (): Promise<StoreCurrency[]> => {
+    const supabase = createStaticSupabaseClient();
+    const { data, error } = await supabase
+      .from('currencies')
+      .select(
+        'id, code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount, created_at, updated_at'
+      )
+      .eq('is_active', true)
+      .order('code', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching cached currencies:', error.message);
+      return [];
+    }
+
+    return data || [];
+  },
+  ['public-layout-currencies'],
+  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
+);
+
 const getCachedNavigationMenu = unstable_cache(
   async (menuKey: MenuLocation, languageCode: string): Promise<NavigationItem[]> => {
     const supabase = createStaticSupabaseClient();
@@ -193,6 +217,7 @@ async function loadLayoutData() {
 
   const xUserLocaleHeader = headerList.get('x-user-locale');
   const nextUserLocaleCookie = cookieStore.get('NEXT_USER_LOCALE')?.value;
+  const serverCurrencyCode = cookieStore.get(CURRENCY_COOKIE_NAME)?.value ?? null;
 
   let serverDeterminedLocale =
     xUserLocaleHeader ??
@@ -204,12 +229,14 @@ async function loadLayoutData() {
       data: { user },
     },
     availableLanguagesResult,
+    currenciesResult,
     copyrightSettingsResult,
     translationsResult,
     isEcommerceActive,
   ] = await Promise.all([
     supabase.auth.getUser(),
     getCachedLanguages().catch(() => getActiveLanguagesServerSide().catch(() => [])),
+    getCachedCurrencies().catch(() => []),
     getCachedCopyrightSettings().catch(() => ({
       en: '(c) {year} Nextblock CMS. All rights reserved.',
     })),
@@ -218,6 +245,7 @@ async function loadLayoutData() {
   ]);
 
   const availableLanguages: Language[] = availableLanguagesResult;
+  const availableCurrencies: StoreCurrency[] = currenciesResult;
   const defaultLanguage: Language | null =
     availableLanguages.find((lang) => lang.is_default) ?? availableLanguages[0] ?? null;
 
@@ -254,6 +282,8 @@ async function loadLayoutData() {
     user,
     profile,
     serverDeterminedLocale,
+    availableCurrencies,
+    serverCurrencyCode,
     availableLanguages,
     defaultLanguage,
     translations,
@@ -316,6 +346,8 @@ export default async function RootLayout({
     user,
     profile,
     serverDeterminedLocale,
+    availableCurrencies,
+    serverCurrencyCode,
     availableLanguages,
     defaultLanguage,
     translations,
@@ -361,6 +393,8 @@ export default async function RootLayout({
           serverUser={user}
           serverProfile={profile}
           serverLocale={serverDeterminedLocale}
+          initialCurrencies={availableCurrencies}
+          initialCurrencyCode={serverCurrencyCode}
           initialAvailableLanguages={availableLanguages}
           initialDefaultLanguage={defaultLanguage}
           translations={translations}

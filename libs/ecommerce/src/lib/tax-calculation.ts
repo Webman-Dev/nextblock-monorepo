@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { normalizeCountryCode } from './countries';
+import type { CurrencyRecord } from './currency';
+import { resolvePriceForCurrency } from './currency';
 import { getEcommerceInventorySettings } from './inventory-settings';
 import { normalizeSubdivisionCode } from './states';
 import type { CartItem, TaxCalculationResult, TaxRate } from './types';
@@ -27,47 +29,27 @@ export function getStripeTaxCodeForProduct(isTaxable: boolean) {
 
 export async function buildCheckoutTaxableItemsFromCart(
   supabase: SupabaseClient<any>,
-  cartItems: CartItem[]
+  cartItems: CartItem[],
+  currencyCode: string,
+  currencies: CurrencyRecord[]
 ): Promise<CheckoutTaxableItem[]> {
   if (!cartItems.length) {
     return [];
   }
 
   const productIds = [...new Set(cartItems.map((item) => item.product_id))];
-  const variantIds = [
-    ...new Set(
-      cartItems
-        .map((item) => item.variant_id)
-        .filter((variantId): variantId is string => Boolean(variantId))
-    ),
-  ];
-
-  const [{ data: products, error: productsError }, { data: variants, error: variantsError }] =
-    await Promise.all([
-      supabase
-        .from('products')
-        .select('id, price, sale_price, is_taxable')
-        .in('id', productIds),
-      variantIds.length
-        ? supabase
-            .from('product_variants')
-            .select('id, product_id, price, sale_price')
-            .in('id', variantIds)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
+  const { data: products, error: productsError } = await supabase
+    .from('products')
+    .select('id, is_taxable')
+    .in('id', productIds);
 
   if (productsError) {
     throw new Error(productsError.message);
   }
 
-  if (variantsError) {
-    throw new Error(variantsError.message);
-  }
-
   const productMap = new Map(
     (products || []).map((product) => [product.id, product])
   );
-  const variantMap = new Map((variants || []).map((variant) => [variant.id, variant]));
 
   return cartItems.reduce<CheckoutTaxableItem[]>((accumulator, cartItem) => {
     const product = productMap.get(cartItem.product_id);
@@ -76,20 +58,19 @@ export async function buildCheckoutTaxableItemsFromCart(
       return accumulator;
     }
 
-    const variant = cartItem.variant_id ? variantMap.get(cartItem.variant_id) : null;
-    const unitAmount =
-      variant
-        ? typeof variant.sale_price === 'number'
-          ? variant.sale_price
-          : variant.price
-        : typeof product.sale_price === 'number'
-          ? product.sale_price
-          : product.price;
+    const resolvedPrice = resolvePriceForCurrency({
+      prices: cartItem.prices,
+      salePrices: cartItem.sale_prices,
+      fallbackPrice: cartItem.price,
+      fallbackSalePrice: cartItem.sale_price,
+      currencyCode,
+      currencies,
+    });
 
     accumulator.push({
       product_id: product.id,
       quantity: cartItem.quantity,
-      unit_amount: unitAmount,
+      unit_amount: resolvedPrice.sale_price ?? resolvedPrice.price,
       is_taxable: product.is_taxable ?? true,
     });
 

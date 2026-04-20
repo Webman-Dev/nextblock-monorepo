@@ -1,6 +1,7 @@
 import { FeaturedProduct } from '@nextblock-cms/ecommerce';
 import { getProduct } from '@nextblock-cms/ecommerce/server';
 import { getVariantEffectivePriceRange } from '@nextblock-cms/ecommerce';
+import { normalizePriceMap, normalizeSalePriceMap } from '@nextblock-cms/ecommerce';
 
 import { FeaturedProductBlockContent } from './ecommerce-block-schemas';
 import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
@@ -35,7 +36,9 @@ export const FeaturedProductBlock = async ({ content }: { content: FeaturedProdu
     sku: product.sku,
     upc: product.upc || undefined,
     price: product.price,
+    prices: normalizePriceMap(product.prices),
     sale_price: typeof product.sale_price === 'number' ? product.sale_price : undefined,
+    sale_prices: normalizeSalePriceMap(product.sale_prices),
     is_taxable: product.is_taxable ?? true,
     price_range_min: variantPriceRange?.min ?? null,
     price_range_max: variantPriceRange?.max ?? null,
@@ -45,6 +48,13 @@ export const FeaturedProductBlock = async ({ content }: { content: FeaturedProdu
     language_id: product.language_id,
     translation_group_id: product.translation_group_id || "",
     has_variants: (product.product_variants?.length || 0) > 0,
+    product_variants: ((product as any).product_variants || []).map((variant: any) => ({
+      id: variant.id,
+      price: variant.price,
+      prices: normalizePriceMap(variant.prices),
+      sale_price: variant.sale_price,
+      sale_prices: normalizeSalePriceMap(variant.sale_prices),
+    })),
   };
 
   return (

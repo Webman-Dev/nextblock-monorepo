@@ -10,7 +10,8 @@ import { normalizeSubdivisionCode } from '../states';
 export async function getShippingEstimates(
     cartTotal: number, 
     destination: ShippingDestination,
-    languageCode?: string
+    languageCode?: string,
+    currencyCode?: string
 ): Promise<{ success: boolean; methods?: ResolvedShippingMethod[]; error?: string }> {
     try {
         const normalizedCountry = normalizeCountryCode(destination.country);
@@ -23,7 +24,7 @@ export async function getShippingEstimates(
             ...destination,
             country: normalizedCountry,
             state: normalizeSubdivisionCode(normalizedCountry, destination.state) || undefined,
-        }, languageCode);
+        }, languageCode, currencyCode);
         return { success: true, methods };
     } catch (error: any) {
         console.error('Failed to resolve shipping options:', error);

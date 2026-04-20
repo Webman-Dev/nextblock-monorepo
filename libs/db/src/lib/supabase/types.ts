@@ -72,6 +72,60 @@ export type Database = {
           },
         ]
       }
+      currencies: {
+        Row: {
+          auto_sync_product_prices: boolean
+          auto_update_exchange_rate: boolean
+          code: string
+          created_at: string
+          exchange_rate: number
+          exchange_rate_source: string | null
+          exchange_rate_updated_at: string | null
+          id: string
+          is_active: boolean
+          is_default: boolean
+          rounding_charm_amount: number | null
+          rounding_increment: number
+          rounding_mode: string
+          symbol: string
+          updated_at: string
+        }
+        Insert: {
+          auto_sync_product_prices?: boolean
+          auto_update_exchange_rate?: boolean
+          code: string
+          created_at?: string
+          exchange_rate: number
+          exchange_rate_source?: string | null
+          exchange_rate_updated_at?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          rounding_charm_amount?: number | null
+          rounding_increment?: number
+          rounding_mode?: string
+          symbol: string
+          updated_at?: string
+        }
+        Update: {
+          auto_sync_product_prices?: boolean
+          auto_update_exchange_rate?: boolean
+          code?: string
+          created_at?: string
+          exchange_rate?: number
+          exchange_rate_source?: string | null
+          exchange_rate_updated_at?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          rounding_charm_amount?: number | null
+          rounding_increment?: number
+          rounding_mode?: string
+          symbol?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       freemius_plans: {
         Row: {
           created_at: string
@@ -159,6 +213,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      inventory_items: {
+        Row: {
+          created_at: string
+          quantity: number
+          sku: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          quantity?: number
+          sku: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          quantity?: number
+          sku?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       languages: {
         Row: {
@@ -399,7 +474,9 @@ export type Database = {
           created_at: string | null
           currency: string
           customer_details: Json | null
+          exchange_rate_at_purchase: number
           id: string
+          inventory_deducted_at: string | null
           invoice_number: string | null
           paid_at: string | null
           payment_intent_id: string | null
@@ -417,7 +494,9 @@ export type Database = {
           created_at?: string | null
           currency?: string
           customer_details?: Json | null
+          exchange_rate_at_purchase?: number
           id?: string
+          inventory_deducted_at?: string | null
           invoice_number?: string | null
           paid_at?: string | null
           payment_intent_id?: string | null
@@ -435,7 +514,9 @@ export type Database = {
           created_at?: string | null
           currency?: string
           customer_details?: Json | null
+          exchange_rate_at_purchase?: number
           id?: string
+          inventory_deducted_at?: string | null
           invoice_number?: string | null
           paid_at?: string | null
           payment_intent_id?: string | null
@@ -715,31 +796,31 @@ export type Database = {
           attribute_id: string
           created_at: string | null
           id: string
-          sort_order: number | null
           slug: string
+          sort_order: number
           updated_at: string | null
           value: string
-          value_translations: Json | null
+          value_translations: Json
         }
         Insert: {
           attribute_id: string
           created_at?: string | null
           id?: string
-          sort_order?: number | null
           slug: string
+          sort_order?: number
           updated_at?: string | null
           value: string
-          value_translations?: Json | null
+          value_translations?: Json
         }
         Update: {
           attribute_id?: string
           created_at?: string | null
           id?: string
-          sort_order?: number | null
           slug?: string
+          sort_order?: number
           updated_at?: string | null
           value?: string
-          value_translations?: Json | null
+          value_translations?: Json
         }
         Relationships: [
           {
@@ -756,7 +837,7 @@ export type Database = {
           created_at: string | null
           id: string
           name: string
-          name_translations: Json | null
+          name_translations: Json
           slug: string
           updated_at: string | null
         }
@@ -764,7 +845,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           name: string
-          name_translations?: Json | null
+          name_translations?: Json
           slug: string
           updated_at?: string | null
         }
@@ -772,7 +853,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           name?: string
-          name_translations?: Json | null
+          name_translations?: Json
           slug?: string
           updated_at?: string | null
         }
@@ -818,8 +899,10 @@ export type Database = {
           main_media_id: string | null
           price: number
           price_adjustment: number
+          prices: Json
           product_id: string
           sale_price: number | null
+          sale_prices: Json | null
           sku: string
           stock_quantity: number
           upc: string | null
@@ -831,8 +914,10 @@ export type Database = {
           main_media_id?: string | null
           price?: number
           price_adjustment?: number
+          prices?: Json
           product_id: string
           sale_price?: number | null
+          sale_prices?: Json | null
           sku: string
           stock_quantity?: number
           upc?: string | null
@@ -844,8 +929,10 @@ export type Database = {
           main_media_id?: string | null
           price?: number
           price_adjustment?: number
+          prices?: Json
           product_id?: string
           sale_price?: number | null
+          sale_prices?: Json | null
           sku?: string
           stock_quantity?: number
           upc?: string | null
@@ -879,7 +966,9 @@ export type Database = {
           language_id: number
           metadata: Json | null
           price: number
+          prices: Json
           sale_price: number | null
+          sale_prices: Json | null
           short_description: string | null
           sku: string
           slug: string
@@ -900,7 +989,9 @@ export type Database = {
           language_id: number
           metadata?: Json | null
           price: number
+          prices?: Json
           sale_price?: number | null
+          sale_prices?: Json | null
           short_description?: string | null
           sku: string
           slug: string
@@ -921,7 +1012,9 @@ export type Database = {
           language_id?: number
           metadata?: Json | null
           price?: number
+          prices?: Json
           sale_price?: number | null
+          sale_prices?: Json | null
           short_description?: string | null
           sku?: string
           slug?: string
@@ -975,21 +1068,202 @@ export type Database = {
         }
         Relationships: []
       }
+      shipping_zone_locations: {
+        Row: {
+          country_code: string
+          created_at: string | null
+          id: string
+          postal_code: string | null
+          state_code: string | null
+          zone_id: string
+        }
+        Insert: {
+          country_code: string
+          created_at?: string | null
+          id?: string
+          postal_code?: string | null
+          state_code?: string | null
+          zone_id: string
+        }
+        Update: {
+          country_code?: string
+          created_at?: string | null
+          id?: string
+          postal_code?: string | null
+          state_code?: string | null
+          zone_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shipping_zone_locations_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "shipping_zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shipping_zone_methods: {
+        Row: {
+          cost_amount: number
+          cost_amounts: Json
+          cost_currency: string
+          created_at: string | null
+          currency_pricing_mode: string
+          id: string
+          method_type: string
+          min_order_amount: number
+          min_order_amounts: Json
+          name: string
+          name_translations: Json
+          updated_at: string | null
+          zone_id: string
+        }
+        Insert: {
+          cost_amount?: number
+          cost_amounts?: Json
+          cost_currency?: string
+          created_at?: string | null
+          currency_pricing_mode?: string
+          id?: string
+          method_type: string
+          min_order_amount?: number
+          min_order_amounts?: Json
+          name: string
+          name_translations?: Json
+          updated_at?: string | null
+          zone_id: string
+        }
+        Update: {
+          cost_amount?: number
+          cost_amounts?: Json
+          cost_currency?: string
+          created_at?: string | null
+          currency_pricing_mode?: string
+          id?: string
+          method_type?: string
+          min_order_amount?: number
+          min_order_amounts?: Json
+          name?: string
+          name_translations?: Json
+          updated_at?: string | null
+          zone_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shipping_zone_methods_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "shipping_zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shipping_zones: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          priority_order: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          priority_order?: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          priority_order?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      site_settings: {
+        Row: {
+          key: string
+          value: Json | null
+        }
+        Insert: {
+          key: string
+          value?: Json | null
+        }
+        Update: {
+          key?: string
+          value?: Json | null
+        }
+        Relationships: []
+      }
+      tax_rates: {
+        Row: {
+          country_code: string
+          created_at: string
+          id: string
+          state_code: string | null
+          tax_name: string
+          tax_rate: number
+          updated_at: string
+        }
+        Insert: {
+          country_code: string
+          created_at?: string
+          id?: string
+          state_code?: string | null
+          tax_name: string
+          tax_rate: number
+          updated_at?: string
+        }
+        Update: {
+          country_code?: string
+          created_at?: string
+          id?: string
+          state_code?: string | null
+          tax_name?: string
+          tax_rate?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      translations: {
+        Row: {
+          created_at: string
+          key: string
+          translations: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          key: string
+          translations: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          key?: string
+          translations?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_addresses: {
         Row: {
           address_type: string
           city: string | null
           company_name: string | null
           country_code: string | null
-          created_at: string | null
+          created_at: string
           id: string
-          is_default: boolean | null
+          is_default: boolean
           line1: string | null
           line2: string | null
           postal_code: string | null
           recipient_name: string | null
           state: string | null
-          updated_at: string | null
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -997,15 +1271,15 @@ export type Database = {
           city?: string | null
           company_name?: string | null
           country_code?: string | null
-          created_at?: string | null
+          created_at?: string
           id?: string
-          is_default?: boolean | null
+          is_default?: boolean
           line1?: string | null
           line2?: string | null
           postal_code?: string | null
           recipient_name?: string | null
           state?: string | null
-          updated_at?: string | null
+          updated_at?: string
           user_id: string
         }
         Update: {
@@ -1013,15 +1287,15 @@ export type Database = {
           city?: string | null
           company_name?: string | null
           country_code?: string | null
-          created_at?: string | null
+          created_at?: string
           id?: string
-          is_default?: boolean | null
+          is_default?: boolean
           line1?: string | null
           line2?: string | null
           postal_code?: string | null
           recipient_name?: string | null
           state?: string | null
-          updated_at?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -1064,189 +1338,42 @@ export type Database = {
           },
         ]
       }
-      shipping_zone_locations: {
-        Row: {
-          country_code: string
-          created_at: string | null
-          id: string
-          postal_code: string | null
-          state_code: string | null
-          zone_id: string
-        }
-        Insert: {
-          country_code: string
-          created_at?: string | null
-          id?: string
-          postal_code?: string | null
-          state_code?: string | null
-          zone_id: string
-        }
-        Update: {
-          country_code?: string
-          created_at?: string | null
-          id?: string
-          postal_code?: string | null
-          state_code?: string | null
-          zone_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "shipping_zone_locations_zone_id_fkey"
-            columns: ["zone_id"]
-            isOneToOne: false
-            referencedRelation: "shipping_zones"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      shipping_zone_methods: {
-        Row: {
-          cost_amount: number
-          cost_currency: string
-          created_at: string | null
-          id: string
-          method_type: string
-          min_order_amount: number
-          name: string
-          name_translations: Json | null
-          updated_at: string | null
-          zone_id: string
-        }
-        Insert: {
-          cost_amount?: number
-          cost_currency?: string
-          created_at?: string | null
-          id?: string
-          method_type: string
-          min_order_amount?: number
-          name: string
-          name_translations?: Json | null
-          updated_at?: string | null
-          zone_id: string
-        }
-        Update: {
-          cost_amount?: number
-          cost_currency?: string
-          created_at?: string | null
-          id?: string
-          method_type?: string
-          min_order_amount?: number
-          name?: string
-          name_translations?: Json | null
-          updated_at?: string | null
-          zone_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "shipping_zone_methods_zone_id_fkey"
-            columns: ["zone_id"]
-            isOneToOne: false
-            referencedRelation: "shipping_zones"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      shipping_zones: {
-        Row: {
-          created_at: string | null
-          id: string
-          name: string
-          priority_order: number
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          name: string
-          priority_order?: number
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          name?: string
-          priority_order?: number
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
-      tax_rates: {
-        Row: {
-          country_code: string
-          created_at: string
-          id: string
-          state_code: string | null
-          tax_name: string
-          tax_rate: number
-          updated_at: string
-        }
-        Insert: {
-          country_code: string
-          created_at?: string
-          id?: string
-          state_code?: string | null
-          tax_name: string
-          tax_rate: number
-          updated_at?: string
-        }
-        Update: {
-          country_code?: string
-          created_at?: string
-          id?: string
-          state_code?: string | null
-          tax_name?: string
-          tax_rate?: number
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      site_settings: {
-        Row: {
-          key: string
-          value: Json | null
-        }
-        Insert: {
-          key: string
-          value?: Json | null
-        }
-        Update: {
-          key?: string
-          value?: Json | null
-        }
-        Relationships: []
-      }
-      translations: {
-        Row: {
-          created_at: string
-          key: string
-          translations: Json
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          key: string
-          translations: Json
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          key?: string
-          translations?: Json
-          updated_at?: string
-        }
-        Relationships: []
-      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      apply_order_inventory_deduction: {
+        Args: { p_order_id: string }
+        Returns: undefined
+      }
+      assign_order_invoice_metadata: {
+        Args: { p_order_id: string; p_paid_at?: string }
+        Returns: {
+          invoice_number: string
+          paid_at: string
+        }[]
+      }
+      clear_currency_price_overrides: {
+        Args: { target_currency: string }
+        Returns: undefined
+      }
+      format_order_invoice_number: {
+        Args: { p_value: number }
+        Returns: string
+      }
+      generate_order_invoice_number: { Args: never; Returns: string }
       get_current_user_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      get_ecommerce_track_quantities: { Args: never; Returns: boolean }
       get_my_claim: { Args: { claim: string }; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
+      sync_inventory_cache_for_sku: {
+        Args: { p_sku: string }
+        Returns: undefined
+      }
       upsert_product_with_variants: {
         Args: { product_payload: Json }
         Returns: string

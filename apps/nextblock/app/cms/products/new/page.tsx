@@ -8,6 +8,7 @@ import {
   getGlobalProductAttributes,
   getPaymentSettings,
   getProduct,
+  normalizeCurrencyRecord,
 } from '@nextblock-cms/ecommerce/server';
 import { ArrowLeft } from 'lucide-react';
 import { Badge, Button } from '@nextblock-cms/ui';
@@ -28,12 +29,20 @@ export default async function NewProductPage({
     languages,
     paymentProvider,
     globalAttributesRaw,
+    currenciesResult,
     { from_group, target_lang_id },
   ] = await Promise.all([
     verifyPackageOnline('ecommerce'),
     getActiveLanguagesServerSide(),
     getPaymentSettings(),
     getGlobalProductAttributes(),
+    createClient()
+      .from('currencies')
+      .select(
+        'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
+      )
+      .eq('is_active', true)
+      .order('code', { ascending: true }),
     searchParams,
   ]);
 
@@ -72,6 +81,9 @@ export default async function NewProductPage({
       ? languages.find((language) => language.id === targetLanguageId)
       : null;
   const globalAttributes = buildGlobalAttributesForForm(globalAttributesRaw || []);
+  const currencies = (currenciesResult.data ?? []).map((currency) =>
+    normalizeCurrencyRecord(currency)
+  );
   const normalizedInitialData = buildProductFormInitialData(
     initialData,
     languages,
@@ -110,6 +122,7 @@ export default async function NewProductPage({
       <ProductFormClientShell
         availableLanguagesProp={languages}
         globalAttributesProp={globalAttributes}
+        currenciesProp={currencies}
         translationGroupId={from_group}
         targetLanguageId={target_lang_id}
         initialData={normalizedInitialData}

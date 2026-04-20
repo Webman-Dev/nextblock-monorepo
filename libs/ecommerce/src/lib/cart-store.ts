@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
 import { type CartItem, isDigitalItem } from './types';
+import { useCurrency } from './CurrencyProvider';
+import { resolvePriceForCurrency } from './currency';
 
 export interface AddItemResult {
   success: boolean;
@@ -91,7 +93,11 @@ export const useCartStore = create<CartState>()(
           set({
             items: items.map((item) =>
               item.id === newItem.id
-                ? { ...item, quantity: item.quantity + 1 }
+                ? {
+                    ...item,
+                    ...newItem,
+                    quantity: item.quantity + 1,
+                  }
                 : item
             ),
             isOpen: true,
@@ -163,7 +169,30 @@ export const useCartTotalItems = () => {
   return items.reduce((acc, item) => acc + item.quantity, 0);
 };
 
+export function getCartItemActivePrice(item: CartItem, params: {
+  currencyCode: string;
+  currencies: ReturnType<typeof useCurrency>['currencies'];
+}) {
+  return resolvePriceForCurrency({
+    prices: item.prices,
+    salePrices: item.sale_prices,
+    fallbackPrice: item.price,
+    fallbackSalePrice: item.sale_price,
+    currencyCode: params.currencyCode,
+    currencies: params.currencies,
+  });
+}
+
 export const useCartSubtotal = () => {
   const items = useCartStore((state) => state.items);
-  return items.reduce((acc, item) => acc + (item.sale_price ?? item.price) * item.quantity, 0);
+  const { activeCurrencyCode, currencies } = useCurrency();
+
+  return items.reduce((accumulator, item) => {
+    const { price, sale_price } = getCartItemActivePrice(item, {
+      currencyCode: activeCurrencyCode,
+      currencies,
+    });
+
+    return accumulator + (sale_price ?? price) * item.quantity;
+  }, 0);
 };

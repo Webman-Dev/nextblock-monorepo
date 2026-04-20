@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui';
+import { Button, Input, Label } from '@nextblock-cms/ui';
 import { Truck, Calculator, Loader2 } from 'lucide-react';
 import { countries } from '../countries';
 import { getShippingEstimates } from '../server-actions/shipping-actions';
 import { ResolvedShippingMethod } from '../shipping/resolver';
-import { useTranslations } from '@nextblock-cms/utils';
+import { formatPrice, useTranslations } from '@nextblock-cms/utils';
 import { countryUsesStructuredStates, getStatesForCountry } from '../states';
+import { useCurrency } from '../CurrencyProvider';
 
 interface ShippingEstimatorProps {
   cartTotal: number;
@@ -21,8 +22,17 @@ export const ShippingEstimator = ({ cartTotal }: ShippingEstimatorProps) => {
   const [rates, setRates] = useState<ResolvedShippingMethod[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { t, lang } = useTranslations();
+  const { activeCurrencyCode } = useCurrency();
   const availableStates = getStatesForCountry(country);
   const usesStructuredStates = countryUsesStructuredStates(country);
+  const selectOptionLabel =
+    t('select_an_option') === 'select_an_option'
+      ? 'Select an option'
+      : t('select_an_option');
+  const statePlaceholder =
+    t('state_province') === 'state_province'
+      ? 'State / Province'
+      : t('state_province');
 
   const handleCalculate = async () => {
     setIsCalculating(true);
@@ -36,7 +46,8 @@ export const ShippingEstimator = ({ cartTotal }: ShippingEstimatorProps) => {
         state: state || undefined,
         postal_code: postalCode,
       },
-      lang
+      lang,
+      activeCurrencyCode
     );
 
     if (result.success && result.methods) {
@@ -59,18 +70,25 @@ export const ShippingEstimator = ({ cartTotal }: ShippingEstimatorProps) => {
           <Label htmlFor="estimate-country" className="text-xs uppercase tracking-wider text-muted-foreground">
             {t('ecommerce.country')}
           </Label>
-          <Select value={country} onValueChange={setCountry}>
-            <SelectTrigger id="estimate-country" className="h-9 text-sm bg-background">
-              <SelectValue placeholder="Select Country" />
-            </SelectTrigger>
-            <SelectContent>
-              {countries.map((c: { code: string; name: string }) => (
-                <SelectItem key={c.code} value={c.code}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <select
+            id="estimate-country"
+            value={country}
+            onChange={(event) => {
+              const nextCountry = event.target.value;
+              const nextStates = getStatesForCountry(nextCountry);
+              setCountry(nextCountry);
+              setState(
+                nextStates.some((entry) => entry.code === state) ? state : ''
+              );
+            }}
+            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            {countries.map((c: { code: string; name: string }) => (
+              <option key={c.code} value={c.code}>
+                {c.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         {usesStructuredStates && (
@@ -78,18 +96,19 @@ export const ShippingEstimator = ({ cartTotal }: ShippingEstimatorProps) => {
             <Label htmlFor="estimate-state" className="text-xs uppercase tracking-wider text-muted-foreground">
               {t('state_province')}
             </Label>
-            <Select value={state} onValueChange={setState}>
-              <SelectTrigger id="estimate-state" className="h-9 text-sm bg-background">
-                <SelectValue placeholder="Select state / province" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableStates.map((entry) => (
-                  <SelectItem key={entry.code} value={entry.code}>
-                    {entry.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select
+              id="estimate-state"
+              value={state}
+              onChange={(event) => setState(event.target.value)}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="">{`${selectOptionLabel}: ${statePlaceholder}`}</option>
+              {availableStates.map((entry) => (
+                <option key={entry.code} value={entry.code}>
+                  {entry.name}
+                </option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -131,7 +150,7 @@ export const ShippingEstimator = ({ cartTotal }: ShippingEstimatorProps) => {
                 <span className="text-sm font-medium">{rate.name}</span>
               </div>
               <span className="text-sm font-bold">
-                {rate.amount === 0 ? t('ecommerce.free') : `$${(rate.amount / 100).toFixed(2)}`}
+                {rate.amount === 0 ? t('ecommerce.free') : formatPrice(rate.amount, activeCurrencyCode)}
               </span>
             </div>
           ))}

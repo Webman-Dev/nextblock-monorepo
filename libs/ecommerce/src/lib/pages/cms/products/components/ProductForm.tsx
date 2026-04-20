@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import type { z } from 'zod';
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -19,7 +20,18 @@ import { useForm } from 'react-hook-form';
 import { ProductMediaManager } from './ProductMediaManager';
 import { SyncFreemiusPricingButton } from './SyncFreemiusPricingButton';
 import { VariationsEditor } from './VariationsEditor';
+import { CurrencyPriceFields } from './CurrencyPriceFields';
+import {
+  getStoreManagedPriceCurrencyCodes,
+  resolveEditorCurrencyPriceMaps,
+  sanitizeProductFormValuesForStoreManagedCurrencies,
+} from '../product-price-sync';
 import { ProductAttribute } from '../../../../types';
+import { convertMinorUnitAmount, type CurrencyRecord } from '../../../../currency';
+import {
+  majorUnitAmountToMinor,
+  minorUnitAmountToMajor,
+} from '@nextblock-cms/utils';
 
 type ProductLanguageOption = {
   id: number;
@@ -61,6 +73,7 @@ interface ProductFormProps {
   editorNode?: React.ReactNode;
   availableLanguagesProp: ProductLanguageOption[];
   globalAttributesProp: ProductAttribute[];
+  currenciesProp: CurrencyRecord[];
   translationGroupId?: string;
   targetLanguageId?: string;
   freemiusDashboardNode?: React.ReactNode;
@@ -115,17 +128,39 @@ function buildProductFormDefaults(
   initialData: ProductFormInitialData | undefined,
   targetLanguageId: string | undefined,
   availableLanguages: ProductLanguageOption[],
+  currencies: CurrencyRecord[],
   translationGroupId?: string
 ): ProductFormValues {
-  return {
+  const defaultCurrency =
+    currencies.find((currency) => currency.is_default) ?? currencies[0];
+  const defaultCurrencyCode = defaultCurrency?.code || 'USD';
+  const initialPrices =
+    initialData?.prices && Object.keys(initialData.prices).length > 0
+      ? initialData.prices
+      : {
+          [defaultCurrencyCode]:
+            typeof initialData?.price === 'number' ? initialData.price / 100 : 0,
+        };
+  const initialSalePrices =
+    initialData?.sale_prices && Object.keys(initialData.sale_prices).length > 0
+      ? initialData.sale_prices
+      : typeof initialData?.sale_price === 'number'
+        ? {
+            [defaultCurrencyCode]: initialData.sale_price / 100,
+          }
+        : {};
+
+  return sanitizeProductFormValuesForStoreManagedCurrencies({
     title: initialData?.title || '',
     slug: initialData?.slug || '',
     sku: initialData?.sku || '',
     upc: initialData?.upc || '',
     is_taxable: initialData?.is_taxable ?? true,
     price: typeof initialData?.price === 'number' ? initialData.price / 100 : 0,
+    prices: initialPrices,
     sale_price:
       typeof initialData?.sale_price === 'number' ? initialData.sale_price / 100 : null,
+    sale_prices: initialSalePrices,
     stock: initialData?.stock || 0,
     short_description: initialData?.short_description || '',
     description_json:
@@ -149,7 +184,7 @@ function buildProductFormDefaults(
       })) || [],
     variation_attributes: initialData?.variation_attributes || [],
     variants: initialData?.variants || [],
-  };
+  }, currencies);
 }
 
 function buildMediaManagerItems(
@@ -202,6 +237,7 @@ export function ProductForm({
   editorNode,
   availableLanguagesProp,
   globalAttributesProp,
+  currenciesProp,
   translationGroupId,
   targetLanguageId,
   freemiusDashboardNode,
@@ -211,12 +247,34 @@ export function ProductForm({
 }: ProductFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showVariations, setShowVariations] = useState(() => Boolean(initialData?.variants?.length));
-  const form = useForm<ProductFormValues>({
+  const currencies = React.useMemo(
+    () =>
+      currenciesProp
+        .filter((currency) => currency.is_active !== false)
+        .sort((left, right) => {
+          if (left.is_default !== right.is_default) {
+            return left.is_default ? -1 : 1;
+          }
+
+          return left.code.localeCompare(right.code);
+        }),
+    [currenciesProp]
+  );
+  const defaultCurrency = React.useMemo(
+    () => currencies.find((currency) => currency.is_default) ?? currencies[0],
+    [currencies]
+  );
+  const storeManagedPriceCurrencyCodes = React.useMemo(
+    () => getStoreManagedPriceCurrencyCodes(currencies),
+    [currencies]
+  );
+  const form = useForm<z.input<typeof productSchema>, unknown, ProductFormValues>({
     resolver: zodResolver(productSchema),
     defaultValues: buildProductFormDefaults(
       initialData,
       targetLanguageId,
       availableLanguagesProp,
+      currencies,
       translationGroupId
     ),
   });
@@ -237,12 +295,27 @@ export function ProductForm({
   const isFreemiusMode = paymentProvider === 'freemius';
   const hasFreemiusProductId = !!watch('freemius_product_id');
   const variants = watch('variants') || [];
+  const baseProductPrice = watch('price');
+  const baseProductSalePrice = watch('sale_price');
+  const productPrices = watch('prices') || {};
+  const productSalePrices = watch('sale_prices') || {};
   const hasVariants = variants.length > 0;
   const selectedLanguageId = watch('language_id');
   const currentLanguageCode =
     availableLanguagesProp.find((lang) => lang.id === selectedLanguageId)?.code ||
     availableLanguagesProp.find((lang) => lang.is_default)?.code ||
     availableLanguagesProp[0]?.code;
+  const resolvedProductPriceMaps = React.useMemo(
+    () =>
+      resolveEditorCurrencyPriceMaps({
+        currencies,
+        prices: productPrices,
+        salePrices: productSalePrices,
+        fallbackPrice: baseProductPrice,
+        fallbackSalePrice: baseProductSalePrice,
+      }),
+    [baseProductPrice, baseProductSalePrice, currencies, productPrices, productSalePrices]
+  );
 
   // Use explicit useEffect to handle slug updates
   useEffect(() => {
@@ -264,6 +337,7 @@ export function ProductForm({
         initialData,
         targetLanguageId,
         availableLanguagesProp,
+        currencies,
         translationGroupId
       )
     );
@@ -272,6 +346,7 @@ export function ProductForm({
     setShowVariations(Boolean(initialData?.variants?.length));
   }, [
     availableLanguagesProp,
+    currencies,
     initialData,
     reset,
     targetLanguageId,
@@ -311,7 +386,143 @@ export function ProductForm({
 
   useEffect(() => {
     register('is_taxable');
+    register('price');
+    register('sale_price');
   }, [register]);
+
+  useEffect(() => {
+    if (!defaultCurrency) {
+      return;
+    }
+
+    if (productPrices[defaultCurrency.code] === undefined) {
+      setValue(
+        'prices',
+        {
+          ...productPrices,
+          [defaultCurrency.code]: baseProductPrice || 0,
+        },
+        { shouldDirty: false }
+      );
+    }
+  }, [baseProductPrice, defaultCurrency, productPrices, setValue]);
+
+  const handleProductPriceChange = useCallback(
+    (currencyCode: string, value: number) => {
+      const nextPrices = {
+        ...productPrices,
+        [currencyCode]: value,
+      };
+      setValue('prices', nextPrices, { shouldDirty: true, shouldValidate: true });
+
+      if (currencyCode === defaultCurrency?.code) {
+        setValue('price', value, { shouldDirty: true, shouldValidate: true });
+      }
+    },
+    [defaultCurrency?.code, productPrices, setValue]
+  );
+
+  const handleProductSalePriceChange = useCallback(
+    (currencyCode: string, value: number | null) => {
+      const nextSalePrices = {
+        ...productSalePrices,
+        [currencyCode]: value,
+      };
+      setValue('sale_prices', nextSalePrices, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+
+      if (currencyCode === defaultCurrency?.code) {
+        setValue('sale_price', value, { shouldDirty: true, shouldValidate: true });
+      }
+    },
+    [defaultCurrency?.code, productSalePrices, setValue]
+  );
+
+  const handleAutoFillProductPrices = useCallback(() => {
+    if (!defaultCurrency) {
+      return;
+    }
+
+    const storeManagedCurrencyCodeSet = new Set(storeManagedPriceCurrencyCodes);
+
+    const baseRegularPrice =
+      productPrices[defaultCurrency.code] ?? baseProductPrice ?? 0;
+    const baseSalePrice =
+      productSalePrices[defaultCurrency.code] ?? baseProductSalePrice ?? null;
+
+    const nextPrices = currencies.reduce<Record<string, number>>((accumulator, currency) => {
+      if (
+        currency.code !== defaultCurrency.code &&
+        storeManagedCurrencyCodeSet.has(currency.code)
+      ) {
+        return accumulator;
+      }
+
+      const convertedMinor = convertMinorUnitAmount({
+        amount: majorUnitAmountToMinor(baseRegularPrice, defaultCurrency.code),
+        fromCurrencyCode: defaultCurrency.code,
+        toCurrencyCode: currency.code,
+        currencies,
+        applyRounding: true,
+      });
+      accumulator[currency.code] = minorUnitAmountToMajor(convertedMinor, currency.code);
+      return accumulator;
+    }, {});
+
+    const nextSalePrices = currencies.reduce<Record<string, number | null>>(
+      (accumulator, currency) => {
+        if (
+          currency.code !== defaultCurrency.code &&
+          storeManagedCurrencyCodeSet.has(currency.code)
+        ) {
+          return accumulator;
+        }
+
+        if (typeof baseSalePrice !== 'number') {
+          if (currency.code === defaultCurrency.code || !storeManagedCurrencyCodeSet.has(currency.code)) {
+            accumulator[currency.code] = null;
+          }
+          return accumulator;
+        }
+
+        const convertedMinor = convertMinorUnitAmount({
+          amount: majorUnitAmountToMinor(baseSalePrice, defaultCurrency.code),
+          fromCurrencyCode: defaultCurrency.code,
+          toCurrencyCode: currency.code,
+          currencies,
+          applyRounding: true,
+        });
+        accumulator[currency.code] = minorUnitAmountToMajor(convertedMinor, currency.code);
+        return accumulator;
+      },
+      {}
+    );
+
+    setValue('prices', nextPrices, { shouldDirty: true, shouldValidate: true });
+    setValue('sale_prices', nextSalePrices, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setValue('price', nextPrices[defaultCurrency.code] ?? baseRegularPrice, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setValue('sale_price', nextSalePrices[defaultCurrency.code] ?? null, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }, [
+    currencies,
+    defaultCurrency,
+    productPrices,
+    productSalePrices,
+    setValue,
+    storeManagedPriceCurrencyCodes,
+    baseProductPrice,
+    baseProductSalePrice,
+  ]);
 
   const handleVariationChange = useCallback(
     ({
@@ -340,11 +551,15 @@ export function ProductForm({
         variation_attributes: isStripeMode ? data.variation_attributes : [],
         variants: isStripeMode ? data.variants : [],
       };
+      const sanitizedData = sanitizeProductFormValuesForStoreManagedCurrencies(
+        normalizedData,
+        currencies
+      );
 
       if (isEdit && updateAction) {
-        await updateAction(normalizedData);
+        await updateAction(sanitizedData);
       } else if (createAction) {
-        await createAction(normalizedData);
+        await createAction(sanitizedData);
       } else {
         throw new Error('Product form action is not configured.');
       }
@@ -478,39 +693,31 @@ export function ProductForm({
         >
           {isStripeMode ? (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="price">Price ($)</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    {...register('price', { valueAsNumber: true })}
-                    placeholder="0.00"
-                    readOnly={hasVariants}
-                    className={disabledBaseFieldClass}
-                  />
-                  {errors.price && <p className="text-destructive text-sm">{errors.price.message as string}</p>}
-                </div>
-                <div>
-                  <Label htmlFor="sale_price">Sale Price ($)</Label>
-                  <Input
-                    id="sale_price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    {...register('sale_price', {
-                      setValueAs: (value) => (value === '' ? null : Number(value)),
-                    })}
-                    placeholder="0.00"
-                    readOnly={hasVariants}
-                    className={disabledBaseFieldClass}
-                  />
-                  {errors.sale_price && (
-                    <p className="text-destructive text-sm">{errors.sale_price.message as string}</p>
-                  )}
-                </div>
+              <div className="grid grid-cols-1 gap-4">
+                <CurrencyPriceFields
+                  idPrefix="product"
+                  currencies={currencies}
+                  prices={resolvedProductPriceMaps.prices}
+                  salePrices={resolvedProductPriceMaps.salePrices}
+                  managedCurrencyCodes={storeManagedPriceCurrencyCodes}
+                  onPriceChange={handleProductPriceChange}
+                  onSalePriceChange={handleProductSalePriceChange}
+                  onAutoFill={handleAutoFillProductPrices}
+                  readOnly={hasVariants}
+                  helperText={
+                    hasVariants
+                      ? 'Parent prices stay as a fallback, but active variants define the live shopper price.'
+                      : storeManagedPriceCurrencyCodes.length > 0
+                        ? `Store-managed currencies update automatically from ${defaultCurrency?.code || 'the base currency'}. Manual FX fills remain available for the rest.`
+                        : undefined
+                  }
+                />
+                {errors.price && (
+                  <p className="text-destructive text-sm">{errors.price.message as string}</p>
+                )}
+                {errors.sale_price && (
+                  <p className="text-destructive text-sm">{errors.sale_price.message as string}</p>
+                )}
                 <div>
                   <Label htmlFor="stock">Qty</Label>
                   <Input
@@ -554,8 +761,13 @@ export function ProductForm({
                     globalAttributes={globalAttributesProp}
                     currentLanguageCode={currentLanguageCode}
                     baseSku={watch('sku') || ''}
-                    basePrice={watch('price') || 0}
-                    baseSalePrice={typeof watch('sale_price') === 'number' ? watch('sale_price') : null}
+                    basePrice={baseProductPrice || 0}
+                    basePrices={productPrices}
+                    baseSalePrice={
+                      typeof baseProductSalePrice === 'number' ? baseProductSalePrice : null
+                    }
+                    baseSalePrices={productSalePrices}
+                    currencies={currencies}
                     availableVariantImages={variantImageOptions}
                     initialVariationAttributes={initialData?.variation_attributes}
                     initialVariants={initialData?.variants}

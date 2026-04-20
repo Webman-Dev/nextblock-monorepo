@@ -30,6 +30,7 @@ export interface CheckoutSessionInput {
   billingAddress: CustomerAddressInput;
   shippingAddress?: CustomerAddressInput | null;
   shippingMethodId?: string | null;
+  currencyCode?: string | null;
   locale?: string | null;
   userId?: string;
 }

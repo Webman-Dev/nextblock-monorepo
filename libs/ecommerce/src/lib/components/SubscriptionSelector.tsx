@@ -7,7 +7,13 @@ import { ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 import { getPublicFreemiusPricing } from '../pages/cms/products/actions';
 import { Product, BillingCycle, ResolvedPlanWithPricing } from '../types';
-import { useTranslations } from '@nextblock-cms/utils';
+import {
+  formatPrice,
+  majorUnitAmountToMinor,
+  useTranslations,
+} from '@nextblock-cms/utils';
+import { useCurrency } from '../CurrencyProvider';
+import { convertMinorUnitAmount } from '../currency';
 
 interface SubscriptionSelectorProps {
   product: Product;
@@ -16,6 +22,7 @@ interface SubscriptionSelectorProps {
 export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => {
   const store = useCart((state) => state);
   const { t } = useTranslations();
+  const { activeCurrencyCode, currencies, defaultCurrency } = useCurrency();
   const [plans, setPlans] = useState<ResolvedPlanWithPricing[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCycle, setSelectedCycle] = useState<BillingCycle>('annual');
@@ -48,14 +55,32 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
   const pricing = plan?.pricing?.[0];
 
   const handleAddToCart = () => {
-    let finalPrice = product.price; // fallback
+    let basePriceMinor = product.price;
     let planId = product.freemius_plan_id;
     
     if (pricing) {
-        if (selectedCycle === 'monthly' && pricing.monthly_price != null) finalPrice = pricing.monthly_price;
-        if (selectedCycle === 'annual' && pricing.annual_price != null) finalPrice = pricing.annual_price;
-        if (selectedCycle === 'lifetime' && pricing.lifetime_price != null) finalPrice = pricing.lifetime_price;
+        if (selectedCycle === 'monthly' && pricing.monthly_price != null) {
+          basePriceMinor = majorUnitAmountToMinor(pricing.monthly_price, defaultCurrency.code);
+        }
+        if (selectedCycle === 'annual' && pricing.annual_price != null) {
+          basePriceMinor = majorUnitAmountToMinor(pricing.annual_price, defaultCurrency.code);
+        }
+        if (selectedCycle === 'lifetime' && pricing.lifetime_price != null) {
+          basePriceMinor = majorUnitAmountToMinor(pricing.lifetime_price, defaultCurrency.code);
+        }
     }
+
+    const allCurrencyPrices = currencies.reduce<Record<string, number>>((accumulator, currency) => {
+      accumulator[currency.code] = convertMinorUnitAmount({
+        amount: basePriceMinor,
+        fromCurrencyCode: defaultCurrency.code,
+        toCurrencyCode: currency.code,
+        currencies,
+        applyRounding: true,
+      });
+      return accumulator;
+    }, {});
+    const finalPrice = allCurrencyPrices[activeCurrencyCode] ?? basePriceMinor;
     
     // Fallbacks if logic is weird
     if (plan && plan.id) {
@@ -67,6 +92,7 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
       product_id: product.id,
       title: product.title,
       price: finalPrice,
+      prices: allCurrencyPrices,
       image_url: product.image_url,
       slug: product.slug,
       sku: product.sku,
@@ -76,6 +102,7 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
       billing_cycle: selectedCycle,
       freemius_product_id: product.freemius_product_id,
       freemius_plan_id: planId, // Overwrite if we got a real plan id
+      currency_code: activeCurrencyCode,
     });
 
     if (success) {
@@ -108,10 +135,34 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
       else if (hasLifetime) setSelectedCycle('lifetime');
   }
 
-  let displayPrice = 0;
-  if (selectedCycle === 'monthly') displayPrice = pricing.monthly_price || 0;
-  if (selectedCycle === 'annual') displayPrice = pricing.annual_price || 0;
-  if (selectedCycle === 'lifetime') displayPrice = pricing.lifetime_price || 0;
+  let displayPriceMinor = product.price;
+  if (selectedCycle === 'monthly' && pricing.monthly_price != null) {
+    displayPriceMinor = convertMinorUnitAmount({
+      amount: majorUnitAmountToMinor(pricing.monthly_price, defaultCurrency.code),
+      fromCurrencyCode: defaultCurrency.code,
+      toCurrencyCode: activeCurrencyCode,
+      currencies,
+      applyRounding: true,
+    });
+  }
+  if (selectedCycle === 'annual' && pricing.annual_price != null) {
+    displayPriceMinor = convertMinorUnitAmount({
+      amount: majorUnitAmountToMinor(pricing.annual_price, defaultCurrency.code),
+      fromCurrencyCode: defaultCurrency.code,
+      toCurrencyCode: activeCurrencyCode,
+      currencies,
+      applyRounding: true,
+    });
+  }
+  if (selectedCycle === 'lifetime' && pricing.lifetime_price != null) {
+    displayPriceMinor = convertMinorUnitAmount({
+      amount: majorUnitAmountToMinor(pricing.lifetime_price, defaultCurrency.code),
+      fromCurrencyCode: defaultCurrency.code,
+      toCurrencyCode: activeCurrencyCode,
+      currencies,
+      applyRounding: true,
+    });
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -156,7 +207,9 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
       </div>
 
       <div className="text-center">
-          <span className="text-4xl font-bold text-primary">${displayPrice.toFixed(2)}</span>
+          <span className="text-4xl font-bold text-primary">
+            {formatPrice(displayPriceMinor, activeCurrencyCode)}
+          </span>
           {selectedCycle !== 'lifetime' && (
               <span className="text-muted-foreground ml-2">/ {selectedCycle === 'annual' ? t('ecommerce.year') : t('ecommerce.month')}</span>
           )}

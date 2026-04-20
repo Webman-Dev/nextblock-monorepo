@@ -6,7 +6,6 @@ import { Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface DeleteProductButtonProps {
-  id: string;
   productName: string;
   isIcon?: boolean;
   className?: string;
@@ -14,7 +13,13 @@ interface DeleteProductButtonProps {
   deleteAction: () => Promise<void>;
 }
 
-export function DeleteProductButton({ id, productName, isIcon = false, className, redirectTo, deleteAction }: DeleteProductButtonProps) {
+export function DeleteProductButton({
+  productName,
+  isIcon = false,
+  className,
+  redirectTo,
+  deleteAction,
+}: DeleteProductButtonProps) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 

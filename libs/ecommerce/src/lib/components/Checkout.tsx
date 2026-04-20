@@ -11,7 +11,7 @@ import {
   Label,
   Separator,
 } from '@nextblock-cms/ui';
-import { useCartSubtotal } from '../cart-store';
+import { getCartItemActivePrice, useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -22,7 +22,7 @@ import {
   ChevronRight,
   MapPin,
 } from 'lucide-react';
-import { useTranslations } from '@nextblock-cms/utils';
+import { formatPrice, useTranslations } from '@nextblock-cms/utils';
 import { countries, normalizeCountryCode } from '../countries';
 import { getShippingEstimates } from '../server-actions/shipping-actions';
 import { getTaxEstimate } from '../server-actions/tax-actions';
@@ -37,6 +37,7 @@ import {
   isCustomerAddressComplete,
   normalizeCustomerAddress,
 } from '../customer';
+import { useCurrency } from '../CurrencyProvider';
 
 const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
 import { Checkout as FreemiusCheckout } from '@freemius/checkout';
@@ -75,6 +76,14 @@ function AddressForm({
   const { t } = useTranslations();
   const companyNameLabel =
     t('company_name') === 'company_name' ? 'Company name' : t('company_name');
+  const selectOptionLabel =
+    t('select_an_option') === 'select_an_option'
+      ? 'Select an option'
+      : t('select_an_option');
+  const statePlaceholder =
+    t('state_province') === 'state_province'
+      ? 'State / Province'
+      : t('state_province');
   const availableStates = getStatesForCountry(value.country_code);
   const usesStructuredStates = countryUsesStructuredStates(value.country_code);
 
@@ -162,11 +171,11 @@ function AddressForm({
             {usesStructuredStates ? (
               <select
                 id={`${idPrefix}-state`}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={value.state}
-                onChange={(e) => onChange({ ...value, state: e.target.value })}
-              >
-                <option value="">{t('select_an_option') || 'Select a state / province'}</option>
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={value.state}
+              onChange={(e) => onChange({ ...value, state: e.target.value })}
+            >
+                <option value="">{`${selectOptionLabel}: ${statePlaceholder}`}</option>
                 {availableStates.map((state) => (
                   <option key={state.code} value={state.code}>
                     {state.name}
@@ -226,6 +235,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
   const store = useCart((state) => state);
   const subtotal = useCartSubtotal();
   const { t, lang } = useTranslations();
+  const { activeCurrencyCode, currencies } = useCurrency();
   const items = store?.items ?? [];
 
   const isAuthenticated = initialCustomer?.isAuthenticated ?? false;
@@ -285,7 +295,8 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
           state: shippingAddressForRates.state,
           postal_code: shippingAddressForRates.postal_code,
         },
-        lang
+        lang,
+        activeCurrencyCode
       );
 
       if (result.success && result.methods) {
@@ -307,6 +318,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
     const timer = setTimeout(fetchRates, 400);
     return () => clearTimeout(timer);
   }, [
+    activeCurrencyCode,
     hasPhysicalProducts,
     selectedMethodId,
     shippingAddressForRates.country_code,
@@ -334,7 +346,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
       const result = await getTaxEstimate(items, {
         country_code: taxAddress.country_code,
         state: taxAddress.state,
-      });
+      }, activeCurrencyCode);
 
       if (result.success && result.tax) {
         setTaxEstimate(result.tax);
@@ -347,7 +359,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
 
     const timer = setTimeout(loadTaxes, 300);
     return () => clearTimeout(timer);
-  }, [items, taxAddress.country_code, taxAddress.state]);
+  }, [activeCurrencyCode, items, taxAddress.country_code, taxAddress.state]);
 
   if (!store) {
     return null;
@@ -409,6 +421,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
           shippingAddress: normalizedShippingAddress,
           shippingMethodId: selectedMethodId,
           locale: lang,
+          currencyCode: activeCurrencyCode,
         }),
       });
 
@@ -637,7 +650,9 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                             </div>
                             <span className="font-medium">{method.name}</span>
                           </div>
-                          <span className="font-bold">${(method.amount / 100).toFixed(2)}</span>
+                          <span className="font-bold">
+                            {formatPrice(method.amount, activeCurrencyCode)}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -660,7 +675,13 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
-                  {items.map((item) => (
+                  {items.map((item) => {
+                    const activePrice = getCartItemActivePrice(item, {
+                      currencyCode: activeCurrencyCode,
+                      currencies,
+                    });
+
+                    return (
                     <div key={item.id} className="flex items-start justify-between gap-4">
                       <div className="flex gap-3">
                         {item.image_url && (
@@ -682,29 +703,36 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                       </div>
                       <div className="flex flex-col items-end gap-0.5 shrink-0">
                         <span className="font-medium text-xs">
-                          ${(((item.sale_price ?? item.price) * item.quantity) / 100).toFixed(2)}
+                          {formatPrice(
+                            (activePrice.sale_price ?? activePrice.price) * item.quantity,
+                            activeCurrencyCode
+                          )}
                         </span>
-                        {item.sale_price && (
+                        {activePrice.sale_price && (
                           <span className="text-[9px] text-muted-foreground line-through">
-                            ${((item.price * item.quantity) / 100).toFixed(2)}
+                            {formatPrice(
+                              activePrice.price * item.quantity,
+                              activeCurrencyCode
+                            )}
                           </span>
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <Separator />
 
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>{t('ecommerce.subtotal')}</span>
-                    <span>${(subtotal / 100).toFixed(2)}</span>
+                    <div className="flex justify-between">
+                      <span>{t('ecommerce.subtotal')}</span>
+                    <span>{formatPrice(subtotal, activeCurrencyCode)}</span>
                   </div>
                   {hasPhysicalProducts && (
                     <div className="flex justify-between">
                       <span>{t('ecommerce.shipping')}</span>
-                      <span>{selectedMethod ? `$${(selectedMethod.amount / 100).toFixed(2)}` : '-'}</span>
+                      <span>{selectedMethod ? formatPrice(selectedMethod.amount, activeCurrencyCode) : '-'}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
@@ -718,7 +746,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                           'Calculated on Stripe'
                         )
                       ) : taxEstimate ? (
-                        `$${(taxEstimate.amount / 100).toFixed(2)}`
+                        formatPrice(taxEstimate.amount, activeCurrencyCode)
                       ) : (
                         '-'
                       )}
@@ -731,14 +759,14 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                           <span>
                             {line.name} ({line.rate.toFixed(4)}%)
                           </span>
-                          <span>${(line.amount / 100).toFixed(2)}</span>
+                          <span>{formatPrice(line.amount, activeCurrencyCode)}</span>
                         </div>
                       ))}
                     </div>
                   ) : null}
                   <div className="flex justify-between font-bold text-lg pt-2 border-t mt-2">
                     <span>{t('ecommerce.total')}</span>
-                    <span className="text-primary">${(total / 100).toFixed(2)}</span>
+                    <span className="text-primary">{formatPrice(total, activeCurrencyCode)}</span>
                   </div>
                 </div>
 

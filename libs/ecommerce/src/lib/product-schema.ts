@@ -1,5 +1,15 @@
 import { z } from 'zod';
 
+const currencyPriceMapSchema = z.record(
+  z.string().regex(/^[A-Z]{3}$/, 'Currency code must be ISO 4217'),
+  z.coerce.number().min(0, 'Prices must be non-negative')
+);
+
+const currencySalePriceMapSchema = z.record(
+  z.string().regex(/^[A-Z]{3}$/, 'Currency code must be ISO 4217'),
+  z.coerce.number().min(0, 'Sale prices must be non-negative').nullable()
+);
+
 const selectedOptionSchema = z.object({
   attribute_id: z.string().uuid(),
   attribute_name: z.string(),
@@ -14,7 +24,9 @@ const variantDraftSchema = z.object({
   sku: z.string().min(1, 'Variant SKU is required'),
   upc: z.string().optional().nullable(),
   price: z.coerce.number().min(0, 'Variant price must be non-negative'),
+  prices: currencyPriceMapSchema.default({}),
   sale_price: z.coerce.number().min(0, 'Variant sale price must be non-negative').optional().nullable(),
+  sale_prices: currencySalePriceMapSchema.default({}),
   stock_quantity: z.coerce.number().int().min(0, 'Variant stock must be a non-negative integer'),
   main_media_id: z.string().uuid().optional().nullable(),
   main_image_url: z.string().optional().nullable(),
@@ -26,6 +38,20 @@ const variantDraftSchema = z.object({
   {
     message: 'Variant sale price cannot exceed the regular price',
     path: ['sale_price'],
+  }
+).refine(
+  (variant) =>
+    Object.entries(variant.sale_prices || {}).every(([currencyCode, salePrice]) => {
+      if (salePrice === null || salePrice === undefined) {
+        return true;
+      }
+
+      const regularPrice = variant.prices?.[currencyCode];
+      return typeof regularPrice === 'number' ? salePrice <= regularPrice : true;
+    }),
+  {
+    message: 'Variant sale prices cannot exceed regular prices',
+    path: ['sale_prices'],
   }
 );
 
@@ -43,7 +69,9 @@ export const productSchema = z.object({
   sku: z.string().min(1, 'SKU is required'),
   upc: z.string().optional().nullable(),
   price: z.coerce.number().min(0, 'Price must be non-negative'),
+  prices: currencyPriceMapSchema.default({}),
   sale_price: z.coerce.number().min(0, 'Sale price must be non-negative').optional().nullable(),
+  sale_prices: currencySalePriceMapSchema.default({}),
   stock: z.coerce.number().int().min(0, 'Stock must be a non-negative integer'),
   short_description: z.string().optional(),
   description_json: z.any().optional(), // Using any for Tiptap JSON structure
@@ -69,6 +97,20 @@ export const productSchema = z.object({
   {
     message: 'Sale price cannot exceed the regular price',
     path: ['sale_price'],
+  }
+).refine(
+  (product) =>
+    Object.entries(product.sale_prices || {}).every(([currencyCode, salePrice]) => {
+      if (salePrice === null || salePrice === undefined) {
+        return true;
+      }
+
+      const regularPrice = product.prices?.[currencyCode];
+      return typeof regularPrice === 'number' ? salePrice <= regularPrice : true;
+    }),
+  {
+    message: 'Sale prices cannot exceed regular prices',
+    path: ['sale_prices'],
   }
 );
 

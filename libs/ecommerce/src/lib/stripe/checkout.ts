@@ -3,11 +3,13 @@ import { createClient } from '@supabase/supabase-js';
 import { type CartItem } from '../types';
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { resolveShippingOptions, type ShippingDestination } from '../shipping/resolver';
+import { getDefaultCurrency, resolvePriceForCurrency } from '../currency';
 
 export const createCheckoutSession = async (
   cartItems: CartItem[],
   userId?: string,
-  destination?: ShippingDestination
+  destination?: ShippingDestination,
+  currencyCode?: string
 ): Promise<{ url: string | null; error?: string }> => {
   // Use Service Role Key to bypass RLS
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -25,6 +27,19 @@ export const createCheckoutSession = async (
     return { error: 'Cart is empty', url: null };
   }
 
+  const { data: currenciesResult } = await supabase
+    .from('currencies')
+    .select(
+      'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
+    )
+    .eq('is_active', true)
+    .order('code', { ascending: true });
+  const currencies = currenciesResult ?? [];
+  const defaultCurrency = getDefaultCurrency(currencies);
+  const selectedCurrency =
+    currencies.find((currency) => currency.code === (currencyCode || '').toUpperCase()) ??
+    defaultCurrency;
+
   // 0. Verify E-Commerce License
   const isEcommerceActive = await verifyPackageOnline('ecommerce');
   if (!isEcommerceActive) {
@@ -37,7 +52,7 @@ export const createCheckoutSession = async (
   
   const { data: products, error: productsError } = await supabase
     .from('products')
-    .select('id, title, price, sale_price')
+    .select('id, title, price, prices, sale_price, sale_prices')
     .in('id', productIds);
 
   if (productsError || !products) {
@@ -64,9 +79,15 @@ export const createCheckoutSession = async (
     // Verify price
     // Note: Stripe expects amount in cents for 'usd'. 
     // The DB stores price in cents (integer), so we use it directly.
-    const unitAmount = (product.sale_price !== null && product.sale_price !== undefined) 
-        ? product.sale_price 
-        : product.price; 
+    const resolvedPrice = resolvePriceForCurrency({
+      prices: product.prices || {},
+      salePrices: product.sale_prices || {},
+      fallbackPrice: product.price,
+      fallbackSalePrice: product.sale_price,
+      currencyCode: selectedCurrency.code,
+      currencies,
+    });
+    const unitAmount = resolvedPrice.sale_price ?? resolvedPrice.price;
 
     if (unitAmount <= 0) {
         console.warn(`[Checkout Session Warning] Product ${product.title} has zero or negative price!`);
@@ -74,7 +95,7 @@ export const createCheckoutSession = async (
 
     line_items.push({
       price_data: {
-        currency: 'usd',
+        currency: selectedCurrency.code.toLowerCase(),
         product_data: {
           name: product.title,
           images: [], // Images temporarily removed due to schema mismatch (requires relation join)
@@ -105,7 +126,9 @@ export const createCheckoutSession = async (
     .from('orders')
     .insert({
       total: totalAmount,
-      user_id: userId
+      user_id: userId,
+      currency: selectedCurrency.code,
+      exchange_rate_at_purchase: selectedCurrency.exchange_rate,
     })
     .select('id')
     .single();
@@ -162,13 +185,18 @@ export const createCheckoutSession = async (
   }
 
   if (resolvedDestination) {
-      const methods = await resolveShippingOptions(totalAmount, resolvedDestination);
+      const methods = await resolveShippingOptions(
+        totalAmount,
+        resolvedDestination,
+        null,
+        selectedCurrency.code
+      );
       shipping_options = methods.map(m => ({
           shipping_rate_data: {
               type: 'fixed_amount',
               fixed_amount: {
                   amount: m.amount,
-                  currency: m.currency,
+                  currency: m.currency.toLowerCase(),
               },
               display_name: m.name,
               // delivery_estimate: { ... } // Could be added in future modules

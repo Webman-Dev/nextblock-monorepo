@@ -5,6 +5,7 @@ import { getProducts } from './actions';
 import { DeleteProductButton } from './components/DeleteProductButton';
 import { SyncFreemiusButton } from './components/SyncFreemiusButton';
 import { deleteProductAction } from './server-actions';
+import { formatPrice } from '@nextblock-cms/utils';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 const resolveMediaUrl = (path?: string | null) => {
@@ -24,10 +25,7 @@ const resolveMediaUrl = (path?: string | null) => {
 };
 
 import { Badge } from '@nextblock-cms/ui';
-import { getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
-
-const formatPrice = (amount?: number | null) =>
-  typeof amount === 'number' ? `$${(amount / 100).toFixed(2)}` : 'N/A';
+import { getActiveLanguagesServerSide, getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
 
 export async function ProductsPage({ 
   searchParams, 
@@ -36,12 +34,23 @@ export async function ProductsPage({
   searchParams?: { lang?: string }, 
   languageFilterNode?: React.ReactNode 
 }) {
-  const allLanguages = await getActiveLanguagesServerSide();
+  const supabase = getServiceRoleSupabaseClient();
+  const [allLanguages, { data: currencies }] = await Promise.all([
+    getActiveLanguagesServerSide(),
+    supabase
+      .from('currencies')
+      .select('code, is_default')
+      .eq('is_active', true)
+      .order('is_default', { ascending: false })
+      .order('code', { ascending: true }),
+  ]);
   const selectedLangId = searchParams?.lang ? parseInt(searchParams.lang, 10) : undefined;
   
   const { data: products } = await getProducts({ languageId: selectedLangId });
   
   const langMap = new Map(allLanguages.map(l => [l.id, l.code.toUpperCase()]));
+  const defaultCurrencyCode =
+    currencies?.find((currency) => currency.is_default)?.code || currencies?.[0]?.code || 'USD';
 
   return (
     <div className="p-8 space-y-6">
@@ -107,11 +116,13 @@ export async function ProductsPage({
                   <TableCell>
                     <div className="flex items-baseline gap-2">
                       <span className={product.sale_price ? 'font-semibold text-primary' : ''}>
-                        {formatPrice(product.sale_price ?? product.price)}
+                        {typeof (product.sale_price ?? product.price) === 'number'
+                          ? formatPrice(product.sale_price ?? product.price, defaultCurrencyCode)
+                          : 'N/A'}
                       </span>
                       {product.sale_price && (
                         <span className="text-sm text-muted-foreground line-through">
-                          {formatPrice(product.price)}
+                          {formatPrice(product.price, defaultCurrencyCode)}
                         </span>
                       )}
                     </div>
@@ -149,7 +160,6 @@ export async function ProductsPage({
                       </Button>
                     </Link>
                     <DeleteProductButton
-                      id={product.id}
                       productName={product.title}
                       isIcon
                       deleteAction={deleteProductAction.bind(null, product.id)}

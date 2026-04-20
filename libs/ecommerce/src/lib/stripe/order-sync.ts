@@ -142,7 +142,7 @@ export async function syncStripeOrderFromSession(session: Stripe.Checkout.Sessio
         : existingTaxDetails?.shipping_total ?? 0,
     fallbackMode: existingTaxDetails?.mode ?? 'automatic',
     currency:
-      detailedSession.currency ?? orderRecord.currency ?? existingTaxDetails?.currency ?? 'usd',
+      (detailedSession.currency ?? orderRecord.currency ?? existingTaxDetails?.currency ?? 'USD').toUpperCase(),
   });
   const finalizedTaxDetails =
     finalizedStripeTaxDetails.tax_total > 0 || finalizedStripeTaxDetails.lines.length > 0
@@ -152,7 +152,7 @@ export async function syncStripeOrderFromSession(session: Stripe.Checkout.Sessio
     finalizedTaxDetails?.tax_total ??
     (typeof orderRecord.tax_total === 'number' ? orderRecord.tax_total : 0);
   const finalizedCurrency =
-    detailedSession.currency ?? orderRecord.currency ?? finalizedTaxDetails?.currency ?? 'usd';
+    (detailedSession.currency ?? orderRecord.currency ?? finalizedTaxDetails?.currency ?? 'USD').toUpperCase();
 
   const updateData = {
     status: 'paid',

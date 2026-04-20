@@ -11,6 +11,9 @@ import { Button } from '@nextblock-cms/ui';
 import { mapRawVariantRelations } from '../../../../../variation-utils';
 import { deleteProductAction, updateProductAction } from '../../server-actions';
 import { getPaymentSettings } from '../../../payments/queries';
+import { getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
+import { minorUnitAmountToMajor } from '@nextblock-cms/utils';
+import { normalizeCurrencyRecord } from '../../../../../currency';
 
 interface EditProductPageProps {
   params: Promise<{
@@ -41,13 +44,24 @@ export async function EditProductPage({
   }
 
   const paymentProvider = await getPaymentSettings();
-  const [pricingPlans, globalAttributesRaw] = await Promise.all([
+  const [pricingPlans, globalAttributesRaw, currenciesResult] = await Promise.all([
     paymentProvider === 'freemius' && product.freemius_product_id
       ? getFreemiusPricingByProductId(product.id)
       : Promise.resolve(null),
     getGlobalProductAttributes(),
+    getServiceRoleSupabaseClient()
+      .from('currencies')
+      .select(
+        'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
+      )
+      .eq('is_active', true)
+      .order('code', { ascending: true })
+      .then((result) => result.data || []),
   ]);
 
+  const currencies = (currenciesResult || []).map((currency) =>
+    normalizeCurrencyRecord(currency)
+  );
   const currentLanguageCode =
     availableLanguagesProp.find((language) => language.id === product.language_id)?.code;
   const { attributes: productAttributes, variants } = mapRawVariantRelations(
@@ -94,7 +108,6 @@ export async function EditProductPage({
            {translationCtaNode}
            {DeleteProductButtonComponent ? (
              <DeleteProductButtonComponent 
-                  id={product.id} 
                   productName={product.title} 
                   redirectTo="/cms/products"
                   className="border-red-200 hover:bg-red-50 hover:text-red-700"
@@ -121,12 +134,28 @@ export async function EditProductPage({
             upc: product.upc ?? undefined,
             stock: product.stock || 0,
             price: product.price || 0,
+            prices: Object.entries(product.prices || {}).reduce<Record<string, number>>(
+              (accumulator, [currencyCode, amount]) => {
+                accumulator[currencyCode] = minorUnitAmountToMajor(amount as number, currencyCode);
+                return accumulator;
+              },
+              {}
+            ),
             is_taxable:
               typeof product.is_taxable === 'boolean' ? product.is_taxable : true,
             status: product.status as 'draft' | 'active' | 'archived',
             short_description: product.short_description ?? undefined,
             description_json: product.description_json,
             sale_price: typeof product.sale_price === 'number' ? product.sale_price : undefined,
+            sale_prices: Object.entries(product.sale_prices || {}).reduce<
+              Record<string, number | null>
+            >((accumulator, [currencyCode, amount]) => {
+              accumulator[currencyCode] =
+                typeof amount === 'number'
+                  ? minorUnitAmountToMajor(amount, currencyCode)
+                  : null;
+              return accumulator;
+            }, {}),
             freemius_plan_id: product.freemius_plan_id ?? undefined,
             freemius_product_id: product.freemius_product_id ?? undefined,
             language_id: product.language_id,
@@ -140,8 +169,24 @@ export async function EditProductPage({
               ...variant,
               upc: variant.upc ?? null,
               price: variant.price / 100,
+              prices: Object.entries(variant.prices || {}).reduce<Record<string, number>>(
+                (accumulator, [currencyCode, amount]) => {
+                  accumulator[currencyCode] = minorUnitAmountToMajor(amount, currencyCode);
+                  return accumulator;
+                },
+                {}
+              ),
               sale_price:
                 typeof variant.sale_price === 'number' ? variant.sale_price / 100 : null,
+              sale_prices: Object.entries(variant.sale_prices || {}).reduce<
+                Record<string, number | null>
+              >((accumulator, [currencyCode, amount]) => {
+                accumulator[currencyCode] =
+                  typeof amount === 'number'
+                    ? minorUnitAmountToMajor(amount, currencyCode)
+                    : null;
+                return accumulator;
+              }, {}),
               main_media_id: variant.main_media_id ?? null,
               main_image_url: variant.image_url ?? null,
             })),
@@ -151,6 +196,7 @@ export async function EditProductPage({
         editorNode={editorNode}
         availableLanguagesProp={availableLanguagesProp}
         globalAttributesProp={globalAttributes}
+        currenciesProp={currencies}
         paymentProvider={paymentProvider}
         updateAction={updateProductAction.bind(null, product.id)}
         freemiusDashboardNode={

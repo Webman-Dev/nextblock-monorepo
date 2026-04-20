@@ -4,10 +4,15 @@ import { createClient, getServiceRoleSupabaseClient } from '@nextblock-cms/db/se
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { normalizeCountryCode } from '../../../countries';
+import { normalizeCurrencyRecord } from '../../../currency';
 import {
     getEcommerceInventorySettings,
     upsertEcommerceInventorySettings,
 } from '../../../inventory-settings';
+import {
+    sanitizeShippingRateAmountMaps,
+    type ShippingRateCurrencyMode,
+} from '../../../shipping-rate-currency';
 import { normalizeSubdivisionCode } from '../../../states';
 
 export interface ShippingZoneLocationInput {
@@ -85,6 +90,25 @@ function normalizeShippingZoneLocations(locations: ShippingZoneLocationInput[]) 
     }
 
     return [...deduped.values()];
+}
+
+async function getActiveShippingCurrencies(
+    supabase: ReturnType<typeof getServiceRoleSupabaseClient>,
+) {
+    const { data: currencies, error } = await supabase
+        .from('currencies')
+        .select('code, is_default')
+        .eq('is_active', true)
+        .order('is_default', { ascending: false })
+        .order('code', { ascending: true });
+
+    if (error) {
+        return { error: error.message as string };
+    }
+
+    return {
+        currencies: currencies || [],
+    };
 }
 
 /**
@@ -197,18 +221,43 @@ export async function createShippingRate(zoneId: string, data: {
     name: string, 
     nameTranslations?: Record<string, string>,
     type: 'flat_rate' | 'free_shipping', 
-    cost: number,
-    minOrderAmount?: number
+    cost?: number,
+    minOrderAmount?: number,
+    currencyPricingMode?: ShippingRateCurrencyMode,
+    sourceCurrencyCode?: string | null,
+    costAmounts?: Record<string, number>,
+    minOrderAmounts?: Record<string, number>,
 }) {
     const supabase = getServiceRoleSupabaseClient();
+    const activeCurrenciesResult = await getActiveShippingCurrencies(supabase);
+
+    if ('error' in activeCurrenciesResult) {
+        return { error: activeCurrenciesResult.error };
+    }
+    const sanitizedAmounts = sanitizeShippingRateAmountMaps({
+        currencies: activeCurrenciesResult.currencies.map((currency) =>
+            normalizeCurrencyRecord(currency)
+        ),
+        mode: data.currencyPricingMode,
+        sourceCurrencyCode: data.sourceCurrencyCode,
+        costAmounts: data.costAmounts,
+        minOrderAmounts: data.minOrderAmounts,
+        fallbackCostAmount: data.cost,
+        fallbackMinOrderAmount: data.minOrderAmount,
+    });
+
     const { error } = await supabase.from('shipping_zone_methods').insert({
         zone_id: zoneId,
         name: data.name.trim(),
         name_translations: sanitizeTranslations(data.nameTranslations),
         method_type: data.type,
-        cost_amount: data.cost,
-        cost_currency: 'usd',
-        min_order_amount: data.minOrderAmount || 0
+        currency_pricing_mode: sanitizedAmounts.mode,
+        cost_amount: sanitizedAmounts.costAmounts[sanitizedAmounts.sourceCurrencyCode],
+        cost_amounts: sanitizedAmounts.costAmounts,
+        cost_currency: sanitizedAmounts.sourceCurrencyCode,
+        min_order_amount:
+            sanitizedAmounts.minOrderAmounts[sanitizedAmounts.sourceCurrencyCode],
+        min_order_amounts: sanitizedAmounts.minOrderAmounts,
     });
     
     if (error) return { error: error.message };
@@ -223,16 +272,42 @@ export async function updateShippingRate(id: string, data: {
     name: string, 
     nameTranslations?: Record<string, string>,
     type: 'flat_rate' | 'free_shipping', 
-    cost: number,
-    minOrderAmount?: number
+    cost?: number,
+    minOrderAmount?: number,
+    currencyPricingMode?: ShippingRateCurrencyMode,
+    sourceCurrencyCode?: string | null,
+    costAmounts?: Record<string, number>,
+    minOrderAmounts?: Record<string, number>,
 }) {
     const supabase = getServiceRoleSupabaseClient();
+    const activeCurrenciesResult = await getActiveShippingCurrencies(supabase);
+
+    if ('error' in activeCurrenciesResult) {
+        return { error: activeCurrenciesResult.error };
+    }
+    const sanitizedAmounts = sanitizeShippingRateAmountMaps({
+        currencies: activeCurrenciesResult.currencies.map((currency) =>
+            normalizeCurrencyRecord(currency)
+        ),
+        mode: data.currencyPricingMode,
+        sourceCurrencyCode: data.sourceCurrencyCode,
+        costAmounts: data.costAmounts,
+        minOrderAmounts: data.minOrderAmounts,
+        fallbackCostAmount: data.cost,
+        fallbackMinOrderAmount: data.minOrderAmount,
+    });
+
     const { error } = await supabase.from('shipping_zone_methods').update({
         name: data.name.trim(),
         name_translations: sanitizeTranslations(data.nameTranslations),
         method_type: data.type,
-        cost_amount: data.cost,
-        min_order_amount: data.minOrderAmount || 0,
+        currency_pricing_mode: sanitizedAmounts.mode,
+        cost_amount: sanitizedAmounts.costAmounts[sanitizedAmounts.sourceCurrencyCode],
+        cost_amounts: sanitizedAmounts.costAmounts,
+        cost_currency: sanitizedAmounts.sourceCurrencyCode,
+        min_order_amount:
+            sanitizedAmounts.minOrderAmounts[sanitizedAmounts.sourceCurrencyCode],
+        min_order_amounts: sanitizedAmounts.minOrderAmounts,
         updated_at: new Date().toISOString()
     }).eq('id', id);
     

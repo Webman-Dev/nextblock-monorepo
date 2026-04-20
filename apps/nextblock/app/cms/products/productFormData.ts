@@ -1,5 +1,6 @@
 import { mapRawVariantRelations } from '@nextblock-cms/ecommerce';
 import type { ProductAttribute } from '@nextblock-cms/ecommerce';
+import { minorUnitAmountToMajor } from '@nextblock-cms/utils';
 
 type LanguageOption = {
   id: number;
@@ -75,6 +76,24 @@ export function buildProductFormInitialData(
   return {
     ...product,
     language_id: resolvedLanguageId,
+    prices: Object.entries(product.prices || {}).reduce<Record<string, number>>(
+      (accumulator, [currencyCode, amount]) => {
+        if (typeof amount === 'number') {
+          accumulator[currencyCode] = minorUnitAmountToMajor(amount, currencyCode);
+        }
+        return accumulator;
+      },
+      {}
+    ),
+    sale_prices: Object.entries(product.sale_prices || {}).reduce<Record<string, number | null>>(
+      (accumulator, [currencyCode, amount]) => {
+        if (typeof amount === 'number') {
+          accumulator[currencyCode] = minorUnitAmountToMajor(amount, currencyCode);
+        }
+        return accumulator;
+      },
+      {}
+    ),
     variation_attributes:
       product.variation_attributes ||
       productAttributes.map((attribute) => ({
@@ -87,8 +106,26 @@ export function buildProductFormInitialData(
         ...variant,
         upc: variant.upc ?? null,
         price: variant.price / 100,
+        prices: Object.entries(variant.prices || {}).reduce<Record<string, number>>(
+          (accumulator, [currencyCode, amount]) => {
+            if (typeof amount === 'number') {
+              accumulator[currencyCode] = minorUnitAmountToMajor(amount, currencyCode);
+            }
+            return accumulator;
+          },
+          {}
+        ),
         sale_price:
           typeof variant.sale_price === 'number' ? variant.sale_price / 100 : null,
+        sale_prices: Object.entries(variant.sale_prices || {}).reduce<Record<string, number | null>>(
+          (accumulator, [currencyCode, amount]) => {
+            if (typeof amount === 'number') {
+              accumulator[currencyCode] = minorUnitAmountToMajor(amount, currencyCode);
+            }
+            return accumulator;
+          },
+          {}
+        ),
         main_media_id: variant.main_media_id ?? null,
         main_image_url: variant.image_url ?? null,
       })),

@@ -19,6 +19,12 @@ import {
   STRIPE_TAX_CODE_SHIPPING,
   STRIPE_TAX_CODE_NONTAXABLE,
 } from '../tax-calculation';
+import {
+  convertMinorUnitAmount,
+  getDefaultCurrency,
+  normalizePriceMap,
+  resolvePriceForCurrency,
+} from '../currency';
 import { buildOrderTaxDetailsFromCalculation } from '../order-tax-details';
 import { isDigitalItem, PaymentProvider, TranslationMap } from '../types';
 import { resolveTranslatedText } from '../variation-utils';
@@ -182,6 +188,7 @@ export class StripeProvider implements PaymentProvider {
     billingAddress,
     shippingAddress,
     shippingMethodId,
+    currencyCode,
     locale,
   }: CheckoutSessionInput): Promise<{
     url: string | null;
@@ -206,6 +213,26 @@ export class StripeProvider implements PaymentProvider {
       return { error: 'Cart is empty', url: null };
     }
 
+    const { data: currenciesResult, error: currenciesError } = await supabase
+      .from('currencies')
+      .select(
+        'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
+      )
+      .eq('is_active', true)
+      .order('code', { ascending: true });
+    const currencies = currenciesResult ?? [];
+
+    if (currenciesError || currencies.length === 0) {
+      console.error('Error fetching currencies for checkout:', currenciesError);
+      return { error: 'Failed to resolve store currencies', url: null };
+    }
+
+    const defaultCurrency = getDefaultCurrency(currencies);
+    const selectedCurrency =
+      currencies.find((currency) => currency.code === (currencyCode || '').toUpperCase()) ??
+      defaultCurrency;
+    const checkoutCurrencyCode = selectedCurrency.code.toLowerCase();
+
     const inventorySettings = await getEcommerceInventorySettings(supabase as any);
 
     const productIds = cartItems.map((item) => item.product_id);
@@ -214,7 +241,7 @@ export class StripeProvider implements PaymentProvider {
       .filter((variantId): variantId is string => Boolean(variantId));
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, title, sku, price, sale_price, stock, is_taxable')
+      .select('id, title, sku, price, prices, sale_price, sale_prices, stock, is_taxable')
       .in('id', productIds);
 
     if (productsError || !products) {
@@ -225,7 +252,7 @@ export class StripeProvider implements PaymentProvider {
     const { data: variants, error: variantsError } = variantIds.length
       ? await supabase
           .from('product_variants')
-          .select('id, product_id, sku, price, sale_price, stock_quantity')
+          .select('id, product_id, sku, price, prices, sale_price, sale_prices, stock_quantity')
           .in('id', variantIds)
       : { data: [], error: null };
 
@@ -305,8 +332,15 @@ export class StripeProvider implements PaymentProvider {
         };
       }
 
-      let unitAmount =
-        typeof product.sale_price === 'number' ? product.sale_price : product.price;
+      const productPrice = resolvePriceForCurrency({
+        prices: normalizePriceMap(product.prices),
+        salePrices: product.sale_prices || {},
+        fallbackPrice: product.price,
+        fallbackSalePrice: product.sale_price,
+        currencyCode: selectedCurrency.code,
+        currencies,
+      });
+      let unitAmount = productPrice.sale_price ?? productPrice.price;
       let lineItemName = product.title;
       let resolvedVariantId: string | null = null;
 
@@ -332,8 +366,15 @@ export class StripeProvider implements PaymentProvider {
           };
         }
 
-        unitAmount =
-          typeof variant.sale_price === 'number' ? variant.sale_price : variant.price;
+        const variantPrice = resolvePriceForCurrency({
+          prices: normalizePriceMap(variant.prices),
+          salePrices: variant.sale_prices || {},
+          fallbackPrice: variant.price,
+          fallbackSalePrice: variant.sale_price,
+          currencyCode: selectedCurrency.code,
+          currencies,
+        });
+        unitAmount = variantPrice.sale_price ?? variantPrice.price;
         resolvedVariantId = variant.id;
         lineItemName = cartItem.variant_label
           ? `${product.title} - ${cartItem.variant_label}`
@@ -360,7 +401,7 @@ export class StripeProvider implements PaymentProvider {
 
       lineItems.push({
         price_data: {
-          currency: 'usd',
+          currency: checkoutCurrencyCode,
           product_data: {
             name: lineItemName,
             tax_code: getStripeTaxCodeForProduct(isTaxable),
@@ -396,7 +437,6 @@ export class StripeProvider implements PaymentProvider {
 
     let shippingAmount = 0;
     let resolvedShippingMethodName: string | null = null;
-    let resolvedShippingCurrency = 'usd';
     if (shippingMethodId) {
       const { data: method, error: methodError } = await supabase
         .from('shipping_zone_methods')
@@ -409,8 +449,12 @@ export class StripeProvider implements PaymentProvider {
         return { error: 'Failed to load shipping method', url: null };
       }
 
-      shippingAmount = method.cost_amount ?? 0;
-      resolvedShippingCurrency = (method.cost_currency || 'USD').toLowerCase();
+      shippingAmount = convertMinorUnitAmount({
+        amount: method.cost_amount ?? 0,
+        fromCurrencyCode: method.cost_currency || defaultCurrency.code,
+        toCurrencyCode: selectedCurrency.code,
+        currencies,
+      });
       resolvedShippingMethodName = resolveShippingMethodName(method, locale);
     }
 
@@ -433,7 +477,7 @@ export class StripeProvider implements PaymentProvider {
     if (shippingAmount > 0 && resolvedShippingMethodName) {
       lineItems.push({
         price_data: {
-          currency: resolvedShippingCurrency,
+          currency: checkoutCurrencyCode,
           product_data: {
             name: resolvedShippingMethodName,
             tax_code:
@@ -458,7 +502,7 @@ export class StripeProvider implements PaymentProvider {
     if (manualTaxAmount > 0) {
       lineItems.push({
         price_data: {
-          currency: 'usd',
+          currency: checkoutCurrencyCode,
           product_data: {
             name: 'Tax',
             tax_code: STRIPE_TAX_CODE_NONTAXABLE,
@@ -477,7 +521,7 @@ export class StripeProvider implements PaymentProvider {
       billing: billingAddress,
       shipping: shippingAddress,
     });
-    const currency = 'usd';
+    const currency = selectedCurrency.code;
     const orderTaxDetails = buildOrderTaxDetailsFromCalculation({
       calculation: taxCalculation,
       subtotal: totalAmount,
@@ -492,6 +536,7 @@ export class StripeProvider implements PaymentProvider {
         status: 'pending',
         total: totalAmount + shippingAmount + manualTaxAmount,
         currency,
+        exchange_rate_at_purchase: selectedCurrency.exchange_rate,
         subtotal: totalAmount,
         shipping_total: shippingAmount,
         tax_total: manualTaxAmount,
@@ -577,6 +622,7 @@ export class StripeProvider implements PaymentProvider {
         metadata: {
           orderId,
           taxMode: taxCalculation.mode,
+          currencyCode: selectedCurrency.code,
         },
       });
 

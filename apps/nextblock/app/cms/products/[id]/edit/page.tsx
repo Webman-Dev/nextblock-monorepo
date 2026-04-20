@@ -18,8 +18,10 @@ import {
   getGlobalProductAttributes,
   getProductTranslations,
   getPaymentSettings,
+  normalizeCurrencyRecord,
   updateProductAction,
 } from '@nextblock-cms/ecommerce/server';
+import { createClient } from '@nextblock-cms/db/server';
 import {
   buildGlobalAttributesForForm,
   buildProductFormInitialData,
@@ -55,6 +57,17 @@ export default async function EditProductPage({
     getGlobalProductAttributes(),
     product.translation_group_id ? getProductTranslations(product.translation_group_id) : Promise.resolve([]),
   ]);
+  const supabase = createClient();
+  const { data: currenciesResult } = await supabase
+    .from('currencies')
+    .select(
+      'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
+    )
+    .eq('is_active', true)
+    .order('code', { ascending: true });
+  const currencies = (currenciesResult ?? []).map((currency) =>
+    normalizeCurrencyRecord(currency)
+  );
 
   const missingLanguageId = missing_lang_id ? parseInt(missing_lang_id, 10) : null;
   const missingLanguage =
@@ -167,6 +180,7 @@ export default async function EditProductPage({
         isEdit
         availableLanguagesProp={languages}
         globalAttributesProp={globalAttributes}
+        currenciesProp={currencies}
         paymentProvider={paymentProvider}
         updateAction={updateProductAction.bind(null, product.id)}
       />

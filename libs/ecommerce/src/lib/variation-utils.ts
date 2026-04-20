@@ -1,10 +1,13 @@
 import {
+  PriceMap,
   ProductAttribute,
   ProductAttributeTerm,
   ProductVariant,
   ProductVariantOption,
+  SalePriceMap,
   TranslationMap,
 } from './types';
+import { normalizePriceMap, normalizeSalePriceMap } from './currency';
 
 type AttributeAccumulator = ProductAttribute & {
   terms: ProductAttributeTerm[];
@@ -23,7 +26,9 @@ export interface ProductVariantDraft {
   sku: string;
   upc?: string | null;
   price: number;
+  prices: PriceMap;
   sale_price?: number | null;
+  sale_prices: SalePriceMap;
   stock_quantity: number;
   main_media_id?: string | null;
   main_image_url?: string | null;
@@ -119,11 +124,21 @@ function cartesianProduct<T>(groups: T[][]): T[][] {
 export function generateVariantDrafts(params: {
   baseSku: string;
   basePrice: number;
+  basePrices?: PriceMap | null;
   baseSalePrice?: number | null;
+  baseSalePrices?: SalePriceMap | null;
   selectedAttributes: VariationSelectionGroup[];
   previousVariants?: ProductVariantDraft[];
 }) {
-  const { baseSku, basePrice, baseSalePrice = null, selectedAttributes, previousVariants = [] } = params;
+  const {
+    baseSku,
+    basePrice,
+    basePrices = {},
+    baseSalePrice = null,
+    baseSalePrices = {},
+    selectedAttributes,
+    previousVariants = [],
+  } = params;
 
   if (
     selectedAttributes.length === 0 ||
@@ -167,7 +182,9 @@ export function generateVariantDrafts(params: {
       sku: previous?.sku || [baseSku.trim(), skuSuffix].filter(Boolean).join('-'),
       upc: previous?.upc ?? null,
       price: previous?.price ?? basePrice,
+      prices: previous?.prices ?? normalizePriceMap(basePrices),
       sale_price: previous?.sale_price ?? baseSalePrice,
+      sale_prices: previous?.sale_prices ?? normalizeSalePriceMap(baseSalePrices),
       stock_quantity: previous?.stock_quantity ?? 0,
       main_media_id: previous?.main_media_id ?? null,
       main_image_url: previous?.main_image_url ?? null,
@@ -369,7 +386,9 @@ export function mapRawVariantRelations(rawVariants: any[] = [], languageCode?: s
         sku: variant.sku,
         upc: variant.upc ?? null,
         price: variant.price ?? 0,
+        prices: normalizePriceMap(variant.prices),
         sale_price: variant.sale_price ?? null,
+        sale_prices: normalizeSalePriceMap(variant.sale_prices),
         stock_quantity: variant.stock_quantity ?? 0,
         main_media_id: variant.main_media_id ?? null,
         image_url: resolveMediaUrl(
@@ -382,8 +401,11 @@ export function mapRawVariantRelations(rawVariants: any[] = [], languageCode?: s
     });
 
   const attributes: ProductAttribute[] = [...attributeMap.values()]
-    .map(({ _termIds, ...attribute }) => ({
-      ...attribute,
+    .map((attribute) => ({
+      id: attribute.id,
+      name: attribute.name,
+      slug: attribute.slug,
+      name_translations: attribute.name_translations,
       terms: [...attribute.terms].sort((left, right) => {
         const leftOrder = left.sort_order ?? Number.MAX_SAFE_INTEGER;
         const rightOrder = right.sort_order ?? Number.MAX_SAFE_INTEGER;

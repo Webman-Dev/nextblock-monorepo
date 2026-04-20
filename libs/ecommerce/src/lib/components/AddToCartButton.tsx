@@ -9,6 +9,7 @@ import { useCart } from '../use-cart';
 import { useTranslations } from '@nextblock-cms/utils';
 
 import { Product } from '../types';
+import { useCurrency } from '../CurrencyProvider';
 
 interface AddToCartButtonProps {
   product: Product;
@@ -20,6 +21,7 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
   // or use store directly since this action is client-side interaction anyway.
   const store = useCart((state) => state);
   const { t } = useTranslations();
+  const { activeCurrencyCode } = useCurrency();
   const requiresVariantSelection =
     Boolean(product.has_variants) && !product.variant_id && !(product as any).freemius_product_id;
 
@@ -49,7 +51,9 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
       product_id: product.id,
       title: product.title,
       price: product.price,
+      prices: product.prices,
       sale_price: product.sale_price,
+      sale_prices: product.sale_prices,
       is_taxable: product.is_taxable,
       image_url: product.image_url,
       slug: product.slug,
@@ -62,6 +66,7 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
       variant_id: product.variant_id,
       variant_label: product.variant_label,
       selected_options: product.selected_options,
+      currency_code: activeCurrencyCode,
     });
 
     if (success) {

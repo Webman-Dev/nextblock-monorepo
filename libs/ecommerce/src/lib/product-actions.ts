@@ -3,9 +3,25 @@ import { deleteMediaFiles } from '@nextblock-cms/utils/server';
 import { Database } from '@nextblock-cms/db';
 import { ProductFormValues } from './product-schema';
 import { syncSharedInventoryForSavedProduct } from './shared-inventory';
+import { normalizeCurrencyCode } from '@nextblock-cms/utils';
 
 // Helper to convert dollars to cents
 const toCents = (dollars: number) => Math.round(dollars * 100);
+
+function serializePriceMap(
+  priceMap?: Record<string, number | null | undefined> | null
+) {
+  return Object.entries(priceMap || {}).reduce<Record<string, number>>(
+    (accumulator, [currencyCode, amount]) => {
+      if (typeof amount === 'number' && Number.isFinite(amount) && amount >= 0) {
+        accumulator[normalizeCurrencyCode(currencyCode)] = toCents(amount);
+      }
+
+      return accumulator;
+    },
+    {}
+  );
+}
 
 function serializeVariantsForRpc(variants?: ProductFormValues['variants']) {
   return (variants || []).map((variant) => ({
@@ -17,6 +33,8 @@ function serializeVariantsForRpc(variants?: ProductFormValues['variants']) {
       typeof variant.sale_price === 'number' && !isNaN(variant.sale_price)
         ? toCents(variant.sale_price)
         : null,
+    prices: serializePriceMap(variant.prices),
+    sale_prices: serializePriceMap(variant.sale_prices),
     stock_quantity: variant.stock_quantity,
     main_media_id: variant.main_media_id ?? null,
     attribute_term_ids: variant.attribute_term_ids,
@@ -40,6 +58,8 @@ function buildProductRpcPayload(data: ProductFormValues, id?: string) {
       typeof data.sale_price === 'number' && !isNaN(data.sale_price)
         ? toCents(data.sale_price)
         : null,
+    prices: serializePriceMap(data.prices),
+    sale_prices: serializePriceMap(data.sale_prices),
     freemius_plan_id: data.freemius_plan_id ?? null,
     freemius_product_id: data.freemius_product_id ?? null,
     is_taxable: data.is_taxable,
@@ -77,7 +97,7 @@ export async function getProducts(
   let query = supabase
     .from('products')
     .select(
-      'id, title, sku, upc, price, sale_price, is_taxable, short_description, stock, status, slug, language_id, translation_group_id, product_media(media(file_path, object_key)), product_variants(id, price, sale_price)',
+      'id, title, sku, upc, price, prices, sale_price, sale_prices, is_taxable, short_description, stock, status, slug, language_id, translation_group_id, product_media(media(file_path, object_key)), product_variants(id, price, prices, sale_price, sale_prices)',
       { count: 'exact' }
     )
     .range(start, end)
@@ -122,7 +142,9 @@ export async function getProduct(supabase: SupabaseClient<Database>, id: string)
         upc,
         main_media_id,
         price,
+        prices,
         sale_price,
+        sale_prices,
         stock_quantity,
         media:main_media_id (
           id,
@@ -182,7 +204,9 @@ export async function getProductBySlug(supabase: SupabaseClient<Database>, slug:
         upc,
         main_media_id,
         price,
+        prices,
         sale_price,
+        sale_prices,
         stock_quantity,
         media:main_media_id (
           id,
@@ -429,7 +453,9 @@ export async function fetchTranslatedProductsForCartInternal(
       title, 
       sku, 
       price, 
+      prices,
       sale_price, 
+      sale_prices,
       stock,
       slug, 
       language_id,
@@ -446,7 +472,9 @@ export async function fetchTranslatedProductsForCartInternal(
         upc,
         main_media_id,
         price,
+        prices,
         sale_price,
+        sale_prices,
         stock_quantity,
         media:main_media_id (
           file_path,

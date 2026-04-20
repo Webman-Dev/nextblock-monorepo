@@ -44,6 +44,8 @@ function syncCartItem(item: CartItem, translatedProduct: any, currentLocale: str
     translation_group_id: translatedProduct.translation_group_id,
     image_url: productImageUrl || item.image_url,
     is_taxable: translatedProduct.is_taxable ?? item.is_taxable,
+    prices: translatedProduct.prices || item.prices,
+    sale_prices: translatedProduct.sale_prices || item.sale_prices,
     has_variants: Boolean(translatedProduct.product_variants?.length),
   };
 
@@ -56,7 +58,9 @@ function syncCartItem(item: CartItem, translatedProduct: any, currentLocale: str
     return {
       ...nextBase,
       price: translatedProduct.price,
+      prices: translatedProduct.prices || item.prices,
       sale_price: translatedProduct.sale_price ?? null,
+      sale_prices: translatedProduct.sale_prices || item.sale_prices,
     };
   }
 
@@ -72,7 +76,9 @@ function syncCartItem(item: CartItem, translatedProduct: any, currentLocale: str
     id: matchedVariant.id,
     sku: matchedVariant.sku,
     price: matchedVariant.price,
+    prices: matchedVariant.prices || item.prices,
     sale_price: matchedVariant.sale_price ?? null,
+    sale_prices: matchedVariant.sale_prices || item.sale_prices,
     stock: matchedVariant.stock_quantity,
     image_url: matchedVariant.image_url || productImageUrl || item.image_url,
     variant_id: matchedVariant.id,
