@@ -1,71 +1,97 @@
-The following section contains the exhaustive, multi-step prompt sequence designed to be executed by artificial intelligence agents operating within the antigravity development environment. These prompts translate the architectural analysis detailed above into highly specific technical directives. Each module is engineered to be fed sequentially to the agents, ensuring that the foundational database schemas are established prior to the generation of the backend logic, frontend interfaces, and integration services. You must copy each prompt entirely and provide it to the agent, waiting for successful completion before proceeding to the next step in the sequence.
+# Role & Context
+You are an expert Next.js, Supabase, and Nx Monorepo developer working on NextBlock CMS. 
+Currently, the CMS architecture forces administrators to choose a single global payment provider: either Stripe (primarily for physical goods) OR Freemius (for SaaS/digital packages). 
 
-Agent Module 1: Declarative Database Schema Generation
-You are a Senior PostgreSQL Database Architect and Next.js Backend Engineer responsible for expanding the NextBlock CMS open-source monorepo. The platform utilizes Supabase as its primary data store, and we manage our database architecture using declarative schemas to prevent schema drift and eliminate duplicate migration code. Your objective is to generate the highly optimized, fully normalized SQL migration scripts required to support a dual-engine e-commerce system that handles both digital software subscriptions via Freemius and physical goods fulfillment via Stripe.
+# The Objective
+Refactor the e-commerce architecture to support **Concurrent Multi-Provider E-commerce**. A single website must be able to sell products via Stripe AND products via Freemius simultaneously. The payment provider should be determined at the **Product Level**, not the global store level.
 
-You must output the raw PostgreSQL script containing all table creations, data types, constraints, and Row Level Security policies. Do not use generic JSONB columns where relational integrity is required. Begin by extending the platform's ability to handle physical fulfillment. Create a table named user_addresses that establishes a foreign key relationship to the core users table. This table must include nullable text fields for address_type (constrained to 'billing' or 'shipping'), line1, line2, city, state, postal_code, and country_code. Ensure that a single user can have multiple addresses, but enforce logic to designate a default shipping and billing address.
+# Step-by-Step Implementation Plan
 
-Next, construct the schema required to synchronize data from the Freemius API. Create a freemius_plans table featuring a unique identifier, a foreign key to the parent products table, a name field, and a title field. Following this, create a freemius_pricing table that references the freemius_plans table. This is the most critical table for digital sales. It must incorporate a dual-state design to allow for local overrides. Define numeric columns for api_monthly_price, api_annual_price, and api_lifetime_price to store the synchronized data. Alongside these, define nullable numeric columns for override_monthly_price, override_annual_price, and override_lifetime_price. Include an integer column for license_quota and a boolean column indicating if the pricing tier is active.
+Please review the codebase and execute the following phases. Stop and ask for my confirmation after evaluating Phase 1 before writing code.
 
-Proceed to implement the WooCommerce-style shipping architecture. Create a shipping_zones table utilizing a UUID primary key, a text field for the zone name, and an integer field for priority_order to determine the sequence in which zones are evaluated. Create a dependent shipping_zone_locations table containing a UUID primary key, a foreign key referencing the shipping_zones table with cascading deletes, a location_code text field, and a location_type enumerated field restricted to the values 'country', 'state', or 'postcode'. Create a third table named shipping_zone_methods referencing the shipping_zones table. This table must define the available shipping options, including a text field for the method title, an enumerated method_type restricted to 'flat_rate' or 'free_shipping', and a numeric cost field.
+## Phase 1: Database Schema & Types Evaluation (`libs/db`)
+1. **Product Schema:** Check `libs/db/src/supabase/migrations/` and the TypeScript types (`libs/ecommerce/src/lib/types.ts` or `product-schema.ts`). 
+   - We need a way to assign a provider to a specific product. Check if there is a `payment_provider` column (enum: 'stripe' | 'freemius') or if we should rely on a `product_type` (e.g., 'physical' -> stripe, 'digital_software' -> freemius).
+   - *Action:* Draft a new Supabase migration to add `payment_provider` to the `products` table, and default existing products to the current global store setting.
+2. **Order Schema:** Check the `orders` table.
+   - *Action:* Ensure `orders` has a `payment_provider` column so we know how to handle refunds, fulfillments, and syncs for that specific order.
 
-Finally, design the Entity-Attribute-Value relational schema for complex product variants. Create a product_attributes table with UUID identifiers, a name field, and a globally unique slug. Create a product_attribute_terms table that references the attributes table, containing the specific value (e.g., 'Red' or 'Large'). Create the product_variants table referencing the parent products table. This table must enforce a unique constraint on the sku text field and include numeric fields for price_adjustment and an integer field for stock_quantity. Conclude the schema with a junction table named variant_attribute_mapping that creates a composite primary key linking a specific variant_id to a specific attribute_term_id.
+## Phase 2: Admin Settings & UI Adjustments (`apps/nextblock` & `libs/ecommerce`)
+1. **Global Settings (`/cms/payments` or `/cms/settings/store`):**
+   - Locate the UI where the user toggles "Stripe vs Freemius".
+   - *Action:* Change this from a mutually exclusive Radio toggle to independent switch toggles (or dual configuration cards). Admins should be able to activate *both* if they provide the necessary `.env` variables (`STRIPE_SECRET_KEY` and Freemius keys).
+2. **Product Editor (`libs/ecommerce/src/lib/pages/cms/products/components/ProductForm.tsx`):**
+   - *Action:* Add a dropdown/toggle in the Product creation/edit form: "Payment Provider".
+   - If Freemius is selected, show Freemius-specific fields (Plan ID, Sync button).
+   - If Stripe is selected, show standard pricing/SKU/inventory fields.
 
-For every foreign key relationship established in this script, you must explicitly generate CREATE INDEX statements to guarantee query performance. Furthermore, you must define strict Row Level Security policies. Issue ALTER TABLE... ENABLE ROW LEVEL SECURITY for all newly created tables. Write policies that grant public read access to the product variants, shipping zones, and Freemius pricing tables. Conversely, write policies that restrict read and write access on the user_addresses table exclusively to the authenticated user who owns the record, utilizing the auth.uid() function.
+## Phase 3: Cart Logic & Guardrails (`libs/ecommerce/src/lib/cart-store.ts`)
+Handling mixed carts (Stripe + Freemius items together) is dangerous because they use completely different checkout flows (Stripe Checkout Session redirect vs Freemius overlay).
+1. *Action:* Inspect `cart-store.ts`. Implement a "Cart Conflict" guardrail. 
+2. If a user adds a Stripe product to a cart that already has a Freemius product (or vice versa), throw a UI toast error: "You cannot mix physical goods and software subscriptions in the same checkout. Please purchase them separately."
+3. Ensure the Cart UI (`CartDrawer.tsx` or `Cart.tsx`) checks the provider of the items currently in the cart to dynamically determine which checkout button/function to trigger.
 
-Agent Module 2: Freemius Synchronization and Override Engine
-You are an API Integration Specialist and Backend Systems Engineer focusing on the NextBlock CMS monorepo. The database schema for the e-commerce engine has been established in the previous step. Your objective is to engineer the synchronization service that communicates with the Freemius API, retrieves software pricing plans, and reconciles this data with the local Supabase dual-state database architecture. You must write the logic using Next.js 16 Server Actions and strict TypeScript interfaces.
+## Phase 4: Checkout Routing (`api/checkout/route.ts`)
+1. *Action:* Refactor the main checkout API route. 
+2. It must inspect the items in the request. 
+3. If `provider === 'stripe'`, route to `libs/ecommerce/src/lib/stripe/checkout.ts`.
+4. If `provider === 'freemius'`, route to the Freemius checkout/activation flow.
 
-Begin by defining the TypeScript interfaces that map precisely to the expected JSON response from the Freemius API endpoint /v1/products/{product_id}/plans/{plan_id}/pricing.json. The interfaces must strongly type the monthly_price, annual_price, lifetime_price, currency, and licenses properties returned by the external service.
+## Phase 5: Order Management & Webhooks
+1. **Webhooks:** Review `api/webhooks/stripe/route.ts` and `api/webhooks/freemius/route.ts`. Ensure they do not assume exclusive control over the `orders` table. They should only update orders associated with their respective provider.
+2. **CMS Order Dashboard (`libs/ecommerce/src/lib/pages/cms/orders/OrdersPage.tsx`):**
+   - *Action:* Add a visual badge to the Order list/details indicating whether the order was processed via Stripe or Freemius.
+   - Ensure the "Mark as Paid" or "Refund" actions map to the correct provider's server actions.
 
-Develop a Next.js Server Action named syncFreemiusPricing. This function must accept a Freemius product_id and an administrative Bearer token. The function must execute an asynchronous fetch request to the Freemius API to retrieve all plans associated with the product, and subsequently iterate through those plans to fetch the detailed pricing collections for each. Implement robust error handling to catch network failures or invalid token responses, utilizing standard HTTP status codes.
+# Instructions for the Agent
+1. Start by searching for `STRIPE_SECRET_KEY`, `freemius`, and `payment_provider` in the `libs/ecommerce` directory to understand the current state.
+2. Map out exactly which files need to be touched.
+3. Present your findings and the generated SQL migration first. Do not proceed to modifying React components until I approve the database/schema approach.# Role & Context
+You are an expert Next.js, Supabase, and Nx Monorepo developer working on NextBlock CMS. 
+Currently, the CMS architecture forces administrators to choose a single global payment provider: either Stripe (primarily for physical goods) OR Freemius (for SaaS/digital packages). 
 
-Once the JSON payload is successfully retrieved and parsed, implement the database reconciliation logic using the @supabase/supabase-js client. The service must iterate over the retrieved pricing objects and execute an upsert operation against the freemius*pricing table created in the previous step. The logic must map the API values to the api_monthly_price, api_annual_price, and api_lifetime_price columns based on the primary keys. Crucially, the upsert operation must be configured to update only the api* prefixed columns, ensuring that any existing administrative data residing in the override\_ prefixed columns is preserved and not overwritten during the synchronization process.
+# The Objective
+Refactor the e-commerce architecture to support **Concurrent Multi-Provider E-commerce**. A single website must be able to sell products via Stripe AND products via Freemius simultaneously. The payment provider should be determined at the **Product Level**, not the global store level.
 
-Following the backend service construction, develop a React Server Component utilizing Tailwind CSS for the administrative dashboard. This component will serve as the Freemius Product Management Interface. It must feature a prominent "Synchronize from Freemius" button that triggers the syncFreemiusPricing Server Action, providing visual loading states during the asynchronous operation. Below this control, render a data table that queries the local freemius*pricing table. The table must display the synchronized API prices alongside editable input fields bound to the override* pricing columns. Ensure that any modifications made to these input fields trigger a separate Server Action that updates the local override values in the Supabase database.
+# Step-by-Step Implementation Plan
 
-Agent Module 3: Frontend Cart Validation and UI Adaptation
-You are a Frontend Architect specializing in React state management and e-commerce conversion optimization for NextBlock CMS. We operate a dual-engine platform where digital software products are managed by Freemius and physical goods are managed by Stripe. Your objective is to modify the global shopping cart state management system and adapt the frontend user interfaces to enforce the specific logistical rules associated with digital software sales.
+Please review the codebase and execute the following phases. Stop and ask for my confirmation after evaluating Phase 1 before writing code.
 
-You must intercept and modify the existing cart store logic, assuming a Zustand store implementation. Locate the primary addToCart mutator function. You must inject a robust validation middleware layer into this function. The middleware must evaluate the payload of the incoming product object. If the product payload contains a property indicating that provider === 'freemius' or product_type === 'digital', the middleware must completely bypass all inventory availability checks, as digital licenses possess infinite stock.
+## Phase 1: Database Schema & Types Evaluation (`libs/db`)
+1. **Product Schema:** Check `libs/db/src/supabase/migrations/` and the TypeScript types (`libs/ecommerce/src/lib/types.ts` or `product-schema.ts`). 
+   - We need a way to assign a provider to a specific product. Check if there is a `payment_provider` column (enum: 'stripe' | 'freemius') or if we should rely on a `product_type` (e.g., 'physical' -> stripe, 'digital_software' -> freemius).
+   - *Action:* Draft a new Supabase migration to add `payment_provider` to the `products` table, and default existing products to the current global store setting.
+2. **Order Schema:** Check the `orders` table.
+   - *Action:* Ensure `orders` has a `payment_provider` column so we know how to handle refunds, fulfillments, and syncs for that specific order.
 
-Furthermore, you must implement a strict cardinality rule for software subscriptions. Within the same middleware, scan the current array of items residing in the cart state. If the user attempts to add a Freemius product, and a product with a matching product_id already exists within the cart, the function must immediately abort the operation and return a descriptive error message to the user interface, preventing the addition of duplicate software instances.
+## Phase 2: Admin Settings & UI Adjustments (`apps/nextblock` & `libs/ecommerce`)
+1. **Global Settings (`/cms/payments` or `/cms/settings/store`):**
+   - Locate the UI where the user toggles "Stripe vs Freemius".
+   - *Action:* Change this from a mutually exclusive Radio toggle to independent switch toggles (or dual configuration cards). Admins should be able to activate *both* if they provide the necessary `.env` variables (`STRIPE_SECRET_KEY` and Freemius keys).
+2. **Product Editor (`libs/ecommerce/src/lib/pages/cms/products/components/ProductForm.tsx`):**
+   - *Action:* Add a dropdown/toggle in the Product creation/edit form: "Payment Provider".
+   - If Freemius is selected, show Freemius-specific fields (Plan ID, Sync button).
+   - If Stripe is selected, show standard pricing/SKU/inventory fields.
 
-Proceed to engineer the frontend Product Detail Page component using React and Tailwind CSS. The component must implement conditional rendering logic based on the product provider. If the product is identified as a physical good destined for Stripe, the component should render standard quantity selectors, stock remaining indicators, and variant dropdowns. However, if the product is identified as a Freemius digital good, you must unconditionally suppress the rendering of any quantity input fields and out-of-stock badges.
+## Phase 3: Cart Logic & Guardrails (`libs/ecommerce/src/lib/cart-store.ts`)
+Handling mixed carts (Stripe + Freemius items together) is dangerous because they use completely different checkout flows (Stripe Checkout Session redirect vs Freemius overlay).
+1. *Action:* Inspect `cart-store.ts`. Implement a "Cart Conflict" guardrail. 
+2. If a user adds a Stripe product to a cart that already has a Freemius product (or vice versa), throw a UI toast error: "You cannot mix physical goods and software subscriptions in the same checkout. Please purchase them separately."
+3. Ensure the Cart UI (`CartDrawer.tsx` or `Cart.tsx`) checks the provider of the items currently in the cart to dynamically determine which checkout button/function to trigger.
 
-In place of the standard add-to-cart interface for Freemius products, you must render a custom Subscription Selection component. This component must query the freemius*pricing table. It must evaluate the dual-state database logic: for each billing cycle, it must check if an override* price exists; if it does, it displays the override price, otherwise, it displays the api\_ synchronized price. Present the user with an intuitive toggle interface allowing them to select between the resolved Monthly, Annual, or Lifetime pricing tiers before adding the singleton item to their cart.
+## Phase 4: Checkout Routing (`api/checkout/route.ts`)
+1. *Action:* Refactor the main checkout API route. 
+2. It must inspect the items in the request. 
+3. If `provider === 'stripe'`, route to `libs/ecommerce/src/lib/stripe/checkout.ts`.
+4. If `provider === 'freemius'`, route to the Freemius checkout/activation flow.
 
-Agent Module 4: Stripe Checkout and Webhook Reconciliation
-You are a Payment Gateway Engineer responsible for finalizing the physical goods checkout pipeline in NextBlock CMS. The platform relies on Stripe to process physical transactions, and we must ensure that all logistical data collected during the payment flow is accurately synchronized back to our local Supabase database. Your objective is to write the Next.js API Routes to initialize the checkout session and process the resulting webhooks.
+## Phase 5: Order Management & Webhooks
+1. **Webhooks:** Review `api/webhooks/stripe/route.ts` and `api/webhooks/freemius/route.ts`. Ensure they do not assume exclusive control over the `orders` table. They should only update orders associated with their respective provider.
+2. **CMS Order Dashboard (`libs/ecommerce/src/lib/pages/cms/orders/OrdersPage.tsx`):**
+   - *Action:* Add a visual badge to the Order list/details indicating whether the order was processed via Stripe or Freemius.
+   - Ensure the "Mark as Paid" or "Refund" actions map to the correct provider's server actions.
 
-Create a Next.js API Route designated as POST /api/checkout utilizing the official stripe Node.js SDK. This endpoint will receive the contents of the user's cart. You must map the cart items into the line_items array format required by the Stripe API. Crucially, because these are physical goods, you must command Stripe to collect the customer's shipping information. When defining the session creation payload, you must explicitly set the billing_address_collection parameter to the string value 'required'. Furthermore, you must define a shipping_address_collection object and populate its allowed_countries array with a comprehensive list of ISO country codes that the merchant supports for delivery. This guarantees that the Stripe hosted checkout page will force the user to input complete geographical data.
-
-Following session creation, you must engineer the synchronization mechanism. Create a separate Next.js API Route at POST /api/webhooks/stripe to handle incoming events from the payment gateway. You must implement rigorous security protocols within this route. Extract the stripe-signature header from the incoming request and utilize the stripe.webhooks.constructEvent method, passing the raw request body and the local webhook secret, to cryptographically verify that the payload originated from Stripe and has not been tampered with.
-
-Configure the webhook handler to listen specifically for the checkout.session.completed event type. Upon intercepting this event, access the session object payload. You must extract the customer's email address from customer_details.email. Simultaneously, extract the entire shipping_details.address object, which will contain the line1, line2, city, state, postal_code, and country properties captured during checkout.
-
-Write the Supabase database logic to persist this data locally. Query the core users table using the extracted email address to locate the corresponding customer record. If the user is successfully identified, execute a mutation to insert a new record into the user_addresses table created in Module 1. Map the Stripe address properties to the corresponding columns in the database, setting the address_type to 'shipping'. If the database operations fail, or if the webhook signature is invalid, ensure the API route returns the appropriate 4xx or 5xx HTTP status codes to inform Stripe of the failure, triggering their automatic retry mechanisms.
-
-Agent Module 5: Shipping Zone and Rate Resolution Engine
-You are a Full-Stack React Developer tasked with constructing the complex shipping logistics architecture for NextBlock CMS. We must provide merchants with granular control over physical fulfillment costs, replicating the sophisticated, manual shipping zone mechanisms found in platforms like WooCommerce. Your objective is to build the administrative user interfaces for configuration and the backend logic for rate resolution during checkout.
-
-Begin by developing the administrative interfaces utilizing Next.js Server Components and Tailwind CSS. Create a primary dashboard view located at /admin/shipping. This view must be vertically divided into Zone Management and Rate Management sections. For Zone Management, construct a comprehensive form allowing administrators to define a new Shipping Zone. The form must capture a descriptive zone name and provide a sophisticated multi-select component allowing the administrator to assign dozens of specific countries, states, or postal codes to the zone. Submission of this form must trigger a Server Action that inserts the parent record into the shipping_zones table and performs a bulk insert of the selected regions into the shipping_zone_locations table.
-
-Within the detailed view of a specifically selected Shipping Zone, implement the Rate Management sub-form. This interface allows the merchant to define the costs applicable to the geographical regions defined in the parent zone. Provide a select dropdown for the administrator to choose the method type, restricted to either 'Flat Rate' or 'Free Shipping'. Provide a numeric input field for the associated cost. This form must execute a Server Action to insert the configuration into the shipping_zone_methods table.
-
-The most critical component of this module is the resolution engine. You must write an asynchronous backend utility function named resolveShippingOptions. This function will be invoked during the initialization of the Stripe Checkout Session. The function must accept the total weight or value of the physical items in the cart and the target geographical destination provided by the user.
-
-The function must execute a complex relational query against the Supabase database. It must search the shipping_zone_locations table for a record matching the user's destination. Because a location might theoretically fall into multiple zones, the query must join the shipping_zones table and order the results by the priority_order integer column, selecting the highest priority match. Once the correct zone is resolved, the function must query the shipping_zone_methods table to retrieve all available shipping rates for that specific zone. The function must return an array of these resolved methods, which the checkout API route will subsequently pass to Stripe to present accurate, dynamically calculated shipping options to the customer.
-
-Agent Module 6: Product Variation Generator and State Management
-You are an Enterprise E-Commerce Architect tasked with the final implementation phase for the NextBlock CMS physical goods engine. Physical products frequently require variations based on disparate attributes such as size or color. Based on the normalized Entity-Attribute-Value (EAV) database schema established in Module 1, your objective is to engineer the administrative tools required to generate these variations and the frontend logic required to manage their state.
-
-Start by constructing the Global Attribute Management interface within the administrative dashboard. Build a React component utilizing Tailwind CSS that allows merchants to define overarching attributes, such as "Material," and subsequently add specific terms to that attribute, such as "Cotton" or "Polyester." This interface must execute mutations against the product_attributes and product_attribute_terms tables.
-
-Next, heavily modify the primary Product Editing interface. Introduce a dedicated "Variations" tab. Within this tab, provide a multi-select interface allowing the merchant to assign multiple global attributes and specific terms to the current product. You must write a complex React utility function responsible for variation generation. When the merchant finalizes their attribute selections, this function must compute the Cartesian product of all selected terms. For example, if the merchant selects the sizes "Small" and "Large," and the colors "Red" and "Blue," the algorithm must automatically generate a matrix of four distinct variations: Small-Red, Small-Blue, Large-Red, and Large-Blue.
-
-Render this generated matrix as a dynamic list of form fields within the browser. For every generated variation combination, the merchant must be presented with input fields to define a unique SKU, a specific price adjustment, and the current stock quantity.
-
-To persist this complex data structure, you must write a highly optimized Next.js Server Action. Because variation generation involves inserting data into multiple relational tables simultaneously, the Server Action must wrap the entire operation within a Supabase transaction using a remote procedure call (RPC) or strictly sequenced asynchronous queries. The action must insert the parent product, iterate through the generated matrix to insert each unique item into the product_variants table, and finally populate the variant_attribute_mapping junction table to establish the relational links between the newly created variant ID and the specific attribute term IDs.
-
-Conclude the implementation by updating the public-facing Product Detail Page. The frontend component must query the junction tables to determine which attributes are available for the product. Render interactive dropdown menus for each available attribute category. Implement React state management logic that listens to changes in these dropdowns. As the user selects different combinations of attributes, the local state must resolve the selections to a specific variant_id, dynamically updating the rendered price and verifying the stock quantity against the product_variants table before allowing the item to be added to the cart.
+# Instructions for the Agent
+1. Start by searching for `STRIPE_SECRET_KEY`, `freemius`, and `payment_provider` in the `libs/ecommerce` directory to understand the current state.
+2. Map out exactly which files need to be touched.
+3. Present your findings and the generated SQL migration first. Do not proceed to modifying React components until I approve the database/schema approach.

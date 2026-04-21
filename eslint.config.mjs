@@ -1,9 +1,17 @@
 import nx from '@nx/eslint-plugin';
+import jsoncParser from 'jsonc-eslint-parser';
 
 export default [
   ...nx.configs['flat/base'],
   ...nx.configs['flat/typescript'],
   ...nx.configs['flat/javascript'],
+  {
+    files: ['**/*.json', '**/*.jsonc', '**/*.json5'],
+    languageOptions: {
+      parser: jsoncParser,
+    },
+    rules: {},
+  },
   {
     ignores: [
       '**/.next',
