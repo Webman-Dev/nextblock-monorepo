@@ -8,6 +8,7 @@ import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
+  ExternalLink,
 } from "lucide-react"
 import { Button } from "@nextblock-cms/ui"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
@@ -216,7 +217,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
 
 
   return (
-    <div className="w-full h-[100dvh] overflow-hidden flex flex-col md:flex-row bg-slate-50 dark:bg-slate-950">
+    <div className="w-full h-full overflow-hidden flex flex-col md:flex-row bg-slate-50 dark:bg-slate-950">
       <div className="fixed bottom-4 right-4 z-[60] md:hidden">
         <Button
           variant="outline"
@@ -230,8 +231,8 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
 
       <aside
         className={cn(
-          "fixed md:sticky top-0 left-0 h-[100dvh] w-64 bg-white shadow-lg transition-transform duration-300 ease-in-out dark:bg-slate-900 dark:border-r dark:border-slate-700/60",
-          "md:translate-x-0",
+          "fixed left-0 top-16 h-[calc(100dvh-4rem)] w-64 bg-white shadow-lg transition-transform duration-300 ease-in-out dark:bg-slate-900 dark:border-r dark:border-slate-700/60",
+          "md:sticky md:top-0 md:h-full md:translate-x-0",
           cmsSidebarOpen ? "translate-x-0" : "-translate-x-full",
           "z-30"
         )}
@@ -376,13 +377,19 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col transition-all duration-300 ease-in-out w-full">
-        <header className="bg-background dark:bg-slate-800/30 border-b border-border h-16 flex items-center px-6 sticky top-0 z-20 w-full shrink-0">
+        <header className="bg-background dark:bg-slate-800/30 border-b border-border h-16 flex items-center gap-3 px-6 sticky top-0 z-20 w-full shrink-0">
             <Button variant="ghost" size="icon" className="md:hidden mr-3 -ml-2" onClick={() => setCmsSidebarOpen(!cmsSidebarOpen)}>
                 <Menu className="h-5 w-5" />
             </Button>
-           <h1 className="text-lg font-semibold text-foreground">
+           <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-foreground">
               {pageTitle}
             </h1>
+            <Button asChild variant="outline" size="sm" className="shrink-0">
+              <Link href="/">
+                <ExternalLink className="h-4 w-4" />
+                <span className="hidden sm:inline">View Site</span>
+              </Link>
+            </Button>
         </header>
         <main className="flex-1 min-h-0 px-6 pt-6 pb-20 md:pb-24 w-full overflow-y-auto overscroll-contain scroll-pb-24">
             {children}
@@ -390,7 +397,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
       </div>
       {cmsSidebarOpen && ! (typeof window !== 'undefined' && window.innerWidth >= 768) && (
         <div
-            className="fixed inset-0 bg-black/30 z-20 md:hidden"
+            className="fixed inset-x-0 bottom-0 top-16 bg-black/30 z-20 md:hidden"
             onClick={() => setCmsSidebarOpen(false)}
         />
       )}

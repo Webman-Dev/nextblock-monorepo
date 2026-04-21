@@ -2,19 +2,15 @@ import '@nextblock-cms/ui/styles/globals.css';
 // eslint-disable-next-line @nx/enforce-module-boundaries
 import '@nextblock-cms/editor/styles/editor.css';
 // app/layout.tsx
-import { EnvVarWarning } from '../components/env-var-warning';
-import { SandboxBanner } from '../components/SandboxBanner';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 
 import { GoogleTagManager } from '@next/third-parties/google';
-import { ThemeSwitcher } from '../components/theme-switcher';
 import type { Metadata } from 'next';
-import Header from '../components/Header';
-import FooterNavigation from '../components/FooterNavigation';
 import { Providers } from './providers';
 import { CartDrawer } from '@nextblock-cms/ecommerce';
 import { CURRENCY_COOKIE_NAME } from '@nextblock-cms/ecommerce/server';
 import { ToasterProvider } from './ToasterProvider';
+import { AppShell } from '../components/AppShell';
 import {
   createClient as createSupabaseServerClient,
   getProfileWithRoleServerSide,
@@ -25,7 +21,6 @@ import { headers, cookies } from 'next/headers';
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { unstable_cache } from 'next/cache';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
-import { cn } from '@nextblock-cms/utils';
 
 const defaultUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
 
@@ -211,9 +206,6 @@ async function loadLayoutData() {
   const headerList = await headers();
   const cookieStore = await cookies();
   const nonce = headerList.get('x-nonce') || '';
-  const currentPathname = headerList.get('x-current-pathname') || '';
-  const isCmsRequest =
-    headerList.get('x-is-cms-request') === 'true' || currentPathname.startsWith('/cms');
 
   const xUserLocaleHeader = headerList.get('x-user-locale');
   const nextUserLocaleCookie = cookieStore.get('NEXT_USER_LOCALE')?.value;
@@ -296,7 +288,6 @@ async function loadLayoutData() {
     canAccessCms,
     siteTitle,
     isEcommerceActive,
-    isCmsRequest,
   };
 }
 
@@ -360,15 +351,10 @@ export default async function RootLayout({
     canAccessCms,
     siteTitle,
     isEcommerceActive,
-    isCmsRequest,
   } = await loadLayoutData();
 
   return (
-    <html
-      lang={serverDeterminedLocale}
-      suppressHydrationWarning
-      className={cn(isCmsRequest && 'h-[100dvh] overflow-hidden')}
-    >
+    <html lang={serverDeterminedLocale} suppressHydrationWarning>
       <head>
         <title>{metadata.title as string}</title>
         <meta name="description" content={metadata.description as string} />
@@ -381,14 +367,7 @@ export default async function RootLayout({
         {/* @ts-expect-error - SpeedInsights version might have missing nonce in types but supports it in runtime */}
         <SpeedInsights nonce={nonce} />
       </head>
-      <body
-        className={cn(
-          'text-foreground flex flex-col',
-          isCmsRequest
-            ? 'h-[100dvh] min-h-0 overflow-hidden bg-slate-50 dark:bg-slate-950'
-            : 'bg-background min-h-screen'
-        )}
-      >
+      <body className="min-h-screen">
         <Providers
           serverUser={user}
           serverProfile={profile}
@@ -400,52 +379,19 @@ export default async function RootLayout({
           translations={translations}
           nonce={nonce}
         >
-          {process.env.NEXT_PUBLIC_IS_SANDBOX === 'true' && !isCmsRequest && <SandboxBanner />}
           <ToasterProvider />
-          <div
-            className={cn(
-              'flex-1 w-full flex flex-col',
-              isCmsRequest && 'min-h-0',
-              !isCmsRequest && 'items-center'
-            )}
+          <AppShell
+            canAccessCms={canAccessCms}
+            copyrightText={copyrightText}
+            footerNavItems={footerNavItems}
+            hasSupabaseEnv={hasSupabaseEnv}
+            headerNavItems={headerNavItems}
+            isEcommerceActive={isEcommerceActive}
+            logo={logo}
+            siteTitle={siteTitle}
           >
-            {!isCmsRequest && (
-              <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
-                <div className="w-full max-w-7xl flex justify-between items-center p-3 px-5 text-sm">
-                  {!hasSupabaseEnv ? (
-                    <EnvVarWarning />
-                  ) : (
-                    <Header
-                      navItems={headerNavItems}
-                      canAccessCms={canAccessCms}
-                      logo={logo}
-                      siteTitle={siteTitle}
-                      isEcommerceActive={isEcommerceActive}
-                    />
-                  )}
-                </div>
-              </nav>
-            )}
-            <main
-              className={cn(
-                'w-full',
-                isCmsRequest ? 'flex-1 min-h-0 overflow-hidden' : 'flex-grow'
-              )}
-            >
-              {children}
-            </main>
-            {!isCmsRequest && (
-              <footer className="w-full border-t py-8">
-                <div className="mx-auto flex flex-col items-center justify-center gap-6 text-center text-xs">
-                  <FooterNavigation navItems={footerNavItems} />
-                  <div className="flex flex-row items-center gap-2">
-                    <p className="text-muted-foreground">{copyrightText}</p>
-                    <ThemeSwitcher />
-                  </div>
-                </div>
-              </footer>
-            )}
-          </div>
+            {children}
+          </AppShell>
 
           {isEcommerceActive && <CartDrawer />}
         </Providers>
