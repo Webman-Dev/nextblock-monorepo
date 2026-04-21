@@ -95,7 +95,52 @@ async function main() {
 
   const supabaseUrl = `https://${answers.projectId}.supabase.co`;
 
-  // 3. Update the .env.local file with the new details
+  // 3. Optional R2 Setup
+  console.log('');
+  const r2Confirm = await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'setupR2',
+      message: 'Do you want to set up Cloudflare R2 for media storage now? (Optional)',
+      default: false
+    }
+  ]);
+
+  let r2Values = null;
+  if (r2Confirm.setupR2) {
+    r2Values = await inquirer.prompt([
+      { type: 'input', name: 'accountId', message: 'R2 Account ID:' },
+      { type: 'input', name: 'bucketName', message: 'R2 Bucket Name:' },
+      { type: 'input', name: 'accessKey', message: 'R2 Access Key ID:' },
+      { type: 'password', name: 'secretKey', message: 'R2 Secret Access Key:' },
+      { type: 'input', name: 'publicBaseUrl', message: 'R2 Public Base URL (e.g. https://pub-xxx.r2.dev):' },
+    ]);
+  }
+
+  // 4. Optional SMTP Setup
+  console.log('');
+  const smtpConfirm = await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'setupSMTP',
+      message: 'Do you want to set up an SMTP server for emails now? (Optional)',
+      default: false
+    }
+  ]);
+
+  let smtpValues = null;
+  if (smtpConfirm.setupSMTP) {
+    smtpValues = await inquirer.prompt([
+      { type: 'input', name: 'host', message: 'SMTP Host (e.g. smtp.resend.com):' },
+      { type: 'input', name: 'port', message: 'SMTP Port (e.g. 465):', default: '465' },
+      { type: 'input', name: 'user', message: 'SMTP User (e.g. resend):' },
+      { type: 'password', name: 'pass', message: 'SMTP Password:' },
+      { type: 'input', name: 'fromEmail', message: 'SMTP From Email:' },
+      { type: 'input', name: 'fromName', message: 'SMTP From Name:' },
+    ]);
+  }
+
+  // 5. Update the .env.local file with the new details
   console.log(chalk.blue('\nUpdating .env.local...'));
   
   const replacements = {
@@ -106,6 +151,23 @@ async function main() {
     'SUPABASE_SERVICE_ROLE_KEY=': `SUPABASE_SERVICE_ROLE_KEY=${answers.serviceKey}`,
     'SUPABASE_ACCESS_TOKEN=': `SUPABASE_ACCESS_TOKEN=${answers.accessToken}`,
   };
+
+  if (r2Values) {
+    replacements['R2_ACCOUNT_ID='] = `R2_ACCOUNT_ID=${r2Values.accountId}`;
+    replacements['R2_BUCKET_NAME='] = `R2_BUCKET_NAME=${r2Values.bucketName}`;
+    replacements['R2_ACCESS_KEY_ID='] = `R2_ACCESS_KEY_ID=${r2Values.accessKey}`;
+    replacements['R2_SECRET_ACCESS_KEY='] = `R2_SECRET_ACCESS_KEY=${r2Values.secretKey}`;
+    replacements['NEXT_PUBLIC_R2_BASE_URL='] = `NEXT_PUBLIC_R2_BASE_URL=${r2Values.publicBaseUrl}`;
+  }
+
+  if (smtpValues) {
+    replacements['SMTP_HOST='] = `SMTP_HOST=${smtpValues.host}`;
+    replacements['SMTP_PORT='] = `SMTP_PORT=${smtpValues.port}`;
+    replacements['SMTP_USER='] = `SMTP_USER=${smtpValues.user}`;
+    replacements['SMTP_PASS='] = `SMTP_PASS=${smtpValues.pass}`;
+    replacements['SMTP_FROM_EMAIL='] = `SMTP_FROM_EMAIL=${smtpValues.fromEmail}`;
+    replacements['SMTP_FROM_NAME='] = `SMTP_FROM_NAME=${smtpValues.fromName}`;
+  }
 
   const lines = envContent.split(/\r?\n/);
   const updatedLines = lines.map(line => {
@@ -120,7 +182,7 @@ async function main() {
   await fs.writeFile(envPath, updatedLines.join('\n'), 'utf8');
   console.log(chalk.green('✓ .env.local updated with Supabase keys.'));
 
-  // 4. Link Supabase
+  // 6. Link Supabase
   console.log(chalk.blue('\nLinking Supabase project...'));
   try {
     await execa('npx', ['supabase', 'link', '--project-ref', answers.projectId, '--password', dbPassword, '--workdir', 'libs/db/src'], {
@@ -133,7 +195,7 @@ async function main() {
     process.exit(1);
   }
 
-  // 5. Push Database
+  // 7. Push Database
   console.log(chalk.blue('\nPushing Database schema and config...'));
   try {
     const { setupPush } = await inquirer.prompt([
@@ -157,13 +219,43 @@ async function main() {
           SUPABASE_ACCESS_TOKEN: answers.accessToken,
         }
       });
-      console.log(chalk.green('\n🎉 Setup Completed! Your environment is successfully configured. You can now run `npm run dev`.'));
+      console.log(chalk.green('\n✓ Database pushed successfully.'));
     } else {
       console.log(chalk.yellow('\nSkipped db push. Run `npm run db:push` to synchronize your database.'));
     }
   } catch {
     console.error(chalk.red('\nDatabase push failed. Please check your credentials and run `npm run db:push` manually.'));
   }
+
+  // 8. Configure SMTP in Supabase Auth
+  if (smtpValues && answers.accessToken) {
+    console.log(chalk.blue('\nSyncing hosted Supabase Auth SMTP and branded email templates...'));
+    try {
+      await execa('npm', ['run', 'configure:supabase-auth'], {
+        stdio: 'inherit',
+        cwd: REPO_ROOT,
+        env: {
+          ...process.env,
+          SUPABASE_PROJECT_ID: answers.projectId,
+          NEXT_PUBLIC_URL: 'http://localhost:3000',
+          SUPABASE_ACCESS_TOKEN: answers.accessToken,
+          SMTP_HOST: smtpValues.host,
+          SMTP_PORT: smtpValues.port,
+          SMTP_USER: smtpValues.user,
+          SMTP_PASS: smtpValues.pass,
+          SMTP_FROM_EMAIL: smtpValues.fromEmail,
+          SMTP_FROM_NAME: smtpValues.fromName,
+        }
+      });
+      console.log(chalk.green('✓ Hosted Supabase Auth set up successfully.'));
+    } catch {
+      console.log(chalk.yellow('! Hosted Supabase Auth configuration failed or skipped. You can manually run `npm run configure:supabase-auth`.'));
+    }
+  } else if (smtpValues) {
+    console.log(chalk.yellow('\n! Skipping Supabase Auth SMTP Sync because Personal Access Token (SUPABASE_ACCESS_TOKEN) was not provided.'));
+  }
+
+  console.log(chalk.green('\n🎉 Setup Completed! Your environment is successfully configured. You can now start the local server.'));
 
 }
 
