@@ -47,8 +47,10 @@ export function AppShell({
       {process.env.NEXT_PUBLIC_IS_SANDBOX === 'true' && !isCmsRequest && <SandboxBanner />}
       <div
         className={cn(
-          'text-foreground flex min-h-screen w-full flex-col',
-          isCmsRequest ? 'bg-slate-50 dark:bg-slate-950' : 'bg-background'
+          'text-foreground flex w-full flex-col',
+          isCmsRequest
+            ? 'h-[100dvh] overflow-hidden bg-slate-50 dark:bg-slate-950'
+            : 'min-h-screen bg-background'
         )}
       >
         <div
@@ -75,7 +77,7 @@ export function AppShell({
           <main
             className={cn(
               'w-full',
-              isCmsRequest ? 'flex-1 min-h-0 overflow-hidden' : 'flex-grow'
+              isCmsRequest ? 'flex flex-1 min-h-0 overflow-hidden' : 'flex-grow'
             )}
           >
             {children}
