@@ -47,7 +47,8 @@
     "deploy:supabase": "node tools/scripts/deploy-supabase.js",
     "generate:sandbox": "npx tsx tools/scripts/generate-sandbox-reset.ts",
     "sandbox:reset": "node tools/scripts/reset-sandbox.js",
-    "stripe": "stripe listen --forward-to localhost:4200/api/webhooks/stripe"
+    "stripe": "stripe listen --forward-to localhost:4200/api/webhooks/stripe",
+    "setup": "node tools/scripts/setup.mjs"
   },
   "private": true,
   "devDependencies": {

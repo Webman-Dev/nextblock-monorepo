@@ -76,6 +76,20 @@ This will:
 
 If you want to contribute to the core platform, develop premium extensions, or audit the code, you are in the right place!
 
+### ⚡ Developer Quickstart
+
+To quickly get the monorepo running locally:
+
+```bash
+git clone https://github.com/nextblock-cms/nextblock.git
+cd nextblock
+npm install
+npm run setup
+npm run dev
+```
+
+The interactive `setup` wizard will help you automatically configure your `.env.local` and seamlessly link your Supabase project instance.
+
 ### 📚 Documentation
 
 Everything you need to know about the architecture is in the `docs/` folder.
