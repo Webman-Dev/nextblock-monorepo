@@ -109,7 +109,10 @@ const getCachedTranslations = unstable_cache(
     return data || [];
   },
   ['public-layout-translations'],
-  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
+  {
+    revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS,
+    tags: ['public-layout-translations'],
+  }
 );
 
 const getCachedCurrencies = unstable_cache(
