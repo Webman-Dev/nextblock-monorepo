@@ -18,6 +18,7 @@ import {
 } from '../variation-utils';
 import { useCurrency } from '../CurrencyProvider';
 import { resolvePriceForCurrency } from '../currency';
+import { isDigitalProduct } from '../types';
 
 export const ProductDetailsLayout: React.FC = () => {
   const product = useProduct();
@@ -41,8 +42,7 @@ export const ProductDetailsLayout: React.FC = () => {
         : [];
 
   const isFreemius =
-    (product as any).custom_props?.provider === 'freemius' ||
-    (product as any).freemius_product_id;
+    (product as any).custom_props?.provider === 'freemius' || isDigitalProduct(product);
   const hasVariants =
     !isFreemius &&
     Boolean(product.has_variants && product.attributes?.length && product.variants?.length);
@@ -316,7 +316,7 @@ export const ProductDetailsLayout: React.FC = () => {
               <div className="grid grid-cols-2 gap-4 text-center text-xs text-muted-foreground pt-2">
                 <div className="flex items-center justify-center gap-2">
                   {(product as any).custom_props?.provider === 'freemius' ||
-                  (product as any).freemius_product_id ? (
+                  isDigitalProduct(product) ? (
                     <span className="inline-flex items-center gap-2">
                       <Download className="h-4 w-4" />
                       {t('ecommerce.instant_digital_delivery')}

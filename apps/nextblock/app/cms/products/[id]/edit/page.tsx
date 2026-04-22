@@ -15,9 +15,10 @@ import {
 import ProductFormClientShell from '../../ProductFormClientShell';
 import {
   getCmsProduct,
+  getEnabledPaymentProviders,
   getGlobalProductAttributes,
   getProductTranslations,
-  getPaymentSettings,
+  getStoreConfigStatus,
   normalizeCurrencyRecord,
   updateProductAction,
 } from '@nextblock-cms/ecommerce/server';
@@ -34,13 +35,21 @@ export default async function EditProductPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ missing_lang_id?: string }>;
 }) {
-  const [{ id }, { missing_lang_id }, isOnline, languages, paymentProvider] =
+  const [
+    { id },
+    { missing_lang_id },
+    isOnline,
+    languages,
+    enabledProviders,
+    configStatus,
+  ] =
     await Promise.all([
       params,
       searchParams,
       verifyPackageOnline('ecommerce'),
       getActiveLanguagesServerSide(),
-      getPaymentSettings(),
+      getEnabledPaymentProviders(),
+      getStoreConfigStatus(),
     ]);
 
   if (!isOnline) {
@@ -181,7 +190,8 @@ export default async function EditProductPage({
         availableLanguagesProp={languages}
         globalAttributesProp={globalAttributes}
         currenciesProp={currencies}
-        paymentProvider={paymentProvider}
+        enabledProviders={enabledProviders}
+        configStatus={configStatus}
         updateAction={updateProductAction.bind(null, product.id)}
       />
     </div>

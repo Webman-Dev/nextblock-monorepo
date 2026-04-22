@@ -61,6 +61,10 @@ export async function fulfillOrderAction(sessionId: string) {
       return { success: false, error: 'Order not found' };
     }
 
+    if (order.provider !== 'freemius') {
+      return { success: false, error: 'Only Freemius order references can be finalized here' };
+    }
+
     if (order.status === 'paid') {
       try {
         await applyOrderInventoryDeduction(supabase as any, order.id);

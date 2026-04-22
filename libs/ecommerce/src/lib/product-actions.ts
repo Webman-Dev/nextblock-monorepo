@@ -44,6 +44,8 @@ function serializeVariantsForRpc(variants?: ProductFormValues['variants']) {
 function buildProductRpcPayload(data: ProductFormValues, id?: string) {
   return {
     id,
+    product_type: data.product_type,
+    payment_provider: data.payment_provider,
     title: data.title,
     slug: data.slug,
     sku: data.sku,
@@ -97,7 +99,7 @@ export async function getProducts(
   let query = supabase
     .from('products')
     .select(
-      'id, title, sku, upc, price, prices, sale_price, sale_prices, is_taxable, short_description, stock, status, slug, language_id, translation_group_id, product_media(media(file_path, object_key)), product_variants(id, price, prices, sale_price, sale_prices)',
+      'id, title, sku, upc, price, prices, sale_price, sale_prices, is_taxable, product_type, payment_provider, short_description, stock, status, slug, language_id, translation_group_id, product_media(media(file_path, object_key)), product_variants(id, price, prices, sale_price, sale_prices)',
       { count: 'exact' }
     )
     .range(start, end)
@@ -459,6 +461,10 @@ export async function fetchTranslatedProductsForCartInternal(
       stock,
       slug, 
       language_id,
+      product_type,
+      payment_provider,
+      freemius_product_id,
+      freemius_plan_id,
       is_taxable,
       product_media (
         media (

@@ -11,10 +11,10 @@ import { countryUsesStructuredStates, getStatesForCountry } from '../states';
 import { useCurrency } from '../CurrencyProvider';
 
 interface ShippingEstimatorProps {
-  cartTotal: number;
+  physicalSubtotal: number;
 }
 
-export const ShippingEstimator = ({ cartTotal }: ShippingEstimatorProps) => {
+export const ShippingEstimator = ({ physicalSubtotal }: ShippingEstimatorProps) => {
   const [country, setCountry] = useState('CA');
   const [state, setState] = useState('');
   const [postalCode, setPostalCode] = useState('');
@@ -40,7 +40,7 @@ export const ShippingEstimator = ({ cartTotal }: ShippingEstimatorProps) => {
     setRates(null);
 
     const result = await getShippingEstimates(
-      cartTotal,
+      physicalSubtotal,
       {
         country,
         state: state || undefined,

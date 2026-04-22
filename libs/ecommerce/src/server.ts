@@ -28,7 +28,11 @@ export {
   updateProductAction,
   deleteProductAction,
 } from './lib/pages/cms/products/server-actions';
-export { getPaymentSettings } from './lib/pages/cms/payments/queries';
+export {
+  getEnabledPaymentProviders,
+  getPaymentSettings,
+  getStoreConfigStatus,
+} from './lib/pages/cms/payments/queries';
 
 // CMS Pages
 export * from './lib/pages/cms/orders';

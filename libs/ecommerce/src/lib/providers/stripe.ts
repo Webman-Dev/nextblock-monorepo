@@ -7,7 +7,10 @@ import {
   CustomerAddressInput,
   normalizeOrderCustomerDetails,
 } from '../customer';
-import { upsertDefaultUserAddresses } from '../customer-addresses';
+import {
+  fillMissingUserProfileCheckoutDetails,
+  upsertDefaultUserAddresses,
+} from '../customer-addresses';
 import {
   createInventoryInsufficientError,
   createInventoryUnavailableError,
@@ -196,6 +199,7 @@ export class StripeProvider implements PaymentProvider {
     errorKey?: string;
     errorParams?: Record<string, string | number>;
     errorStatus?: number;
+    customProps?: any;
   }> {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -579,8 +583,18 @@ export class StripeProvider implements PaymentProvider {
           shippingAddress,
           client: supabase as any,
         });
+        await fillMissingUserProfileCheckoutDetails({
+          userId,
+          fullName:
+            billingAddress?.recipient_name ?? shippingAddress?.recipient_name ?? null,
+          phone: customerPhone,
+          client: supabase as any,
+        });
       } catch (addressError) {
-        console.error('Failed to sync default customer addresses before checkout:', addressError);
+        console.error(
+          'Failed to sync checkout profile defaults before checkout:',
+          addressError
+        );
       }
     }
 

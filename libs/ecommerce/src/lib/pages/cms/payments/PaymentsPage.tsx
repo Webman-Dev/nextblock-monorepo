@@ -1,27 +1,33 @@
 import { updatePaymentSettings } from './actions';
-import { getPaymentSettings, getStoreConfigStatus } from './queries';
+import {
+  getEnabledPaymentProviders,
+  getStoreConfigStatus,
+} from './queries';
 import { PaymentsClient } from './PaymentsClient';
 
 export async function PaymentsPage() {
-  const [initialProvider, configStatus] = await Promise.all([
-    getPaymentSettings(),
+  const [initialEnabledProviders, configStatus] = await Promise.all([
+    getEnabledPaymentProviders(),
     getStoreConfigStatus(),
   ]);
 
   async function savePaymentSettings(formData: FormData) {
     'use server';
 
-    const provider = formData.get('provider');
-    if (provider !== 'stripe' && provider !== 'freemius') {
-      throw new Error('Invalid payment provider');
-    }
+    const nextSettings = {
+      stripe:
+        formData.get('stripe_enabled') === 'true' && configStatus.stripe.hasKeys,
+      freemius:
+        formData.get('freemius_enabled') === 'true' &&
+        configStatus.freemius.hasKeys,
+    };
 
-    await updatePaymentSettings(provider);
+    await updatePaymentSettings(nextSettings);
   }
 
   return (
     <PaymentsClient
-      initialProvider={initialProvider}
+      initialEnabledProviders={initialEnabledProviders}
       configStatus={configStatus}
       saveAction={savePaymentSettings}
     />

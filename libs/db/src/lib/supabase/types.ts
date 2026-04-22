@@ -1367,11 +1367,25 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      get_default_currency_code: { Args: never; Returns: string }
       get_ecommerce_track_quantities: { Args: never; Returns: boolean }
       get_my_claim: { Args: { claim: string }; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
+      is_valid_currency_amount_map: {
+        Args: { amounts: Json }
+        Returns: boolean
+      }
+      is_valid_sale_price_map: {
+        Args: { prices: Json; sale_prices: Json }
+        Returns: boolean
+      }
+      normalize_currency_amount_map: { Args: { amounts: Json }; Returns: Json }
       sync_inventory_cache_for_sku: {
         Args: { p_sku: string }
+        Returns: undefined
+      }
+      sync_legacy_price_columns_for_currency: {
+        Args: { target_currency: string }
         Returns: undefined
       }
       upsert_product_with_variants: {

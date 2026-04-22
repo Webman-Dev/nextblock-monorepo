@@ -22,6 +22,11 @@ type UserAddressRow = {
 
 type SupabaseLikeClient = any;
 
+function normalizeProfileText(value?: string | null) {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
 function mapAddressRow(address?: UserAddressRow | null): CustomerAddressInput | null {
   if (!address) {
     return null;
@@ -185,4 +190,56 @@ export async function upsertDefaultUserAddresses(input: {
     'shipping',
     input.shippingAddress ?? null
   );
+}
+
+export async function fillMissingUserProfileCheckoutDetails(input: {
+  userId: string;
+  fullName?: string | null;
+  phone?: string | null;
+  client?: SupabaseLikeClient;
+}) {
+  const supabase = input.client ?? createClient();
+  const fullName = normalizeProfileText(input.fullName);
+  const phone = normalizeProfileText(input.phone);
+
+  if (!fullName && !phone) {
+    return;
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('full_name, phone')
+    .eq('id', input.userId)
+    .maybeSingle();
+
+  if (profileError) {
+    throw new Error(profileError.message);
+  }
+
+  if (!profile) {
+    return;
+  }
+
+  const nextFullName = normalizeProfileText(profile.full_name) || fullName;
+  const nextPhone = normalizeProfileText(profile.phone) || phone;
+
+  if (
+    normalizeProfileText(profile.full_name) === nextFullName &&
+    normalizeProfileText(profile.phone) === nextPhone
+  ) {
+    return;
+  }
+
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({
+      full_name: nextFullName,
+      phone: nextPhone,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', input.userId);
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
 }

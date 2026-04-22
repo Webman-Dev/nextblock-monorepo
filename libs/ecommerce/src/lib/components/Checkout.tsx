@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Badge,
   Button,
   Card,
   CardContent,
@@ -11,9 +12,10 @@ import {
   Label,
   Separator,
 } from '@nextblock-cms/ui';
-import { getCartItemActivePrice, useCartSubtotal } from '../cart-store';
+import { Checkout as FreemiusCheckout } from '@freemius/checkout';
+import { getCartItemActivePrice } from '../cart-store';
 import { useCart } from '../use-cart';
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import {
   Loader2,
   FlaskConical,
@@ -21,13 +23,15 @@ import {
   CreditCard,
   ChevronRight,
   MapPin,
+  Package,
+  Download,
 } from 'lucide-react';
 import { formatPrice, useTranslations } from '@nextblock-cms/utils';
 import { countries, normalizeCountryCode } from '../countries';
 import { getShippingEstimates } from '../server-actions/shipping-actions';
 import { getTaxEstimate } from '../server-actions/tax-actions';
 import { ResolvedShippingMethod } from '../shipping/resolver';
-import { isDigitalItem } from '../types';
+import { type CartItem, isDigitalItem } from '../types';
 import { countryUsesStructuredStates, getStatesForCountry } from '../states';
 import {
   addressesMatch,
@@ -40,11 +44,14 @@ import {
 import { useCurrency } from '../CurrencyProvider';
 
 const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
-import { Checkout as FreemiusCheckout } from '@freemius/checkout';
+const CHECKOUT_DRAFT_STORAGE_KEY = 'nextblock-checkout-draft-v1';
 
 interface CheckoutProps {
   initialCustomer?: CheckoutCustomerDefaults;
 }
+
+type AddressState = ReturnType<typeof buildAddressState>;
+type ProviderName = 'stripe' | 'freemius';
 
 function buildAddressState(address?: CustomerAddressInput | null, fallbackName?: string | null) {
   return {
@@ -60,6 +67,21 @@ function buildAddressState(address?: CustomerAddressInput | null, fallbackName?:
   };
 }
 
+function calculateCartSubtotal(
+  items: CartItem[],
+  currencyCode: string,
+  currencies: ReturnType<typeof useCurrency>['currencies']
+) {
+  return items.reduce((accumulator, item) => {
+    const { price, sale_price } = getCartItemActivePrice(item, {
+      currencyCode,
+      currencies,
+    });
+
+    return accumulator + (sale_price ?? price) * item.quantity;
+  }, 0);
+}
+
 function AddressForm({
   idPrefix,
   title,
@@ -70,8 +92,8 @@ function AddressForm({
   idPrefix: string;
   title: string;
   description: string;
-  value: ReturnType<typeof buildAddressState>;
-  onChange: (nextValue: ReturnType<typeof buildAddressState>) => void;
+  value: AddressState;
+  onChange: (nextValue: AddressState) => void;
 }) {
   const { t } = useTranslations();
   const companyNameLabel =
@@ -171,10 +193,10 @@ function AddressForm({
             {usesStructuredStates ? (
               <select
                 id={`${idPrefix}-state`}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={value.state}
-              onChange={(e) => onChange({ ...value, state: e.target.value })}
-            >
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={value.state}
+                onChange={(e) => onChange({ ...value, state: e.target.value })}
+              >
                 <option value="">{`${selectOptionLabel}: ${statePlaceholder}`}</option>
                 {availableStates.map((state) => (
                   <option key={state.code} value={state.code}>
@@ -204,13 +226,41 @@ function AddressForm({
   );
 }
 
+function CheckoutSection({
+  title,
+  description,
+  badgeLabel,
+  children,
+}: {
+  title: string;
+  description: string;
+  badgeLabel?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <CardTitle>{title}</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          </div>
+          {badgeLabel ? <Badge variant="secondary">{badgeLabel}</Badge> : null}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">{children}</CardContent>
+    </Card>
+  );
+}
+
 export const Checkout = ({ initialCustomer }: CheckoutProps) => {
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [processingKey, setProcessingKey] = useState<string | null>(null);
+  const [checkoutErrors, setCheckoutErrors] = useState<Partial<Record<ProviderName, string>>>({});
   const [email, setEmail] = useState(initialCustomer?.email || '');
   const [emailError, setEmailError] = useState('');
   const [phone, setPhone] = useState(initialCustomer?.phone || '');
   const [showSandboxModal, setShowSandboxModal] = useState(false);
+  const [sandboxProvider, setSandboxProvider] = useState<ProviderName | null>(null);
   const [isLoadingRates, setIsLoadingRates] = useState(false);
   const [isLoadingTaxes, setIsLoadingTaxes] = useState(false);
   const [shippingMethods, setShippingMethods] = useState<ResolvedShippingMethod[]>([]);
@@ -233,12 +283,19 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
   );
 
   const store = useCart((state) => state);
-  const subtotal = useCartSubtotal();
   const { t, lang } = useTranslations();
   const { activeCurrencyCode, currencies } = useCurrency();
   const items = store?.items ?? [];
-
+  const stripeItems = useMemo(
+    () => items.filter((item) => !isDigitalItem(item)),
+    [items]
+  );
+  const freemiusItems = useMemo(
+    () => items.filter((item) => isDigitalItem(item)),
+    [items]
+  );
   const isAuthenticated = initialCustomer?.isAuthenticated ?? false;
+
   const translateOrFallback = (
     key: string,
     fallback: string,
@@ -248,9 +305,18 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
     return translated === key ? fallback : translated;
   };
 
-  const hasPhysicalProducts = useMemo(
-    () => store?.items.some((item) => !isDigitalItem(item)) ?? false,
-    [store?.items]
+  const hasPhysicalProducts = stripeItems.length > 0;
+  const overallSubtotal = useMemo(
+    () => calculateCartSubtotal(items, activeCurrencyCode, currencies),
+    [activeCurrencyCode, currencies, items]
+  );
+  const stripeSubtotal = useMemo(
+    () => calculateCartSubtotal(stripeItems, activeCurrencyCode, currencies),
+    [activeCurrencyCode, currencies, stripeItems]
+  );
+  const freemiusSubtotal = useMemo(
+    () => calculateCartSubtotal(freemiusItems, activeCurrencyCode, currencies),
+    [activeCurrencyCode, currencies, freemiusItems]
   );
 
   const shippingAddressForRates = useMemo(
@@ -267,13 +333,88 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
     [shippingMethods, selectedMethodId]
   );
 
-  const total = useMemo(
+  const stripeTotal = useMemo(
     () =>
-      subtotal +
+      stripeSubtotal +
       (selectedMethod?.amount ?? 0) +
       (taxEstimate && !taxEstimate.isPendingExternalCalculation ? taxEstimate.amount : 0),
-    [selectedMethod, subtotal, taxEstimate]
+    [selectedMethod, stripeSubtotal, taxEstimate]
   );
+  const overallEstimatedTotal = stripeTotal + freemiusSubtotal;
+
+  useEffect(() => {
+    if (isAuthenticated || typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const rawDraft = window.localStorage.getItem(CHECKOUT_DRAFT_STORAGE_KEY);
+      if (!rawDraft) {
+        return;
+      }
+
+      const draft = JSON.parse(rawDraft) as {
+        email?: string;
+        phone?: string;
+        billingAddress?: CustomerAddressInput | null;
+        shippingAddress?: CustomerAddressInput | null;
+        useBillingForShipping?: boolean;
+        selectedMethodId?: string | null;
+      };
+
+      if (draft.email) {
+        setEmail(draft.email);
+      }
+      if (draft.phone) {
+        setPhone(draft.phone);
+      }
+      if (draft.billingAddress) {
+        setBillingAddress(buildAddressState(draft.billingAddress));
+      }
+      if (draft.shippingAddress) {
+        setShippingAddress(buildAddressState(draft.shippingAddress));
+      }
+      if (typeof draft.useBillingForShipping === 'boolean') {
+        setUseBillingForShipping(draft.useBillingForShipping);
+      }
+      if (typeof draft.selectedMethodId === 'string' || draft.selectedMethodId === null) {
+        setSelectedMethodId(draft.selectedMethodId);
+      }
+    } catch (error) {
+      console.error('[Checkout] Failed to restore checkout draft:', error);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (isAuthenticated) {
+      window.localStorage.removeItem(CHECKOUT_DRAFT_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(
+      CHECKOUT_DRAFT_STORAGE_KEY,
+      JSON.stringify({
+        email,
+        phone,
+        billingAddress,
+        shippingAddress,
+        useBillingForShipping,
+        selectedMethodId,
+      })
+    );
+  }, [
+    billingAddress,
+    email,
+    isAuthenticated,
+    phone,
+    selectedMethodId,
+    shippingAddress,
+    useBillingForShipping,
+  ]);
 
   useEffect(() => {
     if (!hasPhysicalProducts) {
@@ -289,7 +430,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
 
       setIsLoadingRates(true);
       const result = await getShippingEstimates(
-        subtotal,
+        stripeSubtotal,
         {
           country: shippingAddressForRates.country_code,
           state: shippingAddressForRates.state,
@@ -320,17 +461,17 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
   }, [
     activeCurrencyCode,
     hasPhysicalProducts,
+    lang,
     selectedMethodId,
     shippingAddressForRates.country_code,
     shippingAddressForRates.postal_code,
     shippingAddressForRates.state,
-    subtotal,
-    lang,
+    stripeSubtotal,
   ]);
 
   useEffect(() => {
     const loadTaxes = async () => {
-      if (!taxAddress.country_code) {
+      if (!hasPhysicalProducts || !taxAddress.country_code) {
         setIsLoadingTaxes(false);
         setTaxEstimate(null);
         return;
@@ -343,10 +484,14 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
       }
 
       setIsLoadingTaxes(true);
-      const result = await getTaxEstimate(items, {
-        country_code: taxAddress.country_code,
-        state: taxAddress.state,
-      }, activeCurrencyCode);
+      const result = await getTaxEstimate(
+        stripeItems,
+        {
+          country_code: taxAddress.country_code,
+          state: taxAddress.state,
+        },
+        activeCurrencyCode
+      );
 
       if (result.success && result.tax) {
         setTaxEstimate(result.tax);
@@ -359,7 +504,13 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
 
     const timer = setTimeout(loadTaxes, 300);
     return () => clearTimeout(timer);
-  }, [activeCurrencyCode, items, taxAddress.country_code, taxAddress.state]);
+  }, [
+    activeCurrencyCode,
+    hasPhysicalProducts,
+    stripeItems,
+    taxAddress.country_code,
+    taxAddress.state,
+  ]);
 
   if (!store) {
     return null;
@@ -367,59 +518,129 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
 
   const closeSandboxModal = () => {
     setShowSandboxModal(false);
-    if (store?.clearCart) {
-      store.clearCart();
-    }
+    setSandboxProvider(null);
   };
 
-  const handlePay = async () => {
-    setCheckoutError(null);
+  const sandboxModal = showSandboxModal ? (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={closeSandboxModal}
+    >
+      <div
+        className="relative bg-background border rounded-xl shadow-2xl p-8 max-w-md mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={closeSandboxModal}
+          className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900/20">
+            <FlaskConical className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+          </div>
+          <h2 className="text-xl font-semibold">{t('ecommerce.checkout_successful')}</h2>
+        </div>
+        <p className="text-muted-foreground mb-2">{t('ecommerce.sandbox_notice')}</p>
+        <p className="text-muted-foreground mb-2">
+          {sandboxProvider === 'stripe'
+            ? 'This simulated step represents the Stripe checkout for physical products.'
+            : 'This simulated step represents the Freemius checkout for digital products.'}
+        </p>
+        <p className="text-muted-foreground mb-6">{t('ecommerce.license_notice')}</p>
+        <a
+          href="https://nextblock.ca"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block w-full text-center py-3 px-4 rounded-lg bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity"
+        >
+          {t('ecommerce.purchase_at')}
+        </a>
+      </div>
+    </div>
+  ) : null;
 
+  const validateSharedFields = (provider: ProviderName) => {
     if (!isAuthenticated && (!email || !/^\S+@\S+\.\S+$/.test(email))) {
       setEmailError(t('ecommerce.invalid_email'));
-      return;
+      return null;
     }
 
     const normalizedBillingAddress = normalizeCustomerAddress(billingAddress);
     if (!isCustomerAddressComplete(normalizedBillingAddress)) {
       alert(t('checkout_complete_billing_address'));
-      return;
+      return null;
     }
 
     const normalizedShippingAddress = hasPhysicalProducts
       ? normalizeCustomerAddress(useBillingForShipping ? billingAddress : shippingAddress)
       : null;
 
-    if (hasPhysicalProducts && !isCustomerAddressComplete(normalizedShippingAddress)) {
-      alert(t('checkout_complete_shipping_address'));
-      return;
-    }
+    if (provider === 'stripe') {
+      if (!isCustomerAddressComplete(normalizedShippingAddress)) {
+        alert(t('checkout_complete_shipping_address'));
+        return null;
+      }
 
-    if (hasPhysicalProducts && !selectedMethodId) {
-      alert(t('ecommerce.shipping_method_required'));
-      return;
+      if (!selectedMethodId) {
+        alert(t('ecommerce.shipping_method_required'));
+        return null;
+      }
     }
 
     setEmailError('');
 
-    if (isSandbox) {
-      setShowSandboxModal(true);
+    return {
+      normalizedBillingAddress,
+      normalizedShippingAddress,
+    };
+  };
+
+  const handlePay = async (
+    provider: ProviderName,
+    checkoutItems: CartItem[],
+    checkoutKey: string
+  ) => {
+    setCheckoutErrors((current) => ({
+      ...current,
+      [provider]: '',
+    }));
+
+    const normalizedAddresses = validateSharedFields(provider);
+    if (!normalizedAddresses) {
       return;
     }
 
-    setIsProcessing(true);
+    if (isSandbox) {
+      const checkoutItemIds = new Set(checkoutItems.map((item) => item.id));
+      const remainingItems = items.filter((item) => !checkoutItemIds.has(item.id));
+
+      store.setItems(remainingItems);
+      setSandboxProvider(provider);
+      setShowSandboxModal(true);
+
+      if (typeof window !== 'undefined' && remainingItems.length === 0) {
+        window.localStorage.removeItem(CHECKOUT_DRAFT_STORAGE_KEY);
+      }
+
+      return;
+    }
+
+    setProcessingKey(checkoutKey);
 
     try {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items,
+          items: checkoutItems,
           customerEmail: isAuthenticated ? undefined : email,
           customerPhone: phone || null,
-          billingAddress: normalizedBillingAddress,
-          shippingAddress: normalizedShippingAddress,
-          shippingMethodId: selectedMethodId,
+          billingAddress: normalizedAddresses.normalizedBillingAddress,
+          shippingAddress:
+            provider === 'stripe' ? normalizedAddresses.normalizedShippingAddress : null,
+          shippingMethodId: provider === 'stripe' ? selectedMethodId : null,
           locale: lang,
           currencyCode: activeCurrencyCode,
         }),
@@ -432,8 +653,12 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
           data?.errorKey && typeof data.errorKey === 'string'
             ? t(data.errorKey, data.errorParams)
             : data?.error || t('ecommerce.generic_error');
-        setCheckoutError(translatedError);
-        setIsProcessing(false);
+
+        setCheckoutErrors((current) => ({
+          ...current,
+          [provider]: translatedError,
+        }));
+        setProcessingKey(null);
         return;
       }
 
@@ -453,78 +678,57 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
             window.location.href = `/checkout/success?session_id=${cp.order_id}`;
           },
         };
+
         try {
           const handler = new FreemiusCheckout(checkoutConfig);
           handler.open(openConfig);
-          setIsProcessing(false);
+          setProcessingKey(null);
         } catch (error: any) {
-          alert(t('ecommerce.checkout_popup_blocked') + ' ' + (error.message || String(error)));
+          alert(
+            t('ecommerce.checkout_popup_blocked') + ' ' + (error.message || String(error))
+          );
           if (data.url) {
             window.location.href = data.url;
           }
-          setIsProcessing(false);
+          setProcessingKey(null);
         }
       } else if (data.url) {
         window.location.href = data.url;
       } else {
-        setCheckoutError(t('ecommerce.checkout_failed') + (data.error || 'Unknown error'));
-        setIsProcessing(false);
+        setCheckoutErrors((current) => ({
+          ...current,
+          [provider]: t('ecommerce.checkout_failed') + (data.error || 'Unknown error'),
+        }));
+        setProcessingKey(null);
       }
     } catch (error) {
       console.error(error);
-      setCheckoutError(t('ecommerce.generic_error'));
-      setIsProcessing(false);
+      setCheckoutErrors((current) => ({
+        ...current,
+        [provider]: t('ecommerce.generic_error'),
+      }));
+      setProcessingKey(null);
     }
   };
 
   if (items.length === 0) {
     return (
-      <div className="container mx-auto flex min-h-[50vh] flex-col items-center justify-center p-8 text-center">
-        <h1 className="mb-4 text-2xl font-bold">{t('ecommerce.cart_empty')}</h1>
-        <p className="mb-8 text-muted-foreground">{t('ecommerce.cart_empty_description')}</p>
-        <Button asChild>
-          <a href="/shop">{t('ecommerce.go_to_shop')}</a>
-        </Button>
-      </div>
+      <>
+        {sandboxModal}
+        <div className="container mx-auto flex min-h-[50vh] flex-col items-center justify-center p-8 text-center">
+          <h1 className="mb-4 text-2xl font-bold">{t('ecommerce.cart_empty')}</h1>
+          <p className="mb-8 text-muted-foreground">{t('ecommerce.cart_empty_description')}</p>
+          <Button asChild>
+            <a href="/shop">{t('ecommerce.go_to_shop')}</a>
+          </Button>
+        </div>
+      </>
     );
   }
 
   return (
     <div className="container mx-auto px-4 py-12 md:px-6">
-      {showSandboxModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-          onClick={closeSandboxModal}
-        >
-          <div
-            className="relative bg-background border rounded-xl shadow-2xl p-8 max-w-md mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={closeSandboxModal}
-              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900/20">
-                <FlaskConical className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-              </div>
-              <h2 className="text-xl font-semibold">{t('ecommerce.checkout_successful')}</h2>
-            </div>
-            <p className="text-muted-foreground mb-2">{t('ecommerce.sandbox_notice')}</p>
-            <p className="text-muted-foreground mb-6">{t('ecommerce.license_notice')}</p>
-            <a
-              href="https://nextblock.ca"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block w-full text-center py-3 px-4 rounded-lg bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity"
-            >
-              {t('ecommerce.purchase_at')}
-            </a>
-          </div>
-        </div>
-      )}
+      {sandboxModal}
 
       <div className="mx-auto max-w-6xl">
         <h1 className="mb-8 text-3xl font-bold">{t('ecommerce.checkout')}</h1>
@@ -541,7 +745,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
               <CardContent className="space-y-4">
                 {isAuthenticated ? (
                   <div className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
-                      {t('checkout_prefill_notice', { email: initialCustomer?.email || '' })}
+                    {t('checkout_prefill_notice', { email: initialCustomer?.email || '' })}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -561,7 +765,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                       }}
                       required
                     />
-                    {emailError && <p className="text-xs text-destructive mt-1">{emailError}</p>}
+                    {emailError ? <p className="text-xs text-destructive mt-1">{emailError}</p> : null}
                   </div>
                 )}
 
@@ -585,12 +789,12 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
               onChange={setBillingAddress}
             />
 
-            {hasPhysicalProducts && (
+            {hasPhysicalProducts ? (
               <div className="flex items-center space-x-3 rounded-xl border bg-muted/20 p-4">
                 <Checkbox
                   id="use-billing-for-shipping"
                   checked={useBillingForShipping}
-                  onCheckedChange={(checked) => setUseBillingForShipping(!!checked)}
+                  onCheckedChange={(checked) => setUseBillingForShipping(Boolean(checked))}
                 />
                 <div className="space-y-1">
                   <Label htmlFor="use-billing-for-shipping" className="cursor-pointer">
@@ -601,9 +805,9 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                   </p>
                 </div>
               </div>
-            )}
+            ) : null}
 
-            {hasPhysicalProducts && !useBillingForShipping && (
+            {hasPhysicalProducts && !useBillingForShipping ? (
               <AddressForm
                 idPrefix="shipping"
                 title={t('shipping_address')}
@@ -611,9 +815,9 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                 value={shippingAddress}
                 onChange={setShippingAddress}
               />
-            )}
+            ) : null}
 
-            {hasPhysicalProducts && (
+            {hasPhysicalProducts ? (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -644,9 +848,9 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                                 selectedMethodId === method.id ? 'border-primary' : 'border-neutral-300'
                               }`}
                             >
-                              {selectedMethodId === method.id && (
+                              {selectedMethodId === method.id ? (
                                 <div className="w-2 h-2 rounded-full bg-primary" />
-                              )}
+                              ) : null}
                             </div>
                             <span className="font-medium">{method.name}</span>
                           </div>
@@ -665,7 +869,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                   )}
                 </CardContent>
               </Card>
-            )}
+            ) : null}
           </div>
 
           <div className="lg:col-span-4 space-y-6">
@@ -674,7 +878,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                 <CardTitle>{t('ecommerce.order_summary')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+                <div className="space-y-3 max-h-[260px] overflow-y-auto pr-2">
                   {items.map((item) => {
                     const activePrice = getCartItemActivePrice(item, {
                       currencyCode: activeCurrencyCode,
@@ -682,42 +886,44 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                     });
 
                     return (
-                    <div key={item.id} className="flex items-start justify-between gap-4">
-                      <div className="flex gap-3">
-                        {item.image_url && (
-                          <div className="h-10 w-10 shrink-0 overflow-hidden rounded border bg-neutral-100">
-                            <img src={item.image_url} alt={item.title} className="h-full w-full object-cover" />
-                          </div>
-                        )}
-                        <div className="grid gap-0.5">
-                          <span className="font-medium text-xs line-clamp-1">{item.title}</span>
-                          {item.variant_label && (
-                            <span className="text-[10px] text-muted-foreground line-clamp-1">
-                              {item.variant_label}
+                      <div key={`${item.id}-${item.variant_id || 'base'}`} className="flex items-start justify-between gap-4">
+                        <div className="flex gap-3">
+                          {item.image_url ? (
+                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded border bg-neutral-100">
+                              <img src={item.image_url} alt={item.title} className="h-full w-full object-cover" />
+                            </div>
+                          ) : null}
+                          <div className="grid gap-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-xs line-clamp-1">{item.title}</span>
+                              <Badge variant="outline" className="text-[9px] uppercase">
+                                {isDigitalItem(item) ? 'Digital' : 'Physical'}
+                              </Badge>
+                            </div>
+                            {item.variant_label ? (
+                              <span className="text-[10px] text-muted-foreground line-clamp-1">
+                                {item.variant_label}
+                              </span>
+                            ) : null}
+                            <span className="text-[10px] text-muted-foreground">
+                              {t('ecommerce.qty')}: {item.quantity}
                             </span>
-                          )}
-                          <span className="text-[10px] text-muted-foreground">
-                            {t('ecommerce.qty')}: {item.quantity}
-                          </span>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-0.5 shrink-0">
-                        <span className="font-medium text-xs">
-                          {formatPrice(
-                            (activePrice.sale_price ?? activePrice.price) * item.quantity,
-                            activeCurrencyCode
-                          )}
-                        </span>
-                        {activePrice.sale_price && (
-                          <span className="text-[9px] text-muted-foreground line-through">
+                        <div className="flex flex-col items-end gap-0.5 shrink-0">
+                          <span className="font-medium text-xs">
                             {formatPrice(
-                              activePrice.price * item.quantity,
+                              (activePrice.sale_price ?? activePrice.price) * item.quantity,
                               activeCurrencyCode
                             )}
                           </span>
-                        )}
+                          {activePrice.sale_price ? (
+                            <span className="text-[9px] text-muted-foreground line-through">
+                              {formatPrice(activePrice.price * item.quantity, activeCurrencyCode)}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
                     );
                   })}
                 </div>
@@ -725,16 +931,49 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                 <Separator />
 
                 <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>{t('ecommerce.subtotal')}</span>
-                    <span>{formatPrice(subtotal, activeCurrencyCode)}</span>
+                  <div className="flex justify-between">
+                    <span>{t('ecommerce.subtotal')}</span>
+                    <span>{formatPrice(overallSubtotal, activeCurrencyCode)}</span>
                   </div>
-                  {hasPhysicalProducts && (
-                    <div className="flex justify-between">
-                      <span>{t('ecommerce.shipping')}</span>
-                      <span>{selectedMethod ? formatPrice(selectedMethod.amount, activeCurrencyCode) : '-'}</span>
+                  {stripeItems.length > 0 ? (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Physical products</span>
+                      <span>{formatPrice(stripeSubtotal, activeCurrencyCode)}</span>
+                    </div>
+                  ) : null}
+                  {freemiusItems.length > 0 ? (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Digital products</span>
+                      <span>{formatPrice(freemiusSubtotal, activeCurrencyCode)}</span>
+                    </div>
+                  ) : null}
+                  {(stripeItems.length > 0 || freemiusItems.length > 0) && (
+                    <div className="flex justify-between font-bold text-lg pt-2 border-t mt-2">
+                      <span>Estimated total</span>
+                      <span className="text-primary">
+                        {formatPrice(overallEstimatedTotal, activeCurrencyCode)}
+                      </span>
                     </div>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {stripeItems.length > 0 ? (
+              <CheckoutSection
+                title="Stripe Checkout"
+                description="Pay for physical products in one Stripe checkout session."
+                badgeLabel={`${stripeItems.length} ${stripeItems.length === 1 ? 'item' : 'items'}`}
+              >
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Physical subtotal</span>
+                    <span>{formatPrice(stripeSubtotal, activeCurrencyCode)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>{t('ecommerce.shipping')}</span>
+                    <span>{selectedMethod ? formatPrice(selectedMethod.amount, activeCurrencyCode) : '-'}</span>
+                  </div>
                   <div className="flex justify-between">
                     <span>{translateOrFallback('ecommerce.tax', 'Tax')}</span>
                     <span>
@@ -764,33 +1003,114 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                       ))}
                     </div>
                   ) : null}
-                  <div className="flex justify-between font-bold text-lg pt-2 border-t mt-2">
-                    <span>{t('ecommerce.total')}</span>
-                    <span className="text-primary">{formatPrice(total, activeCurrencyCode)}</span>
+                  <div className="flex justify-between font-semibold pt-2 border-t">
+                    <span>Total on Stripe</span>
+                    <span>{formatPrice(stripeTotal, activeCurrencyCode)}</span>
                   </div>
                 </div>
 
-                <Button className="w-full mt-4" size="lg" onClick={handlePay} disabled={isProcessing}>
-                  {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {isProcessing ? t('ecommerce.processing') : t('ecommerce.pay_now')}
+                <Button
+                  className="w-full"
+                  size="lg"
+                  onClick={() => handlePay('stripe', stripeItems, 'stripe')}
+                  disabled={processingKey !== null}
+                >
+                  {processingKey === 'stripe' ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Package className="mr-2 h-4 w-4" />
+                  )}
+                  {processingKey === 'stripe'
+                    ? t('ecommerce.processing')
+                    : 'Checkout Physical Products'}
                 </Button>
 
-                {checkoutError ? (
+                {checkoutErrors.stripe ? (
                   <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                    {checkoutError}
+                    {checkoutErrors.stripe}
                   </div>
                 ) : null}
 
-                <p className="text-[10px] text-center text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   {taxEstimate?.isPendingExternalCalculation
                     ? translateOrFallback(
                         'checkout_stripe_tax_finalized_notice',
                         'Tax will be finalized by Stripe Tax on the payment step.'
                       )
-                    : t('checkout_payment_only_notice')}
+                    : 'Shipping and taxes are only collected during the Stripe step for physical products.'}
                 </p>
-              </CardContent>
-            </Card>
+              </CheckoutSection>
+            ) : null}
+
+            {freemiusItems.length > 0 ? (
+              <CheckoutSection
+                title="Freemius Checkout"
+                description="Digital products use the Freemius checkout flow."
+                badgeLabel={`${freemiusItems.length} ${freemiusItems.length === 1 ? 'license' : 'licenses'}`}
+              >
+                <div className="space-y-3">
+                  {freemiusItems.map((item) => {
+                    const activePrice = getCartItemActivePrice(item, {
+                      currencyCode: activeCurrencyCode,
+                      currencies,
+                    });
+                    const itemKey = `freemius:${item.id}`;
+
+                    return (
+                      <div key={itemKey} className="rounded-lg border p-3 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium">{item.title}</p>
+                            {item.billing_cycle ? (
+                              <p className="text-xs text-muted-foreground capitalize">
+                                {item.billing_cycle} subscription
+                              </p>
+                            ) : null}
+                          </div>
+                          <span className="font-medium">
+                            {formatPrice(activePrice.sale_price ?? activePrice.price, activeCurrencyCode)}
+                          </span>
+                        </div>
+                        <Button
+                          className="w-full"
+                          variant={freemiusItems.length > 1 ? 'outline' : 'default'}
+                          onClick={() => handlePay('freemius', [item], itemKey)}
+                          disabled={processingKey !== null}
+                        >
+                          {processingKey === itemKey ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Download className="mr-2 h-4 w-4" />
+                          )}
+                          {processingKey === itemKey
+                            ? t('ecommerce.processing')
+                            : freemiusItems.length > 1
+                              ? `Checkout ${item.title}`
+                              : 'Checkout Digital Product'}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex justify-between text-sm font-semibold border-t pt-3">
+                  <span>Digital subtotal</span>
+                  <span>{formatPrice(freemiusSubtotal, activeCurrencyCode)}</span>
+                </div>
+
+                {checkoutErrors.freemius ? (
+                  <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {checkoutErrors.freemius}
+                  </div>
+                ) : null}
+
+                <p className="text-[11px] text-muted-foreground">
+                  {freemiusItems.length > 1
+                    ? 'Freemius licenses are completed one at a time, so each digital product gets its own checkout action.'
+                    : 'Taxes and compliance for digital products are handled inside the Freemius checkout.'}
+                </p>
+              </CheckoutSection>
+            ) : null}
           </div>
         </div>
       </div>

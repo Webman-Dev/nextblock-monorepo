@@ -6,8 +6,9 @@ import Link from 'next/link';
 import {
   createProductAction,
   getGlobalProductAttributes,
-  getPaymentSettings,
+  getEnabledPaymentProviders,
   getProduct,
+  getStoreConfigStatus,
   normalizeCurrencyRecord,
 } from '@nextblock-cms/ecommerce/server';
 import { ArrowLeft } from 'lucide-react';
@@ -27,14 +28,16 @@ export default async function NewProductPage({
   const [
     isOnline,
     languages,
-    paymentProvider,
+    enabledProviders,
+    configStatus,
     globalAttributesRaw,
     currenciesResult,
     { from_group, target_lang_id },
   ] = await Promise.all([
     verifyPackageOnline('ecommerce'),
     getActiveLanguagesServerSide(),
-    getPaymentSettings(),
+    getEnabledPaymentProviders(),
+    getStoreConfigStatus(),
     getGlobalProductAttributes(),
     createClient()
       .from('currencies')
@@ -126,7 +129,8 @@ export default async function NewProductPage({
         translationGroupId={from_group}
         targetLanguageId={target_lang_id}
         initialData={normalizedInitialData}
-        paymentProvider={paymentProvider}
+        enabledProviders={enabledProviders}
+        configStatus={configStatus}
         createAction={createProductAction}
       />
     </div>

@@ -6,7 +6,10 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { createClient } from '@supabase/supabase-js';
-import { syncFreemiusProductsToSupabase } from '@nextblock-cms/ecommerce/server';
+import {
+  syncFreemiusProductsToSupabase,
+  syncSingleFreemiusProduct,
+} from '@nextblock-cms/ecommerce/server';
 import postgres from 'postgres';
 
 import { SANDBOX_RESET_SQL } from './sandboxResetSql';
@@ -59,6 +62,8 @@ type ApparelProductSeed = {
   en: SeededLocale;
   fr: SeededLocale;
 };
+
+const SANDBOX_COMMERCE_PRODUCT_ID = '24851';
 
 const SEEDED_ASSETS: SeedAsset[] = [
   {
@@ -545,13 +550,14 @@ async function enrichCommerceProducts(params: {
   const [product] = await params.sql`
     SELECT *
     FROM public.products
-    WHERE freemius_product_id = '24851' AND language_id = ${params.enLangId}
+    WHERE freemius_product_id = ${SANDBOX_COMMERCE_PRODUCT_ID} AND language_id = ${params.enLangId}
     LIMIT 1
   `;
 
   if (!product) {
-    console.log('[Sandbox Reset] Commerce Pro product was not found after Freemius sync.');
-    return;
+    throw new Error(
+      `Commerce Pro product ${SANDBOX_COMMERCE_PRODUCT_ID} was not found after Freemius sync.`
+    );
   }
 
   const shortDescEn =
@@ -660,7 +666,9 @@ async function enrichCommerceProducts(params: {
     UPDATE public.products
     SET
       short_description = ${shortDescEn},
-      description_json = ${params.sql.json(htmlDescriptionEn)}
+      description_json = ${params.sql.json(htmlDescriptionEn)},
+      product_type = 'digital',
+      payment_provider = 'freemius'
     WHERE id = ${product.id}
   `;
 
@@ -765,6 +773,8 @@ async function enrichCommerceProducts(params: {
       status,
       short_description,
       description_json,
+      product_type,
+      payment_provider,
       language_id,
       translation_group_id,
       freemius_product_id,
@@ -780,6 +790,8 @@ async function enrichCommerceProducts(params: {
       ${product.status},
       ${shortDescFr},
       ${params.sql.json(htmlDescriptionFr)},
+      'digital',
+      'freemius',
       ${params.frLangId},
       ${product.translation_group_id},
       ${product.freemius_product_id},
@@ -789,11 +801,13 @@ async function enrichCommerceProducts(params: {
     SET
       title = EXCLUDED.title,
       short_description = EXCLUDED.short_description,
-      description_json = EXCLUDED.description_json,
-      price = EXCLUDED.price,
-      sale_price = EXCLUDED.sale_price,
-      stock = EXCLUDED.stock,
-      status = EXCLUDED.status
+        description_json = EXCLUDED.description_json,
+        price = EXCLUDED.price,
+        sale_price = EXCLUDED.sale_price,
+        stock = EXCLUDED.stock,
+        status = EXCLUDED.status,
+        product_type = EXCLUDED.product_type,
+        payment_provider = EXCLUDED.payment_provider
     RETURNING id
   `;
 
@@ -802,6 +816,48 @@ async function enrichCommerceProducts(params: {
   }
 
   console.log('[Sandbox Reset] Successfully enriched commerce products (EN & FR).');
+}
+
+async function ensureSandboxCommerceProductSynced(params: {
+  sql: SqlClient;
+  enLangId: LanguageId;
+}) {
+  const [existingProduct] = await params.sql`
+    SELECT id
+    FROM public.products
+    WHERE freemius_product_id = ${SANDBOX_COMMERCE_PRODUCT_ID}
+      AND language_id = ${params.enLangId}
+    LIMIT 1
+  `;
+
+  if (existingProduct?.id) {
+    return existingProduct.id as string;
+  }
+
+  console.warn(
+    `[Sandbox Reset] Commerce Pro product ${SANDBOX_COMMERCE_PRODUCT_ID} was missing after the full Freemius sync. Retrying targeted sync.`
+  );
+
+  const fallbackResult = await syncSingleFreemiusProduct(SANDBOX_COMMERCE_PRODUCT_ID);
+  console.log(
+    `[Sandbox Reset] Targeted Commerce Pro sync completed with ${fallbackResult?.count || 0} product(s).`
+  );
+
+  const [syncedProduct] = await params.sql`
+    SELECT id
+    FROM public.products
+    WHERE freemius_product_id = ${SANDBOX_COMMERCE_PRODUCT_ID}
+      AND language_id = ${params.enLangId}
+    LIMIT 1
+  `;
+
+  if (!syncedProduct?.id) {
+    throw new Error(
+      `Targeted Commerce Pro sync did not create product ${SANDBOX_COMMERCE_PRODUCT_ID}.`
+    );
+  }
+
+  return syncedProduct.id as string;
 }
 
 async function upsertSeededCatalogProduct(params: {
@@ -852,6 +908,8 @@ async function upsertSeededCatalogProduct(params: {
         description_json = ${params.sql.json(descriptionJson)},
         metadata = ${params.sql.json(metadata)},
         is_taxable = true,
+        product_type = 'physical',
+        payment_provider = 'stripe',
         updated_at = now()
       WHERE id = ${seededProductId}
       RETURNING id
@@ -875,7 +933,9 @@ async function upsertSeededCatalogProduct(params: {
         short_description,
         description_json,
         metadata,
-        is_taxable
+        is_taxable,
+        product_type,
+        payment_provider
       )
       VALUES (
         ${params.languageId},
@@ -890,7 +950,9 @@ async function upsertSeededCatalogProduct(params: {
         ${params.locale.shortDescription},
         ${params.sql.json(descriptionJson)},
         ${params.sql.json(metadata)},
-        true
+        true,
+        'physical',
+        'stripe'
       )
       ON CONFLICT ON CONSTRAINT products_language_id_slug_key DO UPDATE
       SET
@@ -905,6 +967,8 @@ async function upsertSeededCatalogProduct(params: {
         description_json = EXCLUDED.description_json,
         metadata = EXCLUDED.metadata,
         is_taxable = EXCLUDED.is_taxable,
+        product_type = EXCLUDED.product_type,
+        payment_provider = EXCLUDED.payment_provider,
         updated_at = now()
       RETURNING id
     `;
@@ -1421,9 +1485,22 @@ export async function GET(request: NextRequest) {
             console.log('[Sandbox Reset] Syncing products from Freemius...');
             const syncRes = await syncFreemiusProductsToSupabase();
             console.log(`[Sandbox Reset] Synced ${syncRes?.count || 0} products.`);
+            await db`
+              INSERT INTO public.site_settings (key, value)
+              VALUES (
+                'enabled_payment_providers',
+                '{"stripe": true, "freemius": true}'::jsonb
+              )
+              ON CONFLICT (key) DO UPDATE
+              SET value = EXCLUDED.value
+            `;
 
             try {
               const { enLangId, frLangId } = await getLanguageIds(db);
+              await ensureSandboxCommerceProductSynced({
+                sql: db,
+                enLangId,
+              });
               const commerceAsset = uploadedAssets.get('images/commerce-square.webp');
 
               if (!commerceAsset) {
@@ -1598,7 +1675,9 @@ export async function GET(request: NextRequest) {
               await db`
                 UPDATE public.products 
                 SET short_description = ${shortDescEn}, 
-                    description_json = ${db.json(htmlDescriptionEn)}
+                    description_json = ${db.json(htmlDescriptionEn)},
+                    product_type = 'digital',
+                    payment_provider = 'freemius'
                 WHERE id = ${product.id}
               `;
 
@@ -1697,6 +1776,7 @@ export async function GET(request: NextRequest) {
                   INSERT INTO public.products (
                     sku, title, slug, price, sale_price, stock, status, 
                     short_description, description_json, 
+                    product_type, payment_provider,
                     language_id, translation_group_id,
                     freemius_product_id, freemius_plan_id
                   )
@@ -1704,10 +1784,17 @@ export async function GET(request: NextRequest) {
                     ${product.sku}, 'NextBlock Commerce Pro - Licence Commerce', ${product.slug + '-fr'}, 
                     ${product.price}, ${product.sale_price}, ${product.stock || 99}, ${product.status},
                     ${shortDescFr}, ${db.json(htmlDescriptionFr)},
+                    'digital', 'freemius',
                     ${frLangId}, ${product.translation_group_id},
                     ${product.freemius_product_id}, ${product.freemius_plan_id}
                   )
-                  ON CONFLICT ON CONSTRAINT products_language_id_slug_key DO UPDATE SET title = EXCLUDED.title
+                  ON CONFLICT ON CONSTRAINT products_language_id_slug_key DO UPDATE
+                  SET
+                    title = EXCLUDED.title,
+                    short_description = EXCLUDED.short_description,
+                    description_json = EXCLUDED.description_json,
+                    product_type = EXCLUDED.product_type,
+                    payment_provider = EXCLUDED.payment_provider
                   RETURNING id
                 `;
 

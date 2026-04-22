@@ -5,7 +5,8 @@ import {
   SheetContent, 
   SheetHeader, 
   SheetTitle,
-  Button
+  Button,
+  Badge,
 } from '@nextblock-cms/ui';
 import { useRouter } from 'next/navigation';
 import { Minus, Plus, Trash2 } from 'lucide-react';
@@ -105,31 +106,35 @@ export const CartDrawer = () => {
                     </div>
 
                     <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center rounded-md border text-xs">
-                        <button
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          className="flex h-7 w-7 items-center justify-center border-r"
-                          type="button"
-                          disabled={isDigitalItem(item)}
-                        >
-                          <Minus className="h-3 w-3" />
-                        </button>
-                        <span className="flex h-7 w-8 items-center justify-center">
-                          {item.quantity}
-                        </span>
-                        <button
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          className="flex h-7 w-7 items-center justify-center border-l"
-                          type="button"
-                          disabled={
-                            isDigitalItem(item) ||
-                            (typeof item.stock === 'number' &&
-                              allocatedSkuQuantity >= item.stock)
-                          }
-                        >
-                          <Plus className="h-3 w-3" />
-                        </button>
-                      </div>
+                      {isDigitalItem(item) ? (
+                        <Badge variant="secondary" className="font-normal text-xs">
+                          1 (License)
+                        </Badge>
+                      ) : (
+                        <div className="flex items-center rounded-md border text-xs">
+                          <button
+                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            className="flex h-7 w-7 items-center justify-center border-r"
+                            type="button"
+                          >
+                            <Minus className="h-3 w-3" />
+                          </button>
+                          <span className="flex h-7 w-8 items-center justify-center">
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            className="flex h-7 w-7 items-center justify-center border-l"
+                            type="button"
+                            disabled={
+                              typeof item.stock === 'number' &&
+                              allocatedSkuQuantity >= item.stock
+                            }
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </div>
+                      )}
 
                       <button
                         onClick={() => removeItem(item.id)}

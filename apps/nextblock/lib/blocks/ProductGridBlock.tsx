@@ -30,12 +30,14 @@ export const ProductGridBlock = async ({
     limit: content.limit + 2, 
   }); 
   
-  if (!products) {
+  const productRows = (products || []) as any[];
+
+  if (productRows.length === 0) {
       return null; // Silent fail if no products
   }
 
   // 1. Filter out current product and its translations
-  const filteredProducts = products.filter(p => {
+  const filteredProducts = productRows.filter((p) => {
     if (excludeProductId && p.id === excludeProductId) return false;
     if (excludeTranslationGroupId && p.translation_group_id === excludeTranslationGroupId) return false;
     return true;
@@ -48,6 +50,7 @@ export const ProductGridBlock = async ({
 
   // 3. Transform DB products to UI products
   const uiProducts = filteredProducts.slice(0, content.limit).map(p => {
+      const productRecord = p as any;
       let imageUrl = undefined;
       // Accessing the nested media object correctly (array of objects with media property)
       // The type from getProducts select is: product_media: { media: { file_path: string | null } | null }[]
@@ -74,6 +77,8 @@ export const ProductGridBlock = async ({
         sale_price: typeof p.sale_price === 'number' ? p.sale_price : undefined,
         sale_prices: normalizeSalePriceMap(p.sale_prices),
         is_taxable: p.is_taxable ?? true,
+        product_type: productRecord.product_type ?? undefined,
+        payment_provider: productRecord.payment_provider ?? undefined,
         price_range_min: variantPriceRange?.min ?? null,
         price_range_max: variantPriceRange?.max ?? null,
         image_url: imageUrl,

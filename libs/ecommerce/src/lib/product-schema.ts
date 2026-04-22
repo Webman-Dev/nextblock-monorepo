@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+const productTypeSchema = z
+  .enum(['physical', 'digital'])
+  .or(z.literal(''))
+  .refine((value) => value !== '', {
+    message: 'Product type is required',
+  })
+  .transform((value) => value as 'physical' | 'digital');
+
 const currencyPriceMapSchema = z.record(
   z.string().regex(/^[A-Z]{3}$/, 'Currency code must be ISO 4217'),
   z.coerce.number().min(0, 'Prices must be non-negative')
@@ -61,6 +69,8 @@ const variationAttributeSchema = z.object({
 });
 
 export const productSchema = z.object({
+  product_type: productTypeSchema,
+  payment_provider: z.enum(['stripe', 'freemius']),
   title: z.string().min(1, 'Title is required'),
   slug: z
     .string()

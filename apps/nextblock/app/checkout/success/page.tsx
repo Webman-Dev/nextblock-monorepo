@@ -8,32 +8,54 @@ import {
   localizeInvoicePresentationData,
   translateOrFallback,
   useCartStore,
+  useIsCartHydrated,
 } from '@nextblock-cms/ecommerce';
 import { useTranslations } from '@nextblock-cms/utils';
 import { CheckCircle2 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { fulfillOrderAction } from './actions';
 
+const CHECKOUT_DRAFT_STORAGE_KEY = 'nextblock-checkout-draft-v1';
+
+function buildPurchasedItemKey(productId?: string | null, variantId?: string | null) {
+  return `${productId || 'unknown'}:${variantId || 'base'}`;
+}
+
 export default function CheckoutSuccessPage() {
   const { t, lang } = useTranslations();
-  const clearCart = useCartStore((state) => state?.clearCart);
+  const isCartHydrated = useIsCartHydrated();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session_id');
   const [invoice, setInvoice] = useState<InvoicePresentationData | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [hasRemainingCheckoutItems, setHasRemainingCheckoutItems] = useState(false);
+  const processedSessionIdRef = useRef<string | null>(null);
 
   const labels = useMemo(() => buildInvoiceDocumentLabels(t), [t]);
   const localizedInvoice = useMemo(
     () => localizeInvoicePresentationData(invoice, t),
     [invoice, t]
   );
+  const action = useMemo(
+    () =>
+      hasRemainingCheckoutItems
+        ? {
+            href: '/checkout',
+            label: 'Continue Checkout',
+          }
+        : {
+            href: '/',
+            label: translateOrFallback(t, 'return_home', 'Return to Home'),
+          },
+    [hasRemainingCheckoutItems, t]
+  );
 
   useEffect(() => {
     async function finalizeOrder() {
-      if (!sessionId) {
+      if (!sessionId || !isCartHydrated) {
         return;
       }
 
@@ -51,18 +73,40 @@ export default function CheckoutSuccessPage() {
         }
 
         if (result.invoice) {
-          setInvoice(result.invoice as InvoicePresentationData);
+          const resolvedInvoice = result.invoice as InvoicePresentationData;
+          const purchasedKeys = new Set(
+            resolvedInvoice.order.items.map((item) =>
+              buildPurchasedItemKey(item.product_id, item.variant_id)
+            )
+          );
+          const currentItems = useCartStore.getState().items;
+          const remainingItems = currentItems.filter(
+            (item) => !purchasedKeys.has(buildPurchasedItemKey(item.product_id, item.variant_id))
+          );
+
+          useCartStore.getState().setItems(remainingItems);
+          setHasRemainingCheckoutItems(remainingItems.length > 0);
+
+          if (typeof window !== 'undefined' && remainingItems.length === 0) {
+            window.localStorage.removeItem(CHECKOUT_DRAFT_STORAGE_KEY);
+          }
+
+          setInvoice(resolvedInvoice);
         }
       } finally {
         setIsSyncing(false);
       }
     }
 
-    if (sessionId) {
-      clearCart?.();
+    if (
+      sessionId &&
+      isCartHydrated &&
+      processedSessionIdRef.current !== sessionId
+    ) {
+      processedSessionIdRef.current = sessionId;
       void finalizeOrder();
     }
-  }, [clearCart, sessionId]);
+  }, [isCartHydrated, sessionId]);
 
   return (
     <InvoiceViewerShell
@@ -89,10 +133,7 @@ export default function CheckoutSuccessPage() {
           <CheckCircle2 className="h-8 w-8 text-emerald-600" />
         </div>
       }
-      action={{
-        href: '/',
-        label: translateOrFallback(t, 'return_home', 'Return to Home'),
-      }}
+      action={action}
       loading={isSyncing}
       loadingMessage={translateOrFallback(
         t,

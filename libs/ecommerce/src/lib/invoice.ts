@@ -35,6 +35,8 @@ export interface InvoiceLogo {
 
 export interface InvoiceOrderItem {
   id: string;
+  product_id?: string | null;
+  variant_id?: string | null;
   title: string;
   description?: string | null;
   quantity: number;

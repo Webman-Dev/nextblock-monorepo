@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import {
   Button,
   Table,
@@ -25,10 +26,28 @@ export const Cart = () => {
   const subtotal = useCartSubtotal();
   const { t } = useTranslations();
   const { activeCurrencyCode, currencies } = useCurrency();
+  const items = store?.items ?? [];
+
+  const physicalSubtotal = useMemo(
+    () =>
+      items.reduce((sum, item) => {
+        if (isDigitalItem(item)) {
+          return sum;
+        }
+
+        const activePrice = getCartItemActivePrice(item, {
+          currencyCode: activeCurrencyCode,
+          currencies,
+        });
+
+        return sum + (activePrice.sale_price ?? activePrice.price) * item.quantity;
+      }, 0),
+    [activeCurrencyCode, currencies, items]
+  );
 
   if (!store) return null;
 
-  const { items, updateQuantity, removeItem } = store;
+  const { updateQuantity, removeItem } = store;
   const getAllocatedSkuQuantity = (sku: string) =>
     items.reduce((accumulator, cartItem) => {
       if (isDigitalItem(cartItem) || cartItem.sku !== sku) {
@@ -193,7 +212,7 @@ export const Cart = () => {
                     </p>
                     
                     {items.some(item => !isDigitalItem(item)) && (
-                        <ShippingEstimator cartTotal={subtotal} />
+                        <ShippingEstimator physicalSubtotal={physicalSubtotal} />
                     )}
 
                     <Button className="w-full mt-4" size="lg" onClick={handleCheckout}>

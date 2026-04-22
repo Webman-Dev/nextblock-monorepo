@@ -105,9 +105,12 @@ INSERT INTO public.site_settings (key, value)
 VALUES ('is_admin_created', 'false'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
--- Seed initial payment provider setting (default to freemius)
+-- Seed enabled payment providers setting (runtime source of truth)
 INSERT INTO public.site_settings (key, value)
-VALUES ('payment_provider', '"freemius"'::jsonb)
+VALUES (
+  'enabled_payment_providers',
+  '{"stripe": false, "freemius": false}'::jsonb
+)
 ON CONFLICT (key) DO NOTHING;
 
 
@@ -2131,6 +2134,8 @@ create table public.products (
   sku text not null,
   title text not null,
   slug text not null,
+  product_type text not null check (product_type in ('physical', 'digital')),
+  payment_provider text not null check (payment_provider in ('stripe', 'freemius')),
   price integer not null,
   sale_price integer,
   stock integer default 0,
@@ -2142,6 +2147,10 @@ create table public.products (
   freemius_product_id text,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
+  constraint products_type_provider_consistency_check check (
+    (product_type = 'physical' and payment_provider = 'stripe')
+    or (product_type = 'digital' and payment_provider = 'freemius')
+  ),
   constraint products_language_id_slug_key unique (language_id, slug),
   constraint products_language_id_sku_key unique (language_id, sku)
 );
@@ -5304,6 +5313,16 @@ AS $function$
 DECLARE
   v_product_id uuid := NULLIF(product_payload->>'id', '')::uuid;
   v_translation_group_id uuid := NULLIF(product_payload->>'translation_group_id', '')::uuid;
+  v_product_type text := CASE
+    WHEN product_payload->>'product_type' IN ('physical', 'digital') THEN product_payload->>'product_type'
+    WHEN NULLIF(product_payload->>'freemius_product_id', '') IS NOT NULL
+      OR NULLIF(product_payload->>'freemius_plan_id', '') IS NOT NULL THEN 'digital'
+    ELSE 'physical'
+  END;
+  v_payment_provider text := CASE
+    WHEN v_product_type = 'digital' THEN 'freemius'
+    ELSE 'stripe'
+  END;
   v_variants jsonb := COALESCE(product_payload->'variants', '[]'::jsonb);
   v_variant jsonb;
   v_variant_id uuid;
@@ -5326,6 +5345,8 @@ BEGIN
       title,
       slug,
       sku,
+      product_type,
+      payment_provider,
       upc,
       stock,
       status,
@@ -5345,6 +5366,8 @@ BEGIN
       product_payload->>'title',
       product_payload->>'slug',
       product_payload->>'sku',
+      v_product_type,
+      v_payment_provider,
       NULLIF(product_payload->>'upc', ''),
       CASE
         WHEN v_has_variants THEN v_total_variant_stock
@@ -5378,6 +5401,8 @@ BEGIN
       title = product_payload->>'title',
       slug = product_payload->>'slug',
       sku = product_payload->>'sku',
+      product_type = v_product_type,
+      payment_provider = v_payment_provider,
       upc = NULLIF(product_payload->>'upc', ''),
       stock = CASE
         WHEN v_has_variants THEN v_total_variant_stock

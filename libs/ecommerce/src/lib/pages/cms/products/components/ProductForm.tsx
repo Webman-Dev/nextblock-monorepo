@@ -26,7 +26,11 @@ import {
   resolveEditorCurrencyPriceMaps,
   sanitizeProductFormValuesForStoreManagedCurrencies,
 } from '../product-price-sync';
-import { ProductAttribute } from '../../../../types';
+import {
+  type EnabledPaymentProviders,
+  ProductAttribute,
+  derivePaymentProviderFromProductType,
+} from '../../../../types';
 import { convertMinorUnitAmount, type CurrencyRecord } from '../../../../currency';
 import {
   majorUnitAmountToMinor,
@@ -59,11 +63,22 @@ type ProductMediaManagerItem = {
   sort_order: number;
 };
 
-type ProductFormInitialData = Omit<ProductFormValues, 'product_media'> & {
+type ProductFormInitialData = Omit<z.input<typeof productSchema>, 'product_media'> & {
   id?: string;
   product_media?: ProductMediaRelation[];
   language_id?: number;
   translation_group_id?: string;
+};
+
+type PaymentConfigStatus = {
+  stripe: {
+    hasKeys: boolean;
+    missing: string[];
+  };
+  freemius: {
+    hasKeys: boolean;
+    missing: string[];
+  };
 };
 
 interface ProductFormProps {
@@ -77,7 +92,8 @@ interface ProductFormProps {
   translationGroupId?: string;
   targetLanguageId?: string;
   freemiusDashboardNode?: React.ReactNode;
-  paymentProvider: 'stripe' | 'freemius';
+  enabledProviders: EnabledPaymentProviders;
+  configStatus: PaymentConfigStatus;
   createAction?: (data: ProductFormValues) => Promise<void>;
   updateAction?: (data: ProductFormValues) => Promise<void>;
 }
@@ -130,7 +146,7 @@ function buildProductFormDefaults(
   availableLanguages: ProductLanguageOption[],
   currencies: CurrencyRecord[],
   translationGroupId?: string
-): ProductFormValues {
+): z.input<typeof productSchema> {
   const defaultCurrency =
     currencies.find((currency) => currency.is_default) ?? currencies[0];
   const defaultCurrencyCode = defaultCurrency?.code || 'USD';
@@ -149,8 +165,16 @@ function buildProductFormDefaults(
             [defaultCurrencyCode]: initialData.sale_price / 100,
           }
         : {};
+  const productType = initialData?.product_type || '';
+  const paymentProvider =
+    initialData?.payment_provider ||
+    (initialData?.product_type
+      ? derivePaymentProviderFromProductType(initialData.product_type)
+      : 'stripe');
 
-  return sanitizeProductFormValuesForStoreManagedCurrencies({
+  const sanitizedDefaults = sanitizeProductFormValuesForStoreManagedCurrencies({
+    product_type: (productType || 'physical') as ProductFormValues['product_type'],
+    payment_provider: paymentProvider as ProductFormValues['payment_provider'],
     title: initialData?.title || '',
     slug: initialData?.slug || '',
     sku: initialData?.sku || '',
@@ -183,8 +207,19 @@ function buildProductFormDefaults(
         media_id: productMedia.media_id,
       })) || [],
     variation_attributes: initialData?.variation_attributes || [],
-    variants: initialData?.variants || [],
+    variants:
+      initialData?.variants?.map((variant) => ({
+        ...variant,
+        prices: variant.prices || {},
+        sale_prices: variant.sale_prices || {},
+      })) || [],
   }, currencies);
+
+  return {
+    ...sanitizedDefaults,
+    product_type: productType,
+    payment_provider: paymentProvider,
+  };
 }
 
 function buildMediaManagerItems(
@@ -241,7 +276,8 @@ export function ProductForm({
   translationGroupId,
   targetLanguageId,
   freemiusDashboardNode,
-  paymentProvider,
+  enabledProviders,
+  configStatus,
   createAction,
   updateAction
 }: ProductFormProps) {
@@ -291,8 +327,21 @@ export function ProductForm({
 
   // Auto-generate slug from title if title is modified
   const title = watch('title');
-  const isStripeMode = paymentProvider === 'stripe';
-  const isFreemiusMode = paymentProvider === 'freemius';
+  const productType = watch('product_type');
+  const derivedPaymentProvider =
+    productType === 'digital'
+      ? 'freemius'
+      : productType === 'physical'
+        ? 'stripe'
+        : undefined;
+  const isStripeMode = productType === 'physical';
+  const isFreemiusMode = productType === 'digital';
+  const isProviderEnabled = derivedPaymentProvider
+    ? enabledProviders[derivedPaymentProvider]
+    : false;
+  const isProviderReady = derivedPaymentProvider
+    ? configStatus[derivedPaymentProvider].hasKeys
+    : false;
   const hasFreemiusProductId = !!watch('freemius_product_id');
   const variants = watch('variants') || [];
   const baseProductPrice = watch('price');
@@ -315,6 +364,15 @@ export function ProductForm({
         fallbackSalePrice: baseProductSalePrice,
       }),
     [baseProductPrice, baseProductSalePrice, currencies, productPrices, productSalePrices]
+  );
+  const initialVariantsForEditor = React.useMemo(
+    () =>
+      initialData?.variants?.map((variant) => ({
+        ...variant,
+        prices: variant.prices || {},
+        sale_prices: variant.sale_prices || {},
+      })),
+    [initialData?.variants]
   );
 
   // Use explicit useEffect to handle slug updates
@@ -388,7 +446,19 @@ export function ProductForm({
     register('is_taxable');
     register('price');
     register('sale_price');
+    register('payment_provider');
   }, [register]);
+
+  useEffect(() => {
+    if (!derivedPaymentProvider) {
+      return;
+    }
+
+    setValue('payment_provider', derivedPaymentProvider, {
+      shouldDirty: false,
+      shouldValidate: true,
+    });
+  }, [derivedPaymentProvider, setValue]);
 
   useEffect(() => {
     if (!defaultCurrency) {
@@ -542,12 +612,35 @@ export function ProductForm({
     setIsSubmitting(true);
     
     try {
+      if (!derivedPaymentProvider) {
+        setError('product_type', {
+          type: 'manual',
+          message: 'Select whether this product is physical or digital before saving.',
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (
+        data.status === 'active' &&
+        (!isProviderEnabled || !isProviderReady)
+      ) {
+        setError('product_type', {
+          type: 'manual',
+          message: `${derivedPaymentProvider === 'stripe' ? 'Stripe' : 'Freemius'} must be enabled and fully configured before this product can be published.`,
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
       const normalizedData: ProductFormValues = {
         ...data,
+        product_type: data.product_type,
+        payment_provider: derivedPaymentProvider,
         freemius_product_id: isStripeMode ? '' : data.freemius_product_id,
         freemius_plan_id: isStripeMode ? '' : data.freemius_plan_id,
         upc: isStripeMode ? data.upc : null,
-        is_taxable: isStripeMode ? data.is_taxable : true,
+        is_taxable: isStripeMode ? data.is_taxable : false,
         variation_attributes: isStripeMode ? data.variation_attributes : [],
         variants: isStripeMode ? data.variants : [],
       };
@@ -599,8 +692,79 @@ export function ProductForm({
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 pb-8">
 
       <input type="hidden" {...register('translation_group_id')} />
+      <input type="hidden" {...register('payment_provider')} />
 
       <div className="space-y-8 w-full">
+        <FormSection
+          title="Product Type"
+          description="Choose whether this catalog item is a physical good or a digital product. The payment provider is derived automatically from this choice."
+        >
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <Label className="mb-2 block">Type</Label>
+              <Select
+                onValueChange={(value) =>
+                  setValue('product_type', value as z.input<typeof productSchema>['product_type'], {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+                value={productType || undefined}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose product type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="physical">Physical</SelectItem>
+                  <SelectItem value="digital">Digital</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.product_type && (
+                <p className="text-destructive text-sm">{errors.product_type.message as string}</p>
+              )}
+            </div>
+            <div className="rounded-lg border bg-muted/20 p-4">
+              <p className="text-sm font-medium">Derived Payment Provider</p>
+              <p className="mt-1 text-lg font-semibold">
+                {derivedPaymentProvider
+                  ? derivedPaymentProvider === 'stripe'
+                    ? 'Stripe'
+                    : 'Freemius'
+                  : 'Select a product type'}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Physical products always use Stripe. Digital products always use Freemius.
+              </p>
+            </div>
+          </div>
+
+          {derivedPaymentProvider ? (
+            <div
+              className={`rounded-lg border p-4 ${
+                isProviderEnabled && isProviderReady
+                  ? 'border-emerald-200 bg-emerald-50/70'
+                  : 'border-amber-200 bg-amber-50/70'
+              }`}
+            >
+              <p className="font-medium">
+                {derivedPaymentProvider === 'stripe' ? 'Stripe' : 'Freemius'} status
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {isProviderEnabled
+                  ? isProviderReady
+                    ? 'This provider is enabled and ready for checkout.'
+                    : 'This provider is enabled in settings, but required environment variables are still missing.'
+                  : 'This provider is currently disabled in Payment Settings.'}
+              </p>
+              {!isProviderReady && configStatus[derivedPaymentProvider].missing.length > 0 ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Missing keys: {configStatus[derivedPaymentProvider].missing.join(', ')}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </FormSection>
+
         <FormSection
           title="Product Information"
           description="Set the core catalog details shoppers and integrations rely on."
@@ -770,7 +934,7 @@ export function ProductForm({
                     currencies={currencies}
                     availableVariantImages={variantImageOptions}
                     initialVariationAttributes={initialData?.variation_attributes}
-                    initialVariants={initialData?.variants}
+                    initialVariants={initialVariantsForEditor}
                     onChange={handleVariationChange}
                   />
                 </div>
@@ -858,6 +1022,9 @@ export function ProductForm({
                   <SelectItem value="archived">Archived</SelectItem>
                 </SelectContent>
               </Select>
+              {errors.status && (
+                <p className="text-destructive text-sm">{errors.status.message as string}</p>
+              )}
             </div>
             <div>
               <Label className="mb-2 block">Language</Label>

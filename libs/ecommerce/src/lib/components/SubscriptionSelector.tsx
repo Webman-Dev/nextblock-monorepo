@@ -98,6 +98,8 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
       sku: product.sku,
       language_id: product.language_id,
       translation_group_id: product.translation_group_id,
+      product_type: 'digital',
+      payment_provider: 'freemius',
       provider: 'freemius',
       billing_cycle: selectedCycle,
       freemius_product_id: product.freemius_product_id,

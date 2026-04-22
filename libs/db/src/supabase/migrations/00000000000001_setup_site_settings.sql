@@ -18,7 +18,10 @@ INSERT INTO public.site_settings (key, value)
 VALUES ('is_admin_created', 'false'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
--- Seed initial payment provider setting (default to freemius)
+-- Seed enabled payment providers setting (runtime source of truth)
 INSERT INTO public.site_settings (key, value)
-VALUES ('payment_provider', '"freemius"'::jsonb)
+VALUES (
+  'enabled_payment_providers',
+  '{"stripe": false, "freemius": false}'::jsonb
+)
 ON CONFLICT (key) DO NOTHING;

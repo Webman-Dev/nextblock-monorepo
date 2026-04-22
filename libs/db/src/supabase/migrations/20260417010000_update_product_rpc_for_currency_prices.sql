@@ -10,6 +10,16 @@ AS $function$
 DECLARE
   v_product_id uuid := NULLIF(product_payload->>'id', '')::uuid;
   v_translation_group_id uuid := NULLIF(product_payload->>'translation_group_id', '')::uuid;
+  v_product_type text := CASE
+    WHEN product_payload->>'product_type' IN ('physical', 'digital') THEN product_payload->>'product_type'
+    WHEN NULLIF(product_payload->>'freemius_product_id', '') IS NOT NULL
+      OR NULLIF(product_payload->>'freemius_plan_id', '') IS NOT NULL THEN 'digital'
+    ELSE 'physical'
+  END;
+  v_payment_provider text := CASE
+    WHEN v_product_type = 'digital' THEN 'freemius'
+    ELSE 'stripe'
+  END;
   v_variants jsonb := COALESCE(product_payload->'variants', '[]'::jsonb);
   v_variant jsonb;
   v_variant_id uuid;
@@ -32,6 +42,8 @@ BEGIN
       title,
       slug,
       sku,
+      product_type,
+      payment_provider,
       upc,
       stock,
       status,
@@ -51,6 +63,8 @@ BEGIN
       product_payload->>'title',
       product_payload->>'slug',
       product_payload->>'sku',
+      v_product_type,
+      v_payment_provider,
       NULLIF(product_payload->>'upc', ''),
       CASE
         WHEN v_has_variants THEN v_total_variant_stock
@@ -84,6 +98,8 @@ BEGIN
       title = product_payload->>'title',
       slug = product_payload->>'slug',
       sku = product_payload->>'sku',
+      product_type = v_product_type,
+      payment_provider = v_payment_provider,
       upc = NULLIF(product_payload->>'upc', ''),
       stock = CASE
         WHEN v_has_variants THEN v_total_variant_stock

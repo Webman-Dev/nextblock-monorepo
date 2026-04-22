@@ -3,6 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { CheckoutSessionInput, normalizeOrderCustomerDetails } from '../customer';
 import {
+  fillMissingUserProfileCheckoutDetails,
+  upsertDefaultUserAddresses,
+} from '../customer-addresses';
+import {
   getDefaultCurrency,
   resolvePriceForCurrency,
 } from '../currency';
@@ -41,6 +45,10 @@ export class FreemiusProvider implements PaymentProvider {
           return { error: 'Cart is empty', url: null };
       }
 
+      if (cartItems.length !== 1) {
+          return { error: 'Freemius items must be checked out one at a time.', url: null };
+      }
+
       const { data: currenciesResult, error: currenciesError } = await supabase
         .from('currencies')
         .select(
@@ -59,8 +67,6 @@ export class FreemiusProvider implements PaymentProvider {
         currencies.find((currency) => currency.code === (currencyCode || '').toUpperCase()) ??
         defaultCurrency;
       
-      // Freemius checkout is typically one product/plan at a time.
-      // We will check out the first item in the cart.
       const item = cartItems[0];
       console.log('Freemius Checkout - Fetching product ID:', item.product_id);
       
@@ -130,6 +136,29 @@ export class FreemiusProvider implements PaymentProvider {
           
       if (itemsError) {
           console.error('Failed to insert order items:', itemsError);
+      }
+
+      if (userId) {
+          try {
+              await upsertDefaultUserAddresses({
+                  userId,
+                  billingAddress,
+                  shippingAddress,
+                  client: supabase as any,
+              });
+              await fillMissingUserProfileCheckoutDetails({
+                  userId,
+                  fullName:
+                      billingAddress?.recipient_name ?? shippingAddress?.recipient_name ?? null,
+                  phone: customerPhone,
+                  client: supabase as any,
+              });
+          } catch (profileSyncError) {
+              console.error(
+                  'Failed to sync checkout profile defaults before checkout:',
+                  profileSyncError
+              );
+          }
       }
             
       // Freemius checkout integration logic
@@ -353,6 +382,8 @@ async function syncSingleFreemiusProductInternal(
                 slug: productSlug,
                 short_description: plan.description || '',
                 price: price,
+                product_type: 'digital',
+                payment_provider: 'freemius',
                 freemius_plan_id: planIdStr,
                 freemius_product_id: productId,
                 status: 'active',

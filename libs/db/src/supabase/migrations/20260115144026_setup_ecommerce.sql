@@ -22,6 +22,8 @@ create table public.products (
   sku text not null,
   title text not null,
   slug text not null,
+  product_type text not null check (product_type in ('physical', 'digital')),
+  payment_provider text not null check (payment_provider in ('stripe', 'freemius')),
   price integer not null,
   sale_price integer,
   stock integer default 0,
@@ -33,6 +35,10 @@ create table public.products (
   freemius_product_id text,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
+  constraint products_type_provider_consistency_check check (
+    (product_type = 'physical' and payment_provider = 'stripe')
+    or (product_type = 'digital' and payment_provider = 'freemius')
+  ),
   constraint products_language_id_slug_key unique (language_id, slug),
   constraint products_language_id_sku_key unique (language_id, sku)
 );
