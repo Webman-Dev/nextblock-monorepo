@@ -99,7 +99,7 @@ const BackgroundSchema = z.object({
 
 const BlockInColumnSchema = z.object({
   block_type: z.enum(availableBlockTypes),
-  content: z.record(z.any()),
+  content: z.record(z.string(), z.any()),
   temp_id: z.string().optional(),
 });
 
@@ -657,7 +657,7 @@ export function validateBlockContent(
     return { isValid: true, errors: [], warnings: [] };
   } else {
     // Format Zod errors
-    const errors = result.error.errors.map(e => {
+    const errors = result.error.issues.map(e => {
       const path = e.path.join('.');
       return path ? `${path}: ${e.message}` : e.message;
     });

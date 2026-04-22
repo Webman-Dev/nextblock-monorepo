@@ -374,7 +374,7 @@ export default function ColumnEditor({ columnIndex, blocks, onBlocksChange, bloc
     const initialContent = getInitialContent(selectedBlockType);
     const newBlock: ColumnBlock = {
       block_type: selectedBlockType,
-      content: initialContent || {},
+      content: (initialContent || {}) as Record<string, any>,
       temp_id: `temp-${Date.now()}-${Math.random()}`
     };
     onBlocksChange([...blocks, newBlock]);

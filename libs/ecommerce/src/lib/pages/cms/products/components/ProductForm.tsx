@@ -63,7 +63,7 @@ type ProductMediaManagerItem = {
   sort_order: number;
 };
 
-type ProductFormInitialData = Omit<z.input<typeof productSchema>, 'product_media'> & {
+type ProductFormInitialData = Omit<z.infer<typeof productSchema>, 'product_media'> & {
   id?: string;
   product_media?: ProductMediaRelation[];
   language_id?: number;
@@ -343,12 +343,12 @@ export function ProductForm({
     ? configStatus[derivedPaymentProvider].hasKeys
     : false;
   const hasFreemiusProductId = !!watch('freemius_product_id');
-  const variants = watch('variants') || [];
-  const baseProductPrice = watch('price');
-  const baseProductSalePrice = watch('sale_price');
-  const productPrices = watch('prices') || {};
-  const productSalePrices = watch('sale_prices') || {};
-  const hasVariants = variants.length > 0;
+  const variants = (watch('variants') || []) as NonNullable<ProductFormValues['variants']>;
+  const baseProductPrice = watch('price') as number;
+  const baseProductSalePrice = watch('sale_price') as number | null;
+  const productPrices = (watch('prices') || {}) as Record<string, number>;
+  const productSalePrices = (watch('sale_prices') || {}) as Record<string, number | null>;
+  const hasVariants = (variants?.length || 0) > 0;
   const selectedLanguageId = watch('language_id');
   const currentLanguageCode =
     availableLanguagesProp.find((lang) => lang.id === selectedLanguageId)?.code ||
@@ -704,7 +704,7 @@ export function ProductForm({
               <Label className="mb-2 block">Type</Label>
               <Select
                 onValueChange={(value) =>
-                  setValue('product_type', value as z.input<typeof productSchema>['product_type'], {
+                  setValue('product_type', value as ProductFormValues['product_type'], {
                     shouldDirty: true,
                     shouldValidate: true,
                   })
