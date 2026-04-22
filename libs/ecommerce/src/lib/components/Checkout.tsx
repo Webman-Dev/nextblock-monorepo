@@ -67,6 +67,20 @@ function buildAddressState(address?: CustomerAddressInput | null, fallbackName?:
   };
 }
 
+function isAddressReadyForShippingRates(address?: CustomerAddressInput | null) {
+  const normalized = normalizeCustomerAddress(address);
+
+  if (!normalized?.country_code || !normalized.postal_code) {
+    return false;
+  }
+
+  if (countryUsesStructuredStates(normalized.country_code) && !normalized.state) {
+    return false;
+  }
+
+  return true;
+}
+
 function calculateCartSubtotal(
   items: CartItem[],
   currencyCode: string,
@@ -302,7 +316,24 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
     params?: Record<string, string | number>
   ) => {
     const translated = t(key, params);
-    return translated === key ? fallback : translated;
+    if (translated !== key) {
+      return translated;
+    }
+
+    if (!params) {
+      return fallback;
+    }
+
+    let interpolatedFallback = fallback;
+
+    Object.entries(params).forEach(([paramKey, value]) => {
+      interpolatedFallback = interpolatedFallback.replace(
+        new RegExp(`\\{${paramKey}\\}`, 'g'),
+        String(value)
+      );
+    });
+
+    return interpolatedFallback;
   };
 
   const hasPhysicalProducts = stripeItems.length > 0;
@@ -327,6 +358,8 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
     () => (hasPhysicalProducts ? shippingAddressForRates : billingAddress),
     [billingAddress, hasPhysicalProducts, shippingAddressForRates]
   );
+  const isShippingAddressReadyForRates =
+    !hasPhysicalProducts || isAddressReadyForShippingRates(shippingAddressForRates);
 
   const selectedMethod = useMemo(
     () => shippingMethods.find((method) => method.id === selectedMethodId),
@@ -420,8 +453,18 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
     if (!hasPhysicalProducts) {
       setShippingMethods([]);
       setSelectedMethodId(null);
+      setIsLoadingRates(false);
       return;
     }
+
+    if (!isShippingAddressReadyForRates) {
+      setShippingMethods([]);
+      setSelectedMethodId(null);
+      setIsLoadingRates(false);
+      return;
+    }
+
+    let isCancelled = false;
 
     const fetchRates = async () => {
       if (!shippingAddressForRates.country_code) {
@@ -440,6 +483,10 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
         activeCurrencyCode
       );
 
+      if (isCancelled) {
+        return;
+      }
+
       if (result.success && result.methods) {
         setShippingMethods(result.methods);
         if (
@@ -457,10 +504,14 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
     };
 
     const timer = setTimeout(fetchRates, 400);
-    return () => clearTimeout(timer);
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
   }, [
     activeCurrencyCode,
     hasPhysicalProducts,
+    isShippingAddressReadyForRates,
     lang,
     selectedMethodId,
     shippingAddressForRates.country_code,
@@ -545,8 +596,14 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
         <p className="text-muted-foreground mb-2">{t('ecommerce.sandbox_notice')}</p>
         <p className="text-muted-foreground mb-2">
           {sandboxProvider === 'stripe'
-            ? 'This simulated step represents the Stripe checkout for physical products.'
-            : 'This simulated step represents the Freemius checkout for digital products.'}
+            ? translateOrFallback(
+                'ecommerce.sandbox_checkout_stripe_description',
+                'This simulated step represents the Stripe checkout for physical products.'
+              )
+            : translateOrFallback(
+                'ecommerce.sandbox_checkout_freemius_description',
+                'This simulated step represents the Freemius checkout for digital products.'
+              )}
         </p>
         <p className="text-muted-foreground mb-6">{t('ecommerce.license_notice')}</p>
         <a
@@ -584,7 +641,12 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
       }
 
       if (!selectedMethodId) {
-        alert(t('ecommerce.shipping_method_required'));
+        alert(
+          translateOrFallback(
+            'ecommerce.shipping_method_required',
+            'Please select a shipping method before continuing.'
+          )
+        );
         return null;
       }
     }
@@ -697,7 +759,10 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
       } else {
         setCheckoutErrors((current) => ({
           ...current,
-          [provider]: t('ecommerce.checkout_failed') + (data.error || 'Unknown error'),
+          [provider]:
+            t('ecommerce.checkout_failed') +
+            (data.error ||
+              translateOrFallback('ecommerce.unknown_error', 'Unknown error')),
         }));
         setProcessingKey(null);
       }
@@ -725,6 +790,70 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
       </>
     );
   }
+
+  const stripeCheckoutDisabledMessage = hasPhysicalProducts
+    ? !isShippingAddressReadyForRates
+      ? translateOrFallback(
+          'ecommerce.waiting_on_address_info',
+          'Complete your shipping address to view available shipping options.'
+        )
+      : isLoadingRates
+        ? translateOrFallback(
+            'ecommerce.calculating_shipping',
+            'Calculating shipping...'
+          )
+        : !selectedMethodId
+          ? shippingMethods.length > 0
+            ? t('ecommerce.select_rate')
+            : t('ecommerce.no_rates_for_region')
+          : null
+    : null;
+  const isStripeCheckoutDisabled =
+    processingKey !== null || stripeCheckoutDisabledMessage !== null;
+  const stripeItemCountLabel =
+    stripeItems.length === 1
+      ? translateOrFallback('ecommerce.item_count_one', '{count} item', {
+          count: stripeItems.length,
+        })
+      : translateOrFallback('ecommerce.item_count_other', '{count} items', {
+          count: stripeItems.length,
+        });
+  const freemiusLicenseCountLabel =
+    freemiusItems.length === 1
+      ? translateOrFallback('ecommerce.license_count_one', '{count} license', {
+          count: freemiusItems.length,
+        })
+      : translateOrFallback('ecommerce.license_count_other', '{count} licenses', {
+          count: freemiusItems.length,
+        });
+  const productTypeBadgeLabel = (item: CartItem) =>
+    isDigitalItem(item)
+      ? translateOrFallback('ecommerce.digital_label', 'Digital')
+      : translateOrFallback('ecommerce.physical_label', 'Physical');
+  const checkoutBillingCycleLabel = (billingCycle: CartItem['billing_cycle']) => {
+    if (billingCycle === 'monthly') {
+      return translateOrFallback(
+        'ecommerce.checkout_billing_cycle_monthly',
+        'Monthly subscription'
+      );
+    }
+
+    if (billingCycle === 'annual') {
+      return translateOrFallback(
+        'ecommerce.checkout_billing_cycle_annual',
+        'Annual subscription'
+      );
+    }
+
+    if (billingCycle === 'lifetime') {
+      return translateOrFallback(
+        'ecommerce.checkout_billing_cycle_lifetime',
+        'Lifetime subscription'
+      );
+    }
+
+    return null;
+  };
 
   return (
     <div className="container mx-auto px-4 py-12 md:px-6">
@@ -862,9 +991,12 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                     </div>
                   ) : (
                     <div className="py-4 text-center text-muted-foreground bg-muted/30 rounded-lg italic">
-                      {shippingAddressForRates.postal_code
+                      {isShippingAddressReadyForRates
                         ? t('ecommerce.no_rates_for_region')
-                        : t('ecommerce.enter_address_for_rates')}
+                        : translateOrFallback(
+                            'ecommerce.waiting_on_address_info',
+                            'Complete your shipping address to view available shipping options.'
+                          )}
                     </div>
                   )}
                 </CardContent>
@@ -897,7 +1029,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-xs line-clamp-1">{item.title}</span>
                               <Badge variant="outline" className="text-[9px] uppercase">
-                                {isDigitalItem(item) ? 'Digital' : 'Physical'}
+                                {productTypeBadgeLabel(item)}
                               </Badge>
                             </div>
                             {item.variant_label ? (
@@ -937,19 +1069,34 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                   </div>
                   {stripeItems.length > 0 ? (
                     <div className="flex justify-between text-muted-foreground">
-                      <span>Physical products</span>
+                      <span>
+                        {translateOrFallback(
+                          'ecommerce.physical_products',
+                          'Physical products'
+                        )}
+                      </span>
                       <span>{formatPrice(stripeSubtotal, activeCurrencyCode)}</span>
                     </div>
                   ) : null}
                   {freemiusItems.length > 0 ? (
                     <div className="flex justify-between text-muted-foreground">
-                      <span>Digital products</span>
+                      <span>
+                        {translateOrFallback(
+                          'ecommerce.digital_products',
+                          'Digital products'
+                        )}
+                      </span>
                       <span>{formatPrice(freemiusSubtotal, activeCurrencyCode)}</span>
                     </div>
                   ) : null}
                   {(stripeItems.length > 0 || freemiusItems.length > 0) && (
                     <div className="flex justify-between font-bold text-lg pt-2 border-t mt-2">
-                      <span>Estimated total</span>
+                      <span>
+                        {translateOrFallback(
+                          'ecommerce.estimated_total',
+                          'Estimated total'
+                        )}
+                      </span>
                       <span className="text-primary">
                         {formatPrice(overallEstimatedTotal, activeCurrencyCode)}
                       </span>
@@ -961,13 +1108,24 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
 
             {stripeItems.length > 0 ? (
               <CheckoutSection
-                title="Stripe Checkout"
-                description="Pay for physical products in one Stripe checkout session."
-                badgeLabel={`${stripeItems.length} ${stripeItems.length === 1 ? 'item' : 'items'}`}
+                title={translateOrFallback(
+                  'ecommerce.stripe_checkout_title',
+                  'Stripe Checkout'
+                )}
+                description={translateOrFallback(
+                  'ecommerce.stripe_checkout_description',
+                  'Pay for physical products in one Stripe checkout session.'
+                )}
+                badgeLabel={stripeItemCountLabel}
               >
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span>Physical subtotal</span>
+                    <span>
+                      {translateOrFallback(
+                        'ecommerce.physical_subtotal',
+                        'Physical subtotal'
+                      )}
+                    </span>
                     <span>{formatPrice(stripeSubtotal, activeCurrencyCode)}</span>
                   </div>
                   <div className="flex justify-between">
@@ -1004,7 +1162,12 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                     </div>
                   ) : null}
                   <div className="flex justify-between font-semibold pt-2 border-t">
-                    <span>Total on Stripe</span>
+                    <span>
+                      {translateOrFallback(
+                        'ecommerce.total_on_stripe',
+                        'Total on Stripe'
+                      )}
+                    </span>
                     <span>{formatPrice(stripeTotal, activeCurrencyCode)}</span>
                   </div>
                 </div>
@@ -1013,7 +1176,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                   className="w-full"
                   size="lg"
                   onClick={() => handlePay('stripe', stripeItems, 'stripe')}
-                  disabled={processingKey !== null}
+                  disabled={isStripeCheckoutDisabled}
                 >
                   {processingKey === 'stripe' ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1022,8 +1185,17 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                   )}
                   {processingKey === 'stripe'
                     ? t('ecommerce.processing')
-                    : 'Checkout Physical Products'}
+                    : translateOrFallback(
+                        'ecommerce.checkout_physical_products',
+                        'Checkout Physical Products'
+                      )}
                 </Button>
+
+                {stripeCheckoutDisabledMessage && processingKey === null ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    {stripeCheckoutDisabledMessage}
+                  </p>
+                ) : null}
 
                 {checkoutErrors.stripe ? (
                   <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -1037,16 +1209,25 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                         'checkout_stripe_tax_finalized_notice',
                         'Tax will be finalized by Stripe Tax on the payment step.'
                       )
-                    : 'Shipping and taxes are only collected during the Stripe step for physical products.'}
+                    : translateOrFallback(
+                        'ecommerce.shipping_taxes_collected_on_stripe',
+                        'Shipping and taxes are only collected during the Stripe step for physical products.'
+                      )}
                 </p>
               </CheckoutSection>
             ) : null}
 
             {freemiusItems.length > 0 ? (
               <CheckoutSection
-                title="Freemius Checkout"
-                description="Digital products use the Freemius checkout flow."
-                badgeLabel={`${freemiusItems.length} ${freemiusItems.length === 1 ? 'license' : 'licenses'}`}
+                title={translateOrFallback(
+                  'ecommerce.freemius_checkout_title',
+                  'Freemius Checkout'
+                )}
+                description={translateOrFallback(
+                  'ecommerce.freemius_checkout_description',
+                  'Digital products use the Freemius checkout flow.'
+                )}
+                badgeLabel={freemiusLicenseCountLabel}
               >
                 <div className="space-y-3">
                   {freemiusItems.map((item) => {
@@ -1063,7 +1244,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                             <p className="font-medium">{item.title}</p>
                             {item.billing_cycle ? (
                               <p className="text-xs text-muted-foreground capitalize">
-                                {item.billing_cycle} subscription
+                                {checkoutBillingCycleLabel(item.billing_cycle)}
                               </p>
                             ) : null}
                           </div>
@@ -1085,8 +1266,15 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                           {processingKey === itemKey
                             ? t('ecommerce.processing')
                             : freemiusItems.length > 1
-                              ? `Checkout ${item.title}`
-                              : 'Checkout Digital Product'}
+                              ? translateOrFallback(
+                                  'ecommerce.checkout_product',
+                                  'Checkout {title}',
+                                  { title: item.title }
+                                )
+                              : translateOrFallback(
+                                  'ecommerce.checkout_digital_product',
+                                  'Checkout Digital Product'
+                                )}
                         </Button>
                       </div>
                     );
@@ -1094,7 +1282,12 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                 </div>
 
                 <div className="flex justify-between text-sm font-semibold border-t pt-3">
-                  <span>Digital subtotal</span>
+                  <span>
+                    {translateOrFallback(
+                      'ecommerce.digital_subtotal',
+                      'Digital subtotal'
+                    )}
+                  </span>
                   <span>{formatPrice(freemiusSubtotal, activeCurrencyCode)}</span>
                 </div>
 
@@ -1106,8 +1299,14 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
 
                 <p className="text-[11px] text-muted-foreground">
                   {freemiusItems.length > 1
-                    ? 'Freemius licenses are completed one at a time, so each digital product gets its own checkout action.'
-                    : 'Taxes and compliance for digital products are handled inside the Freemius checkout.'}
+                    ? translateOrFallback(
+                        'ecommerce.freemius_multi_checkout_notice',
+                        'Freemius licenses are completed one at a time, so each digital product gets its own checkout action.'
+                      )
+                    : translateOrFallback(
+                        'ecommerce.freemius_tax_notice',
+                        'Taxes and compliance for digital products are handled inside the Freemius checkout.'
+                      )}
                 </p>
               </CheckoutSection>
             ) : null}

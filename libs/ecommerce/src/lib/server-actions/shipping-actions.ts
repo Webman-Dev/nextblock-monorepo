@@ -12,12 +12,21 @@ export async function getShippingEstimates(
     destination: ShippingDestination,
     languageCode?: string,
     currencyCode?: string
-): Promise<{ success: boolean; methods?: ResolvedShippingMethod[]; error?: string }> {
+): Promise<{
+    success: boolean;
+    methods?: ResolvedShippingMethod[];
+    error?: string;
+    errorKey?: string;
+}> {
     try {
         const normalizedCountry = normalizeCountryCode(destination.country);
 
         if (!normalizedCountry) {
-            return { success: false, error: 'Country is required for shipping calculation' };
+            return {
+                success: false,
+                error: 'Country is required for shipping calculation',
+                errorKey: 'ecommerce.shipping_country_required',
+            };
         }
 
         const methods = await resolveShippingOptions(cartTotal, {
@@ -28,6 +37,10 @@ export async function getShippingEstimates(
         return { success: true, methods };
     } catch (error: any) {
         console.error('Failed to resolve shipping options:', error);
-        return { success: false, error: error.message || 'Failed to calculate shipping' };
+        return {
+            success: false,
+            error: error.message || 'Failed to calculate shipping',
+            errorKey: 'ecommerce.shipping_calculation_failed',
+        };
     }
 }

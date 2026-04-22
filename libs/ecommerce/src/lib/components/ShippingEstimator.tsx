@@ -23,16 +23,14 @@ export const ShippingEstimator = ({ physicalSubtotal }: ShippingEstimatorProps) 
   const [error, setError] = useState<string | null>(null);
   const { t, lang } = useTranslations();
   const { activeCurrencyCode } = useCurrency();
+  const translateOrFallback = (key: string, fallback: string) => {
+    const translated = t(key);
+    return translated === key ? fallback : translated;
+  };
   const availableStates = getStatesForCountry(country);
   const usesStructuredStates = countryUsesStructuredStates(country);
-  const selectOptionLabel =
-    t('select_an_option') === 'select_an_option'
-      ? 'Select an option'
-      : t('select_an_option');
-  const statePlaceholder =
-    t('state_province') === 'state_province'
-      ? 'State / Province'
-      : t('state_province');
+  const selectOptionLabel = translateOrFallback('select_an_option', 'Select an option');
+  const statePlaceholder = translateOrFallback('state_province', 'State / Province');
 
   const handleCalculate = async () => {
     setIsCalculating(true);
@@ -53,7 +51,14 @@ export const ShippingEstimator = ({ physicalSubtotal }: ShippingEstimatorProps) 
     if (result.success && result.methods) {
       setRates(result.methods);
     } else {
-      setError(result.error || t('ecommerce.no_rates_found'));
+      setError(
+        result.errorKey
+          ? translateOrFallback(
+              result.errorKey,
+              result.error || t('ecommerce.no_rates_found')
+            )
+          : result.error || t('ecommerce.no_rates_found')
+      );
     }
     setIsCalculating(false);
   };

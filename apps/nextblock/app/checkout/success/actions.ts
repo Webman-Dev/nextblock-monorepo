@@ -27,7 +27,11 @@ function getServiceRoleSupabaseClient() {
 
 export async function fulfillOrderAction(sessionId: string) {
   if (!sessionId) {
-    return { success: false, error: 'No session ID provided' };
+    return {
+      success: false,
+      error: 'No session ID provided',
+      errorKey: 'ecommerce.checkout_missing_session_id',
+    };
   }
 
   try {
@@ -35,7 +39,11 @@ export async function fulfillOrderAction(sessionId: string) {
       const session = await stripe.checkout.sessions.retrieve(sessionId);
 
       if (session.payment_status !== 'paid') {
-        return { success: false, error: 'Payment is still pending' };
+        return {
+          success: false,
+          error: 'Payment is still pending',
+          errorKey: 'ecommerce.checkout_payment_pending',
+        };
       }
 
       const result = await syncStripeOrderFromSession(session);
@@ -58,11 +66,19 @@ export async function fulfillOrderAction(sessionId: string) {
 
     if (orderError || !order) {
       console.error('Order not found or error:', orderError);
-      return { success: false, error: 'Order not found' };
+      return {
+        success: false,
+        error: 'Order not found',
+        errorKey: 'ecommerce.checkout_success_order_not_found',
+      };
     }
 
     if (order.provider !== 'freemius') {
-      return { success: false, error: 'Only Freemius order references can be finalized here' };
+      return {
+        success: false,
+        error: 'Only Freemius order references can be finalized here',
+        errorKey: 'ecommerce.checkout_success_invalid_reference',
+      };
     }
 
     if (order.status === 'paid') {
@@ -70,7 +86,11 @@ export async function fulfillOrderAction(sessionId: string) {
         await applyOrderInventoryDeduction(supabase as any, order.id);
       } catch (inventoryError) {
         console.error('Failed to reconcile inventory for paid order:', inventoryError);
-        return { success: false, error: 'Failed to update order inventory' };
+        return {
+          success: false,
+          error: 'Failed to update order inventory',
+          errorKey: 'ecommerce.checkout_success_inventory_update_failed',
+        };
       }
 
       await assignInvoiceMetadata({
@@ -93,14 +113,22 @@ export async function fulfillOrderAction(sessionId: string) {
 
     if (updateError) {
       console.error('Failed to update order status:', updateError);
-      return { success: false, error: 'Failed to update order status' };
+      return {
+        success: false,
+        error: 'Failed to update order status',
+        errorKey: 'ecommerce.checkout_success_status_update_failed',
+      };
     }
 
     try {
       await applyOrderInventoryDeduction(supabase as any, order.id);
     } catch (inventoryError) {
       console.error('Failed to deduct inventory for paid order:', inventoryError);
-      return { success: false, error: 'Failed to update order inventory' };
+      return {
+        success: false,
+        error: 'Failed to update order inventory',
+        errorKey: 'ecommerce.checkout_success_inventory_update_failed',
+      };
     }
 
     await assignInvoiceMetadata({
@@ -116,6 +144,10 @@ export async function fulfillOrderAction(sessionId: string) {
     };
   } catch (error) {
     console.error('Action error reconciling order:', error);
-    return { success: false, error: 'Internal server error' };
+    return {
+      success: false,
+      error: 'Internal server error',
+      errorKey: 'ecommerce.checkout_internal_server_error',
+    };
   }
 }

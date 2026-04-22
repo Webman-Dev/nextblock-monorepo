@@ -44,7 +44,7 @@ export default function CheckoutSuccessPage() {
       hasRemainingCheckoutItems
         ? {
             href: '/checkout',
-            label: 'Continue Checkout',
+            label: translateOrFallback(t, 'continue_checkout', 'Continue Checkout'),
           }
         : {
             href: '/',
@@ -67,7 +67,23 @@ export default function CheckoutSuccessPage() {
 
         if (!result.success) {
           setSyncError(
-            result.error || 'We could not finalize your invoice yet. Please refresh shortly.'
+            result.errorKey
+              ? translateOrFallback(
+                  t,
+                  result.errorKey,
+                  result.error ||
+                    translateOrFallback(
+                      t,
+                      'checkout_success_sync_failed',
+                      'We could not finalize your invoice yet. Please refresh shortly.'
+                    )
+                )
+              : result.error ||
+                  translateOrFallback(
+                    t,
+                    'checkout_success_sync_failed',
+                    'We could not finalize your invoice yet. Please refresh shortly.'
+                  )
           );
           return;
         }
@@ -106,7 +122,7 @@ export default function CheckoutSuccessPage() {
       processedSessionIdRef.current = sessionId;
       void finalizeOrder();
     }
-  }, [isCartHydrated, sessionId]);
+  }, [isCartHydrated, sessionId, t]);
 
   return (
     <InvoiceViewerShell
