@@ -2,7 +2,7 @@
 'use server';
 
 import { createClient } from '@nextblock-cms/db/server';
-import { revalidatePath, revalidateTag } from 'next/cache';
+import { revalidatePath, updateTag } from 'next/cache';
 import { z } from 'zod';
 
 import {
@@ -61,7 +61,7 @@ async function getConfiguredLanguageCodes() {
 
 function revalidateTranslationViews() {
   revalidatePath(EXTRA_TRANSLATIONS_PATH);
-  revalidateTag(PUBLIC_TRANSLATIONS_CACHE_TAG);
+  updateTag(PUBLIC_TRANSLATIONS_CACHE_TAG);
 }
 
 export async function createTranslation(
