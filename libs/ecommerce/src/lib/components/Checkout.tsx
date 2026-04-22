@@ -735,6 +735,8 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
           name: t('ecommerce.checkout_overlay_title'),
           plan_id: cp.plan_id,
           user_email: cp.user_email,
+          user_firstname: cp.user_firstname,
+          user_lastname: cp.user_lastname,
           sandbox: cp.sandbox,
           success: function () {
             window.location.href = `/checkout/success?session_id=${cp.order_id}`;

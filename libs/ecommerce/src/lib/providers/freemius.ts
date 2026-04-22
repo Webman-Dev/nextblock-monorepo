@@ -1,6 +1,7 @@
 import { PaymentProvider } from '../types';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { Freemius } from '@freemius/sdk';
 import { CheckoutSessionInput, normalizeOrderCustomerDetails } from '../customer';
 import {
   fillMissingUserProfileCheckoutDetails,
@@ -10,6 +11,142 @@ import {
   getDefaultCurrency,
   resolvePriceForCurrency,
 } from '../currency';
+
+type FreemiusCheckoutCredentialEntry = {
+    publicKey?: string;
+    secretKey?: string;
+    apiKey?: string;
+};
+
+function readFreemiusEnvValue(name: keyof NodeJS.ProcessEnv) {
+    const raw = process.env[name];
+
+    if (!raw) {
+        return null;
+    }
+
+    const trimmed = raw.trim();
+
+    if (
+        (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+        (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ) {
+        return trimmed.slice(1, -1).trim();
+    }
+
+    return trimmed;
+}
+
+function splitFreemiusCustomerName(name?: string | null) {
+    const trimmed = name?.trim();
+
+    if (!trimmed) {
+        return {
+            firstName: null,
+            lastName: null,
+        };
+    }
+
+    const [firstName, ...rest] = trimmed.split(/\s+/);
+
+    return {
+        firstName: firstName || null,
+        lastName: rest.length > 0 ? rest.join(' ') : null,
+    };
+}
+
+function parseFreemiusCheckoutCredentialsMap():
+    | Record<string, FreemiusCheckoutCredentialEntry>
+    | null {
+    const raw = readFreemiusEnvValue('FREEMIUS_CHECKOUT_PRODUCTS_JSON');
+
+    if (!raw) {
+        return null;
+    }
+
+    try {
+        const parsed = JSON.parse(raw) as Record<string, FreemiusCheckoutCredentialEntry>;
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (error) {
+        console.error(
+            '[Freemius Checkout] Failed to parse FREEMIUS_CHECKOUT_PRODUCTS_JSON:',
+            error
+        );
+        return null;
+    }
+}
+
+function resolveFreemiusCheckoutCredentials(productId: string | number) {
+    const credentialsMap = parseFreemiusCheckoutCredentialsMap();
+    const productKey = String(productId);
+    const productScopedCredentials = credentialsMap?.[productKey];
+    const singleProductId = readFreemiusEnvValue('FREEMIUS_PRODUCT_ID');
+    const sandboxOverridePublicKey = readFreemiusEnvValue(
+        'FREEMIUS_ECOMMERCE_SANDBOX_PUBLIC_KEY'
+    );
+    const sandboxOverrideSecretKey = readFreemiusEnvValue(
+        'FREEMIUS_ECOMMERCE_SANDBOX_SECRET_KEY'
+    );
+
+    if (productScopedCredentials?.publicKey) {
+        return {
+            publicKey: productScopedCredentials.publicKey,
+            secretKey: productScopedCredentials.secretKey ?? null,
+            apiKey: productScopedCredentials.apiKey ?? null,
+            source: 'product-map' as const,
+        };
+    }
+
+    if (
+        process.env.FREEMIUS_SANDBOX_ENABLED === 'true' &&
+        singleProductId &&
+        singleProductId === productKey &&
+        sandboxOverridePublicKey
+    ) {
+        return {
+            publicKey: sandboxOverridePublicKey,
+            secretKey: sandboxOverrideSecretKey,
+            apiKey: readFreemiusEnvValue('FREEMIUS_API_KEY'),
+            source: 'single-product-sandbox-env' as const,
+        };
+    }
+
+    if (singleProductId && singleProductId === productKey && readFreemiusEnvValue('FREEMIUS_PUBLIC_KEY')) {
+        return {
+            publicKey: readFreemiusEnvValue('FREEMIUS_PUBLIC_KEY'),
+            secretKey: readFreemiusEnvValue('FREEMIUS_SECRET_KEY'),
+            apiKey: readFreemiusEnvValue('FREEMIUS_API_KEY'),
+            source: 'single-product-env' as const,
+        };
+    }
+
+    return {
+        publicKey: readFreemiusEnvValue('FREEMIUS_PUBLIC_KEY'),
+        secretKey: readFreemiusEnvValue('FREEMIUS_SECRET_KEY'),
+        apiKey: readFreemiusEnvValue('FREEMIUS_API_KEY'),
+        source: 'legacy-env' as const,
+    };
+}
+
+async function getFreemiusSandboxParamsViaSdk(input: {
+    productId: string | number;
+    publicKey: string;
+    secretKey: string;
+    apiKey?: string | null;
+}) {
+    if (!input.apiKey) {
+        throw new Error('Missing Freemius API key for SDK sandbox generation.');
+    }
+
+    const freemius = new Freemius({
+        productId: Number(input.productId),
+        apiKey: input.apiKey,
+        secretKey: input.secretKey,
+        publicKey: input.publicKey,
+    });
+
+    return freemius.checkout.getSandboxParams();
+}
 
 export class FreemiusProvider implements PaymentProvider {
     getProviderName(): string {
@@ -68,8 +205,6 @@ export class FreemiusProvider implements PaymentProvider {
         defaultCurrency;
       
       const item = cartItems[0];
-      console.log('Freemius Checkout - Fetching product ID:', item.product_id);
-      
       const { data: product, error: productError } = await supabase
         .from('products')
         .select('id, title, price, prices, sale_price, sale_prices, freemius_plan_id, freemius_product_id')
@@ -97,6 +232,9 @@ export class FreemiusProvider implements PaymentProvider {
       });
       const unitAmount = resolvedPrice.sale_price ?? resolvedPrice.price;
       const totalAmount = unitAmount * item.quantity;
+      const freemiusCustomerName = splitFreemiusCustomerName(
+        billingAddress?.recipient_name ?? null
+      );
       
       // 3. Create Pending Order in DB
       const { data: order, error: orderError } = await supabase
@@ -161,44 +299,90 @@ export class FreemiusProvider implements PaymentProvider {
           }
       }
             
-      // Freemius checkout integration logic
-      const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true'; 
-      const publicKey = process.env.FREEMIUS_PUBLIC_KEY;
-      const secretKey = process.env.FREEMIUS_SECRET_KEY;
+      // Freemius checkout sandbox is independent from the app-wide demo sandbox.
+      const isFreemiusSandboxEnabled = process.env.FREEMIUS_SANDBOX_ENABLED === 'true';
+      const checkoutCredentials = resolveFreemiusCheckoutCredentials(freemiusProductId);
+      const publicKey = checkoutCredentials.publicKey;
+      const secretKey = checkoutCredentials.secretKey;
+      const apiKey = checkoutCredentials.apiKey;
 
-      if (!publicKey || (isSandbox && !secretKey)) {
+      if (!publicKey || (isFreemiusSandboxEnabled && !secretKey)) {
           return { error: 'Missing FREEMIUS credentials (PUBLIC_KEY or SECRET_KEY) in environment variables.', url: null };
       }
+
+      if (isFreemiusSandboxEnabled && checkoutCredentials.source === 'legacy-env') {
+          const configuredProductId = readFreemiusEnvValue('FREEMIUS_PRODUCT_ID');
+          const hasSandboxOverridePublicKey = Boolean(
+              readFreemiusEnvValue('FREEMIUS_ECOMMERCE_SANDBOX_PUBLIC_KEY')
+          );
+          const hasSandboxOverrideSecretKey = Boolean(
+              readFreemiusEnvValue('FREEMIUS_ECOMMERCE_SANDBOX_SECRET_KEY')
+          );
+          console.warn(
+              `[Freemius Checkout] Sandbox is enabled for product ${freemiusProductId}, but no product-scoped checkout credentials were selected. Falling back to legacy FREEMIUS_PUBLIC_KEY/FREEMIUS_SECRET_KEY may open live checkout instead of sandbox.`,
+              {
+                  configuredProductId,
+                  productIdsMatch: configuredProductId === String(freemiusProductId),
+                  hasSandboxOverridePublicKey,
+                  hasSandboxOverrideSecretKey,
+                  hasCheckoutProductsJson: Boolean(
+                      readFreemiusEnvValue('FREEMIUS_CHECKOUT_PRODUCTS_JSON')
+                  ),
+              }
+          );
+      }
       
-      let sandboxPayload: any = isSandbox;
+      let sandboxPayload: any = false;
       
-      // Generate Secure Token using Context7 exact MD5 specification
-      if (isSandbox && secretKey && publicKey) {
-          const timestamp = Math.floor(Date.now() / 1000).toString();
-          
-          // MD5 String format: timestamp + plugin_id + secret_key + public_key + 'checkout'
-          const hashString = `${timestamp}${freemiusProductId}${secretKey}${publicKey}checkout`;
-          const hash = crypto.createHash('md5').update(hashString).digest('hex');
-          
-          sandboxPayload = {
-              ctx: timestamp,
-              token: hash
-          };
-          console.log('Freemius Checkout - Generated Sandbox Token using local time:', sandboxPayload);
-      } else {
-          console.log('Freemius Checkout - NOT using Sandbox. isSandbox:', isSandbox, 'hasSecret:', !!secretKey, 'hasPublic:', !!publicKey);
+      // Prefer the official Freemius SDK sandbox API. Fall back to the documented
+      // MD5 token flow if the SDK path is unavailable or fails.
+      if (isFreemiusSandboxEnabled && secretKey && publicKey) {
+          try {
+              sandboxPayload = await getFreemiusSandboxParamsViaSdk({
+                  productId: freemiusProductId,
+                  publicKey,
+                  secretKey,
+                  apiKey,
+              });
+          } catch (sdkSandboxError) {
+              console.warn(
+                  'Freemius Checkout - SDK sandbox generation failed. Falling back to manual token generation.',
+                  sdkSandboxError,
+                  {
+                      credentialSource: checkoutCredentials.source,
+                      hasApiKey: !!apiKey,
+                  }
+              );
+
+              const timestamp = Math.floor(Date.now() / 1000).toString();
+              
+              // MD5 String format: timestamp + plugin_id + secret_key + public_key + 'checkout'
+              const hashString = `${timestamp}${freemiusProductId}${secretKey}${publicKey}checkout`;
+              const hash = crypto.createHash('md5').update(hashString).digest('hex');
+              
+              sandboxPayload = {
+                  ctx: timestamp,
+                  token: hash
+              };
+          }
       }
       
       const url = new URL(`https://checkout.freemius.com/app/${freemiusProductId}/plan/${freemiusPlanId}/`);
-      if (isSandbox && secretKey && publicKey) {
+      if (isFreemiusSandboxEnabled && secretKey && publicKey) {
           // Use correct secure parameters for Sandbox Direct Linking
           url.searchParams.append('sandbox', sandboxPayload.token);
           url.searchParams.append('s_ctx_ts', sandboxPayload.ctx);
-      } else if (isSandbox) {
+      } else if (isFreemiusSandboxEnabled) {
           url.searchParams.append('sandbox', 'true');
       }
       
       if (customerEmail) url.searchParams.append('user_email', customerEmail);
+      if (freemiusCustomerName.firstName) {
+          url.searchParams.append('user_firstname', freemiusCustomerName.firstName);
+      }
+      if (freemiusCustomerName.lastName) {
+          url.searchParams.append('user_lastname', freemiusCustomerName.lastName);
+      }
       url.searchParams.append('currency', selectedCurrency.code.toLowerCase());
       
       return { 
@@ -209,6 +393,9 @@ export class FreemiusProvider implements PaymentProvider {
               plan_id: freemiusPlanId,
               public_key: publicKey,
               user_email: customerEmail,
+              user_firstname: freemiusCustomerName.firstName,
+              user_lastname: freemiusCustomerName.lastName,
+              credential_source: checkoutCredentials.source,
               sandbox: sandboxPayload,
               order_id: order.id
           }
@@ -253,9 +440,9 @@ async function fetchFreemiusHelper(path: string, devId: string, publicKey: strin
 }
 
 export async function syncFreemiusProductsToSupabase() {
-    const devId = process.env.FREEMIUS_DEVELOPER_ID;
-    const publicKey = process.env.FREEMIUS_PUBLIC_KEY;
-    const secretKey = process.env.FREEMIUS_SECRET_KEY;
+    const devId = readFreemiusEnvValue('FREEMIUS_DEVELOPER_ID');
+    const publicKey = readFreemiusEnvValue('FREEMIUS_PUBLIC_KEY');
+    const secretKey = readFreemiusEnvValue('FREEMIUS_SECRET_KEY');
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -298,9 +485,9 @@ export async function syncFreemiusProductsToSupabase() {
 }
 
 export async function syncSingleFreemiusProduct(productId: string) {
-    const devId = process.env.FREEMIUS_DEVELOPER_ID;
-    const publicKey = process.env.FREEMIUS_PUBLIC_KEY;
-    const secretKey = process.env.FREEMIUS_SECRET_KEY;
+    const devId = readFreemiusEnvValue('FREEMIUS_DEVELOPER_ID');
+    const publicKey = readFreemiusEnvValue('FREEMIUS_PUBLIC_KEY');
+    const secretKey = readFreemiusEnvValue('FREEMIUS_SECRET_KEY');
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 

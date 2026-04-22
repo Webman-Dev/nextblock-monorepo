@@ -26,12 +26,12 @@ Initially, the codebase relied on a single `FREEMIUS_PRODUCT_ID` stored in `.env
 - **Frontend Changes**: We added a required **Email Address** input to the `Checkout.tsx` payment summary page.
 - **Backend Changes**: When the `FreemiusProvider` creates the initial `pending` order in the database, it immediately saves the captured email into the JSON `customer_details: { email }` column.
 
-## 5. Order Fulfillment & Redirection (JS SDK Overlay)
+## 5. Order Fulfillment & Redirection (`@freemius/checkout`)
 
-Since the Freemius developer dashboard does not natively support an explicit `return_url` parameter using simple Hosted Links without a custom configuration, we transitioned to the **Freemius JS SDK (`checkout.min.js`)**.
+Since the Freemius developer dashboard does not natively support an explicit `return_url` parameter using simple Hosted Links without a custom configuration, we now use the official **`@freemius/checkout` npm package** inside the storefront.
 
-- **The Provider**: The backend `FreemiusProvider` now securely returns your `.env.local`'s `FREEMIUS_PUBLIC_KEY` alongside the product configurations back to the API response payload.
-- **The Overlay**: When "Pay Now" is clicked on NextBlock's UI, `Checkout.tsx` intercepts the response, initializes the `new FS.Checkout` handler, and opens the payment flow as an iframe overlay _on the current storefront page_.
+- **The Provider**: The backend `FreemiusProvider` now resolves checkout credentials per Freemius product. For multi-product stores, product-scoped checkout keys should be provided through `FREEMIUS_CHECKOUT_PRODUCTS_JSON`.
+- **The Overlay**: When "Pay Now" is clicked on NextBlock's UI, `Checkout.tsx` intercepts the response, initializes `new Checkout(...)` from `@freemius/checkout`, and opens the payment flow as an iframe overlay _on the current storefront page_.
 - **The Redirect Hook**: Once the user completes the overlaid checkout, the local `success: function()` listener fires, forcefully rewriting the URL to `/checkout/success?session_id={order.id}`.
 - **Server Action Fulfillment**: We created `actions.ts` inside `/checkout/success` containing `fulfillOrderAction(sessionId)`. This secure backend route flips the specific database order from `pending` to `paid`.
 - **Cart Sync**: The `useEffect` hook on the frontend success page intercepts the returned parameter and instantly runs `clearCart()` to wipe the local storage shopping cart.
@@ -43,10 +43,19 @@ To ensure orders are fulfilled even if a user closes their browser before the `r
 - Created `apps/nextblock/app/api/webhooks/freemius/route.ts`.
 - Implemented **HMAC SHA-256 Signature Verification** using the `FREEMIUS_SECRET_KEY` to authenticate incoming `purchase.created` payloads natively in the Next.js API route.
 
-## 7. Sandbox Testing and Future npm SDK Migration
+## 7. Sandbox Testing
 
-During the integration, we successfully built the backend MD5 hashing algorithm in `freemius.ts` to securely generate Sandbox Tokens structured as `{ ctx: timestamp, token: hash }` according to the official PHP implementation spec. Mathematical verification via standalone Node.js and PHP scripts confirmed our hash generation is 100% accurate byte-for-byte.
+Freemius sandbox checkout is now controlled separately from the global app demo sandbox.
 
-However, when passing these flawless sandbox credentials to the legacy frontend CDN script (`checkout.min.js`), the `FS.Checkout` global initialization stubbornly rejected it with a console error: `Failed to create cart`. As a result, the cart silently fell back to live mode. Because the Freemius dashboard did not expose native sandbox configuration for this specific product ID either, we could not force the legacy script to comply.
+- **`NEXT_PUBLIC_IS_SANDBOX=true`** remains the full-site demo mode. It disables real checkout and shows the local mock modal instead.
+- **`FREEMIUS_SANDBOX_ENABLED=true`** enables the real Freemius checkout in sandbox/test mode while leaving the rest of the application in normal mode.
+- The checkout provider generates Freemius sandbox tokens server-side using the official MD5 format:
+  - `timestamp + product_id + secret_key + public_key + 'checkout'`
+- When using the SDK-first sandbox path, `FREEMIUS_API_KEY` is also required by `@freemius/sdk` to generate sandbox params. The normal production iframe checkout flow still does not require that bearer/API key.
+- Those sandbox parameters are passed into both:
+  - the hosted checkout link as `sandbox` + `s_ctx_ts`
+  - the `@freemius/checkout` handler as `sandbox: { ctx, token }`
+- Per Freemius' official app-integration docs, sandbox checkout uses the same **product** public key and secret key used by the checkout itself. In NextBlock, developer credentials can still be used for sync/webhooks, but true sandbox checkout should use product-scoped keys for the current Freemius product.
+- Quote Freemius keys in `.env` files. Their values often contain characters like `#`, `;`, `<`, `>`, or `=` that can be truncated or misparsed if left unquoted.
 
-**Required Future Action:** To build a robust, native React popup checkout experience that fully supports sandbox carts, we must migrate away from the `window.FS.Checkout` CDN injection entirely. The project must be refactored to install and utilize the official modern NPM package: `@freemius/checkout`.
+The Freemius dashboard's "Sandbox" hosted links are still useful for manual validation, but NextBlock can now switch sandbox behavior directly in code with `FREEMIUS_SANDBOX_ENABLED` once the active product's checkout credentials are configured.
