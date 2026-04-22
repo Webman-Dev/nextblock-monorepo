@@ -23,6 +23,12 @@ const nextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
   },
+  turbopack: {
+    // Work around Turbopack subpath resolution for the latest y-protocols package.
+    resolveAlias: {
+      'y-protocols/awareness': 'y-protocols/awareness.js',
+    },
+  },
   transpilePackages: [
     '@nextblock-cms/utils',
     '@nextblock-cms/ui',
