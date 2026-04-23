@@ -11,8 +11,15 @@ interface ClientTextBlockRendererProps {
   languageId: number;
 }
 
+function normalizeHtmlEncodingArtifacts(html: string): string {
+  return html
+    .replaceAll("âœ“", "&#10003;")
+    .replaceAll("âœ”", "&#10003;");
+}
+
 const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({ content, languageId }) => {
   void languageId;
+  const normalizedHtml = normalizeHtmlEncodingArtifacts(content.html_content || "");
   const options: HTMLReactParserOptions = {
     replace: (domNode) => {
       if (domNode instanceof Element && domNode.attribs) {
@@ -66,7 +73,7 @@ const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({ conte
 
   return (
     <div className="my-4 prose dark:prose-invert container mx-auto">
-      {parse(content.html_content || "", options)}
+      {parse(normalizedHtml, options)}
     </div>
   );
 };

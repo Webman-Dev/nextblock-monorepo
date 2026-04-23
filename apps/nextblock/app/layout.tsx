@@ -36,6 +36,23 @@ type HeaderLogo = Database['public']['Tables']['logos']['Row'] & {
   media: (Database['public']['Tables']['media']['Row'] & { alt_text: string | null }) | null;
 };
 
+function normalizePotentialMojibake(value: string): string {
+  if (!/[ÃÂ]/.test(value)) {
+    return value;
+  }
+
+  return value
+    .replaceAll('Ãƒâ€šÃ‚Â©', '©')
+    .replaceAll('Ã‚Â©', '©')
+    .replaceAll('Â©', '©')
+    .replaceAll('Tous droits rÃƒÆ’Ã‚Â©servÃƒÆ’Ã‚Â©s.', 'Tous droits réservés.')
+    .replaceAll('Tous droits rÃƒÂ©servÃƒÂ©s.', 'Tous droits réservés.')
+    .replaceAll('Tous droits rÃ©servÃ©s.', 'Tous droits réservés.')
+    .replaceAll('rÃƒÆ’Ã‚Â©servÃƒÆ’Ã‚Â©s', 'réservés')
+    .replaceAll('rÃƒÂ©servÃƒÂ©s', 'réservés')
+    .replaceAll('rÃ©servÃ©s', 'réservés');
+}
+
 function createStaticSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey =
@@ -87,7 +104,14 @@ const getCachedCopyrightSettings = unstable_cache(
       return { en: '(c) {year} Nextblock CMS. All rights reserved.' };
     }
 
-    return data.value as Record<string, string>;
+    const rawValue = data.value as Record<string, string>;
+
+    return Object.fromEntries(
+      Object.entries(rawValue).map(([locale, text]) => [
+        locale,
+        typeof text === 'string' ? normalizePotentialMojibake(text) : text,
+      ])
+    ) as Record<string, string>;
   },
   ['public-layout-copyright'],
   { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }

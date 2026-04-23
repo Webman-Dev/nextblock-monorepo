@@ -27,27 +27,38 @@ export const SANDBOX_RESET_SQL = `
   -- Step C: Execute full schema & seed from production migrations
 
 
--- >>> FROM: 00000000000000_setup_extensions_and_roles.sql <<<
--- 00000000000000_setup_extensions_and_roles.sql
--- Base setup: Extensions, Enums, Helper Functions, and Grants
+-- >>> FROM: 00000000000000_setup_foundation_and_enums.sql <<<
+-- 00000000000000_setup_foundation_and_enums.sql
+-- Consolidated migration preserving original statement order within grouped sections.
 
--- 1. Grants
+-- 00000000000000_setup_schema_privileges.sql
+-- Foundation privileges for the public schema.
+
 GRANT USAGE ON SCHEMA public TO postgres;
 GRANT USAGE ON SCHEMA public TO anon;
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT USAGE ON SCHEMA public TO service_role;
 
--- 2. Enums
+-- 00000000000001_setup_auth_and_content_enums.sql
+-- Core enums used by auth and content tables.
+
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
     CREATE TYPE public.user_role AS ENUM ('ADMIN', 'WRITER', 'USER');
   END IF;
-  
+
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'page_status') THEN
     CREATE TYPE public.page_status AS ENUM ('draft', 'published', 'archived');
   END IF;
+END
+$$;
 
+-- 00000000000002_setup_navigation_and_revision_enums.sql
+-- Supporting enums for navigation and revision history.
+
+DO $$
+BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'menu_location') THEN
     CREATE TYPE public.menu_location AS ENUM ('HEADER', 'FOOTER', 'SIDEBAR');
   END IF;
@@ -58,97 +69,43 @@ BEGIN
 END
 $$;
 
--- 3. Helper Functions
 
--- Function: get_my_claim
--- Description: Helper to read JWT claims safely
-CREATE OR REPLACE FUNCTION get_my_claim(claim TEXT)
-RETURNS JSONB AS $$
-  SET search_path = '';
-  SELECT COALESCE(current_setting('request.jwt.claims', true)::JSONB ->> claim, NULL)::JSONB
-$$ LANGUAGE SQL STABLE;
+-- >>> FROM: 00000000000001_setup_cms_core.sql <<<
+-- 00000000000001_setup_cms_core.sql
+-- Consolidated migration preserving original statement order within grouped sections.
 
--- Function: get_current_user_role
--- Description: Fetches the role of the currently authenticated user.
--- SECURITY DEFINER to prevent RLS recursion issues when used in policies.
--- Note: This depends on the 'profiles' table which will be created in the next migration.
--- However, since functions are just definitions, this CREATE statement will succeed 
--- as long as the table exists when the function is *called*.
--- To be safe and avoid "relation does not exist" errors during creation if validation runs,
--- we will defer the creation of this specific function to the profiles migration 
--- OR just ensure profiles is created immediately after. 
--- Actually, let's put it here but be aware it needs profiles table to run.
--- Postgres allows creating functions referring to non-existent tables? No, it usually checks.
--- So I will move \`get_current_user_role\` to \`setup_profiles.sql\` or create a placeholder table?
--- Better: I'll put it in \`setup_profiles.sql\` after the table is created.
-
-
-
--- >>> FROM: 00000000000001_setup_site_settings.sql <<<
--- 00000000000001_setup_site_settings.sql
--- Setup site_settings table
+-- 00000000000003_setup_site_settings_and_profiles.sql
+-- Global settings, user profiles, and saved addresses.
 
 CREATE TABLE public.site_settings (
-    key TEXT PRIMARY KEY,
-    value JSONB
+  key text PRIMARY KEY,
+  value jsonb
 );
 
 COMMENT ON TABLE public.site_settings IS 'Key-value store for global site settings.';
 
--- Seed initial copyright setting
-INSERT INTO public.site_settings (key, value)
-VALUES ('footer_copyright', '{"en": "© {year} Nextblock CMS. All rights reserved.", "fr": "© {year} Nextblock CMS. Tous droits réservés."}')
-ON CONFLICT (key) DO NOTHING;
-
--- Seed initial admin created flag (default false, will be updated by trigger)
-INSERT INTO public.site_settings (key, value)
-VALUES ('is_admin_created', 'false'::jsonb)
-ON CONFLICT (key) DO NOTHING;
-
--- Seed enabled payment providers setting (runtime source of truth)
-INSERT INTO public.site_settings (key, value)
-VALUES (
-  'enabled_payment_providers',
-  '{"stripe": false, "freemius": false}'::jsonb
-)
-ON CONFLICT (key) DO NOTHING;
-
-
--- >>> FROM: 00000000000002_setup_profiles.sql <<<
--- 00000000000002_setup_profiles.sql
--- Setup profiles table and auto-create trigger
-
--- 1. Create profiles table
 CREATE TABLE public.profiles (
-  id uuid NOT NULL PRIMARY KEY, -- references auth.users(id)
-  updated_at timestamp with time zone,
-  -- username text UNIQUE, -- REMOVED as per user request
+  id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  updated_at timestamptz,
   full_name text,
   avatar_url text,
   website text,
-  github_username text, -- Added from 20260116124500
-  phone text,           -- Added from 20260116124500
+  github_username text,
+  phone text,
   role public.user_role NOT NULL DEFAULT 'USER'
 );
-
--- Foreign key to auth.users
-ALTER TABLE public.profiles
-  ADD CONSTRAINT profiles_id_fkey
-  FOREIGN KEY (id)
-  REFERENCES auth.users (id)
-  ON DELETE CASCADE;
 
 COMMENT ON TABLE public.profiles IS 'Profile information for each user, extending auth.users.';
 COMMENT ON COLUMN public.profiles.id IS 'References auth.users.id';
 COMMENT ON COLUMN public.profiles.role IS 'User role for RBAC.';
 
--- 2. Create user_addresses table
 CREATE TABLE public.user_addresses (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   address_type text NOT NULL CHECK (address_type IN ('billing', 'shipping')),
   is_default boolean NOT NULL DEFAULT false,
   recipient_name text,
+  company_name text,
   line1 text,
   line2 text,
   city text,
@@ -159,240 +116,32 @@ CREATE TABLE public.user_addresses (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_user_addresses_user_id ON public.user_addresses(user_id);
-CREATE INDEX idx_user_addresses_type ON public.user_addresses(address_type);
+COMMENT ON COLUMN public.user_addresses.company_name IS
+  'Optional company or organization name for the address.';
+
 CREATE UNIQUE INDEX idx_user_addresses_one_default_per_type
-ON public.user_addresses (user_id, address_type)
-WHERE is_default = true;
+  ON public.user_addresses (user_id, address_type)
+  WHERE is_default = true;
 
-ALTER TABLE public.user_addresses ENABLE ROW LEVEL SECURITY;
+-- 00000000000004_setup_languages_and_media.sql
+-- Core locale and media tables.
 
-CREATE POLICY "Users can manage own addresses"
-  ON public.user_addresses
-  FOR ALL
-  TO authenticated
-  USING (user_id = auth.uid())
-  WITH CHECK (user_id = auth.uid());
-
-CREATE POLICY "Service role manages all addresses"
-  ON public.user_addresses
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-GRANT ALL ON TABLE public.user_addresses TO service_role;
-
--- 3. Helper Function: get_current_user_role
--- Now that profiles table exists, we can define this function.
-CREATE OR REPLACE FUNCTION public.get_current_user_role()
-RETURNS public.user_role
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT role FROM public.profiles WHERE id = auth.uid();
-$$;
-
-COMMENT ON FUNCTION public.get_current_user_role() IS 'Fetches the role of the currently authenticated user. SECURITY DEFINER to prevent RLS recursion issues.';
-
--- 4. Trigger: handle_new_user
--- Automatically creates a profile when a new user signs up.
--- Assigns 'ADMIN' to the first user, 'USER' to subsequent users.
--- Extracts GitHub metadata if available.
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = 'public'
-AS $$
-DECLARE
-  admin_flag_set BOOLEAN := FALSE;
-  user_role public.user_role;
-  v_full_name text;
-  v_avatar_url text;
-  v_github_username text;
-  v_provider text;
-BEGIN
-  -- 1. Role Assignment Logic
-  INSERT INTO public.site_settings (key, value)
-  VALUES ('is_admin_created', 'false'::jsonb)
-  ON CONFLICT (key) DO NOTHING;
-
-  -- Lock and read the flag
-  SELECT COALESCE((value)::jsonb::boolean, FALSE)
-  INTO admin_flag_set
-  FROM public.site_settings
-  WHERE key = 'is_admin_created'
-  FOR UPDATE;
-
-  IF admin_flag_set = FALSE THEN
-    user_role := 'ADMIN'::public.user_role;
-    UPDATE public.site_settings
-    SET value = 'true'::jsonb
-    WHERE key = 'is_admin_created';
-  ELSE
-    user_role := 'USER'::public.user_role;
-  END IF;
-
-  -- 2. Data Extraction
-  v_full_name := new.raw_user_meta_data->>'full_name';
-  v_avatar_url := new.raw_user_meta_data->>'avatar_url';
-  
-  -- Check provider (usually in app_metadata)
-  v_provider := new.raw_app_meta_data->>'provider';
-  
-  -- GitHub Username Extraction
-  IF v_provider = 'github' OR (new.raw_user_meta_data->>'iss') LIKE '%github%' THEN
-     v_github_username := COALESCE(
-       new.raw_user_meta_data->>'user_name',
-       new.raw_user_meta_data->>'preferred_username'
-     );
-  ELSE
-     v_github_username := NULL;
-  END IF;
-
-  -- 3. Insert into profiles
-  -- Use ON CONFLICT DO NOTHING to avoid duplicate key errors if the profile somehow exists
-  INSERT INTO public.profiles (
-    id, 
-    role, 
-    full_name, 
-    avatar_url, 
-    github_username
-  )
-  VALUES (
-    NEW.id, 
-    user_role, 
-    v_full_name, 
-    v_avatar_url, 
-    v_github_username
-  )
-  ON CONFLICT (id) DO UPDATE SET
-    full_name = EXCLUDED.full_name,
-    avatar_url = EXCLUDED.avatar_url,
-    github_username = EXCLUDED.github_username;
-  
-  RETURN NEW;
-END;
-$$;
-
--- Attach trigger to auth.users
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- Translations are now handled in 00000000000010_setup_translations.sql
-
--- 5. Backfill missing profiles for existing auth.users
--- This ensures that if the public schema is reset but auth users persist, profiles are recreated.
-DO $$
-DECLARE
-    missing_user RECORD;
-    v_github_username text;
-    v_full_name text;
-    v_role public.user_role;
-    v_admin_exists boolean;
-BEGIN
-    -- Check if any admin profile already exists
-    SELECT EXISTS (SELECT 1 FROM public.profiles WHERE role = 'ADMIN') INTO v_admin_exists;
-
-    FOR missing_user IN 
-        SELECT * FROM auth.users 
-        WHERE id NOT IN (SELECT id FROM public.profiles)
-        ORDER BY created_at ASC -- Process oldest users first to preserve likely admin ownership
-    LOOP
-        -- Extract GitHub logic for backfill
-        IF missing_user.raw_app_meta_data->>'provider' = 'github' OR (missing_user.raw_user_meta_data->>'iss') LIKE '%github%' THEN
-            v_github_username := COALESCE(
-                missing_user.raw_user_meta_data->>'user_name',
-                missing_user.raw_user_meta_data->>'preferred_username'
-            );
-        ELSE
-            v_github_username := NULL;
-        END IF;
-
-        v_full_name := missing_user.raw_user_meta_data->>'full_name';
-
-        -- Determine Role: First user found (when no admin exists) becomes ADMIN
-        IF v_admin_exists = FALSE THEN
-            v_role := 'ADMIN';
-            v_admin_exists := TRUE; -- Mark as existing so subsequent users are USER
-            
-            -- Sync site_settings
-            INSERT INTO public.site_settings (key, value) VALUES ('is_admin_created', 'true'::jsonb)
-             ON CONFLICT (key) DO UPDATE SET value = 'true'::jsonb;
-        ELSE
-            v_role := 'USER';
-        END IF;
-        
-        INSERT INTO public.profiles (id, role, full_name, avatar_url, github_username)
-        VALUES (
-            missing_user.id,
-            v_role,
-            v_full_name,
-            missing_user.raw_user_meta_data->>'avatar_url',
-            v_github_username
-        )
-        ON CONFLICT (id) DO NOTHING;
-        
-        RAISE NOTICE 'Backfilled profile for user % as %', missing_user.id, v_role;
-    END LOOP;
-END;
-$$;
-
-
--- >>> FROM: 00000000000003_setup_languages.sql <<<
--- 00000000000003_setup_languages.sql
--- Setup languages table
-
--- 1. Create languages table
 CREATE TABLE public.languages (
   id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  code text NOT NULL UNIQUE, -- e.g., 'en', 'fr'
-  name text NOT NULL, -- e.g., 'English', 'Français'
+  code text NOT NULL UNIQUE,
+  name text NOT NULL,
   is_default boolean NOT NULL DEFAULT false,
-  is_active boolean DEFAULT true, -- Added from later migration
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now()
+  is_active boolean DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
 COMMENT ON TABLE public.languages IS 'Stores supported languages for the CMS.';
 COMMENT ON COLUMN public.languages.code IS 'BCP 47 language code.';
 
--- 2. Indexes
 CREATE UNIQUE INDEX ensure_single_default_language_idx
-ON public.languages (is_default)
-WHERE (is_default = true);
-
--- 3. Seed initial languages
-INSERT INTO public.languages (code, name, is_default, is_active)
-VALUES
-  ('en', 'English', true, true),
-  ('fr', 'Français', false, true);
-
--- 4. Trigger: handle_languages_update
-CREATE OR REPLACE FUNCTION public.handle_languages_update()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER on_languages_update
-  BEFORE UPDATE ON public.languages
-  FOR EACH ROW
-  EXECUTE PROCEDURE public.handle_languages_update();
-
-
--- >>> FROM: 00000000000004_setup_media.sql <<<
--- 00000000000004_setup_media.sql
--- Setup media table
+  ON public.languages (is_default)
+  WHERE is_default = true;
 
 CREATE TABLE public.media (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -402,17 +151,14 @@ CREATE TABLE public.media (
   file_type text,
   size_bytes bigint,
   description text,
-  
-  -- Added columns
   width integer,
   height integer,
   blur_data_url text,
   variants jsonb,
   file_path text,
   folder text,
-
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
 COMMENT ON TABLE public.media IS 'Stores information about uploaded media assets.';
@@ -424,32 +170,39 @@ COMMENT ON COLUMN public.media.variants IS 'Array of image variant objects.';
 COMMENT ON COLUMN public.media.file_path IS 'Full path to the file in the storage bucket.';
 COMMENT ON COLUMN public.media.folder IS 'Folder path prefix for the R2 object.';
 
--- Indexes
-CREATE INDEX idx_media_uploader_id ON public.media(uploader_id);
-CREATE INDEX media_folder_idx ON public.media(folder);
+-- 00000000000005_setup_translations_and_branding.sql
+-- Shared translation storage and logo metadata.
 
--- Trigger: handle_media_update
-CREATE OR REPLACE FUNCTION public.handle_media_update()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
+CREATE TABLE public.translations (
+  key text PRIMARY KEY,
+  translations jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 
-CREATE TRIGGER on_media_update
-  BEFORE UPDATE ON public.media
-  FOR EACH ROW
-  EXECUTE PROCEDURE public.handle_media_update();
+COMMENT ON COLUMN public.translations.key IS
+  'A unique, slugified identifier (e.g., "sign_in_button_text").';
+COMMENT ON COLUMN public.translations.translations IS
+  'Stores translations as key-value pairs (e.g., {"en": "Sign In", "fr": "S''inscrire"}).';
+
+CREATE TABLE public.logos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  media_id uuid REFERENCES public.media(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+COMMENT ON TABLE public.logos IS 'Stores company and brand logos.';
+COMMENT ON COLUMN public.logos.name IS 'The name of the brand or company for the logo.';
+COMMENT ON COLUMN public.logos.media_id IS 'Foreign key to the media table for the logo image.';
 
 
--- >>> FROM: 00000000000005_setup_posts.sql <<<
--- 00000000000005_setup_posts.sql
--- Setup posts table
+-- >>> FROM: 00000000000002_setup_content_tables.sql <<<
+-- 00000000000002_setup_content_tables.sql
+-- Consolidated migration preserving original statement order within grouped sections.
+
+-- 00000000000006_setup_pages_and_posts.sql
+-- Page and post records.
 
 CREATE TABLE public.posts (
   id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
@@ -459,56 +212,24 @@ CREATE TABLE public.posts (
   slug text NOT NULL,
   excerpt text,
   status public.page_status NOT NULL DEFAULT 'draft',
-  published_at timestamp with time zone,
+  published_at timestamptz,
   meta_title text,
   meta_description text,
-  
-  -- Added columns
   feature_image_id uuid REFERENCES public.media(id) ON DELETE SET NULL,
   version integer NOT NULL DEFAULT 1,
-  translation_group_id uuid DEFAULT gen_random_uuid() NOT NULL,
-
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now()
+  translation_group_id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT posts_language_id_slug_key UNIQUE (language_id, slug)
 );
 
 COMMENT ON TABLE public.posts IS 'Stores blog posts or news articles.';
 COMMENT ON COLUMN public.posts.slug IS 'URL-friendly identifier, unique per language.';
-COMMENT ON COLUMN public.posts.feature_image_id IS 'ID of the media item to be used as the feature image.';
+COMMENT ON COLUMN public.posts.feature_image_id IS
+  'ID of the media item to be used as the feature image.';
 COMMENT ON COLUMN public.posts.version IS 'Monotonic version number for hybrid revisions.';
-COMMENT ON COLUMN public.posts.translation_group_id IS 'Groups different language versions of the same conceptual post.';
-
--- Constraints
-ALTER TABLE public.posts
-  ADD CONSTRAINT posts_language_id_slug_key UNIQUE (language_id, slug);
-
--- Indexes
-CREATE INDEX idx_posts_feature_image_id ON public.posts(feature_image_id);
-CREATE INDEX idx_posts_author_id ON public.posts(author_id);
-CREATE INDEX idx_posts_translation_group_id ON public.posts(translation_group_id);
-
--- Trigger: handle_posts_update
-CREATE OR REPLACE FUNCTION public.handle_posts_update()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER on_posts_update
-  BEFORE UPDATE ON public.posts
-  FOR EACH ROW
-  EXECUTE PROCEDURE public.handle_posts_update();
-
-
--- >>> FROM: 00000000000006_setup_pages.sql <<<
--- 00000000000006_setup_pages.sql
--- Setup pages table
+COMMENT ON COLUMN public.posts.translation_group_id IS
+  'Groups different language versions of the same conceptual post.';
 
 CREATE TABLE public.pages (
   id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
@@ -519,50 +240,21 @@ CREATE TABLE public.pages (
   status public.page_status NOT NULL DEFAULT 'draft',
   meta_title text,
   meta_description text,
-
-  -- Added columns
   version integer NOT NULL DEFAULT 1,
-  translation_group_id uuid DEFAULT gen_random_uuid() NOT NULL,
-
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now()
+  translation_group_id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT pages_language_id_slug_key UNIQUE (language_id, slug)
 );
 
 COMMENT ON TABLE public.pages IS 'Stores static pages for the website.';
 COMMENT ON COLUMN public.pages.slug IS 'URL-friendly identifier, unique per language.';
 COMMENT ON COLUMN public.pages.version IS 'Monotonic version number for hybrid revisions.';
-COMMENT ON COLUMN public.pages.translation_group_id IS 'Groups different language versions of the same conceptual page.';
+COMMENT ON COLUMN public.pages.translation_group_id IS
+  'Groups different language versions of the same conceptual page.';
 
--- Constraints
-ALTER TABLE public.pages
-  ADD CONSTRAINT pages_language_id_slug_key UNIQUE (language_id, slug);
-
--- Indexes
-CREATE INDEX idx_pages_author_id ON public.pages(author_id);
-CREATE INDEX idx_pages_translation_group_id ON public.pages(translation_group_id);
-
--- Trigger: handle_pages_update
-CREATE OR REPLACE FUNCTION public.handle_pages_update()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER on_pages_update
-  BEFORE UPDATE ON public.pages
-  FOR EACH ROW
-  EXECUTE PROCEDURE public.handle_pages_update();
-
-
--- >>> FROM: 00000000000007_setup_blocks.sql <<<
--- 00000000000007_setup_blocks.sql
--- Setup blocks table
+-- 00000000000007_setup_blocks_and_navigation.sql
+-- Content blocks and navigation trees.
 
 CREATE TABLE public.blocks (
   id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
@@ -572,47 +264,19 @@ CREATE TABLE public.blocks (
   block_type text NOT NULL,
   content jsonb,
   "order" integer NOT NULL DEFAULT 0,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT check_exactly_one_parent CHECK (
-    (page_id IS NOT NULL AND post_id IS NULL) OR
-    (post_id IS NOT NULL AND page_id IS NULL)
+    (page_id IS NOT NULL AND post_id IS NULL)
+    OR (post_id IS NOT NULL AND page_id IS NULL)
   )
 );
 
 COMMENT ON TABLE public.blocks IS 'Stores content blocks for pages and posts.';
-COMMENT ON COLUMN public.blocks.block_type IS 'Type of the block, e.g., "text", "image".';
+COMMENT ON COLUMN public.blocks.block_type IS
+  'Type of the block, e.g., "text", "image".';
 COMMENT ON COLUMN public.blocks.content IS 'JSONB content specific to the block_type.';
 COMMENT ON COLUMN public.blocks.order IS 'Sort order of the block.';
-
--- Indexes
-CREATE INDEX idx_blocks_language_id ON public.blocks(language_id);
-CREATE INDEX idx_blocks_page_id ON public.blocks(page_id);
-CREATE INDEX idx_blocks_post_id ON public.blocks(post_id);
-
--- Trigger: handle_blocks_update
-CREATE OR REPLACE FUNCTION public.handle_blocks_update()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER on_blocks_update
-  BEFORE UPDATE ON public.blocks
-  FOR EACH ROW
-  EXECUTE PROCEDURE public.handle_blocks_update();
-
-
--- >>> FROM: 00000000000008_setup_navigation.sql <<<
--- 00000000000008_setup_navigation.sql
--- Setup navigation_items table
 
 CREATE TABLE public.navigation_items (
   id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
@@ -623,31 +287,1181 @@ CREATE TABLE public.navigation_items (
   parent_id bigint REFERENCES public.navigation_items(id) ON DELETE CASCADE,
   "order" integer NOT NULL DEFAULT 0,
   page_id bigint REFERENCES public.pages(id) ON DELETE SET NULL,
-  
-  -- Added columns (if any, checking previous files... none explicitly added but translation_group_id was mentioned in index drop?)
-  -- 20250520171900_add_translation_group_to_nav_items.sql was listed.
-  -- Let's assume we want it if it was there. I'll double check the file list.
-  -- Yes: 20250520171900_add_translation_group_to_nav_items.sql
-  -- I should add it.
-  translation_group_id uuid DEFAULT gen_random_uuid() NOT NULL,
-
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now()
+  translation_group_id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
 COMMENT ON TABLE public.navigation_items IS 'Stores navigation menu items.';
-COMMENT ON COLUMN public.navigation_items.menu_key IS 'Identifies the menu this item belongs to.';
+COMMENT ON COLUMN public.navigation_items.menu_key IS
+  'Identifies the menu this item belongs to.';
 
--- Indexes
-CREATE INDEX idx_navigation_items_menu_lang_order ON public.navigation_items (menu_key, language_id, "order");
-CREATE INDEX idx_navigation_items_language_id ON public.navigation_items(language_id);
-CREATE INDEX idx_navigation_items_page_id ON public.navigation_items(page_id);
-CREATE INDEX idx_navigation_items_parent_id ON public.navigation_items(parent_id);
--- Note: idx_navigation_items_translation_group_id was dropped in optimize_indexes.sql as unused, so I won't create it.
+-- 00000000000008_setup_revisions.sql
+-- Page and post revision history.
 
--- Trigger: handle_navigation_items_update
-CREATE OR REPLACE FUNCTION public.handle_navigation_items_update()
-RETURNS TRIGGER
+CREATE TABLE public.page_revisions (
+  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  page_id bigint NOT NULL REFERENCES public.pages(id) ON DELETE CASCADE,
+  author_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  version integer NOT NULL,
+  revision_type public.revision_type NOT NULL,
+  content jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT page_revisions_page_version_key UNIQUE (page_id, version)
+);
+
+COMMENT ON TABLE public.page_revisions IS 'Hybrid (snapshot/diff) revisions for pages.';
+COMMENT ON COLUMN public.page_revisions.content IS
+  'If snapshot: full content; if diff: JSON Patch array.';
+
+CREATE TABLE public.post_revisions (
+  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  post_id bigint NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
+  author_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  version integer NOT NULL,
+  revision_type public.revision_type NOT NULL,
+  content jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT post_revisions_post_version_key UNIQUE (post_id, version)
+);
+
+COMMENT ON TABLE public.post_revisions IS 'Hybrid (snapshot/diff) revisions for posts.';
+COMMENT ON COLUMN public.post_revisions.content IS
+  'If snapshot: full content; if diff: JSON Patch array.';
+
+
+-- >>> FROM: 00000000000003_setup_catalog_and_licensing.sql <<<
+-- 00000000000003_setup_catalog_and_licensing.sql
+-- Consolidated migration preserving original statement order within grouped sections.
+
+-- 00000000000009_setup_products_and_media.sql
+-- Core product catalog tables.
+
+CREATE TABLE public.products (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  language_id bigint NOT NULL REFERENCES public.languages(id) ON DELETE CASCADE,
+  translation_group_id uuid NOT NULL DEFAULT gen_random_uuid(),
+  sku text NOT NULL,
+  title text NOT NULL,
+  slug text NOT NULL,
+  product_type text NOT NULL CHECK (product_type IN ('physical', 'digital')),
+  payment_provider text NOT NULL CHECK (payment_provider IN ('stripe', 'freemius')),
+  price integer NOT NULL,
+  prices jsonb NOT NULL DEFAULT '{}'::jsonb,
+  sale_price integer,
+  sale_prices jsonb,
+  stock integer DEFAULT 0,
+  status text NOT NULL CHECK (status IN ('draft', 'active', 'archived')) DEFAULT 'draft',
+  short_description text,
+  description_json jsonb,
+  metadata jsonb,
+  freemius_plan_id text,
+  freemius_product_id text,
+  upc text,
+  is_taxable boolean NOT NULL DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT products_type_provider_consistency_check CHECK (
+    (product_type = 'physical' AND payment_provider = 'stripe')
+    OR (product_type = 'digital' AND payment_provider = 'freemius')
+  ),
+  CONSTRAINT products_language_id_slug_key UNIQUE (language_id, slug),
+  CONSTRAINT products_language_id_sku_key UNIQUE (language_id, sku)
+);
+
+COMMENT ON COLUMN public.products.is_taxable IS
+  'When true, this product participates in Stripe tax calculation.';
+COMMENT ON COLUMN public.products.prices IS
+  'Regular prices by ISO 4217 code in the smallest currency unit.';
+COMMENT ON COLUMN public.products.sale_prices IS
+  'Sale prices by ISO 4217 code in the smallest currency unit.';
+
+CREATE TABLE public.product_media (
+  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+  media_id uuid NOT NULL REFERENCES public.media(id) ON DELETE CASCADE,
+  sort_order integer DEFAULT 0,
+  PRIMARY KEY (product_id, media_id)
+);
+
+-- 00000000000010_setup_product_variants_and_attributes.sql
+-- Variant attributes, terms, and sellable variants.
+
+CREATE TABLE public.product_attributes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  slug text NOT NULL UNIQUE,
+  name_translations jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE public.product_attribute_terms (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  attribute_id uuid NOT NULL REFERENCES public.product_attributes(id) ON DELETE CASCADE,
+  value text NOT NULL,
+  slug text NOT NULL,
+  sort_order integer NOT NULL DEFAULT 0,
+  value_translations jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT product_attribute_terms_attribute_id_slug_key UNIQUE (attribute_id, slug)
+);
+
+CREATE TABLE public.product_variants (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+  sku text NOT NULL,
+  price_adjustment integer NOT NULL DEFAULT 0,
+  price integer NOT NULL DEFAULT 0,
+  prices jsonb NOT NULL DEFAULT '{}'::jsonb,
+  sale_price integer,
+  sale_prices jsonb,
+  stock_quantity integer NOT NULL DEFAULT 0,
+  upc text,
+  main_media_id uuid REFERENCES public.media(id) ON DELETE SET NULL,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT product_variants_product_id_sku_key UNIQUE (product_id, sku)
+);
+
+COMMENT ON COLUMN public.product_variants.prices IS
+  'Variant regular prices by ISO 4217 code in the smallest currency unit.';
+COMMENT ON COLUMN public.product_variants.sale_prices IS
+  'Variant sale prices by ISO 4217 code in the smallest currency unit.';
+
+CREATE TABLE public.inventory_items (
+  sku text PRIMARY KEY,
+  quantity integer NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+COMMENT ON TABLE public.inventory_items IS
+  'Source-of-truth inventory records keyed by sellable SKU.';
+COMMENT ON COLUMN public.inventory_items.sku IS
+  'Global sellable SKU. Matching products or variants share inventory.';
+COMMENT ON COLUMN public.inventory_items.quantity IS
+  'Available quantity for this SKU.';
+
+CREATE TABLE public.variant_attribute_mapping (
+  variant_id uuid NOT NULL REFERENCES public.product_variants(id) ON DELETE CASCADE,
+  attribute_term_id uuid NOT NULL REFERENCES public.product_attribute_terms(id) ON DELETE CASCADE,
+  PRIMARY KEY (variant_id, attribute_term_id)
+);
+
+-- 00000000000011_setup_licensing_and_freemius.sql
+-- Package activations and Freemius plan metadata.
+
+CREATE TABLE public.package_activations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  license_key text NOT NULL,
+  instance_name text NOT NULL,
+  package_id text NOT NULL,
+  status text NOT NULL DEFAULT 'active',
+  meta jsonb DEFAULT '{}'::jsonb,
+  last_validated_at timestamptz DEFAULT now(),
+  created_at timestamptz DEFAULT now(),
+  UNIQUE (license_key, package_id)
+);
+
+CREATE TABLE public.freemius_plans (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  title text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE public.freemius_pricing (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_id uuid NOT NULL REFERENCES public.freemius_plans(id) ON DELETE CASCADE,
+  api_monthly_price numeric,
+  api_annual_price numeric,
+  api_lifetime_price numeric,
+  override_monthly_price numeric,
+  override_annual_price numeric,
+  override_lifetime_price numeric,
+  license_quota integer,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+
+-- >>> FROM: 00000000000004_setup_fulfillment_shipping_taxes_and_currencies.sql <<<
+-- 00000000000004_setup_fulfillment_shipping_taxes_and_currencies.sql
+-- Consolidated migration preserving original statement order within grouped sections.
+
+-- 00000000000012_setup_orders_and_invoiceing.sql
+-- Orders, line items, and invoice numbering primitives.
+
+CREATE TABLE public.orders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  status text NOT NULL CHECK (status IN ('pending', 'paid', 'shipped', 'cancelled', 'refunded')) DEFAULT 'pending',
+  total integer NOT NULL,
+  stripe_session_id text UNIQUE,
+  payment_intent_id text,
+  customer_details jsonb,
+  provider text CHECK (provider IN ('stripe', 'freemius')) DEFAULT 'stripe',
+  currency text NOT NULL DEFAULT 'USD',
+  subtotal integer,
+  shipping_total integer,
+  tax_total integer NOT NULL DEFAULT 0,
+  tax_details jsonb,
+  exchange_rate_at_purchase numeric(20,10) NOT NULL DEFAULT 1,
+  inventory_deducted_at timestamptz,
+  invoice_number text,
+  paid_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  CONSTRAINT orders_exchange_rate_at_purchase_positive CHECK (exchange_rate_at_purchase > 0)
+);
+
+COMMENT ON COLUMN public.orders.currency IS
+  'ISO currency code used for the order totals.';
+COMMENT ON COLUMN public.orders.subtotal IS
+  'Subtotal before shipping and tax, in the smallest currency unit.';
+COMMENT ON COLUMN public.orders.shipping_total IS
+  'Shipping amount before tax, in the smallest currency unit.';
+COMMENT ON COLUMN public.orders.tax_total IS
+  'Total tax amount collected for the order, in the smallest currency unit.';
+COMMENT ON COLUMN public.orders.tax_details IS
+  'Normalized tax breakdown payload sourced from manual rates or finalized Stripe tax data.';
+COMMENT ON COLUMN public.orders.exchange_rate_at_purchase IS
+  'Exchange rate locked at purchase time relative to the store default currency.';
+COMMENT ON COLUMN public.orders.invoice_number IS
+  'Stable printable invoice number assigned once when the order first becomes paid.';
+COMMENT ON COLUMN public.orders.paid_at IS
+  'Timestamp when the order was first marked as paid.';
+
+CREATE UNIQUE INDEX idx_orders_invoice_number_unique
+  ON public.orders (invoice_number)
+  WHERE invoice_number IS NOT NULL;
+
+CREATE TABLE public.order_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+  product_id uuid REFERENCES public.products(id) ON DELETE SET NULL,
+  variant_id uuid REFERENCES public.product_variants(id) ON DELETE SET NULL,
+  quantity integer NOT NULL,
+  price_at_purchase integer NOT NULL
+);
+
+CREATE SEQUENCE public.order_invoice_number_seq
+  START WITH 1
+  INCREMENT BY 1
+  MINVALUE 1
+  NO MAXVALUE
+  CACHE 1;
+
+-- 00000000000013_setup_shipping_and_taxes.sql
+-- Shipping zones, shipping methods, and manual tax rates.
+
+CREATE TABLE public.shipping_zones (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  priority_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE public.shipping_zone_locations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  zone_id uuid NOT NULL REFERENCES public.shipping_zones(id) ON DELETE CASCADE,
+  country_code text NOT NULL,
+  state_code text,
+  postal_code text,
+  created_at timestamptz DEFAULT now()
+);
+
+COMMENT ON COLUMN public.shipping_zone_locations.country_code IS
+  'ISO 3166-1 alpha-2 country code.';
+COMMENT ON COLUMN public.shipping_zone_locations.state_code IS
+  'Optional state/province code within the selected country (for example CA, NY, ON, QC). NULL means the whole country.';
+COMMENT ON COLUMN public.shipping_zone_locations.postal_code IS
+  'Optional exact postal code or wildcard pattern. NULL means all postal codes in the matched country/state.';
+
+CREATE TABLE public.shipping_zone_methods (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  zone_id uuid NOT NULL REFERENCES public.shipping_zones(id) ON DELETE CASCADE,
+  method_type text NOT NULL CHECK (method_type IN ('flat_rate', 'free_shipping')),
+  cost_amount integer NOT NULL DEFAULT 0,
+  cost_currency text NOT NULL DEFAULT 'USD',
+  min_order_amount integer NOT NULL DEFAULT 0,
+  name text NOT NULL,
+  name_translations jsonb NOT NULL DEFAULT '{}'::jsonb,
+  currency_pricing_mode text NOT NULL DEFAULT 'auto',
+  cost_amounts jsonb NOT NULL DEFAULT '{}'::jsonb,
+  min_order_amounts jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT shipping_zone_methods_currency_pricing_mode_valid
+    CHECK (currency_pricing_mode IN ('auto', 'manual')),
+  CONSTRAINT shipping_zone_methods_cost_currency_format
+    CHECK (cost_currency ~ '^[A-Z]{3}$')
+);
+
+COMMENT ON COLUMN public.shipping_zone_methods.name_translations IS
+  'Localized shipping method labels keyed by language code. Example: {"fr": "Livraison standard"}.';
+COMMENT ON COLUMN public.shipping_zone_methods.currency_pricing_mode IS
+  'Whether this rate uses auto FX conversion from a single source currency or exact manual amounts per currency.';
+COMMENT ON COLUMN public.shipping_zone_methods.cost_amounts IS
+  'Shipping costs by ISO 4217 code in the smallest currency unit.';
+COMMENT ON COLUMN public.shipping_zone_methods.min_order_amounts IS
+  'Minimum order thresholds by ISO 4217 code in the smallest currency unit.';
+
+CREATE TABLE public.tax_rates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  country_code text NOT NULL,
+  state_code text,
+  tax_name text NOT NULL CHECK (char_length(btrim(tax_name)) > 0),
+  tax_rate numeric(7,4) NOT NULL CHECK (tax_rate >= 0 AND tax_rate <= 100),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+COMMENT ON TABLE public.tax_rates IS
+  'Manual tax rates used for Stripe storefront orders. Multiple rows can exist per jurisdiction to support combined taxes such as GST + PST.';
+COMMENT ON COLUMN public.tax_rates.country_code IS
+  'ISO 3166-1 alpha-2 country code.';
+COMMENT ON COLUMN public.tax_rates.state_code IS
+  'Optional state/province code within country_code. NULL represents a country-wide or federal tax.';
+COMMENT ON COLUMN public.tax_rates.tax_name IS
+  'Display name for the tax component, for example GST, PST, HST, or State Sales Tax.';
+COMMENT ON COLUMN public.tax_rates.tax_rate IS
+  'Percent value, not decimal fraction. Example: 5.0000 means 5%.';
+
+CREATE UNIQUE INDEX tax_rates_country_state_name_key
+  ON public.tax_rates (country_code, COALESCE(state_code, ''), lower(tax_name));
+
+-- 00000000000014_setup_currencies.sql
+-- Multi-currency configuration.
+
+CREATE TABLE public.currencies (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  code text NOT NULL UNIQUE CHECK (code ~ '^[A-Z]{3}$'),
+  symbol text NOT NULL,
+  exchange_rate numeric(20,10) NOT NULL CHECK (exchange_rate > 0),
+  is_default boolean NOT NULL DEFAULT false,
+  is_active boolean NOT NULL DEFAULT true,
+  rounding_mode text NOT NULL DEFAULT 'none',
+  rounding_increment integer NOT NULL DEFAULT 1,
+  rounding_charm_amount integer,
+  auto_update_exchange_rate boolean NOT NULL DEFAULT true,
+  exchange_rate_updated_at timestamptz,
+  exchange_rate_source text,
+  auto_sync_product_prices boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT currencies_default_must_be_active CHECK (NOT is_default OR is_active),
+  CONSTRAINT currencies_rounding_mode_valid
+    CHECK (rounding_mode IN ('none', 'nearest', 'up', 'down', 'charm')),
+  CONSTRAINT currencies_rounding_increment_positive
+    CHECK (rounding_increment > 0),
+  CONSTRAINT currencies_rounding_charm_nonnegative
+    CHECK (rounding_charm_amount IS NULL OR rounding_charm_amount >= 0),
+  CONSTRAINT currencies_charm_requires_amount
+    CHECK (rounding_mode <> 'charm' OR rounding_charm_amount IS NOT NULL),
+  CONSTRAINT currencies_default_exchange_rate_is_one
+    CHECK (NOT is_default OR exchange_rate = 1),
+  CONSTRAINT currencies_default_auto_update_disabled
+    CHECK (NOT is_default OR auto_update_exchange_rate = false),
+  CONSTRAINT currencies_default_product_price_sync_disabled
+    CHECK (NOT is_default OR auto_sync_product_prices = false)
+);
+
+COMMENT ON TABLE public.currencies IS
+  'Store currencies available for storefront display and conversion.';
+COMMENT ON COLUMN public.currencies.exchange_rate IS
+  'Relative to the current store default currency. The default currency should have exchange_rate = 1.';
+COMMENT ON COLUMN public.currencies.rounding_mode IS
+  'Rounding strategy applied when prices are auto-converted into this currency.';
+COMMENT ON COLUMN public.currencies.rounding_increment IS
+  'Rounding step in the currency smallest unit. Example: 5 means 0.05 for USD/CAD.';
+COMMENT ON COLUMN public.currencies.rounding_charm_amount IS
+  'Charm ending in the currency smallest unit. Example: 90 means prices like 29.90.';
+COMMENT ON COLUMN public.currencies.auto_update_exchange_rate IS
+  'Whether scheduled FX sync jobs should refresh this currency.';
+COMMENT ON COLUMN public.currencies.exchange_rate_updated_at IS
+  'When this currency exchange rate was last refreshed or manually set.';
+COMMENT ON COLUMN public.currencies.exchange_rate_source IS
+  'Human-readable source for the current exchange rate, such as a provider host or manual override.';
+COMMENT ON COLUMN public.currencies.auto_sync_product_prices IS
+  'Whether storefront product and variant prices in this currency are derived automatically from the store default currency using FX and rounding rules.';
+
+CREATE UNIQUE INDEX idx_currencies_single_default
+  ON public.currencies (is_default)
+  WHERE is_default = true;
+
+-- 00000000000017_setup_currency_shipping_and_tax_functions.sql
+-- Currency, shipping, and tax helper functions plus dependent constraints.
+
+CREATE OR REPLACE FUNCTION public.handle_shipping_zone_locations_write()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  NEW.country_code = upper(btrim(NEW.country_code));
+  NEW.state_code = CASE
+    WHEN NEW.state_code IS NULL OR btrim(NEW.state_code) = '' THEN NULL
+    ELSE upper(btrim(NEW.state_code))
+  END;
+  NEW.postal_code = CASE
+    WHEN NEW.postal_code IS NULL OR btrim(NEW.postal_code) = '' THEN NULL
+    ELSE upper(btrim(NEW.postal_code))
+  END;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_tax_rates_write()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  NEW.country_code = upper(btrim(NEW.country_code));
+  NEW.state_code = CASE
+    WHEN NEW.state_code IS NULL OR btrim(NEW.state_code) = '' THEN NULL
+    ELSE upper(btrim(NEW.state_code))
+  END;
+  NEW.tax_name = btrim(NEW.tax_name);
+  NEW.updated_at = now();
+
+  IF NEW.created_at IS NULL THEN
+    NEW.created_at = now();
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_default_currency_code()
+RETURNS text
+LANGUAGE sql
+STABLE
+SET search_path = ''
+AS $$
+  SELECT COALESCE(
+    (
+      SELECT upper(code)
+      FROM public.currencies
+      WHERE is_default = true
+      ORDER BY updated_at DESC, created_at DESC, code ASC
+      LIMIT 1
+    ),
+    'USD'
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.normalize_currency_amount_map(amounts jsonb)
+RETURNS jsonb
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  SELECT CASE
+    WHEN amounts IS NULL THEN '{}'::jsonb
+    WHEN jsonb_typeof(amounts) <> 'object' THEN amounts
+    ELSE COALESCE(
+      (
+        SELECT jsonb_object_agg(
+          upper(trim(entry.key)),
+          CASE
+            WHEN jsonb_typeof(entry.value) = 'number'
+                 AND entry.value::text ~ '^[0-9]+$' THEN
+              to_jsonb((entry.value::text)::bigint)
+            ELSE
+              entry.value
+          END
+        )
+        FROM jsonb_each(amounts) AS entry
+      ),
+      '{}'::jsonb
+    )
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_valid_currency_amount_map(amounts jsonb)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  SELECT CASE
+    WHEN amounts IS NULL THEN false
+    WHEN jsonb_typeof(amounts) <> 'object' THEN false
+    WHEN amounts = '{}'::jsonb THEN false
+    ELSE NOT EXISTS (
+      SELECT 1
+      FROM jsonb_each(amounts) AS entry
+      WHERE entry.key !~ '^[A-Z]{3}$'
+        OR jsonb_typeof(entry.value) <> 'number'
+        OR entry.value::text !~ '^[0-9]+$'
+    )
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_valid_sale_price_map(prices jsonb, sale_prices jsonb)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  SELECT CASE
+    WHEN sale_prices IS NULL THEN true
+    WHEN jsonb_typeof(sale_prices) <> 'object' THEN false
+    WHEN sale_prices = '{}'::jsonb THEN true
+    WHEN prices IS NULL OR jsonb_typeof(prices) <> 'object' THEN false
+    ELSE NOT EXISTS (
+      SELECT 1
+      FROM jsonb_each(sale_prices) AS entry
+      WHERE entry.key !~ '^[A-Z]{3}$'
+        OR NOT (prices ? entry.key)
+        OR jsonb_typeof(entry.value) <> 'number'
+        OR entry.value::text !~ '^[0-9]+$'
+        OR entry.value::text::numeric > (prices ->> entry.key)::numeric
+    )
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.sync_currency_price_maps()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+DECLARE
+  v_default_currency text := public.get_default_currency_code();
+  v_price_map_changed boolean := false;
+  v_legacy_changed boolean := false;
+BEGIN
+  NEW.prices := public.normalize_currency_amount_map(COALESCE(NEW.prices, '{}'::jsonb));
+  NEW.sale_prices := public.normalize_currency_amount_map(COALESCE(NEW.sale_prices, '{}'::jsonb));
+
+  IF NEW.sale_prices = '{}'::jsonb THEN
+    NEW.sale_prices := NULL;
+  END IF;
+
+  IF TG_OP = 'UPDATE' THEN
+    v_price_map_changed :=
+      NEW.prices IS DISTINCT FROM OLD.prices
+      OR NEW.sale_prices IS DISTINCT FROM OLD.sale_prices;
+    v_legacy_changed :=
+      NEW.price IS DISTINCT FROM OLD.price
+      OR NEW.sale_price IS DISTINCT FROM OLD.sale_price;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.prices ? v_default_currency THEN
+      NEW.price := (NEW.prices ->> v_default_currency)::integer;
+    ELSE
+      NEW.prices := NEW.prices || jsonb_build_object(
+        v_default_currency,
+        GREATEST(COALESCE(NEW.price, 0), 0)
+      );
+    END IF;
+
+    IF NEW.sale_prices IS NOT NULL AND NEW.sale_prices ? v_default_currency THEN
+      NEW.sale_price := (NEW.sale_prices ->> v_default_currency)::integer;
+    ELSIF NEW.sale_price IS NOT NULL THEN
+      NEW.sale_prices := COALESCE(NEW.sale_prices, '{}'::jsonb)
+        || jsonb_build_object(v_default_currency, GREATEST(NEW.sale_price, 0));
+    END IF;
+
+    RETURN NEW;
+  END IF;
+
+  IF v_price_map_changed AND NOT v_legacy_changed THEN
+    IF NOT (NEW.prices ? v_default_currency) THEN
+      NEW.prices := NEW.prices || jsonb_build_object(
+        v_default_currency,
+        GREATEST(COALESCE(OLD.price, NEW.price, 0), 0)
+      );
+    END IF;
+
+    NEW.price := (NEW.prices ->> v_default_currency)::integer;
+    NEW.sale_price := CASE
+      WHEN NEW.sale_prices IS NOT NULL AND NEW.sale_prices ? v_default_currency THEN
+        (NEW.sale_prices ->> v_default_currency)::integer
+      ELSE
+        NULL
+    END;
+
+    RETURN NEW;
+  END IF;
+
+  NEW.prices := NEW.prices || jsonb_build_object(
+    v_default_currency,
+    GREATEST(COALESCE(NEW.price, 0), 0)
+  );
+
+  IF NEW.sale_price IS NULL THEN
+    IF NEW.sale_prices IS NOT NULL THEN
+      NEW.sale_prices := NEW.sale_prices - v_default_currency;
+
+      IF NEW.sale_prices = '{}'::jsonb THEN
+        NEW.sale_prices := NULL;
+      END IF;
+    END IF;
+  ELSE
+    NEW.sale_prices := COALESCE(NEW.sale_prices, '{}'::jsonb)
+      || jsonb_build_object(v_default_currency, GREATEST(NEW.sale_price, 0));
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.sync_legacy_price_columns_for_currency(target_currency text)
+RETURNS void
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+DECLARE
+  v_target_currency text := upper(trim(target_currency));
+BEGIN
+  UPDATE public.products
+  SET
+    prices = CASE
+      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN prices
+      ELSE COALESCE(prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, price)
+    END,
+    sale_prices = CASE
+      WHEN sale_price IS NULL THEN sale_prices
+      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN sale_prices
+      ELSE COALESCE(sale_prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, sale_price)
+    END,
+    price = CASE
+      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN
+        (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
+      ELSE
+        price
+    END,
+    sale_price = CASE
+      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN
+        (sale_prices ->> v_target_currency)::integer
+      ELSE
+        sale_price
+    END,
+    updated_at = now()
+  WHERE
+    NOT (COALESCE(prices, '{}'::jsonb) ? v_target_currency)
+    OR (
+      sale_price IS NOT NULL
+      AND (sale_prices IS NULL OR NOT (sale_prices ? v_target_currency))
+    )
+    OR (
+      COALESCE(prices, '{}'::jsonb) ? v_target_currency
+      AND price IS DISTINCT FROM (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
+    )
+    OR (
+      sale_prices IS NOT NULL
+      AND sale_prices ? v_target_currency
+      AND sale_price IS DISTINCT FROM (sale_prices ->> v_target_currency)::integer
+    );
+
+  UPDATE public.product_variants
+  SET
+    prices = CASE
+      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN prices
+      ELSE COALESCE(prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, price)
+    END,
+    sale_prices = CASE
+      WHEN sale_price IS NULL THEN sale_prices
+      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN sale_prices
+      ELSE COALESCE(sale_prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, sale_price)
+    END,
+    price = CASE
+      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN
+        (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
+      ELSE
+        price
+    END,
+    sale_price = CASE
+      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN
+        (sale_prices ->> v_target_currency)::integer
+      ELSE
+        sale_price
+    END,
+    updated_at = now()
+  WHERE
+    NOT (COALESCE(prices, '{}'::jsonb) ? v_target_currency)
+    OR (
+      sale_price IS NOT NULL
+      AND (sale_prices IS NULL OR NOT (sale_prices ? v_target_currency))
+    )
+    OR (
+      COALESCE(prices, '{}'::jsonb) ? v_target_currency
+      AND price IS DISTINCT FROM (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
+    )
+    OR (
+      sale_prices IS NOT NULL
+      AND sale_prices ? v_target_currency
+      AND sale_price IS DISTINCT FROM (sale_prices ->> v_target_currency)::integer
+    );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.set_currency_defaults()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  NEW.code := upper(trim(NEW.code));
+  NEW.updated_at := now();
+
+  IF NEW.is_default THEN
+    NEW.is_active := true;
+    NEW.exchange_rate := 1;
+    NEW.auto_update_exchange_rate := false;
+    NEW.auto_sync_product_prices := false;
+    NEW.exchange_rate_source := COALESCE(NULLIF(NEW.exchange_rate_source, ''), 'store-default');
+    NEW.exchange_rate_updated_at := COALESCE(NEW.exchange_rate_updated_at, now());
+
+    UPDATE public.currencies
+    SET is_default = false,
+        updated_at = now()
+    WHERE id IS DISTINCT FROM NEW.id
+      AND is_default = true;
+  ELSIF NULLIF(NEW.exchange_rate_source, '') IS NULL THEN
+    NEW.exchange_rate_source := NULL;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_default_currency_change()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.is_default THEN
+      PERFORM public.sync_legacy_price_columns_for_currency(NEW.code);
+    END IF;
+  ELSIF NEW.is_default
+        AND (
+          OLD.is_default IS DISTINCT FROM NEW.is_default
+          OR OLD.code IS DISTINCT FROM NEW.code
+        ) THEN
+    PERFORM public.sync_legacy_price_columns_for_currency(NEW.code);
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.clear_currency_price_overrides(target_currency text)
+RETURNS void
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+DECLARE
+  v_target_currency text := upper(trim(target_currency));
+BEGIN
+  IF v_target_currency = '' THEN
+    RETURN;
+  END IF;
+
+  UPDATE public.products
+  SET
+    prices = COALESCE(prices, '{}'::jsonb) - v_target_currency,
+    sale_prices = CASE
+      WHEN sale_prices IS NULL THEN NULL
+      WHEN sale_prices - v_target_currency = '{}'::jsonb THEN NULL
+      ELSE sale_prices - v_target_currency
+    END,
+    updated_at = now()
+  WHERE COALESCE(prices, '{}'::jsonb) ? v_target_currency
+     OR COALESCE(sale_prices, '{}'::jsonb) ? v_target_currency;
+
+  UPDATE public.product_variants
+  SET
+    prices = COALESCE(prices, '{}'::jsonb) - v_target_currency,
+    sale_prices = CASE
+      WHEN sale_prices IS NULL THEN NULL
+      WHEN sale_prices - v_target_currency = '{}'::jsonb THEN NULL
+      ELSE sale_prices - v_target_currency
+    END,
+    updated_at = now()
+  WHERE COALESCE(prices, '{}'::jsonb) ? v_target_currency
+     OR COALESCE(sale_prices, '{}'::jsonb) ? v_target_currency;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.sync_shipping_method_currency_maps()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+DECLARE
+  v_source_currency text;
+BEGIN
+  v_source_currency := upper(trim(COALESCE(NULLIF(NEW.cost_currency, ''), public.get_default_currency_code())));
+
+  NEW.cost_currency := v_source_currency;
+  NEW.currency_pricing_mode := COALESCE(NULLIF(lower(trim(NEW.currency_pricing_mode)), ''), 'auto');
+  NEW.cost_amounts := public.normalize_currency_amount_map(COALESCE(NEW.cost_amounts, '{}'::jsonb));
+  NEW.min_order_amounts := public.normalize_currency_amount_map(COALESCE(NEW.min_order_amounts, '{}'::jsonb));
+
+  IF NEW.currency_pricing_mode NOT IN ('auto', 'manual') THEN
+    RAISE EXCEPTION 'Unsupported shipping currency pricing mode: %', NEW.currency_pricing_mode;
+  END IF;
+
+  IF NEW.cost_amounts = '{}'::jsonb THEN
+    NEW.cost_amounts := jsonb_build_object(v_source_currency, GREATEST(COALESCE(NEW.cost_amount, 0), 0));
+  ELSIF NOT (NEW.cost_amounts ? v_source_currency) THEN
+    NEW.cost_amounts := NEW.cost_amounts || jsonb_build_object(
+      v_source_currency,
+      GREATEST(COALESCE(NEW.cost_amount, 0), 0)
+    );
+  END IF;
+
+  IF NEW.min_order_amounts = '{}'::jsonb THEN
+    NEW.min_order_amounts := jsonb_build_object(
+      v_source_currency,
+      GREATEST(COALESCE(NEW.min_order_amount, 0), 0)
+    );
+  ELSIF NOT (NEW.min_order_amounts ? v_source_currency) THEN
+    NEW.min_order_amounts := NEW.min_order_amounts || jsonb_build_object(
+      v_source_currency,
+      GREATEST(COALESCE(NEW.min_order_amount, 0), 0)
+    );
+  END IF;
+
+  IF NEW.currency_pricing_mode = 'auto' THEN
+    NEW.cost_amounts := jsonb_build_object(
+      v_source_currency,
+      GREATEST((NEW.cost_amounts ->> v_source_currency)::integer, 0)
+    );
+    NEW.min_order_amounts := jsonb_build_object(
+      v_source_currency,
+      GREATEST((NEW.min_order_amounts ->> v_source_currency)::integer, 0)
+    );
+  END IF;
+
+  NEW.cost_amount := GREATEST((NEW.cost_amounts ->> v_source_currency)::integer, 0);
+  NEW.min_order_amount := GREATEST((NEW.min_order_amounts ->> v_source_currency)::integer, 0);
+  NEW.updated_at := now();
+
+  RETURN NEW;
+END;
+$$;
+
+ALTER TABLE public.products
+  ADD CONSTRAINT products_prices_is_valid
+    CHECK (public.is_valid_currency_amount_map(prices)),
+  ADD CONSTRAINT products_sale_prices_are_valid
+    CHECK (public.is_valid_sale_price_map(prices, sale_prices));
+
+ALTER TABLE public.product_variants
+  ADD CONSTRAINT product_variants_prices_is_valid
+    CHECK (public.is_valid_currency_amount_map(prices)),
+  ADD CONSTRAINT product_variants_sale_prices_are_valid
+    CHECK (public.is_valid_sale_price_map(prices, sale_prices));
+
+ALTER TABLE public.shipping_zone_methods
+  ADD CONSTRAINT shipping_zone_methods_cost_amounts_valid
+    CHECK (public.is_valid_currency_amount_map(cost_amounts)),
+  ADD CONSTRAINT shipping_zone_methods_min_order_amounts_valid
+    CHECK (public.is_valid_currency_amount_map(min_order_amounts)),
+  ADD CONSTRAINT shipping_zone_methods_cost_amounts_include_source
+    CHECK (cost_amounts ? upper(cost_currency)),
+  ADD CONSTRAINT shipping_zone_methods_min_order_amounts_include_source
+    CHECK (min_order_amounts ? upper(cost_currency));
+
+DROP TRIGGER IF EXISTS on_shipping_zone_locations_write ON public.shipping_zone_locations;
+CREATE TRIGGER on_shipping_zone_locations_write
+  BEFORE INSERT OR UPDATE ON public.shipping_zone_locations
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_shipping_zone_locations_write();
+
+DROP TRIGGER IF EXISTS on_tax_rates_write ON public.tax_rates;
+CREATE TRIGGER on_tax_rates_write
+  BEFORE INSERT OR UPDATE ON public.tax_rates
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_tax_rates_write();
+
+DROP TRIGGER IF EXISTS trg_sync_products_currency_prices ON public.products;
+CREATE TRIGGER trg_sync_products_currency_prices
+  BEFORE INSERT OR UPDATE OF price, sale_price, prices, sale_prices
+  ON public.products
+  FOR EACH ROW
+  EXECUTE FUNCTION public.sync_currency_price_maps();
+
+DROP TRIGGER IF EXISTS trg_sync_product_variants_currency_prices ON public.product_variants;
+CREATE TRIGGER trg_sync_product_variants_currency_prices
+  BEFORE INSERT OR UPDATE OF price, sale_price, prices, sale_prices
+  ON public.product_variants
+  FOR EACH ROW
+  EXECUTE FUNCTION public.sync_currency_price_maps();
+
+DROP TRIGGER IF EXISTS trg_set_currency_defaults ON public.currencies;
+CREATE TRIGGER trg_set_currency_defaults
+  BEFORE INSERT OR UPDATE ON public.currencies
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_currency_defaults();
+
+DROP TRIGGER IF EXISTS trg_handle_default_currency_change ON public.currencies;
+CREATE TRIGGER trg_handle_default_currency_change
+  AFTER INSERT OR UPDATE ON public.currencies
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_default_currency_change();
+
+DROP TRIGGER IF EXISTS trg_sync_shipping_method_currency_maps ON public.shipping_zone_methods;
+CREATE TRIGGER trg_sync_shipping_method_currency_maps
+  BEFORE INSERT OR UPDATE OF cost_amount, cost_currency, min_order_amount, currency_pricing_mode, cost_amounts, min_order_amounts
+  ON public.shipping_zone_methods
+  FOR EACH ROW
+  EXECUTE FUNCTION public.sync_shipping_method_currency_maps();
+
+GRANT EXECUTE ON FUNCTION public.clear_currency_price_overrides(text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.clear_currency_price_overrides(text) TO service_role;
+
+-- 00000000000032_seed_shipping_defaults.sql
+-- Default North America shipping zone and methods.
+
+DO $$
+DECLARE
+  v_zone_id uuid;
+BEGIN
+  INSERT INTO public.shipping_zones (name, priority_order)
+  VALUES ('North America', 10)
+  RETURNING id INTO v_zone_id;
+
+  INSERT INTO public.shipping_zone_locations (zone_id, country_code)
+  VALUES
+    (v_zone_id, 'US'),
+    (v_zone_id, 'CA'),
+    (v_zone_id, 'MX');
+
+  INSERT INTO public.shipping_zone_methods (
+    zone_id,
+    method_type,
+    cost_amount,
+    name,
+    min_order_amount,
+    name_translations
+  )
+  VALUES
+    (
+      v_zone_id,
+      'flat_rate',
+      1500,
+      'Standard Shipping',
+      0,
+      '{"fr": "Livraison standard"}'::jsonb
+    ),
+    (
+      v_zone_id,
+      'free_shipping',
+      0,
+      'Free Shipping (Orders over $100)',
+      10000,
+      '{"fr": "Livraison gratuite (commandes de plus de 100 $)"}'::jsonb
+    );
+END
+$$;
+
+
+-- >>> FROM: 00000000000005_setup_functions_and_triggers.sql <<<
+-- 00000000000005_setup_functions_and_triggers.sql
+-- Consolidated migration preserving original statement order within grouped sections.
+
+-- 00000000000015_setup_core_functions_and_triggers.sql
+-- Shared auth helpers and CMS timestamp triggers.
+
+CREATE OR REPLACE FUNCTION public.get_my_claim(claim text)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SET search_path = ''
+AS $$
+  SELECT COALESCE(current_setting('request.jwt.claims', true)::jsonb ->> claim, NULL)::jsonb
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_current_user_role()
+RETURNS public.user_role
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT role FROM public.profiles WHERE id = auth.uid();
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT role = 'ADMIN' FROM public.profiles WHERE id = auth.uid();
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  admin_flag_set boolean := false;
+  user_role public.user_role;
+  v_full_name text;
+  v_avatar_url text;
+  v_github_username text;
+  v_provider text;
+BEGIN
+  INSERT INTO public.site_settings (key, value)
+  VALUES ('is_admin_created', 'false'::jsonb)
+  ON CONFLICT (key) DO NOTHING;
+
+  SELECT COALESCE(value::jsonb::boolean, false)
+    INTO admin_flag_set
+  FROM public.site_settings
+  WHERE key = 'is_admin_created'
+  FOR UPDATE;
+
+  IF admin_flag_set = false THEN
+    user_role := 'ADMIN'::public.user_role;
+
+    UPDATE public.site_settings
+    SET value = 'true'::jsonb
+    WHERE key = 'is_admin_created';
+  ELSE
+    user_role := 'USER'::public.user_role;
+  END IF;
+
+  v_full_name := NEW.raw_user_meta_data->>'full_name';
+  v_avatar_url := NEW.raw_user_meta_data->>'avatar_url';
+  v_provider := NEW.raw_app_meta_data->>'provider';
+
+  IF v_provider = 'github' OR (NEW.raw_user_meta_data->>'iss') LIKE '%github%' THEN
+    v_github_username := COALESCE(
+      NEW.raw_user_meta_data->>'user_name',
+      NEW.raw_user_meta_data->>'preferred_username'
+    );
+  ELSE
+    v_github_username := NULL;
+  END IF;
+
+  INSERT INTO public.profiles (
+    id,
+    role,
+    full_name,
+    avatar_url,
+    github_username
+  )
+  VALUES (
+    NEW.id,
+    user_role,
+    v_full_name,
+    v_avatar_url,
+    v_github_username
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    avatar_url = EXCLUDED.avatar_url,
+    github_username = EXCLUDED.github_username;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user();
+
+DO $$
+DECLARE
+  missing_user record;
+  v_github_username text;
+  v_full_name text;
+  v_role public.user_role;
+  v_admin_exists boolean;
+BEGIN
+  SELECT EXISTS (SELECT 1 FROM public.profiles WHERE role = 'ADMIN')
+    INTO v_admin_exists;
+
+  FOR missing_user IN
+    SELECT *
+    FROM auth.users
+    WHERE id NOT IN (SELECT id FROM public.profiles)
+    ORDER BY created_at ASC
+  LOOP
+    IF missing_user.raw_app_meta_data->>'provider' = 'github'
+       OR (missing_user.raw_user_meta_data->>'iss') LIKE '%github%' THEN
+      v_github_username := COALESCE(
+        missing_user.raw_user_meta_data->>'user_name',
+        missing_user.raw_user_meta_data->>'preferred_username'
+      );
+    ELSE
+      v_github_username := NULL;
+    END IF;
+
+    v_full_name := missing_user.raw_user_meta_data->>'full_name';
+
+    IF v_admin_exists = false THEN
+      v_role := 'ADMIN';
+      v_admin_exists := true;
+
+      INSERT INTO public.site_settings (key, value)
+      VALUES ('is_admin_created', 'true'::jsonb)
+      ON CONFLICT (key) DO UPDATE
+      SET value = 'true'::jsonb;
+    ELSE
+      v_role := 'USER';
+    END IF;
+
+    INSERT INTO public.profiles (id, role, full_name, avatar_url, github_username)
+    VALUES (
+      missing_user.id,
+      v_role,
+      v_full_name,
+      missing_user.raw_user_meta_data->>'avatar_url',
+      v_github_username
+    )
+    ON CONFLICT (id) DO NOTHING;
+  END LOOP;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.set_current_timestamp_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+DECLARE
+  _new record;
+BEGIN
+  _new := NEW;
+  _new.updated_at = now();
+  RETURN _new;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_languages_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_media_update()
+RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
@@ -658,65 +1472,1756 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.handle_posts_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_pages_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_blocks_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_navigation_items_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS set_updated_at ON public.translations;
+CREATE TRIGGER set_updated_at
+  BEFORE UPDATE ON public.translations
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_current_timestamp_updated_at();
+
+DROP TRIGGER IF EXISTS on_languages_update ON public.languages;
+CREATE TRIGGER on_languages_update
+  BEFORE UPDATE ON public.languages
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_languages_update();
+
+DROP TRIGGER IF EXISTS on_media_update ON public.media;
+CREATE TRIGGER on_media_update
+  BEFORE UPDATE ON public.media
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_media_update();
+
+DROP TRIGGER IF EXISTS on_posts_update ON public.posts;
+CREATE TRIGGER on_posts_update
+  BEFORE UPDATE ON public.posts
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_posts_update();
+
+DROP TRIGGER IF EXISTS on_pages_update ON public.pages;
+CREATE TRIGGER on_pages_update
+  BEFORE UPDATE ON public.pages
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_pages_update();
+
+DROP TRIGGER IF EXISTS on_blocks_update ON public.blocks;
+CREATE TRIGGER on_blocks_update
+  BEFORE UPDATE ON public.blocks
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_blocks_update();
+
+DROP TRIGGER IF EXISTS on_navigation_items_update ON public.navigation_items;
 CREATE TRIGGER on_navigation_items_update
   BEFORE UPDATE ON public.navigation_items
   FOR EACH ROW
-  EXECUTE PROCEDURE public.handle_navigation_items_update();
+  EXECUTE FUNCTION public.handle_navigation_items_update();
 
+-- 00000000000016_setup_ecommerce_functions_and_triggers.sql
+-- Product RPCs, inventory sync, and invoice helpers.
 
--- >>> FROM: 00000000000009_setup_logos.sql <<<
--- 00000000000009_setup_logos.sql
--- Setup logos table
-
-CREATE TABLE public.logos (
-    id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
-    name text NOT NULL,
-    media_id uuid REFERENCES public.media(id) ON DELETE SET NULL,
-    created_at timestamp with time zone NOT NULL DEFAULT now()
-);
-
-COMMENT ON TABLE public.logos IS 'Stores company and brand logos.';
-COMMENT ON COLUMN public.logos.name IS 'The name of the brand or company for the logo.';
-COMMENT ON COLUMN public.logos.media_id IS 'Foreign key to the media table for the logo image.';
-
-
--- >>> FROM: 00000000000010_setup_translations.sql <<<
--- 00000000000010_setup_translations.sql
--- Setup translations table
-
-CREATE TABLE IF NOT EXISTS public.translations (
-    key text PRIMARY KEY,
-    translations jsonb NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-COMMENT ON COLUMN public.translations.key IS 'A unique, slugified identifier (e.g., "sign_in_button_text").';
-COMMENT ON COLUMN public.translations.translations IS 'Stores translations as key-value pairs (e.g., {"en": "Sign In", "fr": "s''inscrire"}).';
-
--- Trigger: set_updated_at
-CREATE OR REPLACE FUNCTION public.set_current_timestamp_updated_at()
-RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION public.get_ecommerce_track_quantities()
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
 DECLARE
-  _new record;
+  v_value jsonb;
+  v_raw text;
 BEGIN
-  _new := NEW;
-  _new."updated_at" = NOW();
-  RETURN _new;
+  SELECT value
+    INTO v_value
+  FROM public.site_settings
+  WHERE key = 'ecommerce_inventory_settings';
+
+  IF v_value IS NULL THEN
+    RETURN true;
+  END IF;
+
+  IF jsonb_typeof(v_value) = 'object' THEN
+    v_raw := NULLIF(v_value->>'track_quantities', '');
+  ELSE
+    v_raw := NULLIF(trim(BOTH '"' FROM v_value::text), '');
+  END IF;
+
+  IF v_raw IS NULL THEN
+    RETURN true;
+  END IF;
+
+  IF lower(v_raw) IN ('false', 'f', '0', 'no', 'off') THEN
+    RETURN false;
+  END IF;
+
+  RETURN true;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
-DO $$
+CREATE OR REPLACE FUNCTION public.format_order_invoice_number(p_value bigint)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  SELECT 'INV-' || lpad(p_value::text, 6, '0');
+$$;
+
+CREATE OR REPLACE FUNCTION public.generate_order_invoice_number()
+RETURNS text
+LANGUAGE sql
+VOLATILE
+SET search_path = ''
+AS $$
+  SELECT public.format_order_invoice_number(nextval('public.order_invoice_number_seq'));
+$$;
+
+CREATE OR REPLACE FUNCTION public.assign_order_invoice_metadata(
+  p_order_id uuid,
+  p_paid_at timestamptz DEFAULT now()
+)
+RETURNS TABLE(invoice_number text, paid_at timestamptz)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_order public.orders%ROWTYPE;
+  v_effective_paid_at timestamptz;
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_updated_at') THEN
-        CREATE TRIGGER set_updated_at
-        BEFORE UPDATE ON public.translations
-        FOR EACH ROW
-        EXECUTE FUNCTION public.set_current_timestamp_updated_at();
-    END IF;
-END $$;
+  SELECT *
+    INTO v_order
+  FROM public.orders
+  WHERE id = p_order_id
+  FOR UPDATE;
 
--- 20260116 - Profile Form Translations (Moved from merged profiles migration)
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Order % not found', p_order_id;
+  END IF;
+
+  v_effective_paid_at := COALESCE(v_order.paid_at, p_paid_at, now(), v_order.created_at);
+
+  UPDATE public.orders
+  SET
+    invoice_number = COALESCE(v_order.invoice_number, public.generate_order_invoice_number()),
+    paid_at = v_effective_paid_at
+  WHERE id = p_order_id
+  RETURNING orders.invoice_number, orders.paid_at
+  INTO invoice_number, paid_at;
+
+  RETURN NEXT;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.upsert_product_with_variants(product_payload jsonb)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_product_id uuid := NULLIF(product_payload->>'id', '')::uuid;
+  v_translation_group_id uuid := NULLIF(product_payload->>'translation_group_id', '')::uuid;
+  v_product_type text := CASE
+    WHEN product_payload->>'product_type' IN ('physical', 'digital') THEN
+      product_payload->>'product_type'
+    WHEN NULLIF(product_payload->>'freemius_product_id', '') IS NOT NULL
+      OR NULLIF(product_payload->>'freemius_plan_id', '') IS NOT NULL THEN
+      'digital'
+    ELSE
+      'physical'
+  END;
+  v_payment_provider text := CASE
+    WHEN v_product_type = 'digital' THEN 'freemius'
+    ELSE 'stripe'
+  END;
+  v_variants jsonb := COALESCE(product_payload->'variants', '[]'::jsonb);
+  v_variant jsonb;
+  v_variant_id uuid;
+  v_term_id text;
+  v_has_variants boolean := jsonb_typeof(v_variants) = 'array' AND jsonb_array_length(v_variants) > 0;
+  v_total_variant_stock integer := 0;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Admin access required';
+  END IF;
+
+  IF v_has_variants THEN
+    SELECT COALESCE(SUM(COALESCE((value->>'stock_quantity')::integer, 0)), 0)
+      INTO v_total_variant_stock
+    FROM jsonb_array_elements(v_variants);
+  END IF;
+
+  IF v_product_id IS NULL THEN
+    INSERT INTO public.products (
+      title,
+      slug,
+      sku,
+      product_type,
+      payment_provider,
+      upc,
+      stock,
+      status,
+      short_description,
+      description_json,
+      metadata,
+      price,
+      prices,
+      sale_price,
+      sale_prices,
+      freemius_plan_id,
+      freemius_product_id,
+      language_id,
+      translation_group_id
+    )
+    VALUES (
+      product_payload->>'title',
+      product_payload->>'slug',
+      product_payload->>'sku',
+      v_product_type,
+      v_payment_provider,
+      NULLIF(product_payload->>'upc', ''),
+      CASE
+        WHEN v_has_variants THEN v_total_variant_stock
+        ELSE COALESCE((product_payload->>'stock')::integer, 0)
+      END,
+      COALESCE(product_payload->>'status', 'draft'),
+      NULLIF(product_payload->>'short_description', ''),
+      product_payload->'description_json',
+      COALESCE(product_payload->'metadata', '{}'::jsonb),
+      COALESCE((product_payload->>'price')::integer, 0),
+      COALESCE(product_payload->'prices', '{}'::jsonb),
+      CASE
+        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
+          (product_payload->>'sale_price')::integer
+        ELSE
+          NULL
+      END,
+      CASE
+        WHEN product_payload ? 'sale_prices' THEN COALESCE(product_payload->'sale_prices', '{}'::jsonb)
+        ELSE NULL
+      END,
+      NULLIF(product_payload->>'freemius_plan_id', ''),
+      NULLIF(product_payload->>'freemius_product_id', ''),
+      (product_payload->>'language_id')::bigint,
+      COALESCE(v_translation_group_id, gen_random_uuid())
+    )
+    RETURNING id INTO v_product_id;
+  ELSE
+    UPDATE public.products
+    SET
+      title = product_payload->>'title',
+      slug = product_payload->>'slug',
+      sku = product_payload->>'sku',
+      product_type = v_product_type,
+      payment_provider = v_payment_provider,
+      upc = NULLIF(product_payload->>'upc', ''),
+      stock = CASE
+        WHEN v_has_variants THEN v_total_variant_stock
+        ELSE COALESCE((product_payload->>'stock')::integer, 0)
+      END,
+      status = COALESCE(product_payload->>'status', status),
+      short_description = NULLIF(product_payload->>'short_description', ''),
+      description_json = product_payload->'description_json',
+      metadata = COALESCE(product_payload->'metadata', '{}'::jsonb),
+      price = COALESCE((product_payload->>'price')::integer, 0),
+      prices = COALESCE(product_payload->'prices', '{}'::jsonb),
+      sale_price = CASE
+        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
+          (product_payload->>'sale_price')::integer
+        ELSE
+          NULL
+      END,
+      sale_prices = CASE
+        WHEN product_payload ? 'sale_prices' THEN COALESCE(product_payload->'sale_prices', '{}'::jsonb)
+        ELSE NULL
+      END,
+      freemius_plan_id = NULLIF(product_payload->>'freemius_plan_id', ''),
+      freemius_product_id = NULLIF(product_payload->>'freemius_product_id', ''),
+      language_id = COALESCE((product_payload->>'language_id')::bigint, language_id),
+      translation_group_id = COALESCE(v_translation_group_id, translation_group_id),
+      updated_at = now()
+    WHERE id = v_product_id;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Product not found';
+    END IF;
+  END IF;
+
+  DELETE FROM public.variant_attribute_mapping
+  WHERE variant_id IN (
+    SELECT id
+    FROM public.product_variants
+    WHERE product_id = v_product_id
+  );
+
+  DELETE FROM public.product_variants
+  WHERE product_id = v_product_id;
+
+  IF v_has_variants THEN
+    FOR v_variant IN
+      SELECT value FROM jsonb_array_elements(v_variants)
+    LOOP
+      INSERT INTO public.product_variants (
+        product_id,
+        sku,
+        upc,
+        price,
+        prices,
+        sale_price,
+        sale_prices,
+        stock_quantity,
+        main_media_id
+      )
+      VALUES (
+        v_product_id,
+        v_variant->>'sku',
+        NULLIF(v_variant->>'upc', ''),
+        COALESCE((v_variant->>'price')::integer, 0),
+        COALESCE(v_variant->'prices', '{}'::jsonb),
+        CASE
+          WHEN v_variant ? 'sale_price' AND v_variant->>'sale_price' <> '' THEN
+            (v_variant->>'sale_price')::integer
+          ELSE
+            NULL
+        END,
+        CASE
+          WHEN v_variant ? 'sale_prices' THEN COALESCE(v_variant->'sale_prices', '{}'::jsonb)
+          ELSE NULL
+        END,
+        COALESCE((v_variant->>'stock_quantity')::integer, 0),
+        NULLIF(v_variant->>'main_media_id', '')::uuid
+      )
+      RETURNING id INTO v_variant_id;
+
+      FOR v_term_id IN
+        SELECT jsonb_array_elements_text(COALESCE(v_variant->'attribute_term_ids', '[]'::jsonb))
+      LOOP
+        INSERT INTO public.variant_attribute_mapping (variant_id, attribute_term_id)
+        VALUES (v_variant_id, v_term_id::uuid);
+      END LOOP;
+    END LOOP;
+  END IF;
+
+  RETURN v_product_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.handle_inventory_items_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.sync_inventory_cache_for_sku(p_sku text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_quantity integer := 0;
+BEGIN
+  IF NULLIF(trim(p_sku), '') IS NULL THEN
+    RETURN;
+  END IF;
+
+  SELECT quantity
+    INTO v_quantity
+  FROM public.inventory_items
+  WHERE sku = p_sku
+  LIMIT 1;
+
+  v_quantity := COALESCE(v_quantity, 0);
+
+  UPDATE public.product_variants
+  SET
+    stock_quantity = v_quantity,
+    updated_at = now()
+  WHERE sku = p_sku;
+
+  UPDATE public.products AS products
+  SET
+    stock = v_quantity,
+    updated_at = now()
+  WHERE products.sku = p_sku
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.product_variants
+      WHERE product_id = products.id
+    );
+
+  UPDATE public.products AS products
+  SET
+    stock = COALESCE((
+      SELECT SUM(COALESCE(inventory.quantity, 0))
+      FROM public.product_variants AS variants
+      LEFT JOIN public.inventory_items AS inventory
+        ON inventory.sku = variants.sku
+      WHERE variants.product_id = products.id
+    ), 0),
+    updated_at = now()
+  WHERE EXISTS (
+    SELECT 1
+    FROM public.product_variants AS variants
+    WHERE variants.product_id = products.id
+      AND variants.sku = p_sku
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_inventory_item_change()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_sku text := COALESCE(NEW.sku, OLD.sku);
+BEGIN
+  PERFORM public.sync_inventory_cache_for_sku(v_sku);
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.apply_order_inventory_deduction(p_order_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_track_quantities boolean := public.get_ecommerce_track_quantities();
+  v_item record;
+  v_inventory_deducted_at timestamptz;
+  v_sku text;
+  v_current_quantity integer;
+BEGIN
+  SELECT inventory_deducted_at
+    INTO v_inventory_deducted_at
+  FROM public.orders
+  WHERE id = p_order_id
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_inventory_deducted_at IS NOT NULL THEN
+    RETURN;
+  END IF;
+
+  IF NOT v_track_quantities THEN
+    UPDATE public.orders
+    SET inventory_deducted_at = now()
+    WHERE id = p_order_id;
+
+    RETURN;
+  END IF;
+
+  FOR v_item IN
+    SELECT
+      product_id,
+      variant_id,
+      SUM(quantity)::integer AS quantity
+    FROM public.order_items
+    WHERE order_id = p_order_id
+    GROUP BY product_id, variant_id
+  LOOP
+    v_sku := NULL;
+    v_current_quantity := 0;
+
+    IF v_item.variant_id IS NOT NULL THEN
+      SELECT
+        sku,
+        GREATEST(COALESCE(stock_quantity, 0), 0)
+        INTO v_sku,
+             v_current_quantity
+      FROM public.product_variants
+      WHERE id = v_item.variant_id
+      LIMIT 1;
+    ELSIF v_item.product_id IS NOT NULL THEN
+      SELECT
+        sku,
+        GREATEST(COALESCE(stock, 0), 0)
+        INTO v_sku,
+             v_current_quantity
+      FROM public.products
+      WHERE id = v_item.product_id
+      LIMIT 1;
+    END IF;
+
+    IF NULLIF(trim(v_sku), '') IS NULL THEN
+      CONTINUE;
+    END IF;
+
+    INSERT INTO public.inventory_items (sku, quantity)
+    VALUES (v_sku, v_current_quantity)
+    ON CONFLICT (sku) DO NOTHING;
+
+    UPDATE public.inventory_items
+    SET
+      quantity = GREATEST(COALESCE(quantity, 0) - v_item.quantity, 0),
+      updated_at = now()
+    WHERE sku = v_sku;
+  END LOOP;
+
+  UPDATE public.orders
+  SET inventory_deducted_at = now()
+  WHERE id = p_order_id;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_inventory_items_update ON public.inventory_items;
+CREATE TRIGGER on_inventory_items_update
+  BEFORE UPDATE ON public.inventory_items
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_inventory_items_update();
+
+DROP TRIGGER IF EXISTS on_inventory_item_change ON public.inventory_items;
+CREATE TRIGGER on_inventory_item_change
+  AFTER INSERT OR UPDATE OF quantity OR DELETE ON public.inventory_items
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_inventory_item_change();
+
+GRANT EXECUTE ON FUNCTION public.get_ecommerce_track_quantities() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_ecommerce_track_quantities() TO service_role;
+GRANT EXECUTE ON FUNCTION public.generate_order_invoice_number() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.generate_order_invoice_number() TO service_role;
+GRANT EXECUTE ON FUNCTION public.assign_order_invoice_metadata(uuid, timestamptz) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.assign_order_invoice_metadata(uuid, timestamptz) TO service_role;
+GRANT EXECUTE ON FUNCTION public.upsert_product_with_variants(jsonb) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.upsert_product_with_variants(jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.sync_inventory_cache_for_sku(text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.sync_inventory_cache_for_sku(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.apply_order_inventory_deduction(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.apply_order_inventory_deduction(uuid) TO service_role;
+
+
+-- >>> FROM: 00000000000006_setup_rls_and_grants.sql <<<
+-- 00000000000006_setup_rls_and_grants.sql
+-- Consolidated migration preserving original statement order within grouped sections.
+
+-- 00000000000018_setup_core_cms_rls.sql
+-- RLS, grants, and core admin/public access policies.
+
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO service_role;
+
+ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_addresses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.languages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.media ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.translations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.logos ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY profiles_read_policy
+  ON public.profiles
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY profiles_service_role_policy
+  ON public.profiles
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY profiles_update_policy
+  ON public.profiles
+  FOR UPDATE
+  TO authenticated
+  USING (
+    (id = (SELECT auth.uid()))
+    OR ((SELECT public.get_current_user_role()) = 'ADMIN')
+  )
+  WITH CHECK (
+    (id = (SELECT auth.uid()))
+    OR ((SELECT public.get_current_user_role()) = 'ADMIN')
+  );
+
+CREATE POLICY profiles_insert_policy
+  ON public.profiles
+  FOR INSERT
+  TO authenticated
+  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
+
+CREATE POLICY "Users can manage own addresses"
+  ON public.user_addresses
+  FOR ALL
+  TO authenticated
+  USING (user_id = (SELECT auth.uid()))
+  WITH CHECK (user_id = (SELECT auth.uid()));
+
+CREATE POLICY "Service role manages all addresses"
+  ON public.user_addresses
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY languages_read_policy
+  ON public.languages
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY languages_insert_policy
+  ON public.languages
+  FOR INSERT
+  TO authenticated
+  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
+
+CREATE POLICY languages_update_policy
+  ON public.languages
+  FOR UPDATE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) = 'ADMIN')
+  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
+
+CREATE POLICY languages_delete_policy
+  ON public.languages
+  FOR DELETE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) = 'ADMIN');
+
+CREATE POLICY media_read_policy
+  ON public.media
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY media_insert_policy
+  ON public.media
+  FOR INSERT
+  TO authenticated
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY media_update_policy
+  ON public.media
+  FOR UPDATE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY media_delete_policy
+  ON public.media
+  FOR DELETE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY media_service_role_policy
+  ON public.media
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY site_settings_read_policy
+  ON public.site_settings
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY site_settings_insert_policy
+  ON public.site_settings
+  FOR INSERT
+  TO authenticated
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY site_settings_update_policy
+  ON public.site_settings
+  FOR UPDATE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY site_settings_delete_policy
+  ON public.site_settings
+  FOR DELETE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY translations_read_policy
+  ON public.translations
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY translations_insert_policy
+  ON public.translations
+  FOR INSERT
+  TO authenticated
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY translations_update_policy
+  ON public.translations
+  FOR UPDATE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY translations_delete_policy
+  ON public.translations
+  FOR DELETE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY logos_read_policy
+  ON public.logos
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY logos_insert_policy
+  ON public.logos
+  FOR INSERT
+  TO authenticated
+  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
+
+CREATE POLICY logos_update_policy
+  ON public.logos
+  FOR UPDATE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) = 'ADMIN')
+  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
+
+CREATE POLICY logos_delete_policy
+  ON public.logos
+  FOR DELETE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) = 'ADMIN');
+
+-- 00000000000019_setup_content_rls.sql
+-- RLS policies for authoring and published content access.
+
+ALTER TABLE public.pages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.blocks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.navigation_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.page_revisions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.post_revisions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY pages_anon_read_policy
+  ON public.pages
+  FOR SELECT
+  TO anon
+  USING (status = 'published');
+
+CREATE POLICY pages_read_policy
+  ON public.pages
+  FOR SELECT
+  TO authenticated
+  USING (
+    (status = 'published')
+    OR (author_id = (SELECT auth.uid()) AND status <> 'published')
+    OR ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
+  );
+
+CREATE POLICY pages_insert_policy
+  ON public.pages
+  FOR INSERT
+  TO authenticated
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY pages_update_policy
+  ON public.pages
+  FOR UPDATE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY pages_delete_policy
+  ON public.pages
+  FOR DELETE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY posts_anon_read_policy
+  ON public.posts
+  FOR SELECT
+  TO anon
+  USING (status = 'published' AND (published_at IS NULL OR published_at <= now()));
+
+CREATE POLICY posts_read_policy
+  ON public.posts
+  FOR SELECT
+  TO authenticated
+  USING (
+    (
+      status = 'published'
+      AND (published_at IS NULL OR published_at <= now())
+    )
+    OR (author_id = (SELECT auth.uid()) AND status <> 'published')
+    OR ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
+  );
+
+CREATE POLICY posts_insert_policy
+  ON public.posts
+  FOR INSERT
+  TO authenticated
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY posts_update_policy
+  ON public.posts
+  FOR UPDATE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY posts_delete_policy
+  ON public.posts
+  FOR DELETE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY blocks_anon_read_policy
+  ON public.blocks
+  FOR SELECT
+  TO anon
+  USING (
+    (
+      page_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM public.pages AS p
+        WHERE p.id = blocks.page_id
+          AND p.status = 'published'
+      )
+    )
+    OR (
+      post_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM public.posts AS pt
+        WHERE pt.id = blocks.post_id
+          AND pt.status = 'published'
+          AND (pt.published_at IS NULL OR pt.published_at <= now())
+      )
+    )
+  );
+
+CREATE POLICY blocks_read_policy
+  ON public.blocks
+  FOR SELECT
+  TO authenticated
+  USING (
+    ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
+    OR (
+      (
+        page_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM public.pages AS p
+          WHERE p.id = blocks.page_id
+            AND p.status = 'published'
+        )
+      )
+      OR (
+        post_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM public.posts AS pt
+          WHERE pt.id = blocks.post_id
+            AND pt.status = 'published'
+            AND (pt.published_at IS NULL OR pt.published_at <= now())
+        )
+      )
+    )
+  );
+
+CREATE POLICY blocks_insert_policy
+  ON public.blocks
+  FOR INSERT
+  TO authenticated
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY blocks_update_policy
+  ON public.blocks
+  FOR UPDATE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY blocks_delete_policy
+  ON public.blocks
+  FOR DELETE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY navigation_read_policy
+  ON public.navigation_items
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY navigation_items_insert_policy
+  ON public.navigation_items
+  FOR INSERT
+  TO authenticated
+  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
+
+CREATE POLICY navigation_items_update_policy
+  ON public.navigation_items
+  FOR UPDATE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) = 'ADMIN')
+  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
+
+CREATE POLICY navigation_items_delete_policy
+  ON public.navigation_items
+  FOR DELETE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) = 'ADMIN');
+
+CREATE POLICY page_revisions_read_policy
+  ON public.page_revisions
+  FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY page_revisions_insert_policy
+  ON public.page_revisions
+  FOR INSERT
+  TO authenticated
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY page_revisions_update_policy
+  ON public.page_revisions
+  FOR UPDATE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY page_revisions_delete_policy
+  ON public.page_revisions
+  FOR DELETE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY post_revisions_read_policy
+  ON public.post_revisions
+  FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY post_revisions_insert_policy
+  ON public.post_revisions
+  FOR INSERT
+  TO authenticated
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY post_revisions_update_policy
+  ON public.post_revisions
+  FOR UPDATE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+CREATE POLICY post_revisions_delete_policy
+  ON public.post_revisions
+  FOR DELETE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+-- 00000000000020_setup_commerce_and_financial_rls.sql
+-- Consolidated RLS for commerce, licensing, shipping, tax, and currency tables.
+
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_media ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_attributes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_attribute_terms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_variants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.variant_attribute_mapping ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.package_activations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.freemius_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.freemius_pricing ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.shipping_zones ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.shipping_zone_locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.shipping_zone_methods ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tax_rates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.currencies ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public can view products"
+  ON public.products
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY products_insert_policy
+  ON public.products
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY products_update_policy
+  ON public.products
+  FOR UPDATE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY products_delete_policy
+  ON public.products
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Public can view product media"
+  ON public.product_media
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY product_media_insert_policy
+  ON public.product_media
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY product_media_update_policy
+  ON public.product_media
+  FOR UPDATE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY product_media_delete_policy
+  ON public.product_media
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Public read product_attributes"
+  ON public.product_attributes
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY product_attributes_insert_policy
+  ON public.product_attributes
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY product_attributes_update_policy
+  ON public.product_attributes
+  FOR UPDATE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY product_attributes_delete_policy
+  ON public.product_attributes
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Public read product_attribute_terms"
+  ON public.product_attribute_terms
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY product_attribute_terms_insert_policy
+  ON public.product_attribute_terms
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY product_attribute_terms_update_policy
+  ON public.product_attribute_terms
+  FOR UPDATE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY product_attribute_terms_delete_policy
+  ON public.product_attribute_terms
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Public read product_variants"
+  ON public.product_variants
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY product_variants_insert_policy
+  ON public.product_variants
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY product_variants_update_policy
+  ON public.product_variants
+  FOR UPDATE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY product_variants_delete_policy
+  ON public.product_variants
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Public read variant_attribute_mapping"
+  ON public.variant_attribute_mapping
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY variant_attribute_mapping_insert_policy
+  ON public.variant_attribute_mapping
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY variant_attribute_mapping_update_policy
+  ON public.variant_attribute_mapping
+  FOR UPDATE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY variant_attribute_mapping_delete_policy
+  ON public.variant_attribute_mapping
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Users can view own orders"
+  ON public.orders
+  FOR SELECT
+  TO authenticated
+  USING (
+    ((SELECT public.is_admin()) IS TRUE)
+    OR (user_id = (SELECT auth.uid()))
+  );
+
+CREATE POLICY orders_insert_policy
+  ON public.orders
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY orders_update_policy
+  ON public.orders
+  FOR UPDATE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY orders_delete_policy
+  ON public.orders
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Service Role manages orders"
+  ON public.orders
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "Users can view own order items"
+  ON public.order_items
+  FOR SELECT
+  TO authenticated
+  USING (
+    ((SELECT public.is_admin()) IS TRUE)
+    OR EXISTS (
+      SELECT 1
+      FROM public.orders
+      WHERE orders.id = order_items.order_id
+        AND orders.user_id = (SELECT auth.uid())
+    )
+  );
+
+CREATE POLICY order_items_insert_policy
+  ON public.order_items
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY order_items_update_policy
+  ON public.order_items
+  FOR UPDATE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY order_items_delete_policy
+  ON public.order_items
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Service Role manages order items"
+  ON public.order_items
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "Allow service role full access"
+  ON public.package_activations
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "Allow authenticated read access"
+  ON public.package_activations
+  FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Public read access for freemius_plans"
+  ON public.freemius_plans
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Public read access for freemius_pricing"
+  ON public.freemius_pricing
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Public can view inventory items"
+  ON public.inventory_items
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY inventory_items_insert_policy
+  ON public.inventory_items
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY inventory_items_update_policy
+  ON public.inventory_items
+  FOR UPDATE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY inventory_items_delete_policy
+  ON public.inventory_items
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Service Role manages inventory items"
+  ON public.inventory_items
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "Public read shipping_zones"
+  ON public.shipping_zones
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY shipping_zones_insert_policy
+  ON public.shipping_zones
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY shipping_zones_update_policy
+  ON public.shipping_zones
+  FOR UPDATE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY shipping_zones_delete_policy
+  ON public.shipping_zones
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Public read shipping_zone_locations"
+  ON public.shipping_zone_locations
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY shipping_zone_locations_insert_policy
+  ON public.shipping_zone_locations
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY shipping_zone_locations_update_policy
+  ON public.shipping_zone_locations
+  FOR UPDATE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY shipping_zone_locations_delete_policy
+  ON public.shipping_zone_locations
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Public read shipping_zone_methods"
+  ON public.shipping_zone_methods
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY shipping_zone_methods_insert_policy
+  ON public.shipping_zone_methods
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY shipping_zone_methods_update_policy
+  ON public.shipping_zone_methods
+  FOR UPDATE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY shipping_zone_methods_delete_policy
+  ON public.shipping_zone_methods
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Public read tax_rates"
+  ON public.tax_rates
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY tax_rates_insert_policy
+  ON public.tax_rates
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY tax_rates_update_policy
+  ON public.tax_rates
+  FOR UPDATE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY tax_rates_delete_policy
+  ON public.tax_rates
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Service Role manages tax_rates"
+  ON public.tax_rates
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "Public read active currencies"
+  ON public.currencies
+  FOR SELECT
+  TO anon, authenticated
+  USING (is_active = true);
+
+CREATE POLICY currencies_insert_policy
+  ON public.currencies
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY currencies_update_policy
+  ON public.currencies
+  FOR UPDATE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY currencies_delete_policy
+  ON public.currencies
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Service role manages currencies"
+  ON public.currencies
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+
+-- >>> FROM: 00000000000007_setup_indexes.sql <<<
+-- 00000000000007_setup_indexes.sql
+-- Consolidated migration preserving original statement order within grouped sections.
+
+-- 00000000000021_setup_cms_indexes.sql
+-- Supporting indexes for accounts, content, and revisions.
+
+CREATE INDEX idx_user_addresses_user_id
+  ON public.user_addresses (user_id);
+
+CREATE INDEX idx_user_addresses_type
+  ON public.user_addresses (address_type);
+
+CREATE INDEX idx_media_uploader_id
+  ON public.media (uploader_id);
+
+CREATE INDEX media_folder_idx
+  ON public.media (folder);
+
+CREATE INDEX idx_posts_feature_image_id
+  ON public.posts (feature_image_id);
+
+CREATE INDEX idx_posts_author_id
+  ON public.posts (author_id);
+
+CREATE INDEX idx_posts_translation_group_id
+  ON public.posts (translation_group_id);
+
+CREATE INDEX idx_pages_author_id
+  ON public.pages (author_id);
+
+CREATE INDEX idx_pages_translation_group_id
+  ON public.pages (translation_group_id);
+
+CREATE INDEX idx_blocks_language_id
+  ON public.blocks (language_id);
+
+CREATE INDEX idx_blocks_page_id
+  ON public.blocks (page_id);
+
+CREATE INDEX idx_blocks_post_id
+  ON public.blocks (post_id);
+
+CREATE INDEX idx_navigation_items_menu_lang_order
+  ON public.navigation_items (menu_key, language_id, "order");
+
+CREATE INDEX idx_navigation_items_language_id
+  ON public.navigation_items (language_id);
+
+CREATE INDEX idx_navigation_items_page_id
+  ON public.navigation_items (page_id);
+
+CREATE INDEX idx_navigation_items_parent_id
+  ON public.navigation_items (parent_id);
+
+CREATE INDEX idx_logos_media_id
+  ON public.logos (media_id);
+
+CREATE INDEX idx_page_revisions_page_id_version
+  ON public.page_revisions (page_id, version);
+
+CREATE INDEX idx_page_revisions_author_id
+  ON public.page_revisions (author_id);
+
+CREATE INDEX idx_post_revisions_post_id_version
+  ON public.post_revisions (post_id, version);
+
+CREATE INDEX idx_post_revisions_author_id
+  ON public.post_revisions (author_id);
+
+-- 00000000000022_setup_commerce_indexes.sql
+-- Consolidated commerce, shipping, and financial indexes.
+
+CREATE INDEX idx_products_slug
+  ON public.products (slug);
+
+CREATE INDEX idx_products_translation_group_id
+  ON public.products (translation_group_id);
+
+CREATE INDEX idx_products_prices_gin
+  ON public.products
+  USING gin (prices jsonb_path_ops);
+
+CREATE INDEX idx_product_media_product_id
+  ON public.product_media (product_id);
+
+CREATE INDEX idx_product_media_media_id
+  ON public.product_media (media_id);
+
+CREATE INDEX idx_order_items_order_id
+  ON public.order_items (order_id);
+
+CREATE INDEX idx_order_items_variant_id
+  ON public.order_items (variant_id);
+
+CREATE INDEX idx_order_items_product_id
+  ON public.order_items (product_id);
+
+CREATE INDEX idx_orders_user_id
+  ON public.orders (user_id);
+
+CREATE INDEX idx_package_activations_package_id
+  ON public.package_activations (package_id);
+
+CREATE INDEX idx_package_activations_license_key
+  ON public.package_activations (license_key);
+
+CREATE INDEX idx_freemius_plans_product_id
+  ON public.freemius_plans (product_id);
+
+CREATE INDEX idx_freemius_pricing_plan_id
+  ON public.freemius_pricing (plan_id);
+
+CREATE INDEX idx_product_attribute_terms_attribute_id
+  ON public.product_attribute_terms (attribute_id);
+
+CREATE INDEX idx_product_variants_product_id
+  ON public.product_variants (product_id);
+
+CREATE INDEX idx_product_variants_main_media_id
+  ON public.product_variants (main_media_id);
+
+CREATE INDEX idx_product_variants_prices_gin
+  ON public.product_variants
+  USING gin (prices jsonb_path_ops);
+
+CREATE INDEX idx_variant_attribute_mapping_attribute_term_id
+  ON public.variant_attribute_mapping (attribute_term_id);
+
+CREATE INDEX idx_inventory_items_updated_at
+  ON public.inventory_items (updated_at DESC);
+
+CREATE INDEX idx_shipping_zone_locations_zone_id
+  ON public.shipping_zone_locations (zone_id);
+
+CREATE INDEX idx_shipping_zone_locations_country_state_postal
+  ON public.shipping_zone_locations (country_code, state_code, postal_code);
+
+CREATE INDEX idx_shipping_zone_methods_name_translations
+  ON public.shipping_zone_methods
+  USING gin (name_translations);
+
+CREATE INDEX idx_shipping_zone_methods_zone_id
+  ON public.shipping_zone_methods (zone_id);
+
+CREATE INDEX idx_tax_rates_country_state
+  ON public.tax_rates (country_code, state_code);
+
+
+-- >>> FROM: 00000000000008_seed_platform_defaults.sql <<<
+-- 00000000000008_seed_platform_defaults.sql
+-- Consolidated migration preserving original statement order within grouped sections.
+
+-- 00000000000023_seed_platform_defaults.sql
+-- Default settings, base languages, and the store currency seed.
+
+INSERT INTO public.site_settings (key, value)
+VALUES ('footer_copyright', '{"en": "© {year} Nextblock CMS. All rights reserved.", "fr": "© {year} Nextblock CMS. Tous droits réservés."}')
+ON CONFLICT (key) DO NOTHING;
+
+INSERT INTO public.site_settings (key, value)
+VALUES ('is_admin_created', 'false'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+INSERT INTO public.site_settings (key, value)
+VALUES (
+  'enabled_payment_providers',
+  '{"stripe": false, "freemius": false}'::jsonb
+)
+ON CONFLICT (key) DO NOTHING;
+
+INSERT INTO public.site_settings (key, value)
+VALUES (
+  'ecommerce_inventory_settings',
+  '{"track_quantities": true, "enable_taxes": false}'::jsonb
+)
+ON CONFLICT (key) DO UPDATE
+SET value = CASE
+  WHEN jsonb_typeof(site_settings.value) = 'object' THEN
+    jsonb_set(
+      jsonb_set(
+        site_settings.value,
+        '{track_quantities}',
+        COALESCE(
+          site_settings.value->'track_quantities',
+          site_settings.value->'trackQuantities',
+          'true'::jsonb
+        ),
+        true
+      ),
+      '{enable_taxes}',
+      COALESCE(
+        site_settings.value->'enable_taxes',
+        site_settings.value->'enableTaxes',
+        'false'::jsonb
+      ),
+      true
+    )
+  ELSE
+    jsonb_build_object(
+      'track_quantities',
+      CASE
+        WHEN lower(trim(BOTH '"' FROM site_settings.value::text)) IN ('false', 'f', '0', 'no', 'off') THEN false
+        ELSE true
+      END,
+      'enable_taxes',
+      false
+    )
+END;
+
+INSERT INTO public.site_settings (key, value)
+VALUES (
+  'invoice_settings',
+  '{
+    "business_name": "",
+    "email": "",
+    "phone": "",
+    "address": {
+      "line1": "",
+      "line2": "",
+      "city": "",
+      "state": "",
+      "postal_code": "",
+      "country_code": "CA"
+    },
+    "tax_registrations": []
+  }'::jsonb
+)
+ON CONFLICT (key) DO UPDATE
+SET value = CASE
+  WHEN jsonb_typeof(site_settings.value) = 'object' THEN
+    jsonb_build_object(
+      'business_name', COALESCE(site_settings.value->>'business_name', ''),
+      'email', COALESCE(site_settings.value->>'email', ''),
+      'phone', COALESCE(site_settings.value->>'phone', ''),
+      'address', CASE
+        WHEN jsonb_typeof(site_settings.value->'address') = 'object' THEN
+          jsonb_build_object(
+            'line1', COALESCE(site_settings.value->'address'->>'line1', ''),
+            'line2', COALESCE(site_settings.value->'address'->>'line2', ''),
+            'city', COALESCE(site_settings.value->'address'->>'city', ''),
+            'state', COALESCE(site_settings.value->'address'->>'state', ''),
+            'postal_code', COALESCE(site_settings.value->'address'->>'postal_code', ''),
+            'country_code', COALESCE(NULLIF(site_settings.value->'address'->>'country_code', ''), 'CA')
+          )
+        ELSE
+          jsonb_build_object(
+            'line1', '',
+            'line2', '',
+            'city', '',
+            'state', '',
+            'postal_code', '',
+            'country_code', 'CA'
+          )
+      END,
+      'tax_registrations', CASE
+        WHEN jsonb_typeof(site_settings.value->'tax_registrations') = 'array' THEN
+          site_settings.value->'tax_registrations'
+        ELSE
+          '[]'::jsonb
+      END
+    )
+  ELSE
+    '{
+      "business_name": "",
+      "email": "",
+      "phone": "",
+      "address": {
+        "line1": "",
+        "line2": "",
+        "city": "",
+        "state": "",
+        "postal_code": "",
+        "country_code": "CA"
+      },
+      "tax_registrations": []
+    }'::jsonb
+END;
+
+INSERT INTO public.languages (code, name, is_default, is_active)
+VALUES
+  ('en', 'English', true, true),
+  ('fr', 'Français', false, true);
+
+INSERT INTO public.currencies (code, symbol, exchange_rate, is_default, is_active)
+VALUES ('USD', '$', 1, true, true)
+ON CONFLICT (code) DO UPDATE
+SET
+  symbol = EXCLUDED.symbol,
+  exchange_rate = EXCLUDED.exchange_rate,
+  is_default = EXCLUDED.is_default,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+
+-- >>> FROM: 00000000000009_seed_translations.sql <<<
+-- 00000000000009_seed_translations.sql
+-- Consolidated migration preserving original statement order within grouped sections.
+
+-- 00000000000024_seed_core_translations.sql
+-- Base profile, account, and storefront translations.
+
 INSERT INTO public.translations (key, translations)
 VALUES 
   ('continue_with_github', '{"en": "Continue with GitHub", "es": "Continuar con GitHub", "fr": "Continuer avec GitHub"}'::jsonb),
@@ -869,334 +3374,560 @@ VALUES
 ON CONFLICT (key) DO UPDATE
 SET translations = EXCLUDED.translations;
 
+-- 00000000000025_seed_freemius_translations.sql
+-- Freemius storefront copy introduced with the licensing expansion.
 
--- >>> FROM: 00000000000011_setup_revisions.sql <<<
--- 00000000000011_setup_revisions.sql
--- Setup revisions tables
+INSERT INTO public.translations (key, translations) VALUES
+  ('ecommerce.pricing_unavailable', '{"en": "Pricing Unavailable", "es": "Precios no disponibles"}'),
+  ('ecommerce.monthly', '{"en": "Monthly", "es": "Mensual"}'),
+  ('ecommerce.annual', '{"en": "Annual", "es": "Anual"}'),
+  ('ecommerce.lifetime', '{"en": "Lifetime", "es": "De por vida"}'),
+  ('ecommerce.year', '{"en": "year", "es": "año"}'),
+  ('ecommerce.month', '{"en": "month", "es": "mes"}'),
+  ('ecommerce.get_license', '{"en": "Get License", "es": "Obtener Licencia"}'),
+  ('ecommerce.added_to_cart_success', '{"en": "{item} added to your cart.", "es": "{item} añadido al carrito."}'),
+  ('ecommerce.added_to_cart_error', '{"en": "Could not add item to cart.", "es": "No se pudo añadir el artículo al carrito."}')
+ON CONFLICT (key) DO UPDATE
+SET translations = EXCLUDED.translations;
 
--- 1. Page Revisions
-CREATE TABLE public.page_revisions (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  page_id bigint NOT NULL REFERENCES public.pages(id) ON DELETE CASCADE,
-  author_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  version integer NOT NULL,
-  revision_type public.revision_type NOT NULL,
-  content jsonb NOT NULL,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT page_revisions_page_version_key UNIQUE (page_id, version)
-);
+-- 00000000000026_seed_product_variation_translation_keys.sql
+-- Adds missing storefront translation keys for variable-product UX copy.
 
-COMMENT ON TABLE public.page_revisions IS 'Hybrid (snapshot/diff) revisions for pages.';
-COMMENT ON COLUMN public.page_revisions.content IS 'If snapshot: full content; if diff: JSON Patch array.';
-
-CREATE INDEX idx_page_revisions_page_id ON public.page_revisions(page_id);
-CREATE INDEX idx_page_revisions_page_id_version ON public.page_revisions(page_id, version);
-
--- 2. Post Revisions
-CREATE TABLE public.post_revisions (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  post_id bigint NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
-  author_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  version integer NOT NULL,
-  revision_type public.revision_type NOT NULL,
-  content jsonb NOT NULL,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT post_revisions_post_version_key UNIQUE (post_id, version)
-);
-
-COMMENT ON TABLE public.post_revisions IS 'Hybrid (snapshot/diff) revisions for posts.';
-COMMENT ON COLUMN public.post_revisions.content IS 'If snapshot: full content; if diff: JSON Patch array.';
-
-CREATE INDEX idx_post_revisions_post_id ON public.post_revisions(post_id);
-CREATE INDEX idx_post_revisions_post_id_version ON public.post_revisions(post_id, version);
-
-
--- >>> FROM: 00000000000012_setup_rls_policies.sql <<<
--- 00000000000020_setup_rls_policies.sql
--- Consolidated RLS Policies
-
-
--- 1. Enable RLS on all tables
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.languages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.media ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.pages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.blocks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.navigation_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.logos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.translations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.page_revisions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.post_revisions ENABLE ROW LEVEL SECURITY;
-
--- 2. GRANT PERMISSIONS (Crucial step often missed)
--- Grant usage on schema (redundant if in setup_extensions, but safe)
-GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
-
--- Grant SELECT to anon (public) for content that should be visible
-GRANT SELECT ON TABLE public.profiles TO anon;
-GRANT SELECT ON TABLE public.languages TO anon;
-GRANT SELECT ON TABLE public.media TO anon;
-GRANT SELECT ON TABLE public.posts TO anon;
-GRANT SELECT ON TABLE public.pages TO anon;
-GRANT SELECT ON TABLE public.blocks TO anon;
-GRANT SELECT ON TABLE public.navigation_items TO anon;
-GRANT SELECT ON TABLE public.logos TO anon;
-GRANT SELECT ON TABLE public.site_settings TO anon;
-GRANT SELECT ON TABLE public.translations TO anon;
-
--- Grant ALL to authenticated (RLS will still restrict rows)
-GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
-
--- Grant ALL to service_role (Admin access)
-GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO service_role;
-
-
--- 3. PROFILES
--- Read: Public can read basic profile info (needed for author display).
-CREATE POLICY "profiles_read_policy" ON public.profiles
-  FOR SELECT TO public
-  USING (true);
-
--- Create explicit policy for service_role to bypass RLS on profiles
-CREATE POLICY "profiles_service_role_policy" ON public.profiles
-  FOR ALL TO service_role
-  USING (true)
-  WITH CHECK (true);
-
--- Update: Users can update own profile; Admins can update all.
-CREATE POLICY "profiles_update_policy" ON public.profiles
-  FOR UPDATE TO authenticated
-  USING (
-    (id = auth.uid()) OR
-    (public.get_current_user_role() = 'ADMIN')
+INSERT INTO public.translations (key, translations)
+VALUES
+  (
+    'ecommerce.choose_your_options',
+    '{"en": "Choose Your Options", "fr": "Choisissez vos options"}'::jsonb
+  ),
+  (
+    'ecommerce.variant_availability_help',
+    '{"en": "Select a combination to resolve the exact variant price and availability.", "fr": "Selectionnez une combinaison pour afficher le prix exact et la disponibilite de la variante."}'::jsonb
+  ),
+  (
+    'ecommerce.in_stock',
+    '{"en": "{count} in stock", "fr": "{count} en stock"}'::jsonb
+  ),
+  (
+    'ecommerce.out_of_stock',
+    '{"en": "Out of stock", "fr": "Rupture de stock"}'::jsonb
+  ),
+  (
+    'ecommerce.select_options',
+    '{"en": "Select Options", "fr": "Choisir des options"}'::jsonb
+  ),
+  (
+    'ecommerce.variant_selection_required',
+    '{"en": "Select one term from every dropdown to resolve a variation.", "fr": "Selectionnez une valeur dans chaque liste pour afficher la variante correspondante."}'::jsonb
   )
-  WITH CHECK (
-    (id = auth.uid()) OR
-    (public.get_current_user_role() = 'ADMIN')
-  );
+ON CONFLICT (key) DO UPDATE
+SET
+  translations = EXCLUDED.translations,
+  updated_at = now();
 
--- Insert: Admins can insert (Trigger handles signups).
-CREATE POLICY "profiles_insert_policy" ON public.profiles
-  FOR INSERT TO authenticated
-  WITH CHECK (public.get_current_user_role() = 'ADMIN');
+-- 00000000000027_seed_shipping_rate_translations.sql
+-- Shipping and tax copy for checkout.
+
+INSERT INTO public.translations (key, translations)
+VALUES
+  (
+    'ecommerce.tax_calculated_on_stripe',
+    '{"en": "Calculated on Stripe", "es": "Calculado en Stripe", "fr": "Calculé sur Stripe"}'::jsonb
+  ),
+  (
+    'checkout_stripe_tax_finalized_notice',
+    '{"en": "Tax will be finalized by Stripe Tax on the payment step.", "es": "El impuesto se finalizará con Stripe Tax en el paso de pago.", "fr": "La taxe sera finalisée par Stripe Tax à l''étape du paiement."}'::jsonb
+  )
+ON CONFLICT (key) DO UPDATE
+SET translations = EXCLUDED.translations;
+
+-- 00000000000028_seed_invoice_branding_translations.sql
+-- Invoice, branding, and receipt translations.
+
+INSERT INTO public.translations (key, translations)
+VALUES
+  (
+    'branding',
+    '{"en": "Branding", "fr": "Image de marque"}'::jsonb
+  ),
+  (
+    'company_name',
+    '{"en": "Company name", "fr": "Nom de l''entreprise"}'::jsonb
+  ),
+  (
+    'invoice',
+    '{"en": "Invoice", "fr": "Facture"}'::jsonb
+  ),
+  (
+    'invoice_number',
+    '{"en": "Invoice #", "fr": "Facture no"}'::jsonb
+  ),
+  (
+    'paid_on',
+    '{"en": "Paid on", "fr": "Paye le"}'::jsonb
+  ),
+  (
+    'bill_to',
+    '{"en": "Bill to", "fr": "Facturer a"}'::jsonb
+  ),
+  (
+    'ship_to',
+    '{"en": "Ship to", "fr": "Livrer a"}'::jsonb
+  ),
+  (
+    'print_invoice',
+    '{"en": "Print / Save as PDF", "fr": "Imprimer / Enregistrer en PDF"}'::jsonb
+  ),
+  (
+    'tax_registrations',
+    '{"en": "Tax registrations", "fr": "Inscriptions fiscales"}'::jsonb
+  ),
+  (
+    'invoice_settings',
+    '{"en": "Invoice settings", "fr": "Parametres de facture"}'::jsonb
+  ),
+  (
+    'business_name',
+    '{"en": "Business name", "fr": "Nom de l''entreprise"}'::jsonb
+  ),
+  (
+    'order_number',
+    '{"en": "Order #", "fr": "Commande no"}'::jsonb
+  ),
+  (
+    'print_invoice_help',
+    '{"en": "Use your browser print dialog to save this invoice as a PDF.", "fr": "Utilisez la boite de dialogue d''impression de votre navigateur pour enregistrer cette facture en PDF."}'::jsonb
+  ),
+  (
+    'return_home',
+    '{"en": "Return to Home", "fr": "Retour a l''accueil"}'::jsonb
+  ),
+  (
+    'receipt_finalizing',
+    '{"en": "Finalizing your invoice and payment details...", "fr": "Finalisation de votre facture et des details du paiement..."}'::jsonb
+  ),
+  (
+    'receipt_not_ready',
+    '{"en": "Your invoice will appear here once the payment sync is complete.", "fr": "Votre facture apparaitra ici une fois la synchronisation du paiement terminee."}'::jsonb
+  ),
+  (
+    'tax_breakdown',
+    '{"en": "Tax breakdown", "fr": "Detail des taxes"}'::jsonb
+  ),
+  (
+    'amount',
+    '{"en": "Amount", "fr": "Montant"}'::jsonb
+  ),
+  (
+    'price',
+    '{"en": "Price", "fr": "Prix"}'::jsonb
+  ),
+  (
+    'from',
+    '{"en": "From", "fr": "De"}'::jsonb
+  )
+ON CONFLICT (key) DO UPDATE
+SET
+  translations = EXCLUDED.translations,
+  updated_at = now();
+
+-- 00000000000029_seed_account_order_translations.sql
+-- Adds storefront account navigation, customer order, and password translations.
 
 
--- 4. PAGES
--- Read: Anon/Auth can read published. Authors/Admins/Writers can read drafts.
-CREATE POLICY "pages_read_policy" ON public.pages
-  FOR SELECT TO authenticated
-  USING (
-    (status = 'published') OR
-    (author_id = auth.uid() AND status <> 'published') OR
-    (public.get_current_user_role() IN ('ADMIN', 'WRITER'))
-  );
+INSERT INTO public.translations (key, translations)
+VALUES
+  (
+    'account_navigation',
+    '{"en": "Account", "fr": "Compte"}'::jsonb
+  ),
+  (
+    'account_orders',
+    '{"en": "Orders", "fr": "Commandes"}'::jsonb
+  ),
+  (
+    'change_my_password',
+    '{"en": "Change my password", "fr": "Changer mon mot de passe"}'::jsonb
+  ),
+  (
+    'profile_orders_title',
+    '{"en": "My orders", "fr": "Mes commandes"}'::jsonb
+  ),
+  (
+    'profile_orders_description',
+    '{"en": "Review your recent purchases and open printable invoices.", "fr": "Consultez vos achats récents et ouvrez vos factures imprimables."}'::jsonb
+  ),
+  (
+    'profile_orders_empty',
+    '{"en": "You do not have any orders yet.", "fr": "Vous n''avez pas encore de commandes."}'::jsonb
+  ),
+  (
+    'profile_order_detail_title',
+    '{"en": "Order invoice", "fr": "Facture de commande"}'::jsonb
+  ),
+  (
+    'profile_order_detail_description',
+    '{"en": "Review and print your finalized invoice.", "fr": "Consultez et imprimez votre facture finalisée."}'::jsonb
+  ),
+  (
+    'profile_order_invoice_pending',
+    '{"en": "The printable invoice will appear here once this order has been finalized.", "fr": "La facture imprimable apparaîtra ici une fois que cette commande aura été finalisée."}'::jsonb
+  ),
+  (
+    'profile_password_title',
+    '{"en": "Change your password", "fr": "Changer votre mot de passe"}'::jsonb
+  ),
+  (
+    'profile_password_description',
+    '{"en": "Update your account password without leaving your profile.", "fr": "Mettez à jour le mot de passe de votre compte sans quitter votre profil."}'::jsonb
+  ),
+  (
+    'new_password',
+    '{"en": "New password", "fr": "Nouveau mot de passe"}'::jsonb
+  ),
+  (
+    'confirm_new_password',
+    '{"en": "Confirm new password", "fr": "Confirmer le nouveau mot de passe"}'::jsonb
+  ),
+  (
+    'password_updated_success',
+    '{"en": "Password updated successfully.", "fr": "Mot de passe mis à jour avec succès."}'::jsonb
+  ),
+  (
+    'password_update_failed',
+    '{"en": "Password update failed.", "fr": "La mise à jour du mot de passe a échoué."}'::jsonb
+  ),
+  (
+    'passwords_do_not_match',
+    '{"en": "Passwords do not match.", "fr": "Les mots de passe ne correspondent pas."}'::jsonb
+  ),
+  (
+    'order_date',
+    '{"en": "Date", "fr": "Date"}'::jsonb
+  ),
+  (
+    'order_status_paid',
+    '{"en": "Paid", "fr": "Payée"}'::jsonb
+  ),
+  (
+    'order_status_pending',
+    '{"en": "Pending", "fr": "En attente"}'::jsonb
+  ),
+  (
+    'order_status_shipped',
+    '{"en": "Shipped", "fr": "Expédiée"}'::jsonb
+  ),
+  (
+    'order_status_cancelled',
+    '{"en": "Cancelled", "fr": "Annulée"}'::jsonb
+  ),
+  (
+    'order_status_refunded',
+    '{"en": "Refunded", "fr": "Remboursée"}'::jsonb
+  ),
+  (
+    'back_to_orders',
+    '{"en": "Back to orders", "fr": "Retour aux commandes"}'::jsonb
+  )
+ON CONFLICT (key) DO UPDATE
+SET translations = EXCLUDED.translations;
 
-CREATE POLICY "pages_anon_read_policy" ON public.pages
-  FOR SELECT TO anon
-  USING (status = 'published');
 
--- Manage: Admins/Writers can do everything.
-CREATE POLICY "pages_manage_policy" ON public.pages
-  FOR ALL TO authenticated
-  USING (public.get_current_user_role() IN ('ADMIN', 'WRITER'))
-  WITH CHECK (public.get_current_user_role() IN ('ADMIN', 'WRITER'));
+-- 00000000000030_seed_checkout_state_translations.sql
+-- Adds checkout state and CTA translations for shipping-gated checkout UX.
 
 
--- 5. POSTS
--- Read: Anon/Auth can read published. Authors/Admins/Writers can read drafts.
-CREATE POLICY "posts_read_policy" ON public.posts
-  FOR SELECT TO authenticated
-  USING (
-    (status = 'published' AND (published_at IS NULL OR published_at <= now())) OR
-    (author_id = auth.uid() AND status <> 'published') OR
-    (public.get_current_user_role() IN ('ADMIN', 'WRITER'))
-  );
+INSERT INTO public.translations (key, translations)
+VALUES
+  (
+    'select_an_option',
+    '{"en": "Select an option", "es": "Selecciona una opcion", "fr": "Selectionnez une option"}'::jsonb
+  ),
+  (
+    'ecommerce.shipping_method_required',
+    '{"en": "Please select a shipping method before continuing.", "es": "Selecciona un metodo de envio antes de continuar.", "fr": "Veuillez selectionner un mode de livraison avant de continuer."}'::jsonb
+  ),
+  (
+    'ecommerce.waiting_on_address_info',
+    '{"en": "Complete your shipping address to view available shipping options.", "es": "Completa tu direccion de envio para ver las opciones de envio disponibles.", "fr": "Completez votre adresse de livraison pour voir les options de livraison disponibles."}'::jsonb
+  ),
+  (
+    'ecommerce.calculating_shipping',
+    '{"en": "Calculating shipping...", "es": "Calculando el envio...", "fr": "Calcul de la livraison..."}'::jsonb
+  ),
+  (
+    'ecommerce.sandbox_checkout_stripe_description',
+    '{"en": "This simulated step represents the Stripe checkout for physical products.", "es": "Este paso simulado representa el pago de Stripe para productos fisicos.", "fr": "Cette etape simulee represente le paiement Stripe pour les produits physiques."}'::jsonb
+  ),
+  (
+    'ecommerce.sandbox_checkout_freemius_description',
+    '{"en": "This simulated step represents the Freemius checkout for digital products.", "es": "Este paso simulado representa el pago de Freemius para productos digitales.", "fr": "Cette etape simulee represente le paiement Freemius pour les produits numeriques."}'::jsonb
+  ),
+  (
+    'ecommerce.digital_label',
+    '{"en": "Digital", "es": "Digital", "fr": "Numerique"}'::jsonb
+  ),
+  (
+    'ecommerce.physical_label',
+    '{"en": "Physical", "es": "Fisico", "fr": "Physique"}'::jsonb
+  ),
+  (
+    'ecommerce.physical_products',
+    '{"en": "Physical products", "es": "Productos fisicos", "fr": "Produits physiques"}'::jsonb
+  ),
+  (
+    'ecommerce.digital_products',
+    '{"en": "Digital products", "es": "Productos digitales", "fr": "Produits numeriques"}'::jsonb
+  ),
+  (
+    'ecommerce.estimated_total',
+    '{"en": "Estimated total", "es": "Total estimado", "fr": "Total estime"}'::jsonb
+  ),
+  (
+    'ecommerce.stripe_checkout_title',
+    '{"en": "Stripe Checkout", "es": "Pago con Stripe", "fr": "Paiement Stripe"}'::jsonb
+  ),
+  (
+    'ecommerce.stripe_checkout_description',
+    '{"en": "Pay for physical products in one Stripe checkout session.", "es": "Paga los productos fisicos en una sola sesion de Stripe.", "fr": "Payez les produits physiques dans une seule session Stripe."}'::jsonb
+  ),
+  (
+    'ecommerce.item_count_one',
+    '{"en": "{count} item", "es": "{count} articulo", "fr": "{count} article"}'::jsonb
+  ),
+  (
+    'ecommerce.item_count_other',
+    '{"en": "{count} items", "es": "{count} articulos", "fr": "{count} articles"}'::jsonb
+  ),
+  (
+    'ecommerce.physical_subtotal',
+    '{"en": "Physical subtotal", "es": "Subtotal fisico", "fr": "Sous-total physique"}'::jsonb
+  ),
+  (
+    'ecommerce.total_on_stripe',
+    '{"en": "Total on Stripe", "es": "Total en Stripe", "fr": "Total sur Stripe"}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_physical_products',
+    '{"en": "Checkout Physical Products", "es": "Pagar productos fisicos", "fr": "Payer les produits physiques"}'::jsonb
+  ),
+  (
+    'ecommerce.shipping_taxes_collected_on_stripe',
+    '{"en": "Shipping and taxes are only collected during the Stripe step for physical products.", "es": "El envio y los impuestos solo se cobran durante el paso de Stripe para productos fisicos.", "fr": "La livraison et les taxes sont percues uniquement a l''etape Stripe pour les produits physiques."}'::jsonb
+  ),
+  (
+    'ecommerce.freemius_checkout_title',
+    '{"en": "Freemius Checkout", "es": "Pago con Freemius", "fr": "Paiement Freemius"}'::jsonb
+  ),
+  (
+    'ecommerce.freemius_checkout_description',
+    '{"en": "Digital products use the Freemius checkout flow.", "es": "Los productos digitales usan el flujo de pago de Freemius.", "fr": "Les produits numeriques utilisent le flux de paiement Freemius."}'::jsonb
+  ),
+  (
+    'ecommerce.license_count_one',
+    '{"en": "{count} license", "es": "{count} licencia", "fr": "{count} licence"}'::jsonb
+  ),
+  (
+    'ecommerce.license_count_other',
+    '{"en": "{count} licenses", "es": "{count} licencias", "fr": "{count} licences"}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_billing_cycle_monthly',
+    '{"en": "Monthly subscription", "es": "Suscripcion mensual", "fr": "Abonnement mensuel"}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_billing_cycle_annual',
+    '{"en": "Annual subscription", "es": "Suscripcion anual", "fr": "Abonnement annuel"}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_billing_cycle_lifetime',
+    '{"en": "Lifetime subscription", "es": "Suscripcion de por vida", "fr": "Abonnement a vie"}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_product',
+    '{"en": "Checkout {title}", "es": "Pagar {title}", "fr": "Paiement de {title}"}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_digital_product',
+    '{"en": "Checkout Digital Product", "es": "Pagar producto digital", "fr": "Payer le produit numerique"}'::jsonb
+  ),
+  (
+    'ecommerce.digital_subtotal',
+    '{"en": "Digital subtotal", "es": "Subtotal digital", "fr": "Sous-total numerique"}'::jsonb
+  ),
+  (
+    'ecommerce.freemius_multi_checkout_notice',
+    '{"en": "Freemius licenses are completed one at a time, so each digital product gets its own checkout action.", "es": "Las licencias de Freemius se completan una por una, por lo que cada producto digital tiene su propia accion de pago.", "fr": "Les licences Freemius se finalisent une a la fois, donc chaque produit numerique a sa propre action de paiement."}'::jsonb
+  ),
+  (
+    'ecommerce.freemius_tax_notice',
+    '{"en": "Taxes and compliance for digital products are handled inside the Freemius checkout.", "es": "Los impuestos y la conformidad para los productos digitales se gestionan dentro del pago de Freemius.", "fr": "Les taxes et la conformite pour les produits numeriques sont gerees dans le paiement Freemius."}'::jsonb
+  ),
+  (
+    'continue_checkout',
+    '{"en": "Continue Checkout", "fr": "Continuer le paiement"}'::jsonb
+  ),
+  (
+    'checkout_success_sync_failed',
+    '{"en": "We could not finalize your invoice yet. Please refresh shortly.", "fr": "Nous n''avons pas encore pu finaliser votre facture. Veuillez rafraichir la page sous peu."}'::jsonb
+  ),
+  (
+    'ecommerce.shipping_country_required',
+    '{"en": "Country is required to calculate shipping.", "fr": "Le pays est requis pour calculer la livraison."}'::jsonb
+  ),
+  (
+    'ecommerce.shipping_calculation_failed',
+    '{"en": "We couldn''t calculate shipping right now. Please try again.", "fr": "Nous n''avons pas pu calculer la livraison pour le moment. Veuillez reessayer."}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_license_inactive',
+    '{"en": "The ecommerce module license is inactive.", "fr": "La licence du module ecommerce est inactive."}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_invalid_items',
+    '{"en": "Your checkout items could not be processed.", "fr": "Les articles de votre commande n''ont pas pu etre traites."}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_provider_items_required',
+    '{"en": "Each checkout step must include items assigned to a payment provider.", "fr": "Chaque etape de paiement doit inclure des articles associes a un fournisseur de paiement."}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_mixed_provider_steps',
+    '{"en": "Products with different payment providers must be purchased in separate checkout steps.", "fr": "Les produits utilisant differents fournisseurs de paiement doivent etre achetes en etapes separees."}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_freemius_single_item',
+    '{"en": "Freemius products must be purchased one at a time.", "fr": "Les produits Freemius doivent etre achetes un a la fois."}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_billing_address_required',
+    '{"en": "A billing address is required to continue checkout.", "fr": "Une adresse de facturation est requise pour continuer le paiement."}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_internal_server_error',
+    '{"en": "Something went wrong while preparing your checkout. Please try again.", "fr": "Une erreur s''est produite lors de la preparation de votre paiement. Veuillez reessayer."}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_missing_session_id',
+    '{"en": "We couldn''t find a checkout session to finalize.", "fr": "Nous n''avons pas trouve de session de paiement a finaliser."}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_payment_pending',
+    '{"en": "Your payment is still pending.", "fr": "Votre paiement est toujours en attente."}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_success_order_not_found',
+    '{"en": "We couldn''t find the order linked to this checkout.", "fr": "Nous n''avons pas trouve la commande liee a ce paiement."}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_success_invalid_reference',
+    '{"en": "This checkout reference can''t be finalized from this page.", "fr": "Cette reference de paiement ne peut pas etre finalisee depuis cette page."}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_success_inventory_update_failed',
+    '{"en": "We couldn''t update inventory for this order.", "fr": "Nous n''avons pas pu mettre a jour l''inventaire pour cette commande."}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_success_status_update_failed',
+    '{"en": "We couldn''t update the order status.", "fr": "Nous n''avons pas pu mettre a jour le statut de la commande."}'::jsonb
+  ),
+  (
+    'ecommerce.unknown_error',
+    '{"en": "Unknown error", "es": "Error desconocido", "fr": "Erreur inconnue"}'::jsonb
+  )
+ON CONFLICT (key) DO UPDATE
+SET
+  translations = EXCLUDED.translations,
+  updated_at = now();
 
-CREATE POLICY "posts_anon_read_policy" ON public.posts
-  FOR SELECT TO anon
-  USING (status = 'published' AND (published_at IS NULL OR published_at <= now()));
 
--- Manage: Admins/Writers can do everything.
-CREATE POLICY "posts_manage_policy" ON public.posts
-  FOR ALL TO authenticated
-  USING (public.get_current_user_role() IN ('ADMIN', 'WRITER'))
-  WITH CHECK (public.get_current_user_role() IN ('ADMIN', 'WRITER'));
-
-
--- 6. BLOCKS
--- Read: Admins/Writers see all. Others see blocks of published parents.
-CREATE POLICY "blocks_read_policy" ON public.blocks
-  FOR SELECT TO authenticated
-  USING (
-    (public.get_current_user_role() IN ('ADMIN', 'WRITER')) OR
-    (
-      (page_id IS NOT NULL AND EXISTS(SELECT 1 FROM public.pages p WHERE p.id = blocks.page_id AND p.status = 'published')) OR
-      (post_id IS NOT NULL AND EXISTS(SELECT 1 FROM public.posts pt WHERE pt.id = blocks.post_id AND pt.status = 'published' AND (pt.published_at IS NULL OR pt.published_at <= now())))
+-- 00000000000031_seed_french_freemius_translation_fixes.sql
+-- Restores French translations that were overwritten by the Freemius ecommerce expansion seed.
+INSERT INTO public.translations (key, translations)
+VALUES
+  (
+    'ecommerce.pricing_unavailable',
+    jsonb_build_object(
+      'en', 'Pricing Unavailable',
+      'es', 'Precios no disponibles',
+      'fr', 'Tarification indisponible'
     )
-  );
-
-CREATE POLICY "blocks_anon_read_policy" ON public.blocks
-  FOR SELECT TO anon
-  USING (
-    (page_id IS NOT NULL AND EXISTS(SELECT 1 FROM public.pages p WHERE p.id = blocks.page_id AND p.status = 'published')) OR
-    (post_id IS NOT NULL AND EXISTS(SELECT 1 FROM public.posts pt WHERE pt.id = blocks.post_id AND pt.status = 'published' AND (pt.published_at IS NULL OR pt.published_at <= now())))
-  );
-
--- Manage: Admins/Writers can do everything.
-CREATE POLICY "blocks_manage_policy" ON public.blocks
-  FOR ALL TO authenticated
-  USING (public.get_current_user_role() IN ('ADMIN', 'WRITER'))
-  WITH CHECK (public.get_current_user_role() IN ('ADMIN', 'WRITER'));
-
-
--- 7. MEDIA
--- Read: Publicly readable.
-CREATE POLICY "media_read_policy" ON public.media
-  FOR SELECT TO public
-  USING (true);
-
--- Manage: Admins/Writers can do everything.
-CREATE POLICY "media_manage_policy" ON public.media
-  FOR ALL TO authenticated
-  USING (public.get_current_user_role() IN ('ADMIN', 'WRITER'))
-  WITH CHECK (public.get_current_user_role() IN ('ADMIN', 'WRITER'));
-
--- Service Role: Full access (for uploads).
-CREATE POLICY "media_service_role_policy" ON public.media
-  FOR ALL TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-
--- 8. NAVIGATION
--- Read: Publicly readable.
-CREATE POLICY "navigation_read_policy" ON public.navigation_items
-  FOR SELECT TO public
-  USING (true);
-
--- Manage: Admins only.
-CREATE POLICY "navigation_manage_policy" ON public.navigation_items
-  FOR ALL TO authenticated
-  USING (public.get_current_user_role() = 'ADMIN')
-  WITH CHECK (public.get_current_user_role() = 'ADMIN');
-
-
--- 9. LANGUAGES
--- Read: Publicly readable.
-CREATE POLICY "languages_read_policy" ON public.languages
-  FOR SELECT TO public
-  USING (true);
-
--- Manage: Admins only.
-CREATE POLICY "languages_manage_policy" ON public.languages
-  FOR ALL TO authenticated
-  USING (public.get_current_user_role() = 'ADMIN')
-  WITH CHECK (public.get_current_user_role() = 'ADMIN');
-
-
--- 10. LOGOS
--- Read: Publicly readable.
-CREATE POLICY "logos_read_policy" ON public.logos
-  FOR SELECT TO public
-  USING (true);
-
--- Manage: Admins only.
-CREATE POLICY "logos_manage_policy" ON public.logos
-  FOR ALL TO authenticated
-  USING (public.get_current_user_role() = 'ADMIN')
-  WITH CHECK (public.get_current_user_role() = 'ADMIN');
+  ),
+  (
+    'ecommerce.monthly',
+    jsonb_build_object(
+      'en', 'Monthly',
+      'es', 'Mensual',
+      'fr', 'Mensuel'
+    )
+  ),
+  (
+    'ecommerce.annual',
+    jsonb_build_object(
+      'en', 'Annual',
+      'es', 'Anual',
+      'fr', 'Annuel'
+    )
+  ),
+  (
+    'ecommerce.lifetime',
+    jsonb_build_object(
+      'en', 'Lifetime',
+      'es', 'De por vida',
+      'fr', 'À vie'
+    )
+  ),
+  (
+    'ecommerce.year',
+    jsonb_build_object(
+      'en', 'year',
+      'es', 'año',
+      'fr', 'an'
+    )
+  ),
+  (
+    'ecommerce.month',
+    jsonb_build_object(
+      'en', 'month',
+      'es', 'mes',
+      'fr', 'mois'
+    )
+  ),
+  (
+    'ecommerce.get_license',
+    jsonb_build_object(
+      'en', 'Get License',
+      'es', 'Obtener Licencia',
+      'fr', 'Obtenir la licence'
+    )
+  ),
+  (
+    'ecommerce.added_to_cart_success',
+    jsonb_build_object(
+      'en', '{item} added to your cart.',
+      'es', '{item} añadido al carrito.',
+      'fr', '{item} ajouté à votre panier.'
+    )
+  ),
+  (
+    'ecommerce.added_to_cart_error',
+    jsonb_build_object(
+      'en', 'Could not add item to cart.',
+      'es', 'No se pudo añadir el artículo al carrito.',
+      'fr', 'Impossible d''ajouter l''article au panier.'
+    )
+  )
+ON CONFLICT (key) DO UPDATE
+SET translations =
+  COALESCE(public.translations.translations, '{}'::jsonb)
+  || jsonb_build_object('fr', EXCLUDED.translations->>'fr');
 
 
--- 11. SITE SETTINGS
--- Read: Publicly readable.
-CREATE POLICY "site_settings_read_policy" ON public.site_settings
-  FOR SELECT TO public
-  USING (true);
+-- >>> FROM: 00000000000010_seed_content_scaffold.sql <<<
+-- 00000000000010_seed_content_scaffold.sql
+-- Consolidated migration preserving original statement order within grouped sections.
 
--- Manage: Admins/Writers.
-CREATE POLICY "site_settings_manage_policy" ON public.site_settings
-  FOR ALL TO authenticated
-  USING (public.get_current_user_role() IN ('ADMIN', 'WRITER'))
-  WITH CHECK (public.get_current_user_role() IN ('ADMIN', 'WRITER'));
-
-
--- 12. TRANSLATIONS
--- Read: Publicly readable.
-CREATE POLICY "translations_read_policy" ON public.translations
-  FOR SELECT TO public
-  USING (true);
-
--- Manage: Authenticated users (Open for now based on latest fix).
-CREATE POLICY "translations_manage_policy" ON public.translations
-  FOR ALL TO authenticated
-  USING (true)
-  WITH CHECK (true);
-  
-
--- 13. REVISIONS
--- Read: Authenticated users.
-CREATE POLICY "page_revisions_read_policy" ON public.page_revisions
-  FOR SELECT TO authenticated
-  USING (true);
-
-CREATE POLICY "post_revisions_read_policy" ON public.post_revisions
-  FOR SELECT TO authenticated
-  USING (true);
-
--- Manage: Admins/Writers.
-CREATE POLICY "page_revisions_manage_policy" ON public.page_revisions
-  FOR ALL TO authenticated
-  USING (public.get_current_user_role() IN ('ADMIN', 'WRITER'))
-  WITH CHECK (public.get_current_user_role() IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY "post_revisions_manage_policy" ON public.post_revisions
-  FOR ALL TO authenticated
-  USING (public.get_current_user_role() IN ('ADMIN', 'WRITER'))
-  WITH CHECK (public.get_current_user_role() IN ('ADMIN', 'WRITER'));
-
-
--- Ensure Service Role has access to all tables via RLS
-DO $$
-DECLARE
-  tb record;
-BEGIN
-  FOR tb IN 
-    SELECT tablename 
-    FROM pg_tables 
-    WHERE schemaname = 'public' 
-      AND rowsecurity = true
-  LOOP
-    EXECUTE format('
-      DO $policy$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_policies WHERE policyname = %L AND tablename = %L
-        ) THEN
-          CREATE POLICY %I ON public.%I
-            FOR ALL TO service_role
-            USING (true)
-            WITH CHECK (true);
-        END IF;
-      END
-      $policy$;', 
-      tb.tablename || '_service_role_policy', 
-      tb.tablename, 
-      tb.tablename || '_service_role_policy', 
-      tb.tablename
-    );
-  END LOOP;
-END
-$$;
-
-
-
--- >>> FROM: 00000000000013_seed_data.sql <<<
--- 00000000000040_seed_data.sql
--- Consolidated Seed Data: Translations, Logo, Foundational Content
+-- 00000000000033_seed_logo_and_content_scaffold.sql
+-- Foundational translations, logo assets, and starter content scaffolding.
 
 
 -- 1. Translations
@@ -1352,9 +4083,7 @@ BEGIN
 END $$;
 
 
-
--- >>> FROM: 00000000000014_seed_homepage_blocks.sql <<<
--- 00000000000041_seed_homepage_blocks.sql
+-- 00000000000034_seed_homepage_blocks.sql
 -- Populates the English Home page with structured blocks sourced from the landing page brief.
 
 DO $seed$
@@ -1469,7 +4198,7 @@ BEGIN
             {
               "block_type": "text",
               "content": {
-                "html_content": "<div class='p-10 border border-white/10 rounded-3xl bg-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden group'><div class='absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500'></div><div class='relative z-10'><p class='text-xs text-white uppercase tracking-widest font-semibold mb-2'>Why teams switch</p><p class='text-3xl font-bold text-white mb-2'>100% Lighthouse</p><p class='text-base text-slate-300 mb-6'>Edge-rendered marketing sites, launches, and docs with uncompromising performance.</p><ul class='space-y-3 text-sm text-slate-200'><li><span class='text-blue-400 mr-2'>✓</span> Next.js 16 with ISR and edge caching</li><li><span class='text-blue-400 mr-2'>✓</span> Supabase auth, data, and storage</li><li><span class='text-blue-400 mr-2'>✓</span> Notion-style block editor powered by Tiptap</li></ul><div class='mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-lg'><img src='/images/NBcover.webp' alt='Nextblock cover showcasing dashboards and blocks' class='w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700' fetchpriority='high' /></div></div></div>"
+                "html_content": "<div class='p-10 border border-white/10 rounded-3xl bg-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden group'><div class='absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500'></div><div class='relative z-10'><p class='text-xs text-white uppercase tracking-widest font-semibold mb-2'>Why teams switch</p><p class='text-3xl font-bold text-white mb-2'>100% Lighthouse</p><p class='text-base text-slate-300 mb-6'>Edge-rendered marketing sites, launches, and docs with uncompromising performance.</p><ul class='space-y-3 text-sm text-slate-200'><li><span class='text-blue-400 mr-2'>&#10003;</span> Next.js 16 with ISR and edge caching</li><li><span class='text-blue-400 mr-2'>&#10003;</span> Supabase auth, data, and storage</li><li><span class='text-blue-400 mr-2'>&#10003;</span> Notion-style block editor powered by Tiptap</li></ul><div class='mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-lg'><img src='/images/NBcover.webp' alt='Nextblock cover showcasing dashboards and blocks' class='w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700' fetchpriority='high' /></div></div></div>"
               }
             }
           ]
@@ -1846,7 +4575,7 @@ BEGIN
             { "block_type": "text", "content": { "html_content": "<div class='flex flex-wrap justify-center gap-6 text-sm uppercase tracking-wide text-slate-400 mt-8'><a href='https://github.com/nextblock-cms' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>GitHub</a><a href='https://x.com/NextBlockCMS' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>X</a><a href='https://www.linkedin.com/in/nextblock/' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>LinkedIn</a><a href='https://dev.to/nextblockcms' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>Dev.to</a><a href='https://www.npmjs.com/~nextblockcms' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>npm</a></div>" } }
           ],
           [
-            { "block_type": "text", "content": { "html_content": "<div class='p-10 border border-white/10 rounded-3xl bg-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden group'><div class='absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500'></div><div class='relative z-10'><p class='text-xs text-white uppercase tracking-widest font-semibold mb-2'>Pourquoi migrer</p><p class='text-3xl font-bold text-white mb-2'>100% Lighthouse</p><p class='text-base text-slate-300 mb-6'>Sites marketing et docs rendus à l'edge avec des performances irréprochables.</p><ul class='space-y-3 text-sm text-slate-200'><li><span class='text-blue-400 mr-2'>✓</span> Next.js 16 avec ISR et cache edge</li><li><span class='text-blue-400 mr-2'>✓</span> Supabase pour l'auth, les données et le stockage</li><li><span class='text-blue-400 mr-2'>✓</span> Éditeur de blocs type Notion sur Tiptap</li></ul><div class='mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-lg'><img src='/images/NBcover.webp' alt='Couverture Nextblock avec tableaux de bord et blocs' class='w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700' fetchpriority='high' /></div></div></div>" } }
+            { "block_type": "text", "content": { "html_content": "<div class='p-10 border border-white/10 rounded-3xl bg-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden group'><div class='absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500'></div><div class='relative z-10'><p class='text-xs text-white uppercase tracking-widest font-semibold mb-2'>Pourquoi migrer</p><p class='text-3xl font-bold text-white mb-2'>100% Lighthouse</p><p class='text-base text-slate-300 mb-6'>Sites marketing et docs rendus à l'edge avec des performances irréprochables.</p><ul class='space-y-3 text-sm text-slate-200'><li><span class='text-blue-400 mr-2'>&#10003;</span> Next.js 16 avec ISR et cache edge</li><li><span class='text-blue-400 mr-2'>&#10003;</span> Supabase pour l'auth, les données et le stockage</li><li><span class='text-blue-400 mr-2'>&#10003;</span> Éditeur de blocs type Notion sur Tiptap</li></ul><div class='mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-lg'><img src='/images/NBcover.webp' alt='Couverture Nextblock avec tableaux de bord et blocs' class='w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700' fetchpriority='high' /></div></div></div>" } }
           ]
         ]
       }$$::jsonb,
@@ -2016,9 +4745,7 @@ BEGIN
 END;
 $seed_fr$;
 
-
--- >>> FROM: 00000000000015_seed_how_it_works.sql <<<
--- 00000000000042_seed_how_it_works.sql
+-- 00000000000035_seed_how_it_works.sql
 -- Populates the English "How NextBlock Works" post with a synthesized technical article.
 
 WITH target_posts AS (
@@ -2107,4489 +4834,6 @@ supabase db push
   0
 FROM target_posts
 WHERE target_posts.slug = 'comment-nextblock-fonctionne';
-
-
--- >>> FROM: 20260115144026_setup_ecommerce.sql <<<
--- Clean up existing tables if re-running migration
-drop table if exists public.order_items cascade;
-drop table if exists public.orders cascade;
-drop table if exists public.product_media cascade;
-drop table if exists public.products cascade;
-
--- Create helper function for admin check
-create or replace function public.is_admin()
-returns boolean as $$
-  select exists (
-    select 1 from public.profiles
-    where id = auth.uid()
-    and role = 'ADMIN'
-  );
-$$ language sql security definer;
-
--- Create products table
-create table public.products (
-  id uuid primary key default gen_random_uuid(),
-  language_id bigint not null references public.languages(id) on delete cascade,
-  translation_group_id uuid default gen_random_uuid() not null,
-  sku text not null,
-  title text not null,
-  slug text not null,
-  product_type text not null check (product_type in ('physical', 'digital')),
-  payment_provider text not null check (payment_provider in ('stripe', 'freemius')),
-  price integer not null,
-  sale_price integer,
-  stock integer default 0,
-  status text not null check (status in ('draft', 'active', 'archived')) default 'draft',
-  short_description text,
-  description_json jsonb,
-  metadata jsonb,
-  freemius_plan_id text,
-  freemius_product_id text,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now(),
-  constraint products_type_provider_consistency_check check (
-    (product_type = 'physical' and payment_provider = 'stripe')
-    or (product_type = 'digital' and payment_provider = 'freemius')
-  ),
-  constraint products_language_id_slug_key unique (language_id, slug),
-  constraint products_language_id_sku_key unique (language_id, sku)
-);
-
--- PRODUCT RLS
-alter table public.products enable row level security;
-
-create policy "Public can view products"
-  on public.products
-  for select
-  using (true);
-
-create policy "Admins can manage products"
-  on public.products
-  for all
-  to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
-
--- Create product_media junction table
-create table public.product_media (
-  product_id uuid not null references public.products(id) on delete cascade,
-  media_id uuid not null references public.media(id) on delete cascade,
-  sort_order integer default 0,
-  primary key (product_id, media_id)
-);
-
--- PRODUCT_MEDIA RLS (inherit from products basically, or just admin manage)
-alter table public.product_media enable row level security;
-
-create policy "Public can view product media"
-  on public.product_media
-  for select
-  using (true);
-
-create policy "Admins can manage product media"
-  on public.product_media
-  for all
-  to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
-
--- Create orders table
-create table public.orders (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete set null,
-  status text not null check (status in ('pending', 'paid', 'shipped', 'cancelled', 'refunded')) default 'pending',
-  total integer not null,
-  stripe_session_id text unique,
-  payment_intent_id text,
-  customer_details jsonb,
-  provider text check (provider in ('stripe', 'freemius')) default 'stripe',
-  created_at timestamptz default now()
-);
-
--- ORDERS RLS
-alter table public.orders enable row level security;
-
-create policy "Users can view own orders"
-  on public.orders
-  for select
-  to authenticated
-  using (auth.uid() = user_id);
-
-create policy "Admins can view all orders"
-  on public.orders
-  for select
-  to authenticated
-  using (public.is_admin());
-
-create policy "Admins can manage all orders"
-  on public.orders
-  for all
-  to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
-
-create policy "Service Role manages orders"
-  on public.orders
-  for all
-  to service_role
-  using (true)
-  with check (true);
-
--- Create order_items table
-create table public.order_items (
-  id uuid primary key default gen_random_uuid(),
-  order_id uuid not null references public.orders(id) on delete cascade,
-  product_id uuid references public.products(id) on delete set null,
-  quantity integer not null,
-  price_at_purchase integer not null
-);
-
--- ORDER_ITEMS RLS
-alter table public.order_items enable row level security;
-
-create policy "Users can view own order items"
-  on public.order_items
-  for select
-  to authenticated
-  using (
-    exists (
-      select 1 from public.orders
-      where orders.id = order_items.order_id
-      and orders.user_id = auth.uid()
-    )
-  );
-
-create policy "Admins can view all order items"
-  on public.order_items
-  for select
-  to authenticated
-  using (public.is_admin());
-
-create policy "Admins can manage all order items"
-  on public.order_items
-  for all
-  to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
-
-create policy "Service Role manages order items"
-  on public.order_items
-  for all
-  to service_role
-  using (true)
-  with check (true);
-
--- Indexes for performance
-create index idx_products_slug on public.products(slug);
-create index idx_products_translation_group_id on public.products(translation_group_id);
-create index idx_orders_user_id on public.orders(user_id);
-create index idx_order_items_order_id on public.order_items(order_id);
-create index idx_product_media_product_id on public.product_media(product_id);
-
--- Grants
-grant select on table public.products to anon, authenticated;
-grant insert, update, delete on table public.products to authenticated;
-grant all on table public.products to service_role;
-
-grant select on table public.product_media to anon, authenticated;
-grant insert, update, delete on table public.product_media to authenticated;
-grant all on table public.product_media to service_role;
-
-grant select, insert on table public.orders to authenticated;
-grant select, insert on table public.orders to anon;
-grant update on table public.orders to authenticated;
-grant all on table public.orders to service_role;
-
-grant select, insert on table public.order_items to authenticated;
-grant select, insert on table public.order_items to anon;
-grant all on table public.order_items to service_role;
-
-
--- >>> FROM: 20260218104500_setup_package_licensing.sql <<<
--- Create package_activations table
-CREATE TABLE IF NOT EXISTS package_activations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    license_key TEXT NOT NULL,
-    instance_name TEXT NOT NULL,
-    package_id TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'active',
-    meta JSONB DEFAULT '{}'::jsonb,
-    last_validated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(license_key, package_id)
-);
-
--- Enable RLS
-ALTER TABLE package_activations ENABLE ROW LEVEL SECURITY;
-
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_package_activations_package_id ON package_activations(package_id);
-CREATE INDEX IF NOT EXISTS idx_package_activations_license_key ON package_activations(license_key);
-
--- PERMISSIONS
--- Explicitly grant access to roles to prevent "permission denied" errors
-GRANT ALL ON TABLE package_activations TO service_role;
-GRANT ALL ON TABLE package_activations TO postgres;
-GRANT ALL ON TABLE package_activations TO anon;
-GRANT ALL ON TABLE package_activations TO authenticated;
-
--- RLS POLICIES
-
--- 1. Service Role: Full Access
--- Allows server actions to manage activations securely
-CREATE POLICY "Allow service role full access" ON package_activations
-    FOR ALL
-    TO service_role
-    USING (true)
-    WITH CHECK (true);
-
--- 2. Authenticated Users: Read Only
--- Allows the CMS UI to display active packages
-CREATE POLICY "Allow authenticated read access" ON package_activations
-    FOR SELECT
-    TO authenticated
-    USING (true);
-
-
--- >>> FROM: 20260406190000_freemius_ecommerce_expansion.sql <<<
--- Freemius synchronization tables
-CREATE TABLE IF NOT EXISTS public.freemius_plans (
-    id uuid primary key default gen_random_uuid(),
-    product_id uuid not null references public.products(id) on delete cascade,
-    name text not null,
-    title text,
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_freemius_plans_product_id on public.freemius_plans(product_id);
-ALTER TABLE public.freemius_plans ENABLE ROW LEVEL SECURITY;
-
-DO $$ BEGIN
-    CREATE POLICY "Public read access for freemius_plans" on public.freemius_plans for select using (true);
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
-
-CREATE TABLE IF NOT EXISTS public.freemius_pricing (
-    id uuid primary key default gen_random_uuid(),
-    plan_id uuid not null references public.freemius_plans(id) on delete cascade,
-    api_monthly_price numeric,
-    api_annual_price numeric,
-    api_lifetime_price numeric,
-    override_monthly_price numeric,
-    override_annual_price numeric,
-    override_lifetime_price numeric,
-    license_quota integer,
-    is_active boolean not null default true,
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_freemius_pricing_plan_id on public.freemius_pricing(plan_id);
-ALTER TABLE public.freemius_pricing ENABLE ROW LEVEL SECURITY;
-
-DO $$ BEGIN
-    CREATE POLICY "Public read access for freemius_pricing" on public.freemius_pricing for select using (true);
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
-
--- Grants
-grant select on table public.freemius_plans to anon, authenticated;
-grant all on table public.freemius_plans to service_role;
-
-grant select on table public.freemius_pricing to anon, authenticated;
-grant all on table public.freemius_pricing to service_role;
-
--- Translations
-INSERT INTO public.translations (key, translations) VALUES
-  ('ecommerce.pricing_unavailable', '{"en": "Pricing Unavailable", "es": "Precios no disponibles"}'),
-  ('ecommerce.monthly', '{"en": "Monthly", "es": "Mensual"}'),
-  ('ecommerce.annual', '{"en": "Annual", "es": "Anual"}'),
-  ('ecommerce.lifetime', '{"en": "Lifetime", "es": "De por vida"}'),
-  ('ecommerce.year', '{"en": "year", "es": "año"}'),
-  ('ecommerce.month', '{"en": "month", "es": "mes"}'),
-  ('ecommerce.get_license', '{"en": "Get License", "es": "Obtener Licencia"}'),
-  ('ecommerce.added_to_cart_success', '{"en": "{item} added to your cart.", "es": "{item} añadido al carrito."}'),
-  ('ecommerce.added_to_cart_error', '{"en": "Could not add item to cart.", "es": "No se pudo añadir el artículo al carrito."}')
-ON CONFLICT (key) DO UPDATE
-SET translations = excluded.translations;
-
-
--- >>> FROM: 20260408000000_setup_shipping.sql <<<
--- 20260408000000_setup_shipping.sql
--- Setup Shipping Zones, Locations, and Methods
-
--- 1. Create shipping_zones table
-CREATE TABLE IF NOT EXISTS public.shipping_zones (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    name text NOT NULL,
-    priority_order integer NOT NULL DEFAULT 0,
-    created_at timestamptz DEFAULT now(),
-    updated_at timestamptz DEFAULT now()
-);
-
--- 2. Create shipping_zone_locations table
-CREATE TABLE IF NOT EXISTS public.shipping_zone_locations (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    zone_id uuid NOT NULL REFERENCES public.shipping_zones(id) ON DELETE CASCADE,
-    country_code text NOT NULL, -- ISO 3166-1 alpha-2
-    state_code text,            -- ISO 3166-2
-    postal_code text,           -- Exact postal code or wildcard pattern
-    created_at timestamptz DEFAULT now()
-);
-
--- 3. Create shipping_zone_methods table
-CREATE TABLE IF NOT EXISTS public.shipping_zone_methods (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    zone_id uuid NOT NULL REFERENCES public.shipping_zones(id) ON DELETE CASCADE,
-    method_type text NOT NULL CHECK (method_type IN ('flat_rate', 'free_shipping')),
-    cost_amount integer NOT NULL DEFAULT 0, -- In cents
-    cost_currency text NOT NULL DEFAULT 'usd',
-    min_order_amount integer NOT NULL DEFAULT 0, -- Minimum order required (in cents)
-    name text NOT NULL, -- e.g. "Standard Shipping"
-    created_at timestamptz DEFAULT now(),
-    updated_at timestamptz DEFAULT now()
-);
-
--- 4. RLS Policies
-ALTER TABLE public.shipping_zones ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.shipping_zone_locations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.shipping_zone_methods ENABLE ROW LEVEL SECURITY;
-
--- Admins can do everything
-CREATE POLICY "Admins manage shipping_zones" ON public.shipping_zones FOR ALL TO authenticated USING (public.is_admin());
-CREATE POLICY "Admins manage shipping_zone_locations" ON public.shipping_zone_locations FOR ALL TO authenticated USING (public.is_admin());
-CREATE POLICY "Admins manage shipping_zone_methods" ON public.shipping_zone_methods FOR ALL TO authenticated USING (public.is_admin());
-
--- Public (Anonymous/Authenticated) can read for checkout
-CREATE POLICY "Public read shipping_zones" ON public.shipping_zones FOR SELECT USING (true);
-CREATE POLICY "Public read shipping_zone_locations" ON public.shipping_zone_locations FOR SELECT USING (true);
-CREATE POLICY "Public read shipping_zone_methods" ON public.shipping_zone_methods FOR SELECT USING (true);
-
--- 5. Seed Initial Data (example: North America)
-DO $$
-DECLARE
-    v_zone_id uuid;
-BEGIN
-    INSERT INTO public.shipping_zones (name, priority_order)
-    VALUES ('North America', 10)
-    RETURNING id INTO v_zone_id;
-
-    INSERT INTO public.shipping_zone_locations (zone_id, country_code)
-    VALUES 
-        (v_zone_id, 'US'),
-        (v_zone_id, 'CA'),
-        (v_zone_id, 'MX');
-
-    INSERT INTO public.shipping_zone_methods (zone_id, method_type, cost_amount, name, min_order_amount)
-    VALUES 
-        (v_zone_id, 'flat_rate', 1500, 'Standard Shipping', 0),
-        (v_zone_id, 'free_shipping', 0, 'Free Shipping (Orders over $100)', 10000);
-END $$;
-
--- 6. Grants
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
-
-
--- >>> FROM: 20260408120000_harden_ecommerce_fulfillment.sql <<<
--- 20260408120000_harden_ecommerce_fulfillment.sql
--- Foundation for physical goods fulfillment: tables, functions, and RLS
-
--- 1. Helper Function: is_admin
--- Used by multiple modules for RLS checks
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT role = 'ADMIN' FROM public.profiles WHERE id = auth.uid();
-$$;
-
--- 2. Harden Orders Table
-DO $$ 
-BEGIN 
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='payment_intent_id') THEN
-        ALTER TABLE public.orders ADD COLUMN payment_intent_id text;
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='customer_details') THEN
-        ALTER TABLE public.orders ADD COLUMN customer_details jsonb;
-    END IF;
-END $$;
-
--- 3. Unified Service Role Access
--- Ensure background processes (webhooks) are never blocked
-DROP POLICY IF EXISTS "Service Role manages orders" ON public.orders;
-CREATE POLICY "Service Role manages orders" ON public.orders FOR ALL TO service_role USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Service Role manages order items" ON public.order_items;
-CREATE POLICY "Service Role manages order items" ON public.order_items FOR ALL TO service_role USING (true) WITH CHECK (true);
-
--- 4. Grants
-GRANT ALL ON TABLE public.orders TO service_role;
-GRANT ALL ON TABLE public.order_items TO service_role;
-GRANT ALL ON TABLE public.products TO service_role;
-
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
-
-
--- >>> FROM: 20260409000000_setup_product_variations.sql <<<
--- 20260409000000_setup_product_variations.sql
--- Module 6: product attributes, terms, variants, and transactional persistence
-
--- 1. Global product attributes
-CREATE TABLE IF NOT EXISTS public.product_attributes (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  slug text NOT NULL UNIQUE,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.product_attribute_terms (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  attribute_id uuid NOT NULL REFERENCES public.product_attributes(id) ON DELETE CASCADE,
-  value text NOT NULL,
-  slug text NOT NULL,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  CONSTRAINT product_attribute_terms_attribute_id_slug_key UNIQUE (attribute_id, slug)
-);
-
-CREATE TABLE IF NOT EXISTS public.product_variants (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
-  sku text NOT NULL,
-  price_adjustment integer NOT NULL DEFAULT 0,
-  stock_quantity integer NOT NULL DEFAULT 0,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  CONSTRAINT product_variants_product_id_sku_key UNIQUE (product_id, sku)
-);
-
-CREATE TABLE IF NOT EXISTS public.variant_attribute_mapping (
-  variant_id uuid NOT NULL REFERENCES public.product_variants(id) ON DELETE CASCADE,
-  attribute_term_id uuid NOT NULL REFERENCES public.product_attribute_terms(id) ON DELETE CASCADE,
-  PRIMARY KEY (variant_id, attribute_term_id)
-);
-
--- 2. Variant-aware order items for fulfillment + stock sync
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'order_items'
-      AND column_name = 'variant_id'
-  ) THEN
-    ALTER TABLE public.order_items
-      ADD COLUMN variant_id uuid REFERENCES public.product_variants(id) ON DELETE SET NULL;
-  END IF;
-END $$;
-
--- 3. Performance indexes
-CREATE INDEX IF NOT EXISTS idx_product_attribute_terms_attribute_id
-  ON public.product_attribute_terms(attribute_id);
-
-CREATE INDEX IF NOT EXISTS idx_product_variants_product_id
-  ON public.product_variants(product_id);
-
-CREATE INDEX IF NOT EXISTS idx_variant_attribute_mapping_variant_id
-  ON public.variant_attribute_mapping(variant_id);
-
-CREATE INDEX IF NOT EXISTS idx_variant_attribute_mapping_attribute_term_id
-  ON public.variant_attribute_mapping(attribute_term_id);
-
-CREATE INDEX IF NOT EXISTS idx_order_items_variant_id
-  ON public.order_items(variant_id);
-
--- 4. RLS
-ALTER TABLE public.product_attributes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.product_attribute_terms ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.product_variants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.variant_attribute_mapping ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Public read product_attributes" ON public.product_attributes;
-CREATE POLICY "Public read product_attributes"
-  ON public.product_attributes
-  FOR SELECT
-  USING (true);
-
-DROP POLICY IF EXISTS "Admins manage product_attributes" ON public.product_attributes;
-CREATE POLICY "Admins manage product_attributes"
-  ON public.product_attributes
-  FOR ALL
-  TO authenticated
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
-
-DROP POLICY IF EXISTS "Public read product_attribute_terms" ON public.product_attribute_terms;
-CREATE POLICY "Public read product_attribute_terms"
-  ON public.product_attribute_terms
-  FOR SELECT
-  USING (true);
-
-DROP POLICY IF EXISTS "Admins manage product_attribute_terms" ON public.product_attribute_terms;
-CREATE POLICY "Admins manage product_attribute_terms"
-  ON public.product_attribute_terms
-  FOR ALL
-  TO authenticated
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
-
-DROP POLICY IF EXISTS "Public read product_variants" ON public.product_variants;
-CREATE POLICY "Public read product_variants"
-  ON public.product_variants
-  FOR SELECT
-  USING (true);
-
-DROP POLICY IF EXISTS "Admins manage product_variants" ON public.product_variants;
-CREATE POLICY "Admins manage product_variants"
-  ON public.product_variants
-  FOR ALL
-  TO authenticated
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
-
-DROP POLICY IF EXISTS "Public read variant_attribute_mapping" ON public.variant_attribute_mapping;
-CREATE POLICY "Public read variant_attribute_mapping"
-  ON public.variant_attribute_mapping
-  FOR SELECT
-  USING (true);
-
-DROP POLICY IF EXISTS "Admins manage variant_attribute_mapping" ON public.variant_attribute_mapping;
-CREATE POLICY "Admins manage variant_attribute_mapping"
-  ON public.variant_attribute_mapping
-  FOR ALL
-  TO authenticated
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
-
--- 5. Transactional RPC for product + variants
-CREATE OR REPLACE FUNCTION public.upsert_product_with_variants(product_payload jsonb)
-RETURNS uuid
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_product_id uuid := NULLIF(product_payload->>'id', '')::uuid;
-  v_translation_group_id uuid := NULLIF(product_payload->>'translation_group_id', '')::uuid;
-  v_variants jsonb := COALESCE(product_payload->'variants', '[]'::jsonb);
-  v_variant jsonb;
-  v_variant_id uuid;
-  v_term_id text;
-  v_has_variants boolean := jsonb_typeof(v_variants) = 'array' AND jsonb_array_length(v_variants) > 0;
-  v_total_variant_stock integer := 0;
-BEGIN
-  IF NOT public.is_admin() THEN
-    RAISE EXCEPTION 'Admin access required';
-  END IF;
-
-  IF v_has_variants THEN
-    SELECT COALESCE(SUM(COALESCE((value->>'stock_quantity')::integer, 0)), 0)
-      INTO v_total_variant_stock
-    FROM jsonb_array_elements(v_variants);
-  END IF;
-
-  IF v_product_id IS NULL THEN
-    INSERT INTO public.products (
-      title,
-      slug,
-      sku,
-      stock,
-      status,
-      short_description,
-      description_json,
-      metadata,
-      price,
-      sale_price,
-      freemius_plan_id,
-      freemius_product_id,
-      language_id,
-      translation_group_id
-    )
-    VALUES (
-      product_payload->>'title',
-      product_payload->>'slug',
-      product_payload->>'sku',
-      CASE
-        WHEN v_has_variants THEN v_total_variant_stock
-        ELSE COALESCE((product_payload->>'stock')::integer, 0)
-      END,
-      COALESCE(product_payload->>'status', 'draft'),
-      NULLIF(product_payload->>'short_description', ''),
-      product_payload->'description_json',
-      COALESCE(product_payload->'metadata', '{}'::jsonb),
-      COALESCE((product_payload->>'price')::integer, 0),
-      CASE
-        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
-          (product_payload->>'sale_price')::integer
-        ELSE
-          NULL
-      END,
-      NULLIF(product_payload->>'freemius_plan_id', ''),
-      NULLIF(product_payload->>'freemius_product_id', ''),
-      (product_payload->>'language_id')::bigint,
-      COALESCE(v_translation_group_id, gen_random_uuid())
-    )
-    RETURNING id INTO v_product_id;
-  ELSE
-    UPDATE public.products
-    SET
-      title = product_payload->>'title',
-      slug = product_payload->>'slug',
-      sku = product_payload->>'sku',
-      stock = CASE
-        WHEN v_has_variants THEN v_total_variant_stock
-        ELSE COALESCE((product_payload->>'stock')::integer, 0)
-      END,
-      status = COALESCE(product_payload->>'status', status),
-      short_description = NULLIF(product_payload->>'short_description', ''),
-      description_json = product_payload->'description_json',
-      metadata = COALESCE(product_payload->'metadata', '{}'::jsonb),
-      price = COALESCE((product_payload->>'price')::integer, 0),
-      sale_price = CASE
-        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
-          (product_payload->>'sale_price')::integer
-        ELSE
-          NULL
-      END,
-      freemius_plan_id = NULLIF(product_payload->>'freemius_plan_id', ''),
-      freemius_product_id = NULLIF(product_payload->>'freemius_product_id', ''),
-      language_id = COALESCE((product_payload->>'language_id')::bigint, language_id),
-      translation_group_id = COALESCE(v_translation_group_id, translation_group_id),
-      updated_at = now()
-    WHERE id = v_product_id;
-
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'Product not found';
-    END IF;
-  END IF;
-
-  DELETE FROM public.variant_attribute_mapping
-  WHERE variant_id IN (
-    SELECT id FROM public.product_variants WHERE product_id = v_product_id
-  );
-
-  DELETE FROM public.product_variants
-  WHERE product_id = v_product_id;
-
-  IF v_has_variants THEN
-    FOR v_variant IN
-      SELECT value FROM jsonb_array_elements(v_variants)
-    LOOP
-      INSERT INTO public.product_variants (
-        product_id,
-        sku,
-        price_adjustment,
-        stock_quantity
-      )
-      VALUES (
-        v_product_id,
-        v_variant->>'sku',
-        COALESCE((v_variant->>'price_adjustment')::integer, 0),
-        COALESCE((v_variant->>'stock_quantity')::integer, 0)
-      )
-      RETURNING id INTO v_variant_id;
-
-      FOR v_term_id IN
-        SELECT jsonb_array_elements_text(COALESCE(v_variant->'attribute_term_ids', '[]'::jsonb))
-      LOOP
-        INSERT INTO public.variant_attribute_mapping (variant_id, attribute_term_id)
-        VALUES (v_variant_id, v_term_id::uuid);
-      END LOOP;
-    END LOOP;
-  END IF;
-
-  RETURN v_product_id;
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.upsert_product_with_variants(jsonb) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.upsert_product_with_variants(jsonb) TO service_role;
-
--- 6. Grants
-GRANT SELECT ON TABLE public.product_attributes TO anon, authenticated;
-GRANT SELECT ON TABLE public.product_attribute_terms TO anon, authenticated;
-GRANT SELECT ON TABLE public.product_variants TO anon, authenticated;
-GRANT SELECT ON TABLE public.variant_attribute_mapping TO anon, authenticated;
-
-GRANT ALL ON TABLE public.product_attributes TO service_role;
-GRANT ALL ON TABLE public.product_attribute_terms TO service_role;
-GRANT ALL ON TABLE public.product_variants TO service_role;
-GRANT ALL ON TABLE public.variant_attribute_mapping TO service_role;
-
-
--- >>> FROM: 20260413000000_variant_pricing_and_attribute_term_order.sql <<<
--- 20260413000000_variant_pricing_and_attribute_term_order.sql
--- Variant pricing uses explicit price/sale_price and attribute terms get merchant-controlled ordering.
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'product_attribute_terms'
-      AND column_name = 'sort_order'
-  ) THEN
-    ALTER TABLE public.product_attribute_terms
-      ADD COLUMN sort_order integer NOT NULL DEFAULT 0;
-  END IF;
-END $$;
-
-WITH ordered_terms AS (
-  SELECT
-    id,
-    ROW_NUMBER() OVER (
-      PARTITION BY attribute_id
-      ORDER BY created_at ASC NULLS LAST, value ASC, id ASC
-    ) - 1 AS sort_position
-  FROM public.product_attribute_terms
-)
-UPDATE public.product_attribute_terms AS terms
-SET sort_order = ordered_terms.sort_position
-FROM ordered_terms
-WHERE terms.id = ordered_terms.id;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'product_variants'
-      AND column_name = 'price'
-  ) THEN
-    ALTER TABLE public.product_variants
-      ADD COLUMN price integer NOT NULL DEFAULT 0;
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'product_variants'
-      AND column_name = 'sale_price'
-  ) THEN
-    ALTER TABLE public.product_variants
-      ADD COLUMN sale_price integer NULL;
-  END IF;
-END $$;
-
-UPDATE public.product_variants AS variants
-SET
-  price = GREATEST(0, COALESCE(products.price, 0) + COALESCE(variants.price_adjustment, 0)),
-  sale_price = CASE
-    WHEN products.sale_price IS NOT NULL THEN
-      GREATEST(0, products.sale_price + COALESCE(variants.price_adjustment, 0))
-    ELSE
-      NULL
-  END
-FROM public.products
-WHERE products.id = variants.product_id
-  AND variants.price = 0
-  AND variants.sale_price IS NULL;
-
-CREATE OR REPLACE FUNCTION public.upsert_product_with_variants(product_payload jsonb)
-RETURNS uuid
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $function$
-DECLARE
-  v_product_id uuid := NULLIF(product_payload->>'id', '')::uuid;
-  v_translation_group_id uuid := NULLIF(product_payload->>'translation_group_id', '')::uuid;
-  v_variants jsonb := COALESCE(product_payload->'variants', '[]'::jsonb);
-  v_variant jsonb;
-  v_variant_id uuid;
-  v_term_id text;
-  v_has_variants boolean := jsonb_typeof(v_variants) = 'array' AND jsonb_array_length(v_variants) > 0;
-  v_total_variant_stock integer := 0;
-BEGIN
-  IF NOT public.is_admin() THEN
-    RAISE EXCEPTION 'Admin access required';
-  END IF;
-
-  IF v_has_variants THEN
-    SELECT COALESCE(SUM(COALESCE((value->>'stock_quantity')::integer, 0)), 0)
-      INTO v_total_variant_stock
-    FROM jsonb_array_elements(v_variants);
-  END IF;
-
-  IF v_product_id IS NULL THEN
-    INSERT INTO public.products (
-      title,
-      slug,
-      sku,
-      stock,
-      status,
-      short_description,
-      description_json,
-      metadata,
-      price,
-      sale_price,
-      freemius_plan_id,
-      freemius_product_id,
-      language_id,
-      translation_group_id
-    )
-    VALUES (
-      product_payload->>'title',
-      product_payload->>'slug',
-      product_payload->>'sku',
-      CASE
-        WHEN v_has_variants THEN v_total_variant_stock
-        ELSE COALESCE((product_payload->>'stock')::integer, 0)
-      END,
-      COALESCE(product_payload->>'status', 'draft'),
-      NULLIF(product_payload->>'short_description', ''),
-      product_payload->'description_json',
-      COALESCE(product_payload->'metadata', '{}'::jsonb),
-      COALESCE((product_payload->>'price')::integer, 0),
-      CASE
-        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
-          (product_payload->>'sale_price')::integer
-        ELSE
-          NULL
-      END,
-      NULLIF(product_payload->>'freemius_plan_id', ''),
-      NULLIF(product_payload->>'freemius_product_id', ''),
-      (product_payload->>'language_id')::bigint,
-      COALESCE(v_translation_group_id, gen_random_uuid())
-    )
-    RETURNING id INTO v_product_id;
-  ELSE
-    UPDATE public.products
-    SET
-      title = product_payload->>'title',
-      slug = product_payload->>'slug',
-      sku = product_payload->>'sku',
-      stock = CASE
-        WHEN v_has_variants THEN v_total_variant_stock
-        ELSE COALESCE((product_payload->>'stock')::integer, 0)
-      END,
-      status = COALESCE(product_payload->>'status', status),
-      short_description = NULLIF(product_payload->>'short_description', ''),
-      description_json = product_payload->'description_json',
-      metadata = COALESCE(product_payload->'metadata', '{}'::jsonb),
-      price = COALESCE((product_payload->>'price')::integer, 0),
-      sale_price = CASE
-        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
-          (product_payload->>'sale_price')::integer
-        ELSE
-          NULL
-      END,
-      freemius_plan_id = NULLIF(product_payload->>'freemius_plan_id', ''),
-      freemius_product_id = NULLIF(product_payload->>'freemius_product_id', ''),
-      language_id = COALESCE((product_payload->>'language_id')::bigint, language_id),
-      translation_group_id = COALESCE(v_translation_group_id, translation_group_id),
-      updated_at = now()
-    WHERE id = v_product_id;
-
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'Product not found';
-    END IF;
-  END IF;
-
-  DELETE FROM public.variant_attribute_mapping
-  WHERE variant_id IN (
-    SELECT id FROM public.product_variants WHERE product_id = v_product_id
-  );
-
-  DELETE FROM public.product_variants
-  WHERE product_id = v_product_id;
-
-  IF v_has_variants THEN
-    FOR v_variant IN
-      SELECT value FROM jsonb_array_elements(v_variants)
-    LOOP
-      INSERT INTO public.product_variants (
-        product_id,
-        sku,
-        price,
-        sale_price,
-        stock_quantity
-      )
-      VALUES (
-        v_product_id,
-        v_variant->>'sku',
-        COALESCE((v_variant->>'price')::integer, 0),
-        CASE
-          WHEN v_variant ? 'sale_price' AND v_variant->>'sale_price' <> '' THEN
-            (v_variant->>'sale_price')::integer
-          ELSE
-            NULL
-        END,
-        COALESCE((v_variant->>'stock_quantity')::integer, 0)
-      )
-      RETURNING id INTO v_variant_id;
-
-      FOR v_term_id IN
-        SELECT jsonb_array_elements_text(COALESCE(v_variant->'attribute_term_ids', '[]'::jsonb))
-      LOOP
-        INSERT INTO public.variant_attribute_mapping (variant_id, attribute_term_id)
-        VALUES (v_variant_id, v_term_id::uuid);
-      END LOOP;
-    END LOOP;
-  END IF;
-
-  RETURN v_product_id;
-END;
-$function$;
-
-
--- >>> FROM: 20260413010000_product_attribute_translations_and_variant_media.sql <<<
--- 20260413010000_product_attribute_translations_and_variant_media.sql
--- Adds attribute/term translations, product/variant UPCs, and per-variant main images.
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'product_attributes'
-      AND column_name = 'name_translations'
-  ) THEN
-    ALTER TABLE public.product_attributes
-      ADD COLUMN name_translations jsonb NOT NULL DEFAULT '{}'::jsonb;
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'product_attribute_terms'
-      AND column_name = 'value_translations'
-  ) THEN
-    ALTER TABLE public.product_attribute_terms
-      ADD COLUMN value_translations jsonb NOT NULL DEFAULT '{}'::jsonb;
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'products'
-      AND column_name = 'upc'
-  ) THEN
-    ALTER TABLE public.products
-      ADD COLUMN upc text;
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'product_variants'
-      AND column_name = 'upc'
-  ) THEN
-    ALTER TABLE public.product_variants
-      ADD COLUMN upc text;
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'product_variants'
-      AND column_name = 'main_media_id'
-  ) THEN
-    ALTER TABLE public.product_variants
-      ADD COLUMN main_media_id uuid REFERENCES public.media(id) ON DELETE SET NULL;
-  END IF;
-END $$;
-
-CREATE INDEX IF NOT EXISTS idx_product_variants_main_media_id
-  ON public.product_variants(main_media_id);
-
-CREATE OR REPLACE FUNCTION public.upsert_product_with_variants(product_payload jsonb)
-RETURNS uuid
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $function$
-DECLARE
-  v_product_id uuid := NULLIF(product_payload->>'id', '')::uuid;
-  v_translation_group_id uuid := NULLIF(product_payload->>'translation_group_id', '')::uuid;
-  v_variants jsonb := COALESCE(product_payload->'variants', '[]'::jsonb);
-  v_variant jsonb;
-  v_variant_id uuid;
-  v_term_id text;
-  v_has_variants boolean := jsonb_typeof(v_variants) = 'array' AND jsonb_array_length(v_variants) > 0;
-  v_total_variant_stock integer := 0;
-BEGIN
-  IF NOT public.is_admin() THEN
-    RAISE EXCEPTION 'Admin access required';
-  END IF;
-
-  IF v_has_variants THEN
-    SELECT COALESCE(SUM(COALESCE((value->>'stock_quantity')::integer, 0)), 0)
-      INTO v_total_variant_stock
-    FROM jsonb_array_elements(v_variants);
-  END IF;
-
-  IF v_product_id IS NULL THEN
-    INSERT INTO public.products (
-      title,
-      slug,
-      sku,
-      upc,
-      stock,
-      status,
-      short_description,
-      description_json,
-      metadata,
-      price,
-      sale_price,
-      freemius_plan_id,
-      freemius_product_id,
-      language_id,
-      translation_group_id
-    )
-    VALUES (
-      product_payload->>'title',
-      product_payload->>'slug',
-      product_payload->>'sku',
-      NULLIF(product_payload->>'upc', ''),
-      CASE
-        WHEN v_has_variants THEN v_total_variant_stock
-        ELSE COALESCE((product_payload->>'stock')::integer, 0)
-      END,
-      COALESCE(product_payload->>'status', 'draft'),
-      NULLIF(product_payload->>'short_description', ''),
-      product_payload->'description_json',
-      COALESCE(product_payload->'metadata', '{}'::jsonb),
-      COALESCE((product_payload->>'price')::integer, 0),
-      CASE
-        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
-          (product_payload->>'sale_price')::integer
-        ELSE
-          NULL
-      END,
-      NULLIF(product_payload->>'freemius_plan_id', ''),
-      NULLIF(product_payload->>'freemius_product_id', ''),
-      (product_payload->>'language_id')::bigint,
-      COALESCE(v_translation_group_id, gen_random_uuid())
-    )
-    RETURNING id INTO v_product_id;
-  ELSE
-    UPDATE public.products
-    SET
-      title = product_payload->>'title',
-      slug = product_payload->>'slug',
-      sku = product_payload->>'sku',
-      upc = NULLIF(product_payload->>'upc', ''),
-      stock = CASE
-        WHEN v_has_variants THEN v_total_variant_stock
-        ELSE COALESCE((product_payload->>'stock')::integer, 0)
-      END,
-      status = COALESCE(product_payload->>'status', status),
-      short_description = NULLIF(product_payload->>'short_description', ''),
-      description_json = product_payload->'description_json',
-      metadata = COALESCE(product_payload->'metadata', '{}'::jsonb),
-      price = COALESCE((product_payload->>'price')::integer, 0),
-      sale_price = CASE
-        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
-          (product_payload->>'sale_price')::integer
-        ELSE
-          NULL
-      END,
-      freemius_plan_id = NULLIF(product_payload->>'freemius_plan_id', ''),
-      freemius_product_id = NULLIF(product_payload->>'freemius_product_id', ''),
-      language_id = COALESCE((product_payload->>'language_id')::bigint, language_id),
-      translation_group_id = COALESCE(v_translation_group_id, translation_group_id),
-      updated_at = now()
-    WHERE id = v_product_id;
-
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'Product not found';
-    END IF;
-  END IF;
-
-  DELETE FROM public.variant_attribute_mapping
-  WHERE variant_id IN (
-    SELECT id FROM public.product_variants WHERE product_id = v_product_id
-  );
-
-  DELETE FROM public.product_variants
-  WHERE product_id = v_product_id;
-
-  IF v_has_variants THEN
-    FOR v_variant IN
-      SELECT value FROM jsonb_array_elements(v_variants)
-    LOOP
-      INSERT INTO public.product_variants (
-        product_id,
-        sku,
-        upc,
-        price,
-        sale_price,
-        stock_quantity,
-        main_media_id
-      )
-      VALUES (
-        v_product_id,
-        v_variant->>'sku',
-        NULLIF(v_variant->>'upc', ''),
-        COALESCE((v_variant->>'price')::integer, 0),
-        CASE
-          WHEN v_variant ? 'sale_price' AND v_variant->>'sale_price' <> '' THEN
-            (v_variant->>'sale_price')::integer
-          ELSE
-            NULL
-        END,
-        COALESCE((v_variant->>'stock_quantity')::integer, 0),
-        NULLIF(v_variant->>'main_media_id', '')::uuid
-      )
-      RETURNING id INTO v_variant_id;
-
-      FOR v_term_id IN
-        SELECT jsonb_array_elements_text(COALESCE(v_variant->'attribute_term_ids', '[]'::jsonb))
-      LOOP
-        INSERT INTO public.variant_attribute_mapping (variant_id, attribute_term_id)
-        VALUES (v_variant_id, v_term_id::uuid);
-      END LOOP;
-    END LOOP;
-  END IF;
-
-  RETURN v_product_id;
-END;
-$function$;
-
-
--- >>> FROM: 20260414000000_add_product_variation_translation_keys.sql <<<
--- Adds missing storefront translation keys for variable-product UX copy.
-
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'ecommerce.choose_your_options',
-    '{"en": "Choose Your Options", "fr": "Choisissez vos options"}'::jsonb
-  ),
-  (
-    'ecommerce.variant_availability_help',
-    '{"en": "Select a combination to resolve the exact variant price and availability.", "fr": "Selectionnez une combinaison pour afficher le prix exact et la disponibilite de la variante."}'::jsonb
-  ),
-  (
-    'ecommerce.in_stock',
-    '{"en": "{count} in stock", "fr": "{count} en stock"}'::jsonb
-  ),
-  (
-    'ecommerce.out_of_stock',
-    '{"en": "Out of stock", "fr": "Rupture de stock"}'::jsonb
-  ),
-  (
-    'ecommerce.select_options',
-    '{"en": "Select Options", "fr": "Choisir des options"}'::jsonb
-  ),
-  (
-    'ecommerce.variant_selection_required',
-    '{"en": "Select one term from every dropdown to resolve a variation.", "fr": "Selectionnez une valeur dans chaque liste pour afficher la variante correspondante."}'::jsonb
-  )
-ON CONFLICT (key) DO UPDATE
-SET
-  translations = EXCLUDED.translations,
-  updated_at = now();
-
-
--- >>> FROM: 20260414010000_add_ecommerce_inventory_settings.sql <<<
--- Adds ecommerce inventory settings, stock-related storefront translations,
--- and a shared order inventory deduction function.
-
-INSERT INTO public.site_settings (key, value)
-VALUES (
-  'ecommerce_inventory_settings',
-  '{"track_quantities": true}'::jsonb
-)
-ON CONFLICT (key) DO NOTHING;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'orders'
-      AND column_name = 'inventory_deducted_at'
-  ) THEN
-    ALTER TABLE public.orders
-      ADD COLUMN inventory_deducted_at timestamptz;
-  END IF;
-END $$;
-
-CREATE OR REPLACE FUNCTION public.get_ecommerce_track_quantities()
-RETURNS boolean
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_value jsonb;
-  v_raw text;
-BEGIN
-  SELECT value
-    INTO v_value
-  FROM public.site_settings
-  WHERE key = 'ecommerce_inventory_settings';
-
-  IF v_value IS NULL THEN
-    RETURN true;
-  END IF;
-
-  IF jsonb_typeof(v_value) = 'object' THEN
-    v_raw := NULLIF(v_value->>'track_quantities', '');
-  ELSE
-    v_raw := NULLIF(trim(BOTH '"' FROM v_value::text), '');
-  END IF;
-
-  IF v_raw IS NULL THEN
-    RETURN true;
-  END IF;
-
-  IF lower(v_raw) IN ('false', 'f', '0', 'no', 'off') THEN
-    RETURN false;
-  END IF;
-
-  RETURN true;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.apply_order_inventory_deduction(p_order_id uuid)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_track_quantities boolean := public.get_ecommerce_track_quantities();
-  v_item record;
-  v_variant_product_id uuid;
-  v_inventory_deducted_at timestamptz;
-BEGIN
-  IF NOT v_track_quantities THEN
-    RETURN;
-  END IF;
-
-  SELECT inventory_deducted_at
-    INTO v_inventory_deducted_at
-  FROM public.orders
-  WHERE id = p_order_id
-  FOR UPDATE;
-
-  IF NOT FOUND OR v_inventory_deducted_at IS NOT NULL THEN
-    RETURN;
-  END IF;
-
-  FOR v_item IN
-    SELECT
-      product_id,
-      variant_id,
-      SUM(quantity)::integer AS quantity
-    FROM public.order_items
-    WHERE order_id = p_order_id
-    GROUP BY product_id, variant_id
-  LOOP
-    IF v_item.variant_id IS NOT NULL THEN
-      v_variant_product_id := NULL;
-
-      UPDATE public.product_variants
-      SET
-        stock_quantity = GREATEST(COALESCE(stock_quantity, 0) - v_item.quantity, 0),
-        updated_at = now()
-      WHERE id = v_item.variant_id
-      RETURNING product_id INTO v_variant_product_id;
-
-      IF v_variant_product_id IS NOT NULL THEN
-        UPDATE public.products
-        SET
-          stock = COALESCE((
-            SELECT SUM(COALESCE(stock_quantity, 0))
-            FROM public.product_variants
-            WHERE product_id = v_variant_product_id
-          ), 0),
-          updated_at = now()
-        WHERE id = v_variant_product_id;
-      END IF;
-    ELSIF v_item.product_id IS NOT NULL THEN
-      UPDATE public.products
-      SET
-        stock = GREATEST(COALESCE(stock, 0) - v_item.quantity, 0),
-        updated_at = now()
-      WHERE id = v_item.product_id;
-    END IF;
-  END LOOP;
-
-  UPDATE public.orders
-  SET
-    inventory_deducted_at = now(),
-    updated_at = now()
-  WHERE id = p_order_id;
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.get_ecommerce_track_quantities() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_ecommerce_track_quantities() TO service_role;
-GRANT EXECUTE ON FUNCTION public.apply_order_inventory_deduction(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.apply_order_inventory_deduction(uuid) TO service_role;
-
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'ecommerce.inventory_item_unavailable',
-    '{"en": "Sorry, {item} is no longer available.", "fr": "Desole, {item} n''est plus disponible."}'::jsonb
-  ),
-  (
-    'ecommerce.inventory_insufficient',
-    '{"en": "Only {count} units remain for {item}.", "fr": "Il ne reste que {count} unites pour {item}."}'::jsonb
-  )
-ON CONFLICT (key) DO UPDATE
-SET
-  translations = EXCLUDED.translations,
-  updated_at = now();
-
-
--- >>> FROM: 20260414020000_fix_order_inventory_deduction.sql <<<
--- Fixes paid-order stock reconciliation for environments where the initial
--- inventory deduction function referenced a missing orders.updated_at column.
-
-CREATE OR REPLACE FUNCTION public.apply_order_inventory_deduction(p_order_id uuid)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_track_quantities boolean := public.get_ecommerce_track_quantities();
-  v_item record;
-  v_variant_product_id uuid;
-  v_inventory_deducted_at timestamptz;
-BEGIN
-  SELECT inventory_deducted_at
-    INTO v_inventory_deducted_at
-  FROM public.orders
-  WHERE id = p_order_id
-  FOR UPDATE;
-
-  IF NOT FOUND OR v_inventory_deducted_at IS NOT NULL THEN
-    RETURN;
-  END IF;
-
-  IF NOT v_track_quantities THEN
-    UPDATE public.orders
-    SET inventory_deducted_at = now()
-    WHERE id = p_order_id;
-
-    RETURN;
-  END IF;
-
-  FOR v_item IN
-    SELECT
-      product_id,
-      variant_id,
-      SUM(quantity)::integer AS quantity
-    FROM public.order_items
-    WHERE order_id = p_order_id
-    GROUP BY product_id, variant_id
-  LOOP
-    IF v_item.variant_id IS NOT NULL THEN
-      v_variant_product_id := NULL;
-
-      UPDATE public.product_variants
-      SET
-        stock_quantity = GREATEST(COALESCE(stock_quantity, 0) - v_item.quantity, 0),
-        updated_at = now()
-      WHERE id = v_item.variant_id
-      RETURNING product_id INTO v_variant_product_id;
-
-      IF v_variant_product_id IS NOT NULL THEN
-        UPDATE public.products
-        SET
-          stock = COALESCE((
-            SELECT SUM(COALESCE(stock_quantity, 0))
-            FROM public.product_variants
-            WHERE product_id = v_variant_product_id
-          ), 0),
-          updated_at = now()
-        WHERE id = v_variant_product_id;
-      END IF;
-    ELSIF v_item.product_id IS NOT NULL THEN
-      UPDATE public.products
-      SET
-        stock = GREATEST(COALESCE(stock, 0) - v_item.quantity, 0),
-        updated_at = now()
-      WHERE id = v_item.product_id;
-    END IF;
-  END LOOP;
-
-  UPDATE public.orders
-  SET inventory_deducted_at = now()
-  WHERE id = p_order_id;
-END;
-$$;
-
-
--- >>> FROM: 20260414030000_sync_translated_inventory_stock.sql <<<
--- Keeps translated product inventory synchronized across languages and
--- normalizes existing stock drift caused by per-language deductions.
-
-WITH simple_product_groups AS (
-  SELECT
-    translation_group_id,
-    MIN(COALESCE(stock, 0))::integer AS shared_stock
-  FROM public.products
-  WHERE NOT EXISTS (
-    SELECT 1
-    FROM public.product_variants
-    WHERE product_id = public.products.id
-  )
-  GROUP BY translation_group_id
-)
-UPDATE public.products AS products
-SET
-  stock = simple_product_groups.shared_stock,
-  updated_at = now()
-FROM simple_product_groups
-WHERE products.translation_group_id = simple_product_groups.translation_group_id
-  AND NOT EXISTS (
-    SELECT 1
-    FROM public.product_variants
-    WHERE product_id = products.id
-  );
-
-WITH shared_variant_groups AS (
-  SELECT
-    products.translation_group_id,
-    variants.sku,
-    MIN(COALESCE(variants.stock_quantity, 0))::integer AS shared_stock
-  FROM public.product_variants AS variants
-  JOIN public.products ON public.products.id = variants.product_id
-  GROUP BY products.translation_group_id, variants.sku
-)
-UPDATE public.product_variants AS variants
-SET
-  stock_quantity = shared_variant_groups.shared_stock,
-  updated_at = now()
-FROM public.products AS products,
-     shared_variant_groups
-WHERE products.id = variants.product_id
-  AND products.translation_group_id = shared_variant_groups.translation_group_id
-  AND variants.sku = shared_variant_groups.sku;
-
-UPDATE public.products AS products
-SET
-  stock = COALESCE((
-    SELECT SUM(COALESCE(variants.stock_quantity, 0))
-    FROM public.product_variants AS variants
-    WHERE variants.product_id = products.id
-  ), 0),
-  updated_at = now()
-WHERE EXISTS (
-  SELECT 1
-  FROM public.product_variants
-  WHERE product_id = products.id
-);
-
-CREATE OR REPLACE FUNCTION public.apply_order_inventory_deduction(p_order_id uuid)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_track_quantities boolean := public.get_ecommerce_track_quantities();
-  v_item record;
-  v_inventory_deducted_at timestamptz;
-  v_translation_group_id uuid;
-  v_variant_sku text;
-  v_shared_stock integer;
-BEGIN
-  SELECT inventory_deducted_at
-    INTO v_inventory_deducted_at
-  FROM public.orders
-  WHERE id = p_order_id
-  FOR UPDATE;
-
-  IF NOT FOUND OR v_inventory_deducted_at IS NOT NULL THEN
-    RETURN;
-  END IF;
-
-  IF NOT v_track_quantities THEN
-    UPDATE public.orders
-    SET inventory_deducted_at = now()
-    WHERE id = p_order_id;
-
-    RETURN;
-  END IF;
-
-  FOR v_item IN
-    SELECT
-      product_id,
-      variant_id,
-      SUM(quantity)::integer AS quantity
-    FROM public.order_items
-    WHERE order_id = p_order_id
-    GROUP BY product_id, variant_id
-  LOOP
-    IF v_item.variant_id IS NOT NULL THEN
-      SELECT
-        products.translation_group_id,
-        variants.sku
-        INTO v_translation_group_id,
-             v_variant_sku
-      FROM public.product_variants AS variants
-      JOIN public.products ON public.products.id = variants.product_id
-      WHERE variants.id = v_item.variant_id
-      LIMIT 1;
-
-      IF v_translation_group_id IS NOT NULL AND v_variant_sku IS NOT NULL THEN
-        SELECT MIN(COALESCE(variants.stock_quantity, 0))::integer
-          INTO v_shared_stock
-        FROM public.product_variants AS variants
-        JOIN public.products ON public.products.id = variants.product_id
-        WHERE public.products.translation_group_id = v_translation_group_id
-          AND variants.sku = v_variant_sku;
-
-        UPDATE public.product_variants AS variants
-        SET
-          stock_quantity = GREATEST(COALESCE(v_shared_stock, 0) - v_item.quantity, 0),
-          updated_at = now()
-        FROM public.products
-        WHERE public.products.id = variants.product_id
-          AND public.products.translation_group_id = v_translation_group_id
-          AND variants.sku = v_variant_sku;
-
-        UPDATE public.products AS products
-        SET
-          stock = COALESCE((
-            SELECT SUM(COALESCE(stock_quantity, 0))
-            FROM public.product_variants
-            WHERE product_id = products.id
-          ), 0),
-          updated_at = now()
-        WHERE products.translation_group_id = v_translation_group_id;
-
-        CONTINUE;
-      END IF;
-
-      UPDATE public.product_variants
-      SET
-        stock_quantity = GREATEST(COALESCE(stock_quantity, 0) - v_item.quantity, 0),
-        updated_at = now()
-      WHERE id = v_item.variant_id;
-
-      UPDATE public.products AS products
-      SET
-        stock = COALESCE((
-          SELECT SUM(COALESCE(stock_quantity, 0))
-          FROM public.product_variants
-          WHERE product_id = products.id
-        ), 0),
-        updated_at = now()
-      WHERE products.id = (
-        SELECT product_id
-        FROM public.product_variants
-        WHERE id = v_item.variant_id
-        LIMIT 1
-      );
-
-      CONTINUE;
-    END IF;
-
-    IF v_item.product_id IS NOT NULL THEN
-      SELECT translation_group_id
-        INTO v_translation_group_id
-      FROM public.products
-      WHERE id = v_item.product_id
-      LIMIT 1;
-
-      IF v_translation_group_id IS NOT NULL THEN
-        SELECT MIN(COALESCE(stock, 0))::integer
-          INTO v_shared_stock
-        FROM public.products
-        WHERE translation_group_id = v_translation_group_id;
-
-        UPDATE public.products
-        SET
-          stock = GREATEST(COALESCE(v_shared_stock, 0) - v_item.quantity, 0),
-          updated_at = now()
-        WHERE translation_group_id = v_translation_group_id;
-
-        CONTINUE;
-      END IF;
-
-      UPDATE public.products
-      SET
-        stock = GREATEST(COALESCE(stock, 0) - v_item.quantity, 0),
-        updated_at = now()
-      WHERE id = v_item.product_id;
-    END IF;
-  END LOOP;
-
-  UPDATE public.orders
-  SET inventory_deducted_at = now()
-  WHERE id = p_order_id;
-END;
-$$;
-
-
--- >>> FROM: 20260415010000_sku_inventory_source_of_truth.sql <<<
--- Makes SKU inventory the source of truth while keeping product and variant
--- stock columns synchronized as storefront/cache fields.
-
-CREATE TABLE IF NOT EXISTS public.inventory_items (
-  sku text PRIMARY KEY,
-  quantity integer NOT NULL DEFAULT 0 CHECK (quantity >= 0),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-COMMENT ON TABLE public.inventory_items IS 'Source-of-truth inventory records keyed by sellable SKU.';
-COMMENT ON COLUMN public.inventory_items.sku IS 'Global sellable SKU. Matching products or variants share inventory.';
-COMMENT ON COLUMN public.inventory_items.quantity IS 'Available quantity for this SKU.';
-
-CREATE INDEX IF NOT EXISTS idx_inventory_items_updated_at
-  ON public.inventory_items(updated_at DESC);
-
-ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Public can view inventory items" ON public.inventory_items;
-CREATE POLICY "Public can view inventory items"
-  ON public.inventory_items
-  FOR SELECT
-  USING (true);
-
-DROP POLICY IF EXISTS "Admins can manage inventory items" ON public.inventory_items;
-CREATE POLICY "Admins can manage inventory items"
-  ON public.inventory_items
-  FOR ALL
-  TO authenticated
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
-
-DROP POLICY IF EXISTS "Service Role manages inventory items" ON public.inventory_items;
-CREATE POLICY "Service Role manages inventory items"
-  ON public.inventory_items
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-GRANT SELECT ON TABLE public.inventory_items TO anon, authenticated;
-GRANT ALL ON TABLE public.inventory_items TO service_role;
-
-CREATE OR REPLACE FUNCTION public.handle_inventory_items_update()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS on_inventory_items_update ON public.inventory_items;
-CREATE TRIGGER on_inventory_items_update
-  BEFORE UPDATE ON public.inventory_items
-  FOR EACH ROW
-  EXECUTE PROCEDURE public.handle_inventory_items_update();
-
-CREATE OR REPLACE FUNCTION public.sync_inventory_cache_for_sku(p_sku text)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_quantity integer := 0;
-BEGIN
-  IF NULLIF(trim(p_sku), '') IS NULL THEN
-    RETURN;
-  END IF;
-
-  SELECT quantity
-    INTO v_quantity
-  FROM public.inventory_items
-  WHERE sku = p_sku
-  LIMIT 1;
-
-  v_quantity := COALESCE(v_quantity, 0);
-
-  UPDATE public.product_variants
-  SET
-    stock_quantity = v_quantity,
-    updated_at = now()
-  WHERE sku = p_sku;
-
-  UPDATE public.products AS products
-  SET
-    stock = v_quantity,
-    updated_at = now()
-  WHERE products.sku = p_sku
-    AND NOT EXISTS (
-      SELECT 1
-      FROM public.product_variants
-      WHERE product_id = products.id
-    );
-
-  UPDATE public.products AS products
-  SET
-    stock = COALESCE((
-      SELECT SUM(COALESCE(inventory.quantity, 0))
-      FROM public.product_variants AS variants
-      LEFT JOIN public.inventory_items AS inventory
-        ON inventory.sku = variants.sku
-      WHERE variants.product_id = products.id
-    ), 0),
-    updated_at = now()
-  WHERE EXISTS (
-    SELECT 1
-    FROM public.product_variants AS variants
-    WHERE variants.product_id = products.id
-      AND variants.sku = p_sku
-  );
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.handle_inventory_item_change()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_sku text := COALESCE(NEW.sku, OLD.sku);
-BEGIN
-  PERFORM public.sync_inventory_cache_for_sku(v_sku);
-  RETURN COALESCE(NEW, OLD);
-END;
-$$;
-
-DROP TRIGGER IF EXISTS on_inventory_item_change ON public.inventory_items;
-CREATE TRIGGER on_inventory_item_change
-  AFTER INSERT OR UPDATE OF quantity OR DELETE ON public.inventory_items
-  FOR EACH ROW
-  EXECUTE PROCEDURE public.handle_inventory_item_change();
-
-WITH sellable_skus AS (
-  SELECT
-    sku,
-    MIN(quantity)::integer AS quantity
-  FROM (
-    SELECT
-      products.sku,
-      GREATEST(COALESCE(products.stock, 0), 0) AS quantity
-    FROM public.products AS products
-    WHERE NULLIF(trim(products.sku), '') IS NOT NULL
-      AND NOT EXISTS (
-        SELECT 1
-        FROM public.product_variants
-        WHERE product_id = products.id
-      )
-
-    UNION ALL
-
-    SELECT
-      variants.sku,
-      GREATEST(COALESCE(variants.stock_quantity, 0), 0) AS quantity
-    FROM public.product_variants AS variants
-    WHERE NULLIF(trim(variants.sku), '') IS NOT NULL
-  ) AS inventory_sources
-  GROUP BY sku
-)
-INSERT INTO public.inventory_items (sku, quantity)
-SELECT sku, quantity
-FROM sellable_skus
-ON CONFLICT (sku) DO UPDATE
-SET
-  quantity = EXCLUDED.quantity,
-  updated_at = now();
-
-UPDATE public.product_variants AS variants
-SET
-  stock_quantity = COALESCE(inventory.quantity, 0),
-  updated_at = now()
-FROM public.inventory_items AS inventory
-WHERE inventory.sku = variants.sku;
-
-UPDATE public.products AS products
-SET
-  stock = COALESCE(inventory.quantity, 0),
-  updated_at = now()
-FROM public.inventory_items AS inventory
-WHERE inventory.sku = products.sku
-  AND NOT EXISTS (
-    SELECT 1
-    FROM public.product_variants
-    WHERE product_id = products.id
-  );
-
-UPDATE public.products AS products
-SET
-  stock = COALESCE((
-    SELECT SUM(COALESCE(inventory.quantity, 0))
-    FROM public.product_variants AS variants
-    LEFT JOIN public.inventory_items AS inventory
-      ON inventory.sku = variants.sku
-    WHERE variants.product_id = products.id
-  ), 0),
-  updated_at = now()
-WHERE EXISTS (
-  SELECT 1
-  FROM public.product_variants
-  WHERE product_id = products.id
-);
-
-CREATE OR REPLACE FUNCTION public.apply_order_inventory_deduction(p_order_id uuid)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_track_quantities boolean := public.get_ecommerce_track_quantities();
-  v_item record;
-  v_inventory_deducted_at timestamptz;
-  v_sku text;
-  v_current_quantity integer;
-BEGIN
-  SELECT inventory_deducted_at
-    INTO v_inventory_deducted_at
-  FROM public.orders
-  WHERE id = p_order_id
-  FOR UPDATE;
-
-  IF NOT FOUND OR v_inventory_deducted_at IS NOT NULL THEN
-    RETURN;
-  END IF;
-
-  IF NOT v_track_quantities THEN
-    UPDATE public.orders
-    SET inventory_deducted_at = now()
-    WHERE id = p_order_id;
-
-    RETURN;
-  END IF;
-
-  FOR v_item IN
-    SELECT
-      product_id,
-      variant_id,
-      SUM(quantity)::integer AS quantity
-    FROM public.order_items
-    WHERE order_id = p_order_id
-    GROUP BY product_id, variant_id
-  LOOP
-    v_sku := NULL;
-    v_current_quantity := 0;
-
-    IF v_item.variant_id IS NOT NULL THEN
-      SELECT
-        sku,
-        GREATEST(COALESCE(stock_quantity, 0), 0)
-        INTO v_sku,
-             v_current_quantity
-      FROM public.product_variants
-      WHERE id = v_item.variant_id
-      LIMIT 1;
-    ELSIF v_item.product_id IS NOT NULL THEN
-      SELECT
-        sku,
-        GREATEST(COALESCE(stock, 0), 0)
-        INTO v_sku,
-             v_current_quantity
-      FROM public.products
-      WHERE id = v_item.product_id
-      LIMIT 1;
-    END IF;
-
-    IF NULLIF(trim(v_sku), '') IS NULL THEN
-      CONTINUE;
-    END IF;
-
-    INSERT INTO public.inventory_items (sku, quantity)
-    VALUES (v_sku, v_current_quantity)
-    ON CONFLICT (sku) DO NOTHING;
-
-    UPDATE public.inventory_items
-    SET
-      quantity = GREATEST(COALESCE(quantity, 0) - v_item.quantity, 0),
-      updated_at = now()
-    WHERE sku = v_sku;
-  END LOOP;
-
-  UPDATE public.orders
-  SET inventory_deducted_at = now()
-  WHERE id = p_order_id;
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.sync_inventory_cache_for_sku(text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.sync_inventory_cache_for_sku(text) TO service_role;
-GRANT EXECUTE ON FUNCTION public.apply_order_inventory_deduction(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.apply_order_inventory_deduction(uuid) TO service_role;
-
-
--- >>> FROM: 20260416000000_add_taxes_and_state_shipping.sql <<<
--- 20260416000000_add_taxes_and_state_shipping.sql
--- Adds Stripe-oriented tax support and hardens shipping zones for state/province matching.
-
-
--- 1. Shipping zones: keep the existing relational model and normalize it for state/province use.
-UPDATE public.shipping_zone_locations
-SET
-  country_code = upper(btrim(country_code)),
-  state_code = CASE
-    WHEN state_code IS NULL OR btrim(state_code) = '' THEN NULL
-    ELSE upper(btrim(state_code))
-  END,
-  postal_code = CASE
-    WHEN postal_code IS NULL OR btrim(postal_code) = '' THEN NULL
-    ELSE upper(btrim(postal_code))
-  END;
-
-COMMENT ON COLUMN public.shipping_zone_locations.country_code IS
-  'ISO 3166-1 alpha-2 country code.';
-COMMENT ON COLUMN public.shipping_zone_locations.state_code IS
-  'Optional state/province code within the selected country (for example CA, NY, ON, QC). NULL means the whole country.';
-COMMENT ON COLUMN public.shipping_zone_locations.postal_code IS
-  'Optional exact postal code or wildcard pattern. NULL means all postal codes in the matched country/state.';
-
-CREATE INDEX IF NOT EXISTS idx_shipping_zone_locations_zone_id
-  ON public.shipping_zone_locations (zone_id);
-
-CREATE INDEX IF NOT EXISTS idx_shipping_zone_locations_country_state_postal
-  ON public.shipping_zone_locations (country_code, state_code, postal_code);
-
-CREATE OR REPLACE FUNCTION public.handle_shipping_zone_locations_write()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  NEW.country_code = upper(btrim(NEW.country_code));
-  NEW.state_code = CASE
-    WHEN NEW.state_code IS NULL OR btrim(NEW.state_code) = '' THEN NULL
-    ELSE upper(btrim(NEW.state_code))
-  END;
-  NEW.postal_code = CASE
-    WHEN NEW.postal_code IS NULL OR btrim(NEW.postal_code) = '' THEN NULL
-    ELSE upper(btrim(NEW.postal_code))
-  END;
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS on_shipping_zone_locations_write ON public.shipping_zone_locations;
-CREATE TRIGGER on_shipping_zone_locations_write
-  BEFORE INSERT OR UPDATE ON public.shipping_zone_locations
-  FOR EACH ROW
-  EXECUTE PROCEDURE public.handle_shipping_zone_locations_write();
-
--- 2. Global tax setting: extend the existing ecommerce settings JSON.
-INSERT INTO public.site_settings (key, value)
-VALUES (
-  'ecommerce_inventory_settings',
-  '{"track_quantities": true, "enable_taxes": false}'::jsonb
-)
-ON CONFLICT (key) DO UPDATE
-SET value = CASE
-  WHEN jsonb_typeof(site_settings.value) = 'object' THEN
-    jsonb_set(
-      jsonb_set(
-        site_settings.value,
-        '{track_quantities}',
-        COALESCE(
-          site_settings.value->'track_quantities',
-          site_settings.value->'trackQuantities',
-          'true'::jsonb
-        ),
-        true
-      ),
-      '{enable_taxes}',
-      COALESCE(
-        site_settings.value->'enable_taxes',
-        site_settings.value->'enableTaxes',
-        'false'::jsonb
-      ),
-      true
-    )
-  ELSE
-    jsonb_build_object(
-      'track_quantities',
-      CASE
-        WHEN lower(trim(BOTH '"' FROM site_settings.value::text)) IN ('false', 'f', '0', 'no', 'off') THEN false
-        ELSE true
-      END,
-      'enable_taxes',
-      false
-    )
-END;
-
--- 3. Product tax toggle: current repo table is public.products.
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'products'
-      AND column_name = 'is_taxable'
-  ) THEN
-    ALTER TABLE public.products
-      ADD COLUMN is_taxable boolean;
-  END IF;
-END $$;
-
-UPDATE public.products
-SET is_taxable = true
-WHERE is_taxable IS NULL;
-
-ALTER TABLE public.products
-  ALTER COLUMN is_taxable SET DEFAULT true,
-  ALTER COLUMN is_taxable SET NOT NULL;
-
-COMMENT ON COLUMN public.products.is_taxable IS
-  'When true, this product participates in Stripe tax calculation.';
-
--- 4. Manual tax rates table.
--- tax_rate stores a percent value, not a decimal fraction: 5.0000 = 5%.
-CREATE TABLE IF NOT EXISTS public.tax_rates (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  country_code text NOT NULL,
-  state_code text,
-  tax_name text NOT NULL CHECK (char_length(btrim(tax_name)) > 0),
-  tax_rate numeric(7,4) NOT NULL CHECK (tax_rate >= 0 AND tax_rate <= 100),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-COMMENT ON TABLE public.tax_rates IS
-  'Manual tax rates used for Stripe storefront orders. Multiple rows can exist per jurisdiction to support combined taxes such as GST + PST.';
-COMMENT ON COLUMN public.tax_rates.country_code IS
-  'ISO 3166-1 alpha-2 country code.';
-COMMENT ON COLUMN public.tax_rates.state_code IS
-  'Optional state/province code within country_code. NULL represents a country-wide or federal tax.';
-COMMENT ON COLUMN public.tax_rates.tax_name IS
-  'Display name for the tax component, for example GST, PST, HST, or State Sales Tax.';
-COMMENT ON COLUMN public.tax_rates.tax_rate IS
-  'Percent value, not decimal fraction. Example: 5.0000 means 5%.';
-
-UPDATE public.tax_rates
-SET
-  country_code = upper(btrim(country_code)),
-  state_code = CASE
-    WHEN state_code IS NULL OR btrim(state_code) = '' THEN NULL
-    ELSE upper(btrim(state_code))
-  END,
-  tax_name = btrim(tax_name);
-
-CREATE UNIQUE INDEX IF NOT EXISTS tax_rates_country_state_name_key
-  ON public.tax_rates (country_code, COALESCE(state_code, ''), lower(tax_name));
-
-CREATE INDEX IF NOT EXISTS idx_tax_rates_country_state
-  ON public.tax_rates (country_code, state_code);
-
-CREATE OR REPLACE FUNCTION public.handle_tax_rates_write()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  NEW.country_code = upper(btrim(NEW.country_code));
-  NEW.state_code = CASE
-    WHEN NEW.state_code IS NULL OR btrim(NEW.state_code) = '' THEN NULL
-    ELSE upper(btrim(NEW.state_code))
-  END;
-  NEW.tax_name = btrim(NEW.tax_name);
-  NEW.updated_at = now();
-
-  IF NEW.created_at IS NULL THEN
-    NEW.created_at = now();
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS on_tax_rates_write ON public.tax_rates;
-CREATE TRIGGER on_tax_rates_write
-  BEFORE INSERT OR UPDATE ON public.tax_rates
-  FOR EACH ROW
-  EXECUTE PROCEDURE public.handle_tax_rates_write();
-
--- 5. RLS for tax_rates: public read, admin write.
-ALTER TABLE public.tax_rates ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Public read tax_rates" ON public.tax_rates;
-CREATE POLICY "Public read tax_rates"
-  ON public.tax_rates
-  FOR SELECT
-  USING (true);
-
-DROP POLICY IF EXISTS "Admins manage tax_rates" ON public.tax_rates;
-CREATE POLICY "Admins manage tax_rates"
-  ON public.tax_rates
-  FOR ALL
-  TO authenticated
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
-
-DROP POLICY IF EXISTS "Service Role manages tax_rates" ON public.tax_rates;
-CREATE POLICY "Service Role manages tax_rates"
-  ON public.tax_rates
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
--- 6. Grants for the new table.
-GRANT SELECT ON TABLE public.tax_rates TO anon, authenticated;
-GRANT INSERT, UPDATE, DELETE ON TABLE public.tax_rates TO authenticated;
-GRANT ALL ON TABLE public.tax_rates TO service_role;
-
-
-
--- >>> FROM: 20260416010000_add_shipping_rate_translations.sql <<<
--- 20260416010000_add_shipping_rate_translations.sql
--- Adds translation support for shipping rate labels and localized Stripe tax copy.
-
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'shipping_zone_methods'
-      AND column_name = 'name_translations'
-  ) THEN
-    ALTER TABLE public.shipping_zone_methods
-      ADD COLUMN name_translations jsonb NOT NULL DEFAULT '{}'::jsonb;
-  END IF;
-END $$;
-
-UPDATE public.shipping_zone_methods
-SET name_translations = '{}'::jsonb
-WHERE name_translations IS NULL;
-
-UPDATE public.shipping_zone_methods
-SET name_translations = jsonb_set(
-  COALESCE(name_translations, '{}'::jsonb),
-  '{fr}',
-  to_jsonb(
-    CASE
-      WHEN name = 'Standard Shipping' THEN 'Livraison standard'
-      WHEN name = 'Free Shipping (Orders over $100)' THEN
-        'Livraison gratuite (commandes de plus de 100 $)'
-      ELSE name
-    END
-  ),
-  true
-)
-WHERE name IN ('Standard Shipping', 'Free Shipping (Orders over $100)')
-  AND COALESCE(name_translations->>'fr', '') = '';
-
-COMMENT ON COLUMN public.shipping_zone_methods.name_translations IS
-  'Localized shipping method labels keyed by language code. Example: {"fr": "Livraison standard"}.';
-
-CREATE INDEX IF NOT EXISTS idx_shipping_zone_methods_name_translations
-  ON public.shipping_zone_methods
-  USING gin (name_translations);
-
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'ecommerce.tax_calculated_on_stripe',
-    '{"en": "Calculated on Stripe", "es": "Calculado en Stripe", "fr": "Calculé sur Stripe"}'::jsonb
-  ),
-  (
-    'checkout_stripe_tax_finalized_notice',
-    '{"en": "Tax will be finalized by Stripe Tax on the payment step.", "es": "El impuesto se finalizará con Stripe Tax en el paso de pago.", "fr": "La taxe sera finalisée par Stripe Tax à l''étape du paiement."}'::jsonb
-  )
-ON CONFLICT (key) DO UPDATE
-SET translations = EXCLUDED.translations;
-
-
-
--- >>> FROM: 20260416020000_add_order_tax_details.sql <<<
--- 20260416020000_add_order_tax_details.sql
--- Stores normalized tax totals and finalized Stripe/manual tax breakdowns on orders.
-
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'orders'
-      AND column_name = 'currency'
-  ) THEN
-    ALTER TABLE public.orders
-      ADD COLUMN currency text NOT NULL DEFAULT 'usd';
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'orders'
-      AND column_name = 'subtotal'
-  ) THEN
-    ALTER TABLE public.orders
-      ADD COLUMN subtotal integer;
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'orders'
-      AND column_name = 'shipping_total'
-  ) THEN
-    ALTER TABLE public.orders
-      ADD COLUMN shipping_total integer;
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'orders'
-      AND column_name = 'tax_total'
-  ) THEN
-    ALTER TABLE public.orders
-      ADD COLUMN tax_total integer NOT NULL DEFAULT 0;
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'orders'
-      AND column_name = 'tax_details'
-  ) THEN
-    ALTER TABLE public.orders
-      ADD COLUMN tax_details jsonb;
-  END IF;
-END $$;
-
-UPDATE public.orders
-SET
-  currency = COALESCE(NULLIF(lower(currency), ''), 'usd'),
-  tax_total = COALESCE(tax_total, 0);
-
-COMMENT ON COLUMN public.orders.currency IS
-  'ISO currency code used for the order totals.';
-COMMENT ON COLUMN public.orders.subtotal IS
-  'Subtotal before shipping and tax, in the smallest currency unit.';
-COMMENT ON COLUMN public.orders.shipping_total IS
-  'Shipping amount before tax, in the smallest currency unit.';
-COMMENT ON COLUMN public.orders.tax_total IS
-  'Total tax amount collected for the order, in the smallest currency unit.';
-COMMENT ON COLUMN public.orders.tax_details IS
-  'Normalized tax breakdown payload sourced from manual rates or finalized Stripe tax data.';
-
-
-
--- >>> FROM: 20260416030000_add_invoice_branding_and_company_name.sql <<<
--- 20260416030000_add_invoice_branding_and_company_name.sql
--- Adds invoice numbering, branding settings, and optional company names on addresses.
-
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'user_addresses'
-      AND column_name = 'company_name'
-  ) THEN
-    ALTER TABLE public.user_addresses
-      ADD COLUMN company_name text;
-  END IF;
-END $$;
-
-COMMENT ON COLUMN public.user_addresses.company_name IS
-  'Optional company or organization name for the address.';
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'orders'
-      AND column_name = 'invoice_number'
-  ) THEN
-    ALTER TABLE public.orders
-      ADD COLUMN invoice_number text;
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'orders'
-      AND column_name = 'paid_at'
-  ) THEN
-    ALTER TABLE public.orders
-      ADD COLUMN paid_at timestamptz;
-  END IF;
-END $$;
-
-COMMENT ON COLUMN public.orders.invoice_number IS
-  'Stable printable invoice number assigned once when the order first becomes paid.';
-COMMENT ON COLUMN public.orders.paid_at IS
-  'Timestamp when the order was first marked as paid.';
-
-CREATE SEQUENCE IF NOT EXISTS public.order_invoice_number_seq
-  START WITH 1
-  INCREMENT BY 1
-  MINVALUE 1
-  NO MAXVALUE
-  CACHE 1;
-
-CREATE OR REPLACE FUNCTION public.format_order_invoice_number(p_value bigint)
-RETURNS text
-LANGUAGE sql
-IMMUTABLE
-AS $$
-  SELECT 'INV-' || lpad(p_value::text, 6, '0');
-$$;
-
-CREATE OR REPLACE FUNCTION public.generate_order_invoice_number()
-RETURNS text
-LANGUAGE sql
-VOLATILE
-AS $$
-  SELECT public.format_order_invoice_number(nextval('public.order_invoice_number_seq'));
-$$;
-
-CREATE OR REPLACE FUNCTION public.assign_order_invoice_metadata(
-  p_order_id uuid,
-  p_paid_at timestamptz DEFAULT now()
-)
-RETURNS TABLE(invoice_number text, paid_at timestamptz)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_order public.orders%ROWTYPE;
-  v_effective_paid_at timestamptz;
-BEGIN
-  SELECT *
-    INTO v_order
-  FROM public.orders
-  WHERE id = p_order_id
-  FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Order % not found', p_order_id;
-  END IF;
-
-  v_effective_paid_at := COALESCE(v_order.paid_at, p_paid_at, now(), v_order.created_at);
-
-  UPDATE public.orders
-  SET
-    invoice_number = COALESCE(v_order.invoice_number, public.generate_order_invoice_number()),
-    paid_at = v_effective_paid_at
-  WHERE id = p_order_id
-  RETURNING orders.invoice_number, orders.paid_at
-  INTO invoice_number, paid_at;
-
-  RETURN NEXT;
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.generate_order_invoice_number() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.generate_order_invoice_number() TO service_role;
-GRANT EXECUTE ON FUNCTION public.assign_order_invoice_metadata(uuid, timestamptz) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.assign_order_invoice_metadata(uuid, timestamptz) TO service_role;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_invoice_number_unique
-  ON public.orders (invoice_number)
-  WHERE invoice_number IS NOT NULL;
-
-DO $$
-DECLARE
-  v_existing_max bigint;
-  v_order record;
-BEGIN
-  SELECT MAX(NULLIF(regexp_replace(invoice_number, '[^0-9]', '', 'g'), '')::bigint)
-    INTO v_existing_max
-  FROM public.orders
-  WHERE invoice_number IS NOT NULL;
-
-  IF v_existing_max IS NOT NULL THEN
-    PERFORM setval('public.order_invoice_number_seq', GREATEST(v_existing_max, 1), true);
-  END IF;
-
-  FOR v_order IN
-    SELECT
-      id,
-      COALESCE(paid_at, created_at, now()) AS effective_paid_at
-    FROM public.orders
-    WHERE status = 'paid'
-      AND invoice_number IS NULL
-    ORDER BY COALESCE(paid_at, created_at, now()), created_at, id
-  LOOP
-    UPDATE public.orders
-    SET
-      invoice_number = public.generate_order_invoice_number(),
-      paid_at = COALESCE(orders.paid_at, v_order.effective_paid_at)
-    WHERE id = v_order.id;
-  END LOOP;
-END $$;
-
-UPDATE public.orders
-SET paid_at = COALESCE(paid_at, created_at)
-WHERE status = 'paid'
-  AND paid_at IS NULL;
-
-INSERT INTO public.site_settings (key, value)
-VALUES (
-  'invoice_settings',
-  '{
-    "business_name": "",
-    "email": "",
-    "phone": "",
-    "address": {
-      "line1": "",
-      "line2": "",
-      "city": "",
-      "state": "",
-      "postal_code": "",
-      "country_code": "CA"
-    },
-    "tax_registrations": []
-  }'::jsonb
-)
-ON CONFLICT (key) DO UPDATE
-SET value = CASE
-  WHEN jsonb_typeof(site_settings.value) = 'object' THEN
-    jsonb_build_object(
-      'business_name', COALESCE(site_settings.value->>'business_name', ''),
-      'email', COALESCE(site_settings.value->>'email', ''),
-      'phone', COALESCE(site_settings.value->>'phone', ''),
-      'address', CASE
-        WHEN jsonb_typeof(site_settings.value->'address') = 'object' THEN
-          jsonb_build_object(
-            'line1', COALESCE(site_settings.value->'address'->>'line1', ''),
-            'line2', COALESCE(site_settings.value->'address'->>'line2', ''),
-            'city', COALESCE(site_settings.value->'address'->>'city', ''),
-            'state', COALESCE(site_settings.value->'address'->>'state', ''),
-            'postal_code', COALESCE(site_settings.value->'address'->>'postal_code', ''),
-            'country_code', COALESCE(NULLIF(site_settings.value->'address'->>'country_code', ''), 'CA')
-          )
-        ELSE
-          jsonb_build_object(
-            'line1', '',
-            'line2', '',
-            'city', '',
-            'state', '',
-            'postal_code', '',
-            'country_code', 'CA'
-          )
-      END,
-      'tax_registrations', CASE
-        WHEN jsonb_typeof(site_settings.value->'tax_registrations') = 'array' THEN
-          site_settings.value->'tax_registrations'
-        ELSE
-          '[]'::jsonb
-      END
-    )
-  ELSE
-    '{
-      "business_name": "",
-      "email": "",
-      "phone": "",
-      "address": {
-        "line1": "",
-        "line2": "",
-        "city": "",
-        "state": "",
-        "postal_code": "",
-        "country_code": "CA"
-      },
-      "tax_registrations": []
-    }'::jsonb
-END;
-
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'branding',
-    '{"en": "Branding", "fr": "Image de marque"}'::jsonb
-  ),
-  (
-    'company_name',
-    '{"en": "Company name", "fr": "Nom de l''entreprise"}'::jsonb
-  ),
-  (
-    'invoice',
-    '{"en": "Invoice", "fr": "Facture"}'::jsonb
-  ),
-  (
-    'invoice_number',
-    '{"en": "Invoice #", "fr": "Facture no"}'::jsonb
-  ),
-  (
-    'paid_on',
-    '{"en": "Paid on", "fr": "Paye le"}'::jsonb
-  ),
-  (
-    'bill_to',
-    '{"en": "Bill to", "fr": "Facturer a"}'::jsonb
-  ),
-  (
-    'ship_to',
-    '{"en": "Ship to", "fr": "Livrer a"}'::jsonb
-  ),
-  (
-    'print_invoice',
-    '{"en": "Print / Save as PDF", "fr": "Imprimer / Enregistrer en PDF"}'::jsonb
-  ),
-  (
-    'tax_registrations',
-    '{"en": "Tax registrations", "fr": "Inscriptions fiscales"}'::jsonb
-  ),
-  (
-    'invoice_settings',
-    '{"en": "Invoice settings", "fr": "Parametres de facture"}'::jsonb
-  ),
-  (
-    'business_name',
-    '{"en": "Business name", "fr": "Nom de l''entreprise"}'::jsonb
-  ),
-  (
-    'order_number',
-    '{"en": "Order #", "fr": "Commande no"}'::jsonb
-  ),
-  (
-    'print_invoice_help',
-    '{"en": "Use your browser print dialog to save this invoice as a PDF.", "fr": "Utilisez la boite de dialogue d''impression de votre navigateur pour enregistrer cette facture en PDF."}'::jsonb
-  ),
-  (
-    'return_home',
-    '{"en": "Return to Home", "fr": "Retour a l''accueil"}'::jsonb
-  ),
-  (
-    'receipt_finalizing',
-    '{"en": "Finalizing your invoice and payment details...", "fr": "Finalisation de votre facture et des details du paiement..."}'::jsonb
-  ),
-  (
-    'receipt_not_ready',
-    '{"en": "Your invoice will appear here once the payment sync is complete.", "fr": "Votre facture apparaitra ici une fois la synchronisation du paiement terminee."}'::jsonb
-  ),
-  (
-    'tax_breakdown',
-    '{"en": "Tax breakdown", "fr": "Detail des taxes"}'::jsonb
-  ),
-  (
-    'amount',
-    '{"en": "Amount", "fr": "Montant"}'::jsonb
-  ),
-  (
-    'price',
-    '{"en": "Price", "fr": "Prix"}'::jsonb
-  ),
-  (
-    'from',
-    '{"en": "From", "fr": "De"}'::jsonb
-  )
-ON CONFLICT (key) DO UPDATE
-SET
-  translations = EXCLUDED.translations,
-  updated_at = now();
-
-
-
--- >>> FROM: 20260416040000_add_account_order_translations.sql <<<
--- 20260416040000_add_account_order_translations.sql
--- Adds storefront account navigation, customer order, and password translations.
-
-
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'account_navigation',
-    '{"en": "Account", "fr": "Compte"}'::jsonb
-  ),
-  (
-    'account_orders',
-    '{"en": "Orders", "fr": "Commandes"}'::jsonb
-  ),
-  (
-    'change_my_password',
-    '{"en": "Change my password", "fr": "Changer mon mot de passe"}'::jsonb
-  ),
-  (
-    'profile_orders_title',
-    '{"en": "My orders", "fr": "Mes commandes"}'::jsonb
-  ),
-  (
-    'profile_orders_description',
-    '{"en": "Review your recent purchases and open printable invoices.", "fr": "Consultez vos achats récents et ouvrez vos factures imprimables."}'::jsonb
-  ),
-  (
-    'profile_orders_empty',
-    '{"en": "You do not have any orders yet.", "fr": "Vous n''avez pas encore de commandes."}'::jsonb
-  ),
-  (
-    'profile_order_detail_title',
-    '{"en": "Order invoice", "fr": "Facture de commande"}'::jsonb
-  ),
-  (
-    'profile_order_detail_description',
-    '{"en": "Review and print your finalized invoice.", "fr": "Consultez et imprimez votre facture finalisée."}'::jsonb
-  ),
-  (
-    'profile_order_invoice_pending',
-    '{"en": "The printable invoice will appear here once this order has been finalized.", "fr": "La facture imprimable apparaîtra ici une fois que cette commande aura été finalisée."}'::jsonb
-  ),
-  (
-    'profile_password_title',
-    '{"en": "Change your password", "fr": "Changer votre mot de passe"}'::jsonb
-  ),
-  (
-    'profile_password_description',
-    '{"en": "Update your account password without leaving your profile.", "fr": "Mettez à jour le mot de passe de votre compte sans quitter votre profil."}'::jsonb
-  ),
-  (
-    'new_password',
-    '{"en": "New password", "fr": "Nouveau mot de passe"}'::jsonb
-  ),
-  (
-    'confirm_new_password',
-    '{"en": "Confirm new password", "fr": "Confirmer le nouveau mot de passe"}'::jsonb
-  ),
-  (
-    'password_updated_success',
-    '{"en": "Password updated successfully.", "fr": "Mot de passe mis à jour avec succès."}'::jsonb
-  ),
-  (
-    'password_update_failed',
-    '{"en": "Password update failed.", "fr": "La mise à jour du mot de passe a échoué."}'::jsonb
-  ),
-  (
-    'passwords_do_not_match',
-    '{"en": "Passwords do not match.", "fr": "Les mots de passe ne correspondent pas."}'::jsonb
-  ),
-  (
-    'order_date',
-    '{"en": "Date", "fr": "Date"}'::jsonb
-  ),
-  (
-    'order_status_paid',
-    '{"en": "Paid", "fr": "Payée"}'::jsonb
-  ),
-  (
-    'order_status_pending',
-    '{"en": "Pending", "fr": "En attente"}'::jsonb
-  ),
-  (
-    'order_status_shipped',
-    '{"en": "Shipped", "fr": "Expédiée"}'::jsonb
-  ),
-  (
-    'order_status_cancelled',
-    '{"en": "Cancelled", "fr": "Annulée"}'::jsonb
-  ),
-  (
-    'order_status_refunded',
-    '{"en": "Refunded", "fr": "Remboursée"}'::jsonb
-  ),
-  (
-    'back_to_orders',
-    '{"en": "Back to orders", "fr": "Retour aux commandes"}'::jsonb
-  )
-ON CONFLICT (key) DO UPDATE
-SET translations = EXCLUDED.translations;
-
-
-
--- >>> FROM: 20260417000000_setup_currencies.sql <<<
--- 20260417000000_setup_currencies.sql
--- Adds multi-currency foundations with compatibility sync for legacy price columns.
-
-
-CREATE TABLE IF NOT EXISTS public.currencies (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  code text NOT NULL UNIQUE CHECK (code ~ '^[A-Z]{3}$'),
-  symbol text NOT NULL,
-  exchange_rate numeric(20,10) NOT NULL CHECK (exchange_rate > 0),
-  is_default boolean NOT NULL DEFAULT false,
-  is_active boolean NOT NULL DEFAULT true,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT currencies_default_must_be_active CHECK (NOT is_default OR is_active)
-);
-
-COMMENT ON TABLE public.currencies IS
-  'Store currencies available for storefront display and conversion.';
-COMMENT ON COLUMN public.currencies.exchange_rate IS
-  'Relative to the current store default currency. The default currency should have exchange_rate = 1.';
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_currencies_single_default
-  ON public.currencies (is_default)
-  WHERE is_default = true;
-
-ALTER TABLE public.currencies ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Public read active currencies" ON public.currencies;
-CREATE POLICY "Public read active currencies"
-  ON public.currencies
-  FOR SELECT
-  TO anon, authenticated
-  USING (is_active = true);
-
-DROP POLICY IF EXISTS "Admins manage currencies" ON public.currencies;
-CREATE POLICY "Admins manage currencies"
-  ON public.currencies
-  FOR ALL
-  TO authenticated
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
-
-DROP POLICY IF EXISTS "Service role manages currencies" ON public.currencies;
-CREATE POLICY "Service role manages currencies"
-  ON public.currencies
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-GRANT SELECT ON TABLE public.currencies TO anon, authenticated;
-GRANT INSERT, UPDATE, DELETE ON TABLE public.currencies TO authenticated;
-GRANT ALL ON TABLE public.currencies TO service_role;
-
-CREATE OR REPLACE FUNCTION public.get_default_currency_code()
-RETURNS text
-LANGUAGE sql
-STABLE
-AS $$
-  SELECT COALESCE(
-    (
-      SELECT upper(code)
-      FROM public.currencies
-      WHERE is_default = true
-      ORDER BY updated_at DESC, created_at DESC, code ASC
-      LIMIT 1
-    ),
-    'USD'
-  );
-$$;
-
-CREATE OR REPLACE FUNCTION public.normalize_currency_amount_map(amounts jsonb)
-RETURNS jsonb
-LANGUAGE sql
-IMMUTABLE
-AS $$
-  SELECT CASE
-    WHEN amounts IS NULL THEN '{}'::jsonb
-    WHEN jsonb_typeof(amounts) <> 'object' THEN amounts
-    ELSE COALESCE(
-      (
-        SELECT jsonb_object_agg(
-          upper(trim(entry.key)),
-          CASE
-            WHEN jsonb_typeof(entry.value) = 'number'
-                 AND entry.value::text ~ '^[0-9]+$' THEN
-              to_jsonb((entry.value::text)::bigint)
-            ELSE
-              entry.value
-          END
-        )
-        FROM jsonb_each(amounts) AS entry
-      ),
-      '{}'::jsonb
-    )
-  END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.is_valid_currency_amount_map(amounts jsonb)
-RETURNS boolean
-LANGUAGE sql
-IMMUTABLE
-AS $$
-  SELECT CASE
-    WHEN amounts IS NULL THEN false
-    WHEN jsonb_typeof(amounts) <> 'object' THEN false
-    WHEN amounts = '{}'::jsonb THEN false
-    ELSE NOT EXISTS (
-      SELECT 1
-      FROM jsonb_each(amounts) AS entry
-      WHERE entry.key !~ '^[A-Z]{3}$'
-        OR jsonb_typeof(entry.value) <> 'number'
-        OR entry.value::text !~ '^[0-9]+$'
-    )
-  END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.is_valid_sale_price_map(prices jsonb, sale_prices jsonb)
-RETURNS boolean
-LANGUAGE sql
-IMMUTABLE
-AS $$
-  SELECT CASE
-    WHEN sale_prices IS NULL THEN true
-    WHEN jsonb_typeof(sale_prices) <> 'object' THEN false
-    WHEN sale_prices = '{}'::jsonb THEN true
-    WHEN prices IS NULL OR jsonb_typeof(prices) <> 'object' THEN false
-    ELSE NOT EXISTS (
-      SELECT 1
-      FROM jsonb_each(sale_prices) AS entry
-      WHERE entry.key !~ '^[A-Z]{3}$'
-        OR NOT (prices ? entry.key)
-        OR jsonb_typeof(entry.value) <> 'number'
-        OR entry.value::text !~ '^[0-9]+$'
-        OR entry.value::text::numeric > (prices ->> entry.key)::numeric
-    )
-  END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.sync_currency_price_maps()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  v_default_currency text := public.get_default_currency_code();
-  v_price_map_changed boolean := false;
-  v_legacy_changed boolean := false;
-BEGIN
-  NEW.prices := public.normalize_currency_amount_map(COALESCE(NEW.prices, '{}'::jsonb));
-  NEW.sale_prices := public.normalize_currency_amount_map(COALESCE(NEW.sale_prices, '{}'::jsonb));
-
-  IF NEW.sale_prices = '{}'::jsonb THEN
-    NEW.sale_prices := NULL;
-  END IF;
-
-  IF TG_OP = 'UPDATE' THEN
-    v_price_map_changed :=
-      NEW.prices IS DISTINCT FROM OLD.prices
-      OR NEW.sale_prices IS DISTINCT FROM OLD.sale_prices;
-    v_legacy_changed :=
-      NEW.price IS DISTINCT FROM OLD.price
-      OR NEW.sale_price IS DISTINCT FROM OLD.sale_price;
-  END IF;
-
-  IF TG_OP = 'INSERT' THEN
-    IF NEW.prices ? v_default_currency THEN
-      NEW.price := (NEW.prices ->> v_default_currency)::integer;
-    ELSE
-      NEW.prices := NEW.prices || jsonb_build_object(v_default_currency, GREATEST(COALESCE(NEW.price, 0), 0));
-    END IF;
-
-    IF NEW.sale_prices IS NOT NULL AND NEW.sale_prices ? v_default_currency THEN
-      NEW.sale_price := (NEW.sale_prices ->> v_default_currency)::integer;
-    ELSIF NEW.sale_price IS NOT NULL THEN
-      NEW.sale_prices := COALESCE(NEW.sale_prices, '{}'::jsonb)
-        || jsonb_build_object(v_default_currency, GREATEST(NEW.sale_price, 0));
-    END IF;
-
-    RETURN NEW;
-  END IF;
-
-  IF v_price_map_changed AND NOT v_legacy_changed THEN
-    IF NOT (NEW.prices ? v_default_currency) THEN
-      NEW.prices := NEW.prices || jsonb_build_object(
-        v_default_currency,
-        GREATEST(COALESCE(OLD.price, NEW.price, 0), 0)
-      );
-    END IF;
-
-    NEW.price := (NEW.prices ->> v_default_currency)::integer;
-    NEW.sale_price := CASE
-      WHEN NEW.sale_prices IS NOT NULL AND NEW.sale_prices ? v_default_currency THEN
-        (NEW.sale_prices ->> v_default_currency)::integer
-      ELSE
-        NULL
-    END;
-
-    RETURN NEW;
-  END IF;
-
-  NEW.prices := NEW.prices || jsonb_build_object(v_default_currency, GREATEST(COALESCE(NEW.price, 0), 0));
-
-  IF NEW.sale_price IS NULL THEN
-    IF NEW.sale_prices IS NOT NULL THEN
-      NEW.sale_prices := NEW.sale_prices - v_default_currency;
-      IF NEW.sale_prices = '{}'::jsonb THEN
-        NEW.sale_prices := NULL;
-      END IF;
-    END IF;
-  ELSE
-    NEW.sale_prices := COALESCE(NEW.sale_prices, '{}'::jsonb)
-      || jsonb_build_object(v_default_currency, GREATEST(NEW.sale_price, 0));
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.sync_legacy_price_columns_for_currency(target_currency text)
-RETURNS void
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  UPDATE public.products
-  SET
-    prices = CASE
-      WHEN prices ? upper(target_currency) THEN prices
-      ELSE prices || jsonb_build_object(upper(target_currency), price)
-    END,
-    sale_prices = CASE
-      WHEN sale_price IS NULL THEN sale_prices
-      WHEN sale_prices IS NOT NULL AND sale_prices ? upper(target_currency) THEN sale_prices
-      ELSE COALESCE(sale_prices, '{}'::jsonb) || jsonb_build_object(upper(target_currency), sale_price)
-    END,
-    price = CASE
-      WHEN prices ? upper(target_currency) THEN (prices ->> upper(target_currency))::integer
-      ELSE price
-    END,
-    sale_price = CASE
-      WHEN sale_prices IS NOT NULL AND sale_prices ? upper(target_currency) THEN
-        (sale_prices ->> upper(target_currency))::integer
-      ELSE
-        sale_price
-    END,
-    updated_at = now();
-
-  UPDATE public.product_variants
-  SET
-    prices = CASE
-      WHEN prices ? upper(target_currency) THEN prices
-      ELSE prices || jsonb_build_object(upper(target_currency), price)
-    END,
-    sale_prices = CASE
-      WHEN sale_price IS NULL THEN sale_prices
-      WHEN sale_prices IS NOT NULL AND sale_prices ? upper(target_currency) THEN sale_prices
-      ELSE COALESCE(sale_prices, '{}'::jsonb) || jsonb_build_object(upper(target_currency), sale_price)
-    END,
-    price = CASE
-      WHEN prices ? upper(target_currency) THEN (prices ->> upper(target_currency))::integer
-      ELSE price
-    END,
-    sale_price = CASE
-      WHEN sale_prices IS NOT NULL AND sale_prices ? upper(target_currency) THEN
-        (sale_prices ->> upper(target_currency))::integer
-      ELSE
-        sale_price
-    END,
-    updated_at = now();
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.set_currency_defaults()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  NEW.code := upper(trim(NEW.code));
-  NEW.updated_at := now();
-
-  IF NEW.is_default THEN
-    UPDATE public.currencies
-    SET is_default = false,
-        updated_at = now()
-    WHERE id IS DISTINCT FROM NEW.id
-      AND is_default = true;
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.handle_default_currency_change()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    IF NEW.is_default THEN
-      PERFORM public.sync_legacy_price_columns_for_currency(NEW.code);
-    END IF;
-  ELSIF NEW.is_default
-        AND (
-          OLD.is_default IS DISTINCT FROM NEW.is_default
-          OR OLD.code IS DISTINCT FROM NEW.code
-        ) THEN
-    PERFORM public.sync_legacy_price_columns_for_currency(NEW.code);
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS trg_set_currency_defaults ON public.currencies;
-CREATE TRIGGER trg_set_currency_defaults
-BEFORE INSERT OR UPDATE ON public.currencies
-FOR EACH ROW
-EXECUTE FUNCTION public.set_currency_defaults();
-
-ALTER TABLE public.products
-  ADD COLUMN IF NOT EXISTS prices jsonb NOT NULL DEFAULT '{}'::jsonb,
-  ADD COLUMN IF NOT EXISTS sale_prices jsonb;
-
-ALTER TABLE public.product_variants
-  ADD COLUMN IF NOT EXISTS prices jsonb NOT NULL DEFAULT '{}'::jsonb,
-  ADD COLUMN IF NOT EXISTS sale_prices jsonb;
-
-ALTER TABLE public.products
-  DROP CONSTRAINT IF EXISTS products_prices_is_valid,
-  ADD CONSTRAINT products_prices_is_valid
-    CHECK (public.is_valid_currency_amount_map(prices));
-
-ALTER TABLE public.products
-  DROP CONSTRAINT IF EXISTS products_sale_prices_are_valid,
-  ADD CONSTRAINT products_sale_prices_are_valid
-    CHECK (public.is_valid_sale_price_map(prices, sale_prices));
-
-ALTER TABLE public.product_variants
-  DROP CONSTRAINT IF EXISTS product_variants_prices_is_valid,
-  ADD CONSTRAINT product_variants_prices_is_valid
-    CHECK (public.is_valid_currency_amount_map(prices));
-
-ALTER TABLE public.product_variants
-  DROP CONSTRAINT IF EXISTS product_variants_sale_prices_are_valid,
-  ADD CONSTRAINT product_variants_sale_prices_are_valid
-    CHECK (public.is_valid_sale_price_map(prices, sale_prices));
-
-COMMENT ON COLUMN public.products.prices IS
-  'Regular prices by ISO 4217 code in the smallest currency unit.';
-COMMENT ON COLUMN public.products.sale_prices IS
-  'Sale prices by ISO 4217 code in the smallest currency unit.';
-COMMENT ON COLUMN public.product_variants.prices IS
-  'Variant regular prices by ISO 4217 code in the smallest currency unit.';
-COMMENT ON COLUMN public.product_variants.sale_prices IS
-  'Variant sale prices by ISO 4217 code in the smallest currency unit.';
-
-CREATE INDEX IF NOT EXISTS idx_products_prices_gin
-  ON public.products
-  USING gin (prices jsonb_path_ops);
-
-CREATE INDEX IF NOT EXISTS idx_product_variants_prices_gin
-  ON public.product_variants
-  USING gin (prices jsonb_path_ops);
-
-INSERT INTO public.currencies (code, symbol, exchange_rate, is_default, is_active)
-VALUES ('USD', '$', 1, true, true)
-ON CONFLICT (code) DO UPDATE
-SET symbol = EXCLUDED.symbol,
-    exchange_rate = EXCLUDED.exchange_rate,
-    is_default = EXCLUDED.is_default,
-    is_active = EXCLUDED.is_active,
-    updated_at = now();
-
-UPDATE public.products
-SET
-  prices = jsonb_build_object('USD', GREATEST(price, 0)),
-  sale_prices = CASE
-    WHEN sale_price IS NOT NULL THEN
-      jsonb_build_object('USD', GREATEST(sale_price, 0))
-    ELSE
-      NULL
-  END
-WHERE prices = '{}'::jsonb OR prices IS NULL;
-
-UPDATE public.product_variants
-SET
-  prices = jsonb_build_object('USD', GREATEST(price, 0)),
-  sale_prices = CASE
-    WHEN sale_price IS NOT NULL THEN
-      jsonb_build_object('USD', GREATEST(sale_price, 0))
-    ELSE
-      NULL
-  END
-WHERE prices = '{}'::jsonb OR prices IS NULL;
-
-DROP TRIGGER IF EXISTS trg_sync_products_currency_prices ON public.products;
-CREATE TRIGGER trg_sync_products_currency_prices
-BEFORE INSERT OR UPDATE OF price, sale_price, prices, sale_prices
-ON public.products
-FOR EACH ROW
-EXECUTE FUNCTION public.sync_currency_price_maps();
-
-DROP TRIGGER IF EXISTS trg_sync_product_variants_currency_prices ON public.product_variants;
-CREATE TRIGGER trg_sync_product_variants_currency_prices
-BEFORE INSERT OR UPDATE OF price, sale_price, prices, sale_prices
-ON public.product_variants
-FOR EACH ROW
-EXECUTE FUNCTION public.sync_currency_price_maps();
-
-DROP TRIGGER IF EXISTS trg_handle_default_currency_change ON public.currencies;
-CREATE TRIGGER trg_handle_default_currency_change
-AFTER INSERT OR UPDATE ON public.currencies
-FOR EACH ROW
-EXECUTE FUNCTION public.handle_default_currency_change();
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'orders'
-      AND column_name = 'exchange_rate_at_purchase'
-  ) THEN
-    ALTER TABLE public.orders
-      ADD COLUMN exchange_rate_at_purchase numeric(20,10) NOT NULL DEFAULT 1;
-  END IF;
-END $$;
-
-ALTER TABLE public.orders
-  DROP CONSTRAINT IF EXISTS orders_exchange_rate_at_purchase_positive,
-  ADD CONSTRAINT orders_exchange_rate_at_purchase_positive
-    CHECK (exchange_rate_at_purchase > 0);
-
-ALTER TABLE public.orders
-  ALTER COLUMN currency SET DEFAULT 'USD';
-
-UPDATE public.orders
-SET
-  currency = upper(COALESCE(NULLIF(currency, ''), 'USD')),
-  exchange_rate_at_purchase = COALESCE(exchange_rate_at_purchase, 1);
-
-COMMENT ON COLUMN public.orders.currency IS
-  'ISO currency code used for the order totals.';
-COMMENT ON COLUMN public.orders.exchange_rate_at_purchase IS
-  'Exchange rate locked at purchase time relative to the store default currency.';
-
-
-
--- >>> FROM: 20260417010000_update_product_rpc_for_currency_prices.sql <<<
--- 20260417010000_update_product_rpc_for_currency_prices.sql
--- Extends the product upsert RPC to persist prices/sale_prices JSONB maps.
-
-CREATE OR REPLACE FUNCTION public.upsert_product_with_variants(product_payload jsonb)
-RETURNS uuid
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $function$
-DECLARE
-  v_product_id uuid := NULLIF(product_payload->>'id', '')::uuid;
-  v_translation_group_id uuid := NULLIF(product_payload->>'translation_group_id', '')::uuid;
-  v_product_type text := CASE
-    WHEN product_payload->>'product_type' IN ('physical', 'digital') THEN product_payload->>'product_type'
-    WHEN NULLIF(product_payload->>'freemius_product_id', '') IS NOT NULL
-      OR NULLIF(product_payload->>'freemius_plan_id', '') IS NOT NULL THEN 'digital'
-    ELSE 'physical'
-  END;
-  v_payment_provider text := CASE
-    WHEN v_product_type = 'digital' THEN 'freemius'
-    ELSE 'stripe'
-  END;
-  v_variants jsonb := COALESCE(product_payload->'variants', '[]'::jsonb);
-  v_variant jsonb;
-  v_variant_id uuid;
-  v_term_id text;
-  v_has_variants boolean := jsonb_typeof(v_variants) = 'array' AND jsonb_array_length(v_variants) > 0;
-  v_total_variant_stock integer := 0;
-BEGIN
-  IF NOT public.is_admin() THEN
-    RAISE EXCEPTION 'Admin access required';
-  END IF;
-
-  IF v_has_variants THEN
-    SELECT COALESCE(SUM(COALESCE((value->>'stock_quantity')::integer, 0)), 0)
-      INTO v_total_variant_stock
-    FROM jsonb_array_elements(v_variants);
-  END IF;
-
-  IF v_product_id IS NULL THEN
-    INSERT INTO public.products (
-      title,
-      slug,
-      sku,
-      product_type,
-      payment_provider,
-      upc,
-      stock,
-      status,
-      short_description,
-      description_json,
-      metadata,
-      price,
-      prices,
-      sale_price,
-      sale_prices,
-      freemius_plan_id,
-      freemius_product_id,
-      language_id,
-      translation_group_id
-    )
-    VALUES (
-      product_payload->>'title',
-      product_payload->>'slug',
-      product_payload->>'sku',
-      v_product_type,
-      v_payment_provider,
-      NULLIF(product_payload->>'upc', ''),
-      CASE
-        WHEN v_has_variants THEN v_total_variant_stock
-        ELSE COALESCE((product_payload->>'stock')::integer, 0)
-      END,
-      COALESCE(product_payload->>'status', 'draft'),
-      NULLIF(product_payload->>'short_description', ''),
-      product_payload->'description_json',
-      COALESCE(product_payload->'metadata', '{}'::jsonb),
-      COALESCE((product_payload->>'price')::integer, 0),
-      COALESCE(product_payload->'prices', '{}'::jsonb),
-      CASE
-        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
-          (product_payload->>'sale_price')::integer
-        ELSE
-          NULL
-      END,
-      CASE
-        WHEN product_payload ? 'sale_prices' THEN COALESCE(product_payload->'sale_prices', '{}'::jsonb)
-        ELSE NULL
-      END,
-      NULLIF(product_payload->>'freemius_plan_id', ''),
-      NULLIF(product_payload->>'freemius_product_id', ''),
-      (product_payload->>'language_id')::bigint,
-      COALESCE(v_translation_group_id, gen_random_uuid())
-    )
-    RETURNING id INTO v_product_id;
-  ELSE
-    UPDATE public.products
-    SET
-      title = product_payload->>'title',
-      slug = product_payload->>'slug',
-      sku = product_payload->>'sku',
-      product_type = v_product_type,
-      payment_provider = v_payment_provider,
-      upc = NULLIF(product_payload->>'upc', ''),
-      stock = CASE
-        WHEN v_has_variants THEN v_total_variant_stock
-        ELSE COALESCE((product_payload->>'stock')::integer, 0)
-      END,
-      status = COALESCE(product_payload->>'status', status),
-      short_description = NULLIF(product_payload->>'short_description', ''),
-      description_json = product_payload->'description_json',
-      metadata = COALESCE(product_payload->'metadata', '{}'::jsonb),
-      price = COALESCE((product_payload->>'price')::integer, 0),
-      prices = COALESCE(product_payload->'prices', '{}'::jsonb),
-      sale_price = CASE
-        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
-          (product_payload->>'sale_price')::integer
-        ELSE
-          NULL
-      END,
-      sale_prices = CASE
-        WHEN product_payload ? 'sale_prices' THEN COALESCE(product_payload->'sale_prices', '{}'::jsonb)
-        ELSE NULL
-      END,
-      freemius_plan_id = NULLIF(product_payload->>'freemius_plan_id', ''),
-      freemius_product_id = NULLIF(product_payload->>'freemius_product_id', ''),
-      language_id = COALESCE((product_payload->>'language_id')::bigint, language_id),
-      translation_group_id = COALESCE(v_translation_group_id, translation_group_id),
-      updated_at = now()
-    WHERE id = v_product_id;
-
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'Product not found';
-    END IF;
-  END IF;
-
-  DELETE FROM public.variant_attribute_mapping
-  WHERE variant_id IN (
-    SELECT id FROM public.product_variants WHERE product_id = v_product_id
-  );
-
-  DELETE FROM public.product_variants
-  WHERE product_id = v_product_id;
-
-  IF v_has_variants THEN
-    FOR v_variant IN
-      SELECT value FROM jsonb_array_elements(v_variants)
-    LOOP
-      INSERT INTO public.product_variants (
-        product_id,
-        sku,
-        upc,
-        price,
-        prices,
-        sale_price,
-        sale_prices,
-        stock_quantity,
-        main_media_id
-      )
-      VALUES (
-        v_product_id,
-        v_variant->>'sku',
-        NULLIF(v_variant->>'upc', ''),
-        COALESCE((v_variant->>'price')::integer, 0),
-        COALESCE(v_variant->'prices', '{}'::jsonb),
-        CASE
-          WHEN v_variant ? 'sale_price' AND v_variant->>'sale_price' <> '' THEN
-            (v_variant->>'sale_price')::integer
-          ELSE
-            NULL
-        END,
-        CASE
-          WHEN v_variant ? 'sale_prices' THEN COALESCE(v_variant->'sale_prices', '{}'::jsonb)
-          ELSE NULL
-        END,
-        COALESCE((v_variant->>'stock_quantity')::integer, 0),
-        NULLIF(v_variant->>'main_media_id', '')::uuid
-      )
-      RETURNING id INTO v_variant_id;
-
-      FOR v_term_id IN
-        SELECT jsonb_array_elements_text(COALESCE(v_variant->'attribute_term_ids', '[]'::jsonb))
-      LOOP
-        INSERT INTO public.variant_attribute_mapping (variant_id, attribute_term_id)
-        VALUES (v_variant_id, v_term_id::uuid);
-      END LOOP;
-    END LOOP;
-  END IF;
-
-  RETURN v_product_id;
-END;
-$function$;
-
-
--- >>> FROM: 20260420000000_add_currency_sync_and_rounding.sql <<<
--- 20260420000000_add_currency_sync_and_rounding.sql
--- Adds automated FX sync metadata and merchant-friendly rounding rules.
-
-
-ALTER TABLE public.currencies
-  ADD COLUMN IF NOT EXISTS rounding_mode text NOT NULL DEFAULT 'none',
-  ADD COLUMN IF NOT EXISTS rounding_increment integer NOT NULL DEFAULT 1,
-  ADD COLUMN IF NOT EXISTS rounding_charm_amount integer,
-  ADD COLUMN IF NOT EXISTS auto_update_exchange_rate boolean NOT NULL DEFAULT true,
-  ADD COLUMN IF NOT EXISTS exchange_rate_updated_at timestamptz,
-  ADD COLUMN IF NOT EXISTS exchange_rate_source text;
-
-UPDATE public.currencies
-SET
-  rounding_mode = COALESCE(rounding_mode, 'none'),
-  rounding_increment = COALESCE(rounding_increment, 1),
-  auto_update_exchange_rate = CASE
-    WHEN is_default THEN false
-    ELSE COALESCE(auto_update_exchange_rate, true)
-  END,
-  exchange_rate = CASE
-    WHEN is_default THEN 1
-    ELSE exchange_rate
-  END,
-  exchange_rate_source = CASE
-    WHEN is_default THEN COALESCE(NULLIF(exchange_rate_source, ''), 'store-default')
-    WHEN NULLIF(exchange_rate_source, '') IS NULL THEN 'manual'
-    ELSE exchange_rate_source
-  END,
-  exchange_rate_updated_at = CASE
-    WHEN is_default THEN COALESCE(exchange_rate_updated_at, now())
-    ELSE COALESCE(exchange_rate_updated_at, now())
-  END,
-  updated_at = now();
-
-ALTER TABLE public.currencies
-  DROP CONSTRAINT IF EXISTS currencies_rounding_mode_valid,
-  ADD CONSTRAINT currencies_rounding_mode_valid
-    CHECK (rounding_mode IN ('none', 'nearest', 'up', 'down', 'charm'));
-
-ALTER TABLE public.currencies
-  DROP CONSTRAINT IF EXISTS currencies_rounding_increment_positive,
-  ADD CONSTRAINT currencies_rounding_increment_positive
-    CHECK (rounding_increment > 0);
-
-ALTER TABLE public.currencies
-  DROP CONSTRAINT IF EXISTS currencies_rounding_charm_nonnegative,
-  ADD CONSTRAINT currencies_rounding_charm_nonnegative
-    CHECK (rounding_charm_amount IS NULL OR rounding_charm_amount >= 0);
-
-ALTER TABLE public.currencies
-  DROP CONSTRAINT IF EXISTS currencies_charm_requires_amount,
-  ADD CONSTRAINT currencies_charm_requires_amount
-    CHECK (rounding_mode <> 'charm' OR rounding_charm_amount IS NOT NULL);
-
-ALTER TABLE public.currencies
-  DROP CONSTRAINT IF EXISTS currencies_default_exchange_rate_is_one,
-  ADD CONSTRAINT currencies_default_exchange_rate_is_one
-    CHECK (NOT is_default OR exchange_rate = 1);
-
-ALTER TABLE public.currencies
-  DROP CONSTRAINT IF EXISTS currencies_default_auto_update_disabled,
-  ADD CONSTRAINT currencies_default_auto_update_disabled
-    CHECK (NOT is_default OR auto_update_exchange_rate = false);
-
-COMMENT ON COLUMN public.currencies.rounding_mode IS
-  'Rounding strategy applied when prices are auto-converted into this currency.';
-COMMENT ON COLUMN public.currencies.rounding_increment IS
-  'Rounding step in the currency smallest unit. Example: 5 means 0.05 for USD/CAD.';
-COMMENT ON COLUMN public.currencies.rounding_charm_amount IS
-  'Charm ending in the currency smallest unit. Example: 90 means prices like 29.90.';
-COMMENT ON COLUMN public.currencies.auto_update_exchange_rate IS
-  'Whether scheduled FX sync jobs should refresh this currency.';
-COMMENT ON COLUMN public.currencies.exchange_rate_updated_at IS
-  'When this currency exchange rate was last refreshed or manually set.';
-COMMENT ON COLUMN public.currencies.exchange_rate_source IS
-  'Human-readable source for the current exchange rate, such as a provider host or manual override.';
-
-CREATE OR REPLACE FUNCTION public.set_currency_defaults()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  NEW.code := upper(trim(NEW.code));
-  NEW.updated_at := now();
-
-  IF NEW.is_default THEN
-    NEW.is_active := true;
-    NEW.exchange_rate := 1;
-    NEW.auto_update_exchange_rate := false;
-    NEW.exchange_rate_source := COALESCE(NULLIF(NEW.exchange_rate_source, ''), 'store-default');
-    NEW.exchange_rate_updated_at := COALESCE(NEW.exchange_rate_updated_at, now());
-
-    UPDATE public.currencies
-    SET is_default = false,
-        updated_at = now()
-    WHERE id IS DISTINCT FROM NEW.id
-      AND is_default = true;
-  ELSIF NULLIF(NEW.exchange_rate_source, '') IS NULL THEN
-    NEW.exchange_rate_source := NULL;
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
-
-
--- >>> FROM: 20260420010000_fix_currency_safeupdate_trigger.sql <<<
--- 20260420010000_fix_currency_safeupdate_trigger.sql
--- Avoids safe-update errors when a default currency sync touches legacy price columns.
-
-
-CREATE OR REPLACE FUNCTION public.sync_legacy_price_columns_for_currency(target_currency text)
-RETURNS void
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  v_target_currency text := upper(trim(target_currency));
-BEGIN
-  UPDATE public.products
-  SET
-    prices = CASE
-      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN prices
-      ELSE COALESCE(prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, price)
-    END,
-    sale_prices = CASE
-      WHEN sale_price IS NULL THEN sale_prices
-      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN sale_prices
-      ELSE COALESCE(sale_prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, sale_price)
-    END,
-    price = CASE
-      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN
-        (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
-      ELSE
-        price
-    END,
-    sale_price = CASE
-      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN
-        (sale_prices ->> v_target_currency)::integer
-      ELSE
-        sale_price
-    END,
-    updated_at = now()
-  WHERE
-    NOT (COALESCE(prices, '{}'::jsonb) ? v_target_currency)
-    OR (
-      sale_price IS NOT NULL
-      AND (sale_prices IS NULL OR NOT (sale_prices ? v_target_currency))
-    )
-    OR (
-      COALESCE(prices, '{}'::jsonb) ? v_target_currency
-      AND price IS DISTINCT FROM (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
-    )
-    OR (
-      sale_prices IS NOT NULL
-      AND sale_prices ? v_target_currency
-      AND sale_price IS DISTINCT FROM (sale_prices ->> v_target_currency)::integer
-    );
-
-  UPDATE public.product_variants
-  SET
-    prices = CASE
-      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN prices
-      ELSE COALESCE(prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, price)
-    END,
-    sale_prices = CASE
-      WHEN sale_price IS NULL THEN sale_prices
-      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN sale_prices
-      ELSE COALESCE(sale_prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, sale_price)
-    END,
-    price = CASE
-      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN
-        (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
-      ELSE
-        price
-    END,
-    sale_price = CASE
-      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN
-        (sale_prices ->> v_target_currency)::integer
-      ELSE
-        sale_price
-    END,
-    updated_at = now()
-  WHERE
-    NOT (COALESCE(prices, '{}'::jsonb) ? v_target_currency)
-    OR (
-      sale_price IS NOT NULL
-      AND (sale_prices IS NULL OR NOT (sale_prices ? v_target_currency))
-    )
-    OR (
-      COALESCE(prices, '{}'::jsonb) ? v_target_currency
-      AND price IS DISTINCT FROM (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
-    )
-    OR (
-      sale_prices IS NOT NULL
-      AND sale_prices ? v_target_currency
-      AND sale_price IS DISTINCT FROM (sale_prices ->> v_target_currency)::integer
-    );
-END;
-$$;
-
-
-
--- >>> FROM: 20260420020000_add_auto_sync_product_prices.sql <<<
--- 20260420020000_add_auto_sync_product_prices.sql
--- Lets currencies opt into store-managed product and variant pricing.
-
-
-ALTER TABLE public.currencies
-  ADD COLUMN IF NOT EXISTS auto_sync_product_prices boolean NOT NULL DEFAULT false;
-
-UPDATE public.currencies
-SET
-  auto_sync_product_prices = CASE
-    WHEN is_default THEN false
-    ELSE COALESCE(auto_sync_product_prices, false)
-  END,
-  updated_at = now();
-
-ALTER TABLE public.currencies
-  DROP CONSTRAINT IF EXISTS currencies_default_product_price_sync_disabled,
-  ADD CONSTRAINT currencies_default_product_price_sync_disabled
-    CHECK (NOT is_default OR auto_sync_product_prices = false);
-
-COMMENT ON COLUMN public.currencies.auto_sync_product_prices IS
-  'Whether storefront product and variant prices in this currency are derived automatically from the store default currency using FX and rounding rules.';
-
-CREATE OR REPLACE FUNCTION public.set_currency_defaults()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  NEW.code := upper(trim(NEW.code));
-  NEW.updated_at := now();
-
-  IF NEW.is_default THEN
-    NEW.is_active := true;
-    NEW.exchange_rate := 1;
-    NEW.auto_update_exchange_rate := false;
-    NEW.auto_sync_product_prices := false;
-    NEW.exchange_rate_source := COALESCE(NULLIF(NEW.exchange_rate_source, ''), 'store-default');
-    NEW.exchange_rate_updated_at := COALESCE(NEW.exchange_rate_updated_at, now());
-
-    UPDATE public.currencies
-    SET is_default = false,
-        updated_at = now()
-    WHERE id IS DISTINCT FROM NEW.id
-      AND is_default = true;
-  ELSIF NULLIF(NEW.exchange_rate_source, '') IS NULL THEN
-    NEW.exchange_rate_source := NULL;
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.clear_currency_price_overrides(target_currency text)
-RETURNS void
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  v_target_currency text := upper(trim(target_currency));
-BEGIN
-  IF v_target_currency = '' THEN
-    RETURN;
-  END IF;
-
-  UPDATE public.products
-  SET
-    prices = COALESCE(prices, '{}'::jsonb) - v_target_currency,
-    sale_prices = CASE
-      WHEN sale_prices IS NULL THEN NULL
-      WHEN sale_prices - v_target_currency = '{}'::jsonb THEN NULL
-      ELSE sale_prices - v_target_currency
-    END,
-    updated_at = now()
-  WHERE COALESCE(prices, '{}'::jsonb) ? v_target_currency
-     OR COALESCE(sale_prices, '{}'::jsonb) ? v_target_currency;
-
-  UPDATE public.product_variants
-  SET
-    prices = COALESCE(prices, '{}'::jsonb) - v_target_currency,
-    sale_prices = CASE
-      WHEN sale_prices IS NULL THEN NULL
-      WHEN sale_prices - v_target_currency = '{}'::jsonb THEN NULL
-      ELSE sale_prices - v_target_currency
-    END,
-    updated_at = now()
-  WHERE COALESCE(prices, '{}'::jsonb) ? v_target_currency
-     OR COALESCE(sale_prices, '{}'::jsonb) ? v_target_currency;
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.clear_currency_price_overrides(text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.clear_currency_price_overrides(text) TO service_role;
-
-
-
--- >>> FROM: 20260420030000_add_multi_currency_shipping_rates.sql <<<
--- 20260420030000_add_multi_currency_shipping_rates.sql
--- Adds manual-vs-auto multi-currency support for shipping rates.
-
-
-ALTER TABLE public.shipping_zone_methods
-  ADD COLUMN IF NOT EXISTS currency_pricing_mode text NOT NULL DEFAULT 'auto',
-  ADD COLUMN IF NOT EXISTS cost_amounts jsonb NOT NULL DEFAULT '{}'::jsonb,
-  ADD COLUMN IF NOT EXISTS min_order_amounts jsonb NOT NULL DEFAULT '{}'::jsonb;
-
-UPDATE public.shipping_zone_methods
-SET
-  cost_currency = upper(trim(COALESCE(NULLIF(cost_currency, ''), public.get_default_currency_code()))),
-  currency_pricing_mode = COALESCE(NULLIF(lower(trim(currency_pricing_mode)), ''), 'auto'),
-  cost_amounts = CASE
-    WHEN cost_amounts IS NULL OR cost_amounts = '{}'::jsonb THEN
-      jsonb_build_object(
-        upper(trim(COALESCE(NULLIF(cost_currency, ''), public.get_default_currency_code()))),
-        GREATEST(cost_amount, 0)
-      )
-    ELSE
-      public.normalize_currency_amount_map(cost_amounts)
-  END,
-  min_order_amounts = CASE
-    WHEN min_order_amounts IS NULL OR min_order_amounts = '{}'::jsonb THEN
-      jsonb_build_object(
-        upper(trim(COALESCE(NULLIF(cost_currency, ''), public.get_default_currency_code()))),
-        GREATEST(min_order_amount, 0)
-      )
-    ELSE
-      public.normalize_currency_amount_map(min_order_amounts)
-  END,
-  updated_at = now();
-
-ALTER TABLE public.shipping_zone_methods
-  DROP CONSTRAINT IF EXISTS shipping_zone_methods_currency_pricing_mode_valid,
-  ADD CONSTRAINT shipping_zone_methods_currency_pricing_mode_valid
-    CHECK (currency_pricing_mode IN ('auto', 'manual'));
-
-ALTER TABLE public.shipping_zone_methods
-  DROP CONSTRAINT IF EXISTS shipping_zone_methods_cost_currency_format,
-  ADD CONSTRAINT shipping_zone_methods_cost_currency_format
-    CHECK (cost_currency ~ '^[A-Z]{3}$');
-
-ALTER TABLE public.shipping_zone_methods
-  DROP CONSTRAINT IF EXISTS shipping_zone_methods_cost_amounts_valid,
-  ADD CONSTRAINT shipping_zone_methods_cost_amounts_valid
-    CHECK (public.is_valid_currency_amount_map(cost_amounts));
-
-ALTER TABLE public.shipping_zone_methods
-  DROP CONSTRAINT IF EXISTS shipping_zone_methods_min_order_amounts_valid,
-  ADD CONSTRAINT shipping_zone_methods_min_order_amounts_valid
-    CHECK (public.is_valid_currency_amount_map(min_order_amounts));
-
-ALTER TABLE public.shipping_zone_methods
-  DROP CONSTRAINT IF EXISTS shipping_zone_methods_cost_amounts_include_source,
-  ADD CONSTRAINT shipping_zone_methods_cost_amounts_include_source
-    CHECK (cost_amounts ? upper(cost_currency));
-
-ALTER TABLE public.shipping_zone_methods
-  DROP CONSTRAINT IF EXISTS shipping_zone_methods_min_order_amounts_include_source,
-  ADD CONSTRAINT shipping_zone_methods_min_order_amounts_include_source
-    CHECK (min_order_amounts ? upper(cost_currency));
-
-COMMENT ON COLUMN public.shipping_zone_methods.currency_pricing_mode IS
-  'Whether this rate uses auto FX conversion from a single source currency or exact manual amounts per currency.';
-COMMENT ON COLUMN public.shipping_zone_methods.cost_amounts IS
-  'Shipping costs by ISO 4217 code in the smallest currency unit.';
-COMMENT ON COLUMN public.shipping_zone_methods.min_order_amounts IS
-  'Minimum order thresholds by ISO 4217 code in the smallest currency unit.';
-
-CREATE OR REPLACE FUNCTION public.sync_shipping_method_currency_maps()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  v_source_currency text;
-BEGIN
-  v_source_currency := upper(trim(COALESCE(NULLIF(NEW.cost_currency, ''), public.get_default_currency_code())));
-
-  NEW.cost_currency := v_source_currency;
-  NEW.currency_pricing_mode := COALESCE(NULLIF(lower(trim(NEW.currency_pricing_mode)), ''), 'auto');
-  NEW.cost_amounts := public.normalize_currency_amount_map(COALESCE(NEW.cost_amounts, '{}'::jsonb));
-  NEW.min_order_amounts := public.normalize_currency_amount_map(COALESCE(NEW.min_order_amounts, '{}'::jsonb));
-
-  IF NEW.currency_pricing_mode NOT IN ('auto', 'manual') THEN
-    RAISE EXCEPTION 'Unsupported shipping currency pricing mode: %', NEW.currency_pricing_mode;
-  END IF;
-
-  IF NEW.cost_amounts = '{}'::jsonb THEN
-    NEW.cost_amounts := jsonb_build_object(v_source_currency, GREATEST(COALESCE(NEW.cost_amount, 0), 0));
-  ELSIF NOT (NEW.cost_amounts ? v_source_currency) THEN
-    NEW.cost_amounts := NEW.cost_amounts || jsonb_build_object(
-      v_source_currency,
-      GREATEST(COALESCE(NEW.cost_amount, 0), 0)
-    );
-  END IF;
-
-  IF NEW.min_order_amounts = '{}'::jsonb THEN
-    NEW.min_order_amounts := jsonb_build_object(
-      v_source_currency,
-      GREATEST(COALESCE(NEW.min_order_amount, 0), 0)
-    );
-  ELSIF NOT (NEW.min_order_amounts ? v_source_currency) THEN
-    NEW.min_order_amounts := NEW.min_order_amounts || jsonb_build_object(
-      v_source_currency,
-      GREATEST(COALESCE(NEW.min_order_amount, 0), 0)
-    );
-  END IF;
-
-  IF NEW.currency_pricing_mode = 'auto' THEN
-    NEW.cost_amounts := jsonb_build_object(
-      v_source_currency,
-      GREATEST((NEW.cost_amounts ->> v_source_currency)::integer, 0)
-    );
-    NEW.min_order_amounts := jsonb_build_object(
-      v_source_currency,
-      GREATEST((NEW.min_order_amounts ->> v_source_currency)::integer, 0)
-    );
-  END IF;
-
-  NEW.cost_amount := GREATEST((NEW.cost_amounts ->> v_source_currency)::integer, 0);
-  NEW.min_order_amount := GREATEST((NEW.min_order_amounts ->> v_source_currency)::integer, 0);
-  NEW.updated_at := now();
-
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS trg_sync_shipping_method_currency_maps ON public.shipping_zone_methods;
-CREATE TRIGGER trg_sync_shipping_method_currency_maps
-BEFORE INSERT OR UPDATE OF cost_amount, cost_currency, min_order_amount, currency_pricing_mode, cost_amounts, min_order_amounts
-ON public.shipping_zone_methods
-FOR EACH ROW
-EXECUTE FUNCTION public.sync_shipping_method_currency_maps();
-
-
-
--- >>> FROM: 20260422000000_add_checkout_state_translations.sql <<<
--- Adds checkout state and CTA translations for shipping-gated checkout UX.
-
-
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'select_an_option',
-    '{"en": "Select an option", "es": "Selecciona una opcion", "fr": "Selectionnez une option"}'::jsonb
-  ),
-  (
-    'ecommerce.shipping_method_required',
-    '{"en": "Please select a shipping method before continuing.", "es": "Selecciona un metodo de envio antes de continuar.", "fr": "Veuillez selectionner un mode de livraison avant de continuer."}'::jsonb
-  ),
-  (
-    'ecommerce.waiting_on_address_info',
-    '{"en": "Complete your shipping address to view available shipping options.", "es": "Completa tu direccion de envio para ver las opciones de envio disponibles.", "fr": "Completez votre adresse de livraison pour voir les options de livraison disponibles."}'::jsonb
-  ),
-  (
-    'ecommerce.calculating_shipping',
-    '{"en": "Calculating shipping...", "es": "Calculando el envio...", "fr": "Calcul de la livraison..."}'::jsonb
-  ),
-  (
-    'ecommerce.sandbox_checkout_stripe_description',
-    '{"en": "This simulated step represents the Stripe checkout for physical products.", "es": "Este paso simulado representa el pago de Stripe para productos fisicos.", "fr": "Cette etape simulee represente le paiement Stripe pour les produits physiques."}'::jsonb
-  ),
-  (
-    'ecommerce.sandbox_checkout_freemius_description',
-    '{"en": "This simulated step represents the Freemius checkout for digital products.", "es": "Este paso simulado representa el pago de Freemius para productos digitales.", "fr": "Cette etape simulee represente le paiement Freemius pour les produits numeriques."}'::jsonb
-  ),
-  (
-    'ecommerce.digital_label',
-    '{"en": "Digital", "es": "Digital", "fr": "Numerique"}'::jsonb
-  ),
-  (
-    'ecommerce.physical_label',
-    '{"en": "Physical", "es": "Fisico", "fr": "Physique"}'::jsonb
-  ),
-  (
-    'ecommerce.physical_products',
-    '{"en": "Physical products", "es": "Productos fisicos", "fr": "Produits physiques"}'::jsonb
-  ),
-  (
-    'ecommerce.digital_products',
-    '{"en": "Digital products", "es": "Productos digitales", "fr": "Produits numeriques"}'::jsonb
-  ),
-  (
-    'ecommerce.estimated_total',
-    '{"en": "Estimated total", "es": "Total estimado", "fr": "Total estime"}'::jsonb
-  ),
-  (
-    'ecommerce.stripe_checkout_title',
-    '{"en": "Stripe Checkout", "es": "Pago con Stripe", "fr": "Paiement Stripe"}'::jsonb
-  ),
-  (
-    'ecommerce.stripe_checkout_description',
-    '{"en": "Pay for physical products in one Stripe checkout session.", "es": "Paga los productos fisicos en una sola sesion de Stripe.", "fr": "Payez les produits physiques dans une seule session Stripe."}'::jsonb
-  ),
-  (
-    'ecommerce.item_count_one',
-    '{"en": "{count} item", "es": "{count} articulo", "fr": "{count} article"}'::jsonb
-  ),
-  (
-    'ecommerce.item_count_other',
-    '{"en": "{count} items", "es": "{count} articulos", "fr": "{count} articles"}'::jsonb
-  ),
-  (
-    'ecommerce.physical_subtotal',
-    '{"en": "Physical subtotal", "es": "Subtotal fisico", "fr": "Sous-total physique"}'::jsonb
-  ),
-  (
-    'ecommerce.total_on_stripe',
-    '{"en": "Total on Stripe", "es": "Total en Stripe", "fr": "Total sur Stripe"}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_physical_products',
-    '{"en": "Checkout Physical Products", "es": "Pagar productos fisicos", "fr": "Payer les produits physiques"}'::jsonb
-  ),
-  (
-    'ecommerce.shipping_taxes_collected_on_stripe',
-    '{"en": "Shipping and taxes are only collected during the Stripe step for physical products.", "es": "El envio y los impuestos solo se cobran durante el paso de Stripe para productos fisicos.", "fr": "La livraison et les taxes sont percues uniquement a l''etape Stripe pour les produits physiques."}'::jsonb
-  ),
-  (
-    'ecommerce.freemius_checkout_title',
-    '{"en": "Freemius Checkout", "es": "Pago con Freemius", "fr": "Paiement Freemius"}'::jsonb
-  ),
-  (
-    'ecommerce.freemius_checkout_description',
-    '{"en": "Digital products use the Freemius checkout flow.", "es": "Los productos digitales usan el flujo de pago de Freemius.", "fr": "Les produits numeriques utilisent le flux de paiement Freemius."}'::jsonb
-  ),
-  (
-    'ecommerce.license_count_one',
-    '{"en": "{count} license", "es": "{count} licencia", "fr": "{count} licence"}'::jsonb
-  ),
-  (
-    'ecommerce.license_count_other',
-    '{"en": "{count} licenses", "es": "{count} licencias", "fr": "{count} licences"}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_billing_cycle_monthly',
-    '{"en": "Monthly subscription", "es": "Suscripcion mensual", "fr": "Abonnement mensuel"}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_billing_cycle_annual',
-    '{"en": "Annual subscription", "es": "Suscripcion anual", "fr": "Abonnement annuel"}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_billing_cycle_lifetime',
-    '{"en": "Lifetime subscription", "es": "Suscripcion de por vida", "fr": "Abonnement a vie"}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_product',
-    '{"en": "Checkout {title}", "es": "Pagar {title}", "fr": "Paiement de {title}"}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_digital_product',
-    '{"en": "Checkout Digital Product", "es": "Pagar producto digital", "fr": "Payer le produit numerique"}'::jsonb
-  ),
-  (
-    'ecommerce.digital_subtotal',
-    '{"en": "Digital subtotal", "es": "Subtotal digital", "fr": "Sous-total numerique"}'::jsonb
-  ),
-  (
-    'ecommerce.freemius_multi_checkout_notice',
-    '{"en": "Freemius licenses are completed one at a time, so each digital product gets its own checkout action.", "es": "Las licencias de Freemius se completan una por una, por lo que cada producto digital tiene su propia accion de pago.", "fr": "Les licences Freemius se finalisent une a la fois, donc chaque produit numerique a sa propre action de paiement."}'::jsonb
-  ),
-  (
-    'ecommerce.freemius_tax_notice',
-    '{"en": "Taxes and compliance for digital products are handled inside the Freemius checkout.", "es": "Los impuestos y la conformidad para los productos digitales se gestionan dentro del pago de Freemius.", "fr": "Les taxes et la conformite pour les produits numeriques sont gerees dans le paiement Freemius."}'::jsonb
-  ),
-  (
-    'continue_checkout',
-    '{"en": "Continue Checkout", "fr": "Continuer le paiement"}'::jsonb
-  ),
-  (
-    'checkout_success_sync_failed',
-    '{"en": "We could not finalize your invoice yet. Please refresh shortly.", "fr": "Nous n''avons pas encore pu finaliser votre facture. Veuillez rafraichir la page sous peu."}'::jsonb
-  ),
-  (
-    'ecommerce.shipping_country_required',
-    '{"en": "Country is required to calculate shipping.", "fr": "Le pays est requis pour calculer la livraison."}'::jsonb
-  ),
-  (
-    'ecommerce.shipping_calculation_failed',
-    '{"en": "We couldn''t calculate shipping right now. Please try again.", "fr": "Nous n''avons pas pu calculer la livraison pour le moment. Veuillez reessayer."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_license_inactive',
-    '{"en": "The ecommerce module license is inactive.", "fr": "La licence du module ecommerce est inactive."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_invalid_items',
-    '{"en": "Your checkout items could not be processed.", "fr": "Les articles de votre commande n''ont pas pu etre traites."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_provider_items_required',
-    '{"en": "Each checkout step must include items assigned to a payment provider.", "fr": "Chaque etape de paiement doit inclure des articles associes a un fournisseur de paiement."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_mixed_provider_steps',
-    '{"en": "Products with different payment providers must be purchased in separate checkout steps.", "fr": "Les produits utilisant differents fournisseurs de paiement doivent etre achetes en etapes separees."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_freemius_single_item',
-    '{"en": "Freemius products must be purchased one at a time.", "fr": "Les produits Freemius doivent etre achetes un a la fois."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_billing_address_required',
-    '{"en": "A billing address is required to continue checkout.", "fr": "Une adresse de facturation est requise pour continuer le paiement."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_internal_server_error',
-    '{"en": "Something went wrong while preparing your checkout. Please try again.", "fr": "Une erreur s''est produite lors de la preparation de votre paiement. Veuillez reessayer."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_missing_session_id',
-    '{"en": "We couldn''t find a checkout session to finalize.", "fr": "Nous n''avons pas trouve de session de paiement a finaliser."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_payment_pending',
-    '{"en": "Your payment is still pending.", "fr": "Votre paiement est toujours en attente."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_success_order_not_found',
-    '{"en": "We couldn''t find the order linked to this checkout.", "fr": "Nous n''avons pas trouve la commande liee a ce paiement."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_success_invalid_reference',
-    '{"en": "This checkout reference can''t be finalized from this page.", "fr": "Cette reference de paiement ne peut pas etre finalisee depuis cette page."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_success_inventory_update_failed',
-    '{"en": "We couldn''t update inventory for this order.", "fr": "Nous n''avons pas pu mettre a jour l''inventaire pour cette commande."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_success_status_update_failed',
-    '{"en": "We couldn''t update the order status.", "fr": "Nous n''avons pas pu mettre a jour le statut de la commande."}'::jsonb
-  ),
-  (
-    'ecommerce.unknown_error',
-    '{"en": "Unknown error", "es": "Error desconocido", "fr": "Erreur inconnue"}'::jsonb
-  )
-ON CONFLICT (key) DO UPDATE
-SET
-  translations = EXCLUDED.translations,
-  updated_at = now();
-
-
-
--- >>> FROM: 20260422010000_restore_missing_french_freemius_translations.sql <<<
--- Restore French translations that were overwritten by the Freemius ecommerce expansion seed.
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'ecommerce.pricing_unavailable',
-    jsonb_build_object(
-      'en', 'Pricing Unavailable',
-      'es', 'Precios no disponibles',
-      'fr', 'Tarification indisponible'
-    )
-  ),
-  (
-    'ecommerce.monthly',
-    jsonb_build_object(
-      'en', 'Monthly',
-      'es', 'Mensual',
-      'fr', 'Mensuel'
-    )
-  ),
-  (
-    'ecommerce.annual',
-    jsonb_build_object(
-      'en', 'Annual',
-      'es', 'Anual',
-      'fr', 'Annuel'
-    )
-  ),
-  (
-    'ecommerce.lifetime',
-    jsonb_build_object(
-      'en', 'Lifetime',
-      'es', 'De por vida',
-      'fr', 'À vie'
-    )
-  ),
-  (
-    'ecommerce.year',
-    jsonb_build_object(
-      'en', 'year',
-      'es', 'año',
-      'fr', 'an'
-    )
-  ),
-  (
-    'ecommerce.month',
-    jsonb_build_object(
-      'en', 'month',
-      'es', 'mes',
-      'fr', 'mois'
-    )
-  ),
-  (
-    'ecommerce.get_license',
-    jsonb_build_object(
-      'en', 'Get License',
-      'es', 'Obtener Licencia',
-      'fr', 'Obtenir la licence'
-    )
-  ),
-  (
-    'ecommerce.added_to_cart_success',
-    jsonb_build_object(
-      'en', '{item} added to your cart.',
-      'es', '{item} añadido al carrito.',
-      'fr', '{item} ajouté à votre panier.'
-    )
-  ),
-  (
-    'ecommerce.added_to_cart_error',
-    jsonb_build_object(
-      'en', 'Could not add item to cart.',
-      'es', 'No se pudo añadir el artículo al carrito.',
-      'fr', 'Impossible d''ajouter l''article au panier.'
-    )
-  )
-ON CONFLICT (key) DO UPDATE
-SET translations =
-  COALESCE(public.translations.translations, '{}'::jsonb)
-  || jsonb_build_object('fr', EXCLUDED.translations->>'fr');
-
-
--- >>> FROM: 20260422020000_fix_supabase_advisor_warnings.sql <<<
--- 20260422020000_fix_supabase_advisor_warnings.sql
--- Resolves repo-addressable Supabase advisor warnings around mutable function
--- search_path values and overlapping or unoptimized RLS policies.
-
-
--- 1. Harden warned functions with an explicit search_path.
-ALTER FUNCTION public.get_my_claim(text) SET search_path = '';
-ALTER FUNCTION public.handle_languages_update() SET search_path = '';
-ALTER FUNCTION public.set_current_timestamp_updated_at() SET search_path = '';
-ALTER FUNCTION public.handle_shipping_zone_locations_write() SET search_path = '';
-ALTER FUNCTION public.handle_tax_rates_write() SET search_path = '';
-ALTER FUNCTION public.format_order_invoice_number(bigint) SET search_path = '';
-ALTER FUNCTION public.generate_order_invoice_number() SET search_path = '';
-ALTER FUNCTION public.get_default_currency_code() SET search_path = '';
-ALTER FUNCTION public.normalize_currency_amount_map(jsonb) SET search_path = '';
-ALTER FUNCTION public.is_valid_currency_amount_map(jsonb) SET search_path = '';
-ALTER FUNCTION public.is_valid_sale_price_map(jsonb, jsonb) SET search_path = '';
-ALTER FUNCTION public.sync_currency_price_maps() SET search_path = '';
-ALTER FUNCTION public.handle_default_currency_change() SET search_path = '';
-ALTER FUNCTION public.sync_legacy_price_columns_for_currency(text) SET search_path = '';
-ALTER FUNCTION public.set_currency_defaults() SET search_path = '';
-ALTER FUNCTION public.clear_currency_price_overrides(text) SET search_path = '';
-ALTER FUNCTION public.sync_shipping_method_currency_maps() SET search_path = '';
-
--- 2. Replace direct auth.uid() calls in the warned policies with scalar
--- subselects so the result is initialized once per statement.
-DROP POLICY IF EXISTS "Users can manage own addresses" ON public.user_addresses;
-CREATE POLICY "Users can manage own addresses"
-  ON public.user_addresses
-  FOR ALL
-  TO authenticated
-  USING (user_id = (SELECT auth.uid()))
-  WITH CHECK (user_id = (SELECT auth.uid()));
-
-DROP POLICY IF EXISTS "profiles_update_policy" ON public.profiles;
-CREATE POLICY "profiles_update_policy"
-  ON public.profiles
-  FOR UPDATE
-  TO authenticated
-  USING (
-    (id = (SELECT auth.uid()))
-    OR ((SELECT public.get_current_user_role()) = 'ADMIN')
-  )
-  WITH CHECK (
-    (id = (SELECT auth.uid()))
-    OR ((SELECT public.get_current_user_role()) = 'ADMIN')
-  );
-
--- 3. Consolidate authenticated SELECT access for content tables and split the
--- prior FOR ALL policies into explicit write policies.
-DROP POLICY IF EXISTS "pages_read_policy" ON public.pages;
-DROP POLICY IF EXISTS "pages_manage_policy" ON public.pages;
-DROP POLICY IF EXISTS "pages_insert_policy" ON public.pages;
-DROP POLICY IF EXISTS "pages_update_policy" ON public.pages;
-DROP POLICY IF EXISTS "pages_delete_policy" ON public.pages;
-
-CREATE POLICY "pages_read_policy"
-  ON public.pages
-  FOR SELECT
-  TO authenticated
-  USING (
-    (status = 'published')
-    OR (author_id = (SELECT auth.uid()) AND status <> 'published')
-    OR ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  );
-
-CREATE POLICY "pages_insert_policy"
-  ON public.pages
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY "pages_update_policy"
-  ON public.pages
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY "pages_delete_policy"
-  ON public.pages
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-DROP POLICY IF EXISTS "posts_read_policy" ON public.posts;
-DROP POLICY IF EXISTS "posts_manage_policy" ON public.posts;
-DROP POLICY IF EXISTS "posts_insert_policy" ON public.posts;
-DROP POLICY IF EXISTS "posts_update_policy" ON public.posts;
-DROP POLICY IF EXISTS "posts_delete_policy" ON public.posts;
-
-CREATE POLICY "posts_read_policy"
-  ON public.posts
-  FOR SELECT
-  TO authenticated
-  USING (
-    (
-      status = 'published'
-      AND (published_at IS NULL OR published_at <= now())
-    )
-    OR (author_id = (SELECT auth.uid()) AND status <> 'published')
-    OR ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  );
-
-CREATE POLICY "posts_insert_policy"
-  ON public.posts
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY "posts_update_policy"
-  ON public.posts
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY "posts_delete_policy"
-  ON public.posts
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-DROP POLICY IF EXISTS "blocks_read_policy" ON public.blocks;
-DROP POLICY IF EXISTS "blocks_manage_policy" ON public.blocks;
-DROP POLICY IF EXISTS "blocks_insert_policy" ON public.blocks;
-DROP POLICY IF EXISTS "blocks_update_policy" ON public.blocks;
-DROP POLICY IF EXISTS "blocks_delete_policy" ON public.blocks;
-
-CREATE POLICY "blocks_read_policy"
-  ON public.blocks
-  FOR SELECT
-  TO authenticated
-  USING (
-    ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-    OR (
-      (
-        page_id IS NOT NULL
-        AND EXISTS (
-          SELECT 1
-          FROM public.pages AS p
-          WHERE p.id = blocks.page_id
-            AND p.status = 'published'
-        )
-      )
-      OR (
-        post_id IS NOT NULL
-        AND EXISTS (
-          SELECT 1
-          FROM public.posts AS pt
-          WHERE pt.id = blocks.post_id
-            AND pt.status = 'published'
-            AND (pt.published_at IS NULL OR pt.published_at <= now())
-        )
-      )
-    )
-  );
-
-CREATE POLICY "blocks_insert_policy"
-  ON public.blocks
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY "blocks_update_policy"
-  ON public.blocks
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY "blocks_delete_policy"
-  ON public.blocks
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
--- 4. Split public-readable admin/editor management policies into explicit
--- write-only policies so authenticated SELECT access is not duplicated.
-DO $$
-DECLARE
-  entry record;
-BEGIN
-  FOR entry IN
-    SELECT *
-    FROM (
-      VALUES
-        ('languages', 'languages_manage_policy', '(SELECT public.get_current_user_role()) = ''ADMIN'''),
-        ('logos', 'logos_manage_policy', '(SELECT public.get_current_user_role()) = ''ADMIN'''),
-        ('navigation_items', 'navigation_manage_policy', '(SELECT public.get_current_user_role()) = ''ADMIN'''),
-        ('media', 'media_manage_policy', '(SELECT public.get_current_user_role()) IN (''ADMIN'', ''WRITER'')'),
-        ('site_settings', 'site_settings_manage_policy', '(SELECT public.get_current_user_role()) IN (''ADMIN'', ''WRITER'')'),
-        ('translations', 'translations_manage_policy', '(SELECT public.get_current_user_role()) IN (''ADMIN'', ''WRITER'')'),
-        ('page_revisions', 'page_revisions_manage_policy', '(SELECT public.get_current_user_role()) IN (''ADMIN'', ''WRITER'')'),
-        ('post_revisions', 'post_revisions_manage_policy', '(SELECT public.get_current_user_role()) IN (''ADMIN'', ''WRITER'')'),
-        ('currencies', 'Admins manage currencies', '((SELECT public.is_admin()) IS TRUE)'),
-        ('inventory_items', 'Admins can manage inventory items', '((SELECT public.is_admin()) IS TRUE)'),
-        ('product_attributes', 'Admins manage product_attributes', '((SELECT public.is_admin()) IS TRUE)'),
-        ('product_attribute_terms', 'Admins manage product_attribute_terms', '((SELECT public.is_admin()) IS TRUE)'),
-        ('product_media', 'Admins can manage product media', '((SELECT public.is_admin()) IS TRUE)'),
-        ('product_variants', 'Admins manage product_variants', '((SELECT public.is_admin()) IS TRUE)'),
-        ('products', 'Admins can manage products', '((SELECT public.is_admin()) IS TRUE)'),
-        ('shipping_zone_locations', 'Admins manage shipping_zone_locations', '((SELECT public.is_admin()) IS TRUE)'),
-        ('shipping_zone_methods', 'Admins manage shipping_zone_methods', '((SELECT public.is_admin()) IS TRUE)'),
-        ('shipping_zones', 'Admins manage shipping_zones', '((SELECT public.is_admin()) IS TRUE)'),
-        ('tax_rates', 'Admins manage tax_rates', '((SELECT public.is_admin()) IS TRUE)'),
-        ('variant_attribute_mapping', 'Admins manage variant_attribute_mapping', '((SELECT public.is_admin()) IS TRUE)')
-    ) AS policies(table_name, old_policy_name, role_check)
-  LOOP
-    EXECUTE format(
-      'DROP POLICY IF EXISTS %I ON public.%I',
-      entry.old_policy_name,
-      entry.table_name
-    );
-    EXECUTE format(
-      'DROP POLICY IF EXISTS %I ON public.%I',
-      entry.table_name || '_insert_policy',
-      entry.table_name
-    );
-    EXECUTE format(
-      'DROP POLICY IF EXISTS %I ON public.%I',
-      entry.table_name || '_update_policy',
-      entry.table_name
-    );
-    EXECUTE format(
-      'DROP POLICY IF EXISTS %I ON public.%I',
-      entry.table_name || '_delete_policy',
-      entry.table_name
-    );
-
-    EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR INSERT TO authenticated WITH CHECK (%s)',
-      entry.table_name || '_insert_policy',
-      entry.table_name,
-      entry.role_check
-    );
-    EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated USING (%s) WITH CHECK (%s)',
-      entry.table_name || '_update_policy',
-      entry.table_name,
-      entry.role_check,
-      entry.role_check
-    );
-    EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR DELETE TO authenticated USING (%s)',
-      entry.table_name || '_delete_policy',
-      entry.table_name,
-      entry.role_check
-    );
-  END LOOP;
-END $$;
-
--- 5. Collapse orders and order_items authenticated SELECT access to a single
--- policy each, while keeping admin writes explicit.
-DROP POLICY IF EXISTS "Users can view own orders" ON public.orders;
-DROP POLICY IF EXISTS "Admins can view all orders" ON public.orders;
-DROP POLICY IF EXISTS "Admins can manage all orders" ON public.orders;
-DROP POLICY IF EXISTS "orders_insert_policy" ON public.orders;
-DROP POLICY IF EXISTS "orders_update_policy" ON public.orders;
-DROP POLICY IF EXISTS "orders_delete_policy" ON public.orders;
-
-CREATE POLICY "Users can view own orders"
-  ON public.orders
-  FOR SELECT
-  TO authenticated
-  USING (
-    ((SELECT public.is_admin()) IS TRUE)
-    OR (user_id = (SELECT auth.uid()))
-  );
-
-CREATE POLICY "orders_insert_policy"
-  ON public.orders
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.is_admin()) IS TRUE);
-
-CREATE POLICY "orders_update_policy"
-  ON public.orders
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.is_admin()) IS TRUE)
-  WITH CHECK ((SELECT public.is_admin()) IS TRUE);
-
-CREATE POLICY "orders_delete_policy"
-  ON public.orders
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.is_admin()) IS TRUE);
-
-DROP POLICY IF EXISTS "Users can view own order items" ON public.order_items;
-DROP POLICY IF EXISTS "Admins can view all order items" ON public.order_items;
-DROP POLICY IF EXISTS "Admins can manage all order items" ON public.order_items;
-DROP POLICY IF EXISTS "order_items_insert_policy" ON public.order_items;
-DROP POLICY IF EXISTS "order_items_update_policy" ON public.order_items;
-DROP POLICY IF EXISTS "order_items_delete_policy" ON public.order_items;
-
-CREATE POLICY "Users can view own order items"
-  ON public.order_items
-  FOR SELECT
-  TO authenticated
-  USING (
-    ((SELECT public.is_admin()) IS TRUE)
-    OR EXISTS (
-      SELECT 1
-      FROM public.orders
-      WHERE orders.id = order_items.order_id
-        AND orders.user_id = (SELECT auth.uid())
-    )
-  );
-
-CREATE POLICY "order_items_insert_policy"
-  ON public.order_items
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.is_admin()) IS TRUE);
-
-CREATE POLICY "order_items_update_policy"
-  ON public.order_items
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.is_admin()) IS TRUE)
-  WITH CHECK ((SELECT public.is_admin()) IS TRUE);
-
-CREATE POLICY "order_items_delete_policy"
-  ON public.order_items
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.is_admin()) IS TRUE);
-
-
-
--- >>> FROM: 20260423000000_optimize_index_advisor_findings.sql <<<
--- 20260423000000_optimize_index_advisor_findings.sql
--- Applies safe index optimizations based on Supabase Performance Advisor:
--- add missing FK indexes and remove only schema-redundant indexes.
-
-
--- 1. Add covering indexes for foreign keys flagged by the advisor.
-CREATE INDEX IF NOT EXISTS idx_logos_media_id
-  ON public.logos (media_id);
-
-CREATE INDEX IF NOT EXISTS idx_order_items_product_id
-  ON public.order_items (product_id);
-
-CREATE INDEX IF NOT EXISTS idx_page_revisions_author_id
-  ON public.page_revisions (author_id);
-
-CREATE INDEX IF NOT EXISTS idx_post_revisions_author_id
-  ON public.post_revisions (author_id);
-
-CREATE INDEX IF NOT EXISTS idx_product_media_media_id
-  ON public.product_media (media_id);
-
-CREATE INDEX IF NOT EXISTS idx_shipping_zone_methods_zone_id
-  ON public.shipping_zone_methods (zone_id);
-
--- 2. Remove indexes that are redundant by schema definition.
--- The composite (page_id, version) index covers page_id lookups.
-DROP INDEX IF EXISTS public.idx_page_revisions_page_id;
-
--- The composite (post_id, version) index covers post_id lookups.
-DROP INDEX IF EXISTS public.idx_post_revisions_post_id;
-
--- The PRIMARY KEY on (variant_id, attribute_term_id) already covers variant_id.
-DROP INDEX IF EXISTS public.idx_variant_attribute_mapping_variant_id;
-
 
 
   -- Step D: Anchor demo profile

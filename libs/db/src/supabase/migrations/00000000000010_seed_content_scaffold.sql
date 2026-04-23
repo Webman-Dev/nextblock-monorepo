@@ -1,4 +1,166 @@
--- 00000000000041_seed_homepage_blocks.sql
+-- 00000000000010_seed_content_scaffold.sql
+-- Consolidated migration preserving original statement order within grouped sections.
+
+-- 00000000000033_seed_logo_and_content_scaffold.sql
+-- Foundational translations, logo assets, and starter content scaffolding.
+
+BEGIN;
+
+-- 1. Translations
+-- Merged from multiple translation seed files
+INSERT INTO public.translations (key, translations) VALUES
+('sign_in', '{"en": "Sign in", "fr": "Connexion"}'),
+('sign_up', '{"en": "Sign up", "fr": "Inscription"}'),
+('sign_out', '{"en": "Sign out", "fr": "Déconnexion"}'),
+('dont_have_account', '{"en": "Don''t have an account?", "fr": "Pas encore de compte ?"}'),
+('email', '{"en": "Email", "fr": "Email"}'),
+('you_at_example_com', '{"en": "you@example.com", "fr": "vous@example.com"}'),
+('password', '{"en": "Password", "fr": "Mot de passe"}'),
+('forgot_password', '{"en": "Forgot Password?", "fr": "Mot de passe oublié ?"}'),
+('your_password', '{"en": "Your password", "fr": "Votre mot de passe"}'),
+('signing_in_pending', '{"en": "Signing In...", "fr": "Connexion en cours..."}'),
+('already_have_account', '{"en": "Already have an account?", "fr": "Déjà un compte ?"}'),
+('signing_up_pending', '{"en": "Signing up...", "fr": "Inscription en cours..."}'),
+('reset_password', '{"en": "Reset Password", "fr": "Réinitialiser le mot de passe"}'),
+('auth.signup_form_description', '{"en": "Create your account in one quick step. We''ll email you a confirmation link before you finish your profile.", "fr": "Créez votre compte en une étape rapide. Nous vous enverrons un lien de confirmation avant de terminer votre profil."}'),
+('auth.signup_success_badge', '{"en": "Signup received", "fr": "Inscription reçue"}'),
+('auth.signup_success_title', '{"en": "Check your inbox", "fr": "Vérifiez votre boîte de réception"}'),
+('auth.signup_success_step_confirm', '{"en": "Open the email we sent and confirm your address.", "fr": "Ouvrez l''e-mail envoyé et confirmez votre adresse."}'),
+('auth.signup_success_step_profile', '{"en": "After confirmation, we''ll bring you to your profile to finish setup.", "fr": "Après confirmation, nous vous amènerons à votre profil pour terminer la configuration."}'),
+('auth.signup_success_step_spam', '{"en": "If it doesn''t arrive soon, check spam, junk, or promotions.", "fr": "S''il n''arrive pas bientôt, vérifiez les dossiers spam, indésirables ou promotions."}'),
+('auth.signup_use_different_email', '{"en": "Use a different email", "fr": "Utiliser une autre adresse e-mail"}'),
+('auth.back_to_sign_in', '{"en": "Back to sign in", "fr": "Retour à la connexion"}'),
+('auth.signup_rate_limit', '{"en": "You''re trying too quickly. Please wait a moment before requesting another confirmation email.", "fr": "Vous allez trop vite. Veuillez attendre un instant avant de demander un nouvel e-mail de confirmation."}'),
+('blog_prefix', '{"en": "article", "fr": "article"}'),
+('edit_page', '{"en": "Edit Page", "fr": "Éditer la page"}'),
+('edit_post', '{"en": "Edit Post", "fr": "Éditer l''article"}'),
+('open_main_menu', '{"en": "Open main menu", "fr": "Ouvrir le menu principal"}'),
+('mobile_navigation_menu', '{"en": "Mobile navigation menu", "fr": "Menu de navigation mobile"}'),
+('cms_dashboard', '{"en": "CMS Dashboard", "fr": "Tableau de bord CMS"}'),
+('update_env_file_warning', '{"en": "Please update .env.local file with anon key and url", "fr": "Veuillez mettre à jour .env.local avec l''anon key et l''URL"}'),
+('greeting', '{"en": "Hey, {username}!", "fr": "Salut, {username} !"}'),
+('theme_switcher', '{"en": "Theme Switcher", "fr": "Sélecteur de thème"}'),
+('theme_light', '{"en": "Light", "fr": "Clair"}'),
+('theme_dark', '{"en": "Dark", "fr": "Sombre"}'),
+('theme_system', '{"en": "System", "fr": "Système"}'),
+('theme_vibrant', '{"en": "Vibrant", "fr": "Vibrant"}'),
+('sandbox_mode_banner', '{"en": "Sandbox Mode: Data is public and resets every 15 minutes.", "fr": "Mode Sandbox : Les données sont publiques et réinitialisées toutes les 15 minutes."}'),
+('demo_access_title', '{"en": "Demo Access", "fr": "Accès Démo"}'),
+('demo_access_desc', '{"en": "This is a demo site. You may use the following credentials to access the admin section:", "fr": "Ceci est un site de démonstration. Vous pouvez utiliser les identifiants suivants pour accéder à l''administration :"}'),
+('demo_user_label', '{"en": "User:", "fr": "Utilisateur :"}'),
+('demo_password_label', '{"en": "Password:", "fr": "Mot de passe :"}')
+ON CONFLICT (key) DO UPDATE
+SET translations = EXCLUDED.translations;
+
+
+-- 2. Site Logo
+DO $$
+DECLARE
+  v_logo_media_id UUID := gen_random_uuid();
+  v_admin_id UUID;
+BEGIN
+  -- Get an admin user ID to set as uploader (optional, fallback to NULL)
+  SELECT id INTO v_admin_id FROM public.profiles WHERE role = 'ADMIN' LIMIT 1;
+
+  -- Insert the logo into the media table
+  INSERT INTO public.media (id, uploader_id, file_name, object_key, file_type, size_bytes, description)
+  VALUES (
+    v_logo_media_id,
+    v_admin_id,
+    'nextblock-logo-small.webp',
+    'images/nextblock-logo-small.webp',
+    'image/webp',
+    10000,
+    'NextBlock Site Logo'
+  )
+  ON CONFLICT (object_key) DO UPDATE
+  SET
+    file_name = excluded.file_name,
+    file_type = excluded.file_type,
+    description = excluded.description
+  RETURNING id INTO v_logo_media_id;
+
+  -- Insert the logo into the logos table
+  INSERT INTO public.logos (name, media_id)
+  VALUES ('NextBlock Logo', v_logo_media_id)
+  ON CONFLICT DO NOTHING; -- Assuming name is not unique but we don't want to double insert if running multiple times? No unique constraint on name.
+  -- Actually, logos table has no unique constraint on name. 
+  -- But since this is a seed, we might want to avoid duplicates if run multiple times.
+  -- Let's check if it exists.
+  IF NOT EXISTS (SELECT 1 FROM public.logos WHERE name = 'NextBlock Logo') THEN
+     INSERT INTO public.logos (name, media_id) VALUES ('NextBlock Logo', v_logo_media_id);
+  END IF;
+
+END $$;
+
+
+-- 3. Foundational Content (Pages & Posts Structure)
+DO $$
+DECLARE
+  v_home_page_group_id uuid := gen_random_uuid();
+  v_blog_page_group_id uuid := gen_random_uuid();
+  v_how_it_works_post_group_id uuid := gen_random_uuid();
+  v_en_lang_id bigint;
+  v_fr_lang_id bigint;
+  v_feature_media_id uuid;
+BEGIN
+  -- Ensure languages exist (already seeded in setup_languages, but good to be safe/get IDs)
+  SELECT id INTO v_en_lang_id FROM public.languages WHERE code = 'en' LIMIT 1;
+  SELECT id INTO v_fr_lang_id FROM public.languages WHERE code = 'fr' LIMIT 1;
+
+  IF v_en_lang_id IS NULL OR v_fr_lang_id IS NULL THEN
+    RAISE EXCEPTION 'Required languages (en, fr) not found.';
+  END IF;
+
+  -- Scaffold Home Pages
+  INSERT INTO public.pages (language_id, title, slug, status, translation_group_id)
+  VALUES (v_en_lang_id, 'Home', 'home', 'published', v_home_page_group_id)
+  ON CONFLICT (language_id, slug) DO UPDATE
+    SET title = EXCLUDED.title, status = EXCLUDED.status;
+    -- Note: We don't update translation_group_id on conflict to avoid overwriting existing groups if they were manually set?
+    -- Actually, for a fresh reset, it doesn't matter. For an update, we might want to preserve.
+    -- But the user said "reset the database every time". So we can overwrite.
+    
+  INSERT INTO public.pages (language_id, title, slug, status, translation_group_id)
+  VALUES (v_fr_lang_id, 'Accueil', 'accueil', 'published', v_home_page_group_id)
+  ON CONFLICT (language_id, slug) DO UPDATE
+    SET title = EXCLUDED.title, status = EXCLUDED.status;
+
+  -- Scaffold Articles Pages
+  INSERT INTO public.pages (language_id, title, slug, status, translation_group_id)
+  VALUES (v_en_lang_id, 'Articles', 'articles', 'published', v_blog_page_group_id)
+  ON CONFLICT (language_id, slug) DO UPDATE
+    SET title = EXCLUDED.title, status = EXCLUDED.status;
+
+  INSERT INTO public.pages (language_id, title, slug, status, translation_group_id)
+  VALUES (v_fr_lang_id, 'Articles', 'articles', 'published', v_blog_page_group_id)
+  ON CONFLICT (language_id, slug) DO UPDATE
+    SET title = EXCLUDED.title, status = EXCLUDED.status;
+
+  -- Seed Featured Image
+  v_feature_media_id := gen_random_uuid();
+  INSERT INTO public.media (id, file_name, object_key, file_type, size_bytes)
+  VALUES (v_feature_media_id, 'programmer-upscaled.webp', 'images/programmer-upscaled.webp', 'image/webp', 100000)
+  ON CONFLICT (object_key) DO UPDATE
+    SET file_name = EXCLUDED.file_name
+  RETURNING id INTO v_feature_media_id;
+
+  -- Seed "How It Works" Post
+  INSERT INTO public.posts (language_id, title, slug, status, translation_group_id, feature_image_id)
+  VALUES (v_en_lang_id, 'How NextBlock Works: A Look Under the Hood', 'how-nextblock-works', 'published', v_how_it_works_post_group_id, v_feature_media_id)
+  ON CONFLICT (language_id, slug) DO UPDATE
+    SET title = EXCLUDED.title, status = EXCLUDED.status, feature_image_id = EXCLUDED.feature_image_id;
+
+  INSERT INTO public.posts (language_id, title, slug, status, translation_group_id, feature_image_id)
+  VALUES (v_fr_lang_id, 'Comment NextBlock Fonctionne : Regard Sous le Capot', 'comment-nextblock-fonctionne', 'published', v_how_it_works_post_group_id, v_feature_media_id)
+  ON CONFLICT (language_id, slug) DO UPDATE
+    SET title = EXCLUDED.title, status = EXCLUDED.status, feature_image_id = EXCLUDED.feature_image_id;
+
+END $$;
+
+COMMIT;
+
+-- 00000000000034_seed_homepage_blocks.sql
 -- Populates the English Home page with structured blocks sourced from the landing page brief.
 
 DO $seed$
@@ -113,7 +275,7 @@ BEGIN
             {
               "block_type": "text",
               "content": {
-                "html_content": "<div class='p-10 border border-white/10 rounded-3xl bg-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden group'><div class='absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500'></div><div class='relative z-10'><p class='text-xs text-white uppercase tracking-widest font-semibold mb-2'>Why teams switch</p><p class='text-3xl font-bold text-white mb-2'>100% Lighthouse</p><p class='text-base text-slate-300 mb-6'>Edge-rendered marketing sites, launches, and docs with uncompromising performance.</p><ul class='space-y-3 text-sm text-slate-200'><li><span class='text-blue-400 mr-2'>✓</span> Next.js 16 with ISR and edge caching</li><li><span class='text-blue-400 mr-2'>✓</span> Supabase auth, data, and storage</li><li><span class='text-blue-400 mr-2'>✓</span> Notion-style block editor powered by Tiptap</li></ul><div class='mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-lg'><img src='/images/NBcover.webp' alt='Nextblock cover showcasing dashboards and blocks' class='w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700' fetchpriority='high' /></div></div></div>"
+                "html_content": "<div class='p-10 border border-white/10 rounded-3xl bg-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden group'><div class='absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500'></div><div class='relative z-10'><p class='text-xs text-white uppercase tracking-widest font-semibold mb-2'>Why teams switch</p><p class='text-3xl font-bold text-white mb-2'>100% Lighthouse</p><p class='text-base text-slate-300 mb-6'>Edge-rendered marketing sites, launches, and docs with uncompromising performance.</p><ul class='space-y-3 text-sm text-slate-200'><li><span class='text-blue-400 mr-2'>&#10003;</span> Next.js 16 with ISR and edge caching</li><li><span class='text-blue-400 mr-2'>&#10003;</span> Supabase auth, data, and storage</li><li><span class='text-blue-400 mr-2'>&#10003;</span> Notion-style block editor powered by Tiptap</li></ul><div class='mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-lg'><img src='/images/NBcover.webp' alt='Nextblock cover showcasing dashboards and blocks' class='w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700' fetchpriority='high' /></div></div></div>"
               }
             }
           ]
@@ -490,7 +652,7 @@ BEGIN
             { "block_type": "text", "content": { "html_content": "<div class='flex flex-wrap justify-center gap-6 text-sm uppercase tracking-wide text-slate-400 mt-8'><a href='https://github.com/nextblock-cms' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>GitHub</a><a href='https://x.com/NextBlockCMS' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>X</a><a href='https://www.linkedin.com/in/nextblock/' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>LinkedIn</a><a href='https://dev.to/nextblockcms' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>Dev.to</a><a href='https://www.npmjs.com/~nextblockcms' target='_blank' rel='noopener noreferrer' class='hover:text-white transition-colors'>npm</a></div>" } }
           ],
           [
-            { "block_type": "text", "content": { "html_content": "<div class='p-10 border border-white/10 rounded-3xl bg-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden group'><div class='absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500'></div><div class='relative z-10'><p class='text-xs text-white uppercase tracking-widest font-semibold mb-2'>Pourquoi migrer</p><p class='text-3xl font-bold text-white mb-2'>100% Lighthouse</p><p class='text-base text-slate-300 mb-6'>Sites marketing et docs rendus à l'edge avec des performances irréprochables.</p><ul class='space-y-3 text-sm text-slate-200'><li><span class='text-blue-400 mr-2'>✓</span> Next.js 16 avec ISR et cache edge</li><li><span class='text-blue-400 mr-2'>✓</span> Supabase pour l'auth, les données et le stockage</li><li><span class='text-blue-400 mr-2'>✓</span> Éditeur de blocs type Notion sur Tiptap</li></ul><div class='mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-lg'><img src='/images/NBcover.webp' alt='Couverture Nextblock avec tableaux de bord et blocs' class='w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700' fetchpriority='high' /></div></div></div>" } }
+            { "block_type": "text", "content": { "html_content": "<div class='p-10 border border-white/10 rounded-3xl bg-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden group'><div class='absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500'></div><div class='relative z-10'><p class='text-xs text-white uppercase tracking-widest font-semibold mb-2'>Pourquoi migrer</p><p class='text-3xl font-bold text-white mb-2'>100% Lighthouse</p><p class='text-base text-slate-300 mb-6'>Sites marketing et docs rendus à l'edge avec des performances irréprochables.</p><ul class='space-y-3 text-sm text-slate-200'><li><span class='text-blue-400 mr-2'>&#10003;</span> Next.js 16 avec ISR et cache edge</li><li><span class='text-blue-400 mr-2'>&#10003;</span> Supabase pour l'auth, les données et le stockage</li><li><span class='text-blue-400 mr-2'>&#10003;</span> Éditeur de blocs type Notion sur Tiptap</li></ul><div class='mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-lg'><img src='/images/NBcover.webp' alt='Couverture Nextblock avec tableaux de bord et blocs' class='w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700' fetchpriority='high' /></div></div></div>" } }
           ]
         ]
       }$$::jsonb,
@@ -659,3 +821,93 @@ BEGIN
     );
 END;
 $seed_fr$;
+
+-- 00000000000035_seed_how_it_works.sql
+-- Populates the English "How NextBlock Works" post with a synthesized technical article.
+
+WITH target_posts AS (
+  SELECT id, language_id, slug
+  FROM public.posts
+  WHERE slug IN ('how-nextblock-works', 'comment-nextblock-fonctionne')
+),
+purged AS (
+  DELETE FROM public.blocks
+  WHERE post_id IN (SELECT id FROM target_posts)
+)
+INSERT INTO public.blocks (post_id, language_id, block_type, content, "order")
+SELECT
+  target_posts.id,
+  target_posts.language_id,
+  'text',
+  jsonb_build_object(
+    'html_content',
+    $$<h2>How NextBlock Works: Architecture for a Visual-First CMS</h2>
+<p>NextBlock is purpose-built to feel like a polished product from day one, and that polish starts with the Nx monorepo. Applications and libraries sit side-by-side so the same code that powers the hosted CMS experience also ships inside the open-source template and CLI. Instead of scattering configuration across projects, TypeScript paths, Tailwind presets, and shared lint rules all originate from the workspace root, which keeps every downstream package aligned.</p>
+<div class='flex flex-col md:flex-row gap-8 items-start my-8'>
+  <div class='w-full md:w-3/5 space-y-4'>
+    <h3>Monorepo Layout and Dependency Flow</h3>
+    <p>The <code>apps/nextblock</code> directory contains the production Next.js interface—both the public site and the authenticated CMS. The <code>apps/create-nextblock</code> CLI mirrors it, syncing files from the main app before publishing a scaffolding tool. Reusable primitives live under <code>libs/</code>. UI components and design tokens are exported from <code>@nextblock-cms/ui</code>, cross-cutting helpers (translations, R2 clients, Supabase environment guards) live in <code>@nextblock-cms/utils</code>, and database code plus migrations are centralized inside <code>@nextblock-cms/db</code>. Future-facing work, like the SDK and e-commerce module, already have dedicated libraries so they can mature without disrupting the core runtime.</p>
+    <p>This organization matters because Nx understands project boundaries. When you run <code>nx graph</code> you see exactly how a change in the editor package might ripple into the Next.js app. Path aliases from <code>tsconfig.base.json</code> and the shared <code>tailwind.config.js</code> ensure that every consumer sees the same theme scales and helper utilities, which is crucial for a system that promises design parity between marketing pages, admin screens, and scaffolded customer projects.</p>
+    <p>Together, those guardrails mean features can ship quickly without regressions. Schema migrations live in <code>libs/db</code>, UI primitives live in <code>libs/ui</code>, and the CLI simply syncs changes downstream—no copy/paste debt, no drifting configs.</p>
+  </div>
+  <aside class='md:w-2/5 bg-muted/40 border border-border/40 rounded-2xl p-4 shadow-lg text-center'>
+    <img src='/images/nx-graph.webp' alt='Nx project graph preview' class='w-full h-auto object-cover rounded-lg' />
+    <p class='text-sm text-muted-foreground mt-3'>Nx keeps every workspace relationship visible.</p>
+  </aside>
+</div>
+<h3>Inside the CMS Application</h3>
+<p>Within <code>apps/nextblock/app/cms</code>, each feature area—pages, posts, media, navigation, users, settings—follows a predictable file pattern: a list page, creation and edit routes, server actions, and scoped client components. The root CMS layout enforces authentication, builds the shell (sidebar, responsive header, profile menu), and injects role-aware navigation. That means writers can jump straight into the block editor while admins unlock additional menus such as language management or user provisioning, all without duplicating layout logic.</p>
+<p>Server actions wrap Supabase calls so mutations never leak credentials into the browser. Media uploads coordinate with Cloudflare R2, navigation management includes drag-and-drop ordering, and every table interaction respects the row-level security policies defined in the Supabase migrations—e.g., only admins and writers can mutate pages or posts while anonymous traffic can only read published content.</p>
+<h3>Tech Stack and Runtime</h3>
+<p>The stack highlighted in the project README—Next.js 16, Supabase, Tailwind CSS, and shadcn/ui—was selected to balance developer velocity with runtime performance. Next.js App Router unlocks Server Components, streaming, and incremental static regeneration so marketing experiences remain edge-fast. Supabase covers Postgres, Auth, and Storage, shrinking the operational footprint while still allowing custom SQL migrations. Tailwind plus shadcn/ui provide composable building blocks so the CMS interface, marketing site, and generated client projects all inherit the same visual language.</p>
+<p>Nx tooling ties it together. Common commands such as <code>nx serve nextblock</code>, <code>nx build nextblock</code>, or workspace-wide tasks like <code>nx run-many -t lint --all</code> respect dependency caching, so even large rebuilds feel snappy during the 100-day roadmap.</p>
+<pre><code>nx serve nextblock
+nx run-many -t build --all
+supabase db push
+</code></pre>
+<h3>The Tiptap-Based Block Editor</h3>
+<p>The <code>@nextblock-cms/editor</code> package turns Tiptap v3 into a polished, reusable editing surface. It ships rich-text formatting, tables, task lists, slash commands, floating and bubble menus, character counts, focus mode, and syntax-highlighted code blocks. Under the hood it bundles StarterKit, TextStyleKit, CodeBlockLowlight, Image, TaskList, Table, Link, TextAlign, Highlight, Typography, and more. Because the editor is published as a standalone library, both the CMS and the generated template pull identical behavior, ensuring content parity.</p>
+<p>From an implementation standpoint, the editor exposes granular components—EditorToolbar, BubbleMenu, FloatingMenu—so the CMS can embed one cohesive editing experience while keeping the door open for agencies or plugin developers to compose their own UI. Comprehensive CSS hooks (e.g., <code>.tiptap pre</code> for code blocks) mean that teams can layer in dark-mode friendly themes without forking the core package.</p>
+<h3>Putting It All Together</h3>
+<p>The result is a platform where architecture decisions reinforce each other: the Nx workspace keeps libraries honest, the Next.js app enforces UX consistency, Supabase migrations codify access rules, and the Tiptap editor guarantees that content collaborators see the same tooling regardless of deployment. When a new team runs <code>npm create nextblock</code>, they inherit not just a starter site, but the entire operational philosophy described above—ready to extend with SDKs, premium modules, and marketplace blocks as the ecosystem grows.</p>$$
+  ),
+  0
+FROM target_posts
+WHERE target_posts.slug = 'how-nextblock-works'
+
+UNION ALL
+
+SELECT
+  target_posts.id,
+  target_posts.language_id,
+  'text',
+  jsonb_build_object(
+    'html_content',
+    $$<h2>Comment NextBlock fonctionne : architecture pour un CMS axé sur l'expérience visuelle</h2>
+<p>NextBlock est conçu pour fonctionner dès le premier jour avec un socle Nx. Applications et librairies cohabitent pour que le même code propulse l'expérience CMS hébergée et le template open-source. Au lieu d'éparpiller la configuration, les chemins TypeScript, le preset Tailwind et les règles lint sont centralisés à la racine, gardant tous les packages alignés.</p>
+<div class='flex flex-col md:flex-row gap-8 items-start my-8'>
+  <div class='w-full md:w-3/5 space-y-4'>
+    <h3>Architecture monorepo et flux de dépendances</h3>
+    <p>Le dossier <code>apps/nextblock</code> contient l'interface Next.js (site public + CMS). Le CLI <code>apps/create-nextblock</code> la reflète et publie un outil de scaffolding. Les briques réutilisables vivent dans <code>libs/</code> : UI et design tokens via <code>@nextblock-cms/ui</code>, helpers (traductions, R2, règles Supabase) via <code>@nextblock-cms/utils</code>, et la base de données + migrations dans <code>@nextblock-cms/db</code>. Les travaux futurs (SDK, e-commerce) ont déjà leurs librairies dédiées.</p>
+    <p>Ce découplage est lisible via <code>nx graph</code> : un changement dans l'éditeur impacte clairement les apps dépendantes. Les alias de <code>tsconfig.base.json</code> et le <code>tailwind.config.js</code> partagé assurent une cohérence de thème et d'outils entre pages marketing, back-office et projets générés.</p>
+    <p>En pratique, cela accélère les livraisons sans régressions : migrations dans <code>libs/db</code>, primitives UI dans <code>libs/ui</code>, et le CLI synchronise simplement en aval—pas de dettes de copier/coller ni de configs divergentes.</p>
+  </div>
+  <aside class='md:w-2/5 bg-muted/40 border border-border/40 rounded-2xl p-4 shadow-lg text-center'>
+    <img src='/images/nx-graph.webp' alt='Aperçu du graph Nx' class='w-full h-auto object-cover rounded-lg' />
+    <p class='text-sm text-muted-foreground mt-3'>Nx rend visibles toutes les relations du workspace.</p>
+  </aside>
+</div>
+<h3>Stack technique et exécution</h3>
+<p>Le stack—Next.js 16, Supabase, Tailwind CSS, shadcn/ui—équilibre vélocité et performance. L'App Router active les Server Components et l'ISR pour un rendu edge rapide. Supabase gère Postgres/Auth/Storage, réduisant l'opérationnel tout en gardant la liberté SQL. Tailwind + shadcn/ui fournissent des blocs réutilisables pour le CMS, le site marketing et les projets générés.</p>
+<pre><code>nx serve nextblock
+nx run-many -t build --all
+supabase db push
+</code></pre>
+<h3>Éditeur basé sur Tiptap</h3>
+<p>Le package <code>@nextblock-cms/editor</code> transforme Tiptap v3 en surface d'édition robuste : mise en forme riche, menus contextuels, compteurs de caractères, blocs de code avec syntax highlighting, tables, listes de tâches, et plus. Éditor et template consomment la même librairie pour garantir la parité de contenu.</p>
+<h3>En résumé</h3>
+<p>Chaque choix architectural se renforce : Nx garde les dépendances lisibles, l'app Next.js impose une UX cohérente, les migrations Supabase codifient l'accès, et l'éditeur Tiptap assure une expérience identique pour tous les contributeurs.</p>$$
+  ),
+  0
+FROM target_posts
+WHERE target_posts.slug = 'comment-nextblock-fonctionne';
