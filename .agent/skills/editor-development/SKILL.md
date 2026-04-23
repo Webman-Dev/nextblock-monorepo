@@ -30,7 +30,7 @@ description: When you are working on the Tiptap v3 block editor. Use this for ex
 
 - **Strict CSP:** The editor runs in a strict CSP environment.
 - **Inline Styles:** Avoid inline `style="..."` attributes if possible, or ensure they are handled by `Rehype` sanitization in the renderer.
-- See `docs/EDITOR.md` for deep dive.
+- See `docs/03-CMS-AND-EDITOR.md` for deep dive.
 
 ## 4. Build & Test
 

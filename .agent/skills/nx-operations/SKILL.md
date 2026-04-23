@@ -9,9 +9,9 @@ description: When you need to run tasks, build projects, or understand the works
 
 - **Always use Nx:** Run tasks via `nx run`, `nx run-many`, or `nx affected`. Do not use underlying tools (like `tsc` or `vite` directly) unless debugging a specific issue with them.
 - **Analyze First:**
-  - Use `nx_workspace` to understand the workspace layout.
-  - Use `nx_project_details` to analyze specific project dependencies before making changes.
-  - Use `nx_docs` if you are unsure about configuration or best practices.
+  - Use `npx nx graph` to visualize the workspace dependency graph.
+  - Use `npx nx show project <name>` to analyze specific project dependencies before making changes.
+  - Use the `context7` MCP tool if you are unsure about Nx configuration or best practices.
 
 ## 2. Common Commands
 
