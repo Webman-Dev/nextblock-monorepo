@@ -10,15 +10,30 @@ import { estimateReadTimeMinutesFromBlocks } from '../../lib/posts/readTime';
 
 type PostRow = Database['public']['Tables']['posts']['Row'];
 type BlockRow = Database['public']['Tables']['blocks']['Row'];
+type FeatureMediaSelection = {
+  object_key: string;
+  width?: number | null;
+  height?: number | null;
+  blur_data_url?: string | null;
+};
+
+type PostQueryRow = PostRow & {
+  feature_media_object?: FeatureMediaSelection | FeatureMediaSelection[] | null;
+};
 
 type PostWithFeatureMedia = PostRow & {
-  feature_media_object?: {
-    object_key: string;
-    width?: number | null;
-    height?: number | null;
-    blur_data_url?: string | null;
-  } | null;
+  feature_media_object?: FeatureMediaSelection | null;
 };
+
+function normalizeFeatureMediaObject(
+  mediaObject: PostQueryRow['feature_media_object']
+): FeatureMediaSelection | null {
+  if (Array.isArray(mediaObject)) {
+    return mediaObject[0] ?? null;
+  }
+
+  return mediaObject ?? null;
+}
 
 async function getEstimatedReadTimeMap(
   supabase: ReturnType<typeof createClient>,
@@ -99,12 +114,17 @@ async function fetchPublishedPostsPage(languageId: number, page: number, limit: 
     return { posts: [], totalCount: 0, error: error.message };
   }
 
-  const normalizedPosts = posts as PostWithFeatureMedia[] | null;
-  const postIds = normalizedPosts?.map((post) => post.id) || [];
+  const normalizedPosts: PostWithFeatureMedia[] = ((posts as PostQueryRow[] | null) ?? []).map(
+    (post) => ({
+      ...post,
+      feature_media_object: normalizeFeatureMediaObject(post.feature_media_object),
+    })
+  );
+  const postIds = normalizedPosts.map((post) => post.id);
   const estimatedReadTimeMap = await getEstimatedReadTimeMap(supabase, postIds);
 
   return {
-    posts: normalizePostsForCards(normalizedPosts || [], estimatedReadTimeMap),
+    posts: normalizePostsForCards(normalizedPosts, estimatedReadTimeMap),
     totalCount: count || 0,
     error: undefined,
   };
