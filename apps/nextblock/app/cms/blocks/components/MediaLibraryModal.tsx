@@ -16,10 +16,10 @@ import {
 } from '@nextblock-cms/ui';
 import { Input } from '@nextblock-cms/ui';
 import type { Database } from '@nextblock-cms/db';
+import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
 
 type Media = Database['public']['Tables']['media']['Row'];
 
-const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 const MEDIA_REQUEST_TIMEOUT_MS = 8000;
 const MEDIA_LIBRARY_LIMIT = 20;
 
@@ -28,15 +28,7 @@ function resolveMediaPreviewPath(media: Media) {
 }
 
 function resolveMediaPreviewSrc(path: string) {
-  if (path.startsWith('http')) {
-    return path;
-  }
-
-  if (!R2_BASE_URL) {
-    return path;
-  }
-
-  return `${R2_BASE_URL.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+  return resolveMediaUrl(path);
 }
 
 interface MediaLibraryModalProps {
@@ -123,8 +115,8 @@ export const MediaLibraryModal = ({ editor }: MediaLibraryModalProps) => {
 
   const handleSelectMedia = (mediaItem: Media) => {
     const previewPath = resolveMediaPreviewPath(mediaItem);
-    if (editor && mediaItem.file_type?.startsWith("image/") && previewPath) {
-      const imageUrl = resolveMediaPreviewSrc(previewPath);
+    const imageUrl = previewPath ? resolveMediaPreviewSrc(previewPath) : null;
+    if (editor && mediaItem.file_type?.startsWith("image/") && imageUrl) {
       editor.chain().focus().insertContent(`<img src="${imageUrl}" alt="${mediaItem.description || mediaItem.file_name}" />`).run();
     }
     setIsModalOpen(false);
@@ -164,34 +156,39 @@ export const MediaLibraryModal = ({ editor }: MediaLibraryModalProps) => {
           <div className="flex-grow flex items-center justify-center"><p>No media found.</p></div>
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 overflow-y-auto flex-grow pr-2">
-            {mediaLibrary.filter(m => m.file_type?.startsWith("image/")).map((media) => (
-              <button
-                key={media.id}
-                type="button"
-                className="relative aspect-square border rounded-md overflow-hidden group focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-                onClick={() => handleSelectMedia(media)}
-              >
-                {resolveMediaPreviewPath(media) ? (
-                  <Image
-                    src={resolveMediaPreviewSrc(resolveMediaPreviewPath(media) as string)}
-                    alt={media.description || media.file_name}
-                    width={200}
-                    height={200}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-muted text-xs text-muted-foreground">
-                    Preview unavailable
+            {mediaLibrary.filter(m => m.file_type?.startsWith("image/")).map((media) => {
+              const previewPath = resolveMediaPreviewPath(media);
+              const previewSrc = previewPath ? resolveMediaPreviewSrc(previewPath) : null;
+
+              return (
+                <button
+                  key={media.id}
+                  type="button"
+                  className="relative aspect-square border rounded-md overflow-hidden group focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                  onClick={() => handleSelectMedia(media)}
+                >
+                  {previewSrc ? (
+                    <Image
+                      src={previewSrc}
+                      alt={media.description || media.file_name}
+                      width={200}
+                      height={200}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-muted text-xs text-muted-foreground">
+                      Preview unavailable
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity flex items-center justify-center">
+                    <CheckCircle className="h-8 w-8 text-white" />
                   </div>
-                )}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity flex items-center justify-center">
-                  <CheckCircle className="h-8 w-8 text-white" />
-                </div>
-                 <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1 truncate text-center">
-                    {media.file_name}
-                </p>
-              </button>
-            ))}
+                   <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1 truncate text-center">
+                      {media.file_name}
+                  </p>
+                </button>
+              );
+            })}
           </div>
         )}
         <DialogFooter className="mt-4">

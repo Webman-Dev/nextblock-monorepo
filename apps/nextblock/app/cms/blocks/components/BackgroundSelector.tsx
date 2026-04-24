@@ -11,10 +11,9 @@ import { cn } from "@nextblock-cms/utils";
 import type { Database } from "@nextblock-cms/db";
 import { SectionBlockContent } from '../../../../lib/blocks/blockRegistry';
 import MediaPickerDialog from "../../media/components/MediaPickerDialog";
+import { resolveMediaUrl } from "../../../../lib/media/resolveMediaUrl";
 
 type Media = Database["public"]["Tables"]["media"]["Row"];
-
-const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 
 interface BackgroundSelectorProps {
   background: SectionBlockContent["background"];
@@ -164,6 +163,7 @@ export default function BackgroundSelector({ background, onChange }: BackgroundS
   const hasMinHeightChanged = (background?.min_height || "") !== minHeight;
   const imageSizeClass = selectedImage?.size === "contain" ? "object-contain" : "object-cover";
   const hasOverlayDirectionChanged = (selectedImage?.overlay?.gradient?.direction || "to bottom") !== overlayDirection;
+  const selectedImageUrl = resolveMediaUrl(selectedImage?.object_key);
 
   return (
     <TooltipProvider>
@@ -195,7 +195,9 @@ export default function BackgroundSelector({ background, onChange }: BackgroundS
             <div className="mt-3 p-3 border rounded-md bg-muted/30 min-h-[120px] flex flex-col items-center justify-center">
               {selectedImage?.object_key ? (
                 <div className="relative group w-full" style={{ height: background?.min_height || "250px", overflow: "hidden" }}>
-                  <Image src={`${R2_BASE_URL}/${selectedImage.object_key}`} alt="Selected background image" width={selectedImage.width || 500} height={selectedImage.height || 300} sizes="100vw" className={`w-full h-full ${imageSizeClass}`} style={{ objectPosition: selectedImage.position }} />
+                  {selectedImageUrl ? (
+                    <Image src={selectedImageUrl} alt="Selected background image" width={selectedImage.width || 500} height={selectedImage.height || 300} sizes="100vw" className={`w-full h-full ${imageSizeClass}`} style={{ objectPosition: selectedImage.position }} />
+                  ) : null}
                   {selectedImage.overlay && (
                     <div className="absolute inset-0" style={{ background: generateGradientCss(selectedImage.overlay.gradient) }} />
                   )}

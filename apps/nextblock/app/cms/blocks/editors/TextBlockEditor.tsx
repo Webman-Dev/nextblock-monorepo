@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import MediaPickerDialog from '../../media/components/MediaPickerDialog';
 import { Label } from '@nextblock-cms/ui';
 import { BlockEditorProps } from '../components/BlockEditorModal';
+import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
 
 // Props expected by NotionEditor
 type NotionEditorProps = {
@@ -33,7 +34,6 @@ export default function TextBlockEditor({
   const labelId = useId();
   const [pickerOpen, setPickerOpen] = useState(false);
   const resolverRef = useRef<null | ((v: any) => void)>(null);
-  const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
   const openImagePicker = useCallback(() => {
     setPickerOpen(true);
     return new Promise<{ src: string; alt?: string; width?: number | null; height?: number | null; blurDataURL?: string | null } | null>((resolve) => {
@@ -64,7 +64,13 @@ export default function TextBlockEditor({
             title="Select or Upload Image"
             accept={(m) => !!m.file_type?.startsWith('image/')}
             onSelect={(media) => {
-              const src = `${R2_BASE_URL}/${media.object_key}`;
+              const src = resolveMediaUrl(media.file_path || media.object_key);
+              if (!src) {
+                resolverRef.current?.(null);
+                resolverRef.current = null;
+                setPickerOpen(false);
+                return;
+              }
               resolverRef.current?.({
                 src,
                 alt: media.description || media.file_name || undefined,

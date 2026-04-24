@@ -261,7 +261,7 @@ export async function restorePostToVersion(postId: number, targetVersion: number
   } else if (targetVersion === 1) {
     const { data: postMeta } = await supabase
       .from('posts')
-      .select('title, slug, language_id, status, meta_title, meta_description, excerpt, published_at, feature_image_id')
+      .select('title, slug, language_id, status, meta_title, meta_description, label, excerpt, subtitle, published_at, feature_image_id')
       .eq('id', postId)
       .single();
     if (!postMeta) return { error: 'Post not found.' } as const;
@@ -313,7 +313,9 @@ export async function restorePostToVersion(postId: number, targetVersion: number
       status: content.meta.status,
       meta_title: content.meta.meta_title,
       meta_description: content.meta.meta_description,
+      label: content.meta.label,
       excerpt: content.meta.excerpt,
+      subtitle: content.meta.subtitle,
       published_at: content.meta.published_at,
       feature_image_id: content.meta.feature_image_id,
       version: newVersion,
@@ -430,7 +432,7 @@ export async function reconstructPostVersionContent(postId: number, targetVersio
   } else if (targetVersion === 1) {
     const { data: postMeta } = await supabase
       .from('posts')
-      .select('title, slug, language_id, status, meta_title, meta_description, excerpt, published_at, feature_image_id')
+      .select('title, slug, language_id, status, meta_title, meta_description, label, excerpt, subtitle, published_at, feature_image_id')
       .eq('id', postId)
       .single();
     if (!postMeta) return { error: 'Post not found.' } as const;

@@ -12,6 +12,7 @@ import { Textarea } from '@nextblock-cms/ui';
 import type { Database } from '@nextblock-cms/db';
 import { useAuth } from '../../../../context/AuthContext';
 import { useHotkeys } from '../../../../hooks/use-hotkeys';
+import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
 
 type Media = Database['public']['Tables']['media']['Row'];
 import { FileText } from 'lucide-react';
@@ -21,8 +22,6 @@ interface MediaEditFormProps {
   // The formAction will be updateMediaItem bound with the mediaItem.id
   formAction: (formData: FormData) => Promise<{ error?: string; success?: boolean; media?: Media } | void>;
 }
-
-const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 
 export default function MediaEditForm({ mediaItem, formAction }: MediaEditFormProps) {
   const router = useRouter();
@@ -78,14 +77,15 @@ export default function MediaEditForm({ mediaItem, formAction }: MediaEditFormPr
 
   const formRef = React.useRef<HTMLFormElement>(null);
   useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
+  const previewUrl = resolveMediaUrl(mediaItem.file_path || mediaItem.object_key);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       <div className="md:col-span-1 space-y-4">
         <h2 className="text-lg font-semibold">Media Preview</h2>
-        {mediaItem.file_type?.startsWith("image/") ? (
+        {mediaItem.file_type?.startsWith("image/") && previewUrl ? (
           <Image
-            src={`${R2_BASE_URL}/${mediaItem.object_key}`}
+            src={previewUrl}
             alt={description || fileName}
             width={400}
             height={400}

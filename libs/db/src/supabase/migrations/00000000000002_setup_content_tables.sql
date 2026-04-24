@@ -10,7 +10,9 @@ CREATE TABLE public.posts (
   author_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   title text NOT NULL,
   slug text NOT NULL,
+  label text,
   excerpt text,
+  subtitle text,
   status public.page_status NOT NULL DEFAULT 'draft',
   published_at timestamptz,
   meta_title text,
@@ -25,6 +27,12 @@ CREATE TABLE public.posts (
 
 COMMENT ON TABLE public.posts IS 'Stores blog posts or news articles.';
 COMMENT ON COLUMN public.posts.slug IS 'URL-friendly identifier, unique per language.';
+COMMENT ON COLUMN public.posts.label IS
+  'Short editorial label rendered as a pill on post hero and article cards.';
+COMMENT ON COLUMN public.posts.excerpt IS
+  'Short editorial summary used in post metadata rows and post cards.';
+COMMENT ON COLUMN public.posts.subtitle IS
+  'Longer deck shown under the post title.';
 COMMENT ON COLUMN public.posts.feature_image_id IS
   'ID of the media item to be used as the feature image.';
 COMMENT ON COLUMN public.posts.version IS 'Monotonic version number for hybrid revisions.';

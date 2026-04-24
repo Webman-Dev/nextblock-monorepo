@@ -81,6 +81,27 @@ const SEEDED_ASSETS: SeedAsset[] = [
     description: 'Sandbox seed asset: goals illustration.',
   },
   {
+    source: 'images/NBcover.webp',
+    dest: 'images/NBcover.webp',
+    fileName: 'NBcover.webp',
+    contentType: 'image/webp',
+    description: 'Sandbox seed asset: NextBlock architecture cover image.',
+  },
+  {
+    source: 'images/extensibility.webp',
+    dest: 'images/extensibility.webp',
+    fileName: 'extensibility.webp',
+    contentType: 'image/webp',
+    description: 'Sandbox seed asset: NextBlock extensibility editorial artwork.',
+  },
+  {
+    source: 'images/included.webp',
+    dest: 'images/included.webp',
+    fileName: 'included.webp',
+    contentType: 'image/webp',
+    description: 'Sandbox seed asset: NextBlock getting-started platform artwork.',
+  },
+  {
     source: 'images/programmer-upscaled.webp',
     dest: 'images/programmer-upscaled.webp',
     fileName: 'programmer-upscaled.webp',
@@ -88,11 +109,25 @@ const SEEDED_ASSETS: SeedAsset[] = [
     description: 'Sandbox seed asset: programmer hero image.',
   },
   {
+    source: 'images/commerce-plan.webp',
+    dest: 'images/commerce-plan.webp',
+    fileName: 'commerce-plan.webp',
+    contentType: 'image/webp',
+    description: 'Sandbox seed asset: NextBlock commerce roadmap artwork.',
+  },
+  {
     source: 'images/commerce-square.webp',
     dest: 'images/commerce-square.webp',
     fileName: 'commerce-square.webp',
     contentType: 'image/webp',
     description: 'Sandbox seed asset: Commerce Pro cover image.',
+  },
+  {
+    source: 'images/commerce-wide.webp',
+    dest: 'images/commerce-wide.webp',
+    fileName: 'commerce-wide.webp',
+    contentType: 'image/webp',
+    description: 'Sandbox seed asset: NextBlock Commerce editorial feature image.',
   },
   {
     source: 'images/t-shirt.webp',
@@ -137,8 +172,28 @@ const CORE_MEDIA_RECORDS: Array<{
     description: 'NextBlock Site Logo',
   },
   {
+    assetKey: 'images/NBcover.webp',
+    description: 'NextBlock architecture overview cover image',
+  },
+  {
+    assetKey: 'images/extensibility.webp',
+    description: 'NextBlock extensibility editorial artwork',
+  },
+  {
+    assetKey: 'images/included.webp',
+    description: 'NextBlock getting-started platform artwork',
+  },
+  {
     assetKey: 'images/programmer-upscaled.webp',
     description: undefined,
+  },
+  {
+    assetKey: 'images/commerce-plan.webp',
+    description: 'NextBlock commerce roadmap artwork',
+  },
+  {
+    assetKey: 'images/commerce-wide.webp',
+    description: 'NextBlock Commerce editorial feature image',
   },
 ];
 

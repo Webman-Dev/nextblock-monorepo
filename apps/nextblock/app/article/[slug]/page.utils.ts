@@ -1,6 +1,7 @@
 // app/article/[slug]/page.utils.ts
 import { createClient } from "@nextblock-cms/db/server";
 import type { Database } from "@nextblock-cms/db";
+import { resolveMediaUrl } from "../../../lib/media/resolveMediaUrl";
 
 type PostType = Database['public']['Tables']['posts']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
@@ -23,15 +24,16 @@ interface SectionOrHeroBlockContent {
     };
   };
 }
-// Includes logic to fetch object_key for image blocks.
-const buildMediaUrl = (objectKey?: string | null) => {
-  if (!objectKey) return null;
-  if (objectKey.startsWith('/')) return objectKey;
-  const base = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
-  return base ? `${base}/${objectKey}` : objectKey;
-};
-
-export async function getPostDataBySlug(slug: string): Promise<(PostType & { blocks: BlockType[]; language_code: string; language_id: number; translation_group_id: string; feature_image_url?: string | null; feature_image_blur_data_url?: string | null; }) | null> {
+export async function getPostDataBySlug(slug: string): Promise<(PostType & {
+  blocks: BlockType[];
+  language_code: string;
+  language_id: number;
+  translation_group_id: string;
+  feature_image_url?: string | null;
+  feature_image_blur_data_url?: string | null;
+  feature_image_width?: number | null;
+  feature_image_height?: number | null;
+}) | null> {
   const supabase = createClient();
 
   const { data: postData, error: postError } = await supabase
@@ -40,7 +42,7 @@ export async function getPostDataBySlug(slug: string): Promise<(PostType & { blo
       *,
       languages!inner (id, code),
       blocks (*),
-      media ( object_key, blur_data_url )
+      media ( object_key, blur_data_url, width, height )
     `)
     .eq("slug", slug) // Find the post by its unique slug for this language
     .eq("status", "published")
@@ -137,7 +139,18 @@ export async function getPostDataBySlug(slug: string): Promise<(PostType & { blo
     language_code: langInfo.code,
     language_id: langInfo.id,
     translation_group_id: postData.translation_group_id,
-    feature_image_url: buildMediaUrl(postData.media?.object_key),
+    feature_image_url: resolveMediaUrl(postData.media?.object_key),
     feature_image_blur_data_url: postData.media?.blur_data_url,
-  } as (PostType & { blocks: BlockType[]; language_code: string; language_id: number; translation_group_id: string; feature_image_url?: string | null; feature_image_blur_data_url?: string | null; });
+    feature_image_width: postData.media?.width ?? null,
+    feature_image_height: postData.media?.height ?? null,
+  } as (PostType & {
+    blocks: BlockType[];
+    language_code: string;
+    language_id: number;
+    translation_group_id: string;
+    feature_image_url?: string | null;
+    feature_image_blur_data_url?: string | null;
+    feature_image_width?: number | null;
+    feature_image_height?: number | null;
+  });
 }

@@ -39,6 +39,7 @@ import MediaUploadForm from "../../media/components/MediaUploadForm";
 import { Separator } from "@nextblock-cms/ui";
 import { useRef } from "react";
 import { useHotkeys } from '../../../../hooks/use-hotkeys';
+import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
 
 
 interface PostFormProps {
@@ -67,11 +68,13 @@ export default function PostForm({
 
   const [title, setTitle] = useState(post?.title || "");
   const [slug, setSlug] = useState(post?.slug || "");
+  const [label, setLabel] = useState(post?.label || "");
   const [languageId, setLanguageId] = useState<string>(
     post?.language_id?.toString() || ""
   );
   const [status, setStatus] = useState<PageStatus>(post?.status || "draft");
   const [excerpt, setExcerpt] = useState(post?.excerpt || "");
+  const [subtitle, setSubtitle] = useState(post?.subtitle || "");
   const [publishedAt, setPublishedAt] = useState<string>(() => {
     if (post?.published_at) {
       try {
@@ -152,17 +155,11 @@ export default function PostForm({
   }, [isModalOpen, hasMoreMedia, loadMedia, mediaItems.length, mediaPage]);
 
   const handleImageSelectInModal = (image: Media) => {
-    const r2BaseUrl = process.env.NEXT_PUBLIC_R2_BASE_URL;
-    if (!r2BaseUrl) {
-      console.error("NEXT_PUBLIC_R2_PUBLIC_URL is not set. Cannot construct image URL.");
-      setMediaError("Image server configuration is missing. Cannot display images.");
-      return;
-    }
-    const imageUrl = image.object_key ? `${r2BaseUrl}/${image.object_key}` : null;
+    const imageUrl = resolveMediaUrl(image.file_path || image.object_key);
 
     if (!imageUrl) {
-        console.error("Selected image does not have an object_key:", image);
-        setMediaError("Selected image is missing a valid identifier.");
+        console.error("Selected image does not have a usable path:", image);
+        setMediaError("Selected image is missing a valid path.");
         return;
     }
 
@@ -259,8 +256,44 @@ export default function PostForm({
       </div>
 
       <div>
+        <Label htmlFor="label">Label</Label>
+        <Input
+          id="label"
+          name="label"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          className="mt-1"
+          placeholder="e.g. Architecture"
+        />
+        <p className="text-xs text-muted-foreground mt-1">Short pill text shown on the article hero and post cards.</p>
+      </div>
+
+      <div>
         <Label htmlFor="excerpt">Excerpt</Label>
-        <Textarea id="excerpt" name="excerpt" value={excerpt} onChange={(e) => setExcerpt(e.target.value)} className="mt-1" rows={3} />
+        <Textarea
+          id="excerpt"
+          name="excerpt"
+          value={excerpt}
+          onChange={(e) => setExcerpt(e.target.value)}
+          className="mt-1"
+          rows={3}
+          placeholder="Short editorial summary for the hero metadata row and article cards"
+        />
+        <p className="text-xs text-muted-foreground mt-1">Used as the short summary above the hero and on public post cards.</p>
+      </div>
+
+      <div>
+        <Label htmlFor="subtitle">Subtitle</Label>
+        <Textarea
+          id="subtitle"
+          name="subtitle"
+          value={subtitle}
+          onChange={(e) => setSubtitle(e.target.value)}
+          className="mt-1"
+          rows={4}
+          placeholder="Longer deck shown under the article title"
+        />
+        <p className="text-xs text-muted-foreground mt-1">Displayed as the larger deck under the article title.</p>
       </div>
 
       <div>
@@ -349,15 +382,9 @@ export default function PostForm({
                 {!mediaLoading && !mediaError && mediaItems.length === 0 && <p className="text-center text-muted-foreground">No media items found. Try uploading some first.</p>}
                 
                 {mediaItems.length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3">
+                  <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(0,150px))]">
                     {mediaItems.map((item) => {
-                      const r2BaseUrl = process.env.NEXT_PUBLIC_R2_BASE_URL;
-                      if (!r2BaseUrl && item.object_key) {
-                         // This check is more for safety, error primarily handled in handleImageSelectInModal
-                        if (!mediaError) setMediaError("Image server configuration is missing. Cannot display images.");
-                        return null; // Or a placeholder
-                      }
-                      const imageUrl = item.object_key ? `${r2BaseUrl}/${item.object_key}` : null;
+                      const imageUrl = resolveMediaUrl(item.file_path || item.object_key);
 
                       // Only render image-type media for selection
                       if (!item.file_type?.startsWith("image/") || !imageUrl) {

@@ -722,12 +722,14 @@ export type Database = {
           excerpt: string | null
           feature_image_id: string | null
           id: number
+          label: string | null
           language_id: number
           meta_description: string | null
           meta_title: string | null
           published_at: string | null
           slug: string
           status: Database["public"]["Enums"]["page_status"]
+          subtitle: string | null
           title: string
           translation_group_id: string
           updated_at: string
@@ -739,12 +741,14 @@ export type Database = {
           excerpt?: string | null
           feature_image_id?: string | null
           id?: number
+          label?: string | null
           language_id: number
           meta_description?: string | null
           meta_title?: string | null
           published_at?: string | null
           slug: string
           status?: Database["public"]["Enums"]["page_status"]
+          subtitle?: string | null
           title: string
           translation_group_id?: string
           updated_at?: string
@@ -756,12 +760,14 @@ export type Database = {
           excerpt?: string | null
           feature_image_id?: string | null
           id?: number
+          label?: string | null
           language_id?: number
           meta_description?: string | null
           meta_title?: string | null
           published_at?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["page_status"]
+          subtitle?: string | null
           title?: string
           translation_group_id?: string
           updated_at?: string
