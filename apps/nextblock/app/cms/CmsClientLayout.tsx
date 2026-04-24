@@ -151,6 +151,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
   const handleSignOut = async () => {
     if (supabase) {
       await supabase.auth.signOut();
+      window.location.href = '/sign-in';
     }
   };
 
