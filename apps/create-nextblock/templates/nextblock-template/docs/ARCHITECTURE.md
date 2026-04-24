@@ -1,13 +1,13 @@
-# NextBlock CMS: Architectural Vision & Master Context
+# NextBlock™ CMS: Architectural Vision & Master Context
 
 > **NOTICE TO AI ASSISTANTS (Copilot/Cursor/Claude):**
-> This document is the **Primary Source of Truth** for the architectural goals, constraints, and business logic of the NextBlock CMS monorepo. All code generation and refactoring suggestions MUST align with the Open-Core model and Distribution Strategy outlined below.
+> This document is the **Primary Source of Truth** for the architectural goals, constraints, and business logic of the NextBlock™ CMS monorepo. All code generation and refactoring suggestions MUST align with the Open-Core model and Distribution Strategy outlined below.
 
 ---
 
 ## 1. The Grand Vision: Open-Core & Scalability
 
-NextBlock CMS is **not** just a simple website template. It is a scalable, extensible platform designed under an **Open-Core Business Model**.
+NextBlock™ CMS is **not** just a simple website template. It is a scalable, extensible platform designed under an **Open-Core Business Model**.
 
 ### The Business Mandate
 

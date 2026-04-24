@@ -3,7 +3,7 @@ import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { redirect } from 'next/navigation';
 
 export const metadata = {
-  title: 'Payments Settings | NextBlock CMS',
+  title: 'Payments Settings | NextBlock™ CMS',
 };
 
 export default async function PaymentsPageWrapper() {

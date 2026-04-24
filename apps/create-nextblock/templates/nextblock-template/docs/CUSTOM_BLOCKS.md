@@ -1,6 +1,6 @@
-# How to Create a Custom Block with the NextBlock SDK
+# How to Create a Custom Block with the NextBlock™ SDK
 
-Custom blocks allow you to extend the functionality of NextBlock CMS while ensuring type safety and seamless integration. The `@nextblock-cms/sdk` package provides the necessary tools and interfaces.
+Custom blocks allow you to extend the functionality of NextBlock™ CMS while ensuring type safety and seamless integration. The `@nextblock-cms/sdk` package provides the necessary tools and interfaces.
 
 ## Step 1: Define the Schema (Zod)
 

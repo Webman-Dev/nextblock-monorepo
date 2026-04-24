@@ -1,8 +1,8 @@
-# NextBlock Editor System
+# NextBlock™ Editor System
 
 ## 1. Overview
 
-The NextBlock Editor is a dual-layer system:
+The NextBlock™ Editor is a dual-layer system:
 
 1.  **Block Layout:** A structured `JSONB` format for Sections, Columns, and layout blocks.
 2.  **Rich Text (Tiptap):** A Notion-style Tiptap v3 editor for text content within blocks.
@@ -79,7 +79,7 @@ The rich-text editor is a separate library (`@nextblock-cms/editor`) shared by t
 
 ### Content Security Policy
 
-NextBlock uses a strict Nonce-based CSP in production.
+NextBlock™ uses a strict Nonce-based CSP in production.
 
 - **Middleware (`middleware.ts`):** Generates a nonce per request.
 - **Renderer (`TextBlockRenderer.tsx`):** Injects the nonce into inline `<script>` tags.

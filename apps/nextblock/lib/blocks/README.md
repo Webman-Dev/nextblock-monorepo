@@ -1,4 +1,4 @@
-# NextBlock Block System
+# NextBlock™ Block System
 
 The built-in block registry for the app lives in this directory. The current
 source of truth is `blockRegistry.ts`, which defines block types, schemas,

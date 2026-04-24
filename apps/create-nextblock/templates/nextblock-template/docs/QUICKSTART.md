@@ -1,6 +1,6 @@
-# 🚀 NextBlock CMS: User Quickstart Guide
+# 🚀 NextBlock™ CMS: User Quickstart Guide
 
-**Welcome to NextBlock!** This guide will take you from zero to a fully deployed, high-performance website in about 15 minutes.
+**Welcome to NextBlock™!** This guide will take you from zero to a fully deployed, high-performance website in about 15 minutes.
 
 You will learn how to:
 
@@ -36,7 +36,7 @@ The CLI will ask you for specific keys during setup. Let's get them ready first 
 
 ### 1.2 Cloudflare R2 (Image Storage)
 
-NextBlock uses Cloudflare R2 because it's cheaper and faster than AWS S3.
+NextBlock™ uses Cloudflare R2 because it's cheaper and faster than AWS S3.
 
 1.  Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com/).
 2.  On the sidebar, go to **R2**.
@@ -59,7 +59,7 @@ Keep these tabs open. You will need to copy-paste these values into the terminal
 | **Connection String**     | Dashboard > Connect (Top Right) > Transaction Pooler > **URI Mode**                        |
 | **Anon Key**              | Dashboard > Settings > API > **Project API Keys**                                          |
 | **Service Role Key**      | Dashboard > Settings > API > **Project API Keys**                                          |
-| **Supabase Access Token** | Profile (Top Right) > Access Tokens > **Generate New Token** (Name it "NextBlock CLI")     |
+| **Supabase Access Token** | Profile (Top Right) > Access Tokens > **Generate New Token** (Name it "NextBlock™ CLI")     |
 | **R2 Account ID**         | R2 Dashboard > **Account ID** (Right Sidebar)                                              |
 | **R2 Access/Secret Key**  | R2 Dashboard > Manage R2 API Tokens > **Create Token** > **Admin Read/Write** permissions. |
 

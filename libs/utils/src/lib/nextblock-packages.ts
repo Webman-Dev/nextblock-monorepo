@@ -1,9 +1,9 @@
 export const NEXTBLOCK_PACKAGES = {
   ecommerce: {
     id: 'ecommerce',
-    name: 'NextBlock Commerce Pro',
+    name: 'NextBlock™ Commerce Pro',
     description: 'Full-featured digital store with Stripe & Freemius.',
-    fm_product_id: '24851', // Product ID for NextBlock Commerce Pro
+    fm_product_id: '24851', // Product ID for NextBlock™ Commerce Pro
     fm_plan_id: '41208', // $25/month or $250/year
     purchase_url: 'https://nextblock.ca',
   },

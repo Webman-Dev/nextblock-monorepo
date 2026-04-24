@@ -118,7 +118,7 @@ async function ensureEnvExample() {
     }
   }
 
-  const placeholder = `# Environment variables for NextBlock CMS
+  const placeholder = `# Environment variables for NextBlock™ CMS
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=

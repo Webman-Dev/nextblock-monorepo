@@ -71,7 +71,7 @@ const SEEDED_ASSETS: SeedAsset[] = [
     dest: 'images/nextblock-logo-small.webp',
     fileName: 'nextblock-logo-small.webp',
     contentType: 'image/webp',
-    description: 'Sandbox seed asset: NextBlock logo.',
+    description: 'Sandbox seed asset: NextBlock™ logo.',
   },
   {
     source: 'images/goals.webp',
@@ -85,21 +85,21 @@ const SEEDED_ASSETS: SeedAsset[] = [
     dest: 'images/NBcover.webp',
     fileName: 'NBcover.webp',
     contentType: 'image/webp',
-    description: 'Sandbox seed asset: NextBlock architecture cover image.',
+    description: 'Sandbox seed asset: NextBlock™ architecture cover image.',
   },
   {
     source: 'images/extensibility.webp',
     dest: 'images/extensibility.webp',
     fileName: 'extensibility.webp',
     contentType: 'image/webp',
-    description: 'Sandbox seed asset: NextBlock extensibility editorial artwork.',
+    description: 'Sandbox seed asset: NextBlock™ extensibility editorial artwork.',
   },
   {
     source: 'images/included.webp',
     dest: 'images/included.webp',
     fileName: 'included.webp',
     contentType: 'image/webp',
-    description: 'Sandbox seed asset: NextBlock getting-started platform artwork.',
+    description: 'Sandbox seed asset: NextBlock™ getting-started platform artwork.',
   },
   {
     source: 'images/programmer-upscaled.webp',
@@ -113,7 +113,7 @@ const SEEDED_ASSETS: SeedAsset[] = [
     dest: 'images/commerce-plan.webp',
     fileName: 'commerce-plan.webp',
     contentType: 'image/webp',
-    description: 'Sandbox seed asset: NextBlock commerce roadmap artwork.',
+    description: 'Sandbox seed asset: NextBlock™ commerce roadmap artwork.',
   },
   {
     source: 'images/commerce-square.webp',
@@ -127,28 +127,28 @@ const SEEDED_ASSETS: SeedAsset[] = [
     dest: 'images/commerce-wide.webp',
     fileName: 'commerce-wide.webp',
     contentType: 'image/webp',
-    description: 'Sandbox seed asset: NextBlock Commerce editorial feature image.',
+    description: 'Sandbox seed asset: NextBlock™ Commerce editorial feature image.',
   },
   {
     source: 'images/t-shirt.webp',
     dest: 'images/t-shirt.webp',
     fileName: 't-shirt.webp',
     contentType: 'image/webp',
-    description: 'Sandbox seed asset: NextBlock Studio Tee.',
+    description: 'Sandbox seed asset: NextBlock™ Studio Tee.',
   },
   {
     source: 'images/cap.webp',
     dest: 'images/cap.webp',
     fileName: 'cap.webp',
     contentType: 'image/webp',
-    description: 'Sandbox seed asset: NextBlock Signal Cap.',
+    description: 'Sandbox seed asset: NextBlock™ Signal Cap.',
   },
   {
     source: 'images/pants.webp',
     dest: 'images/pants.webp',
     fileName: 'pants.webp',
     contentType: 'image/webp',
-    description: 'Sandbox seed asset: NextBlock Utility Pants.',
+    description: 'Sandbox seed asset: NextBlock™ Utility Pants.',
   },
 ];
 
@@ -169,19 +169,19 @@ const CORE_MEDIA_RECORDS: Array<{
 }> = [
   {
     assetKey: 'images/nextblock-logo-small.webp',
-    description: 'NextBlock Site Logo',
+    description: 'NextBlock™ Site Logo',
   },
   {
     assetKey: 'images/NBcover.webp',
-    description: 'NextBlock architecture overview cover image',
+    description: 'NextBlock™ architecture overview cover image',
   },
   {
     assetKey: 'images/extensibility.webp',
-    description: 'NextBlock extensibility editorial artwork',
+    description: 'NextBlock™ extensibility editorial artwork',
   },
   {
     assetKey: 'images/included.webp',
-    description: 'NextBlock getting-started platform artwork',
+    description: 'NextBlock™ getting-started platform artwork',
   },
   {
     assetKey: 'images/programmer-upscaled.webp',
@@ -189,11 +189,11 @@ const CORE_MEDIA_RECORDS: Array<{
   },
   {
     assetKey: 'images/commerce-plan.webp',
-    description: 'NextBlock commerce roadmap artwork',
+    description: 'NextBlock™ commerce roadmap artwork',
   },
   {
     assetKey: 'images/commerce-wide.webp',
-    description: 'NextBlock Commerce editorial feature image',
+    description: 'NextBlock™ Commerce editorial feature image',
   },
 ];
 
@@ -246,14 +246,14 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
     price: 3200,
     variantStocks: { small: 8, medium: 12, large: 6 },
     en: {
-      title: 'NextBlock Studio Tee',
+      title: 'NextBlock™ Studio Tee',
       slug: 'nextblock-studio-tee',
       shortDescription:
         'A heavyweight studio tee built for long build sessions, late launches, and every quiet hour between.',
       description: {
         headline: 'Studio uniform for shipping days',
         lead:
-          'The NextBlock Studio Tee is cut from premium heavyweight cotton with a clean silhouette that feels equally at home in a workshop, a coworking space, or a midnight deployment window.',
+          'The NextBlock™ Studio Tee is cut from premium heavyweight cotton with a clean silhouette that feels equally at home in a workshop, a coworking space, or a midnight deployment window.',
         whyHeading: 'Why it works',
         whyParagraph:
           'Soft structure, durable fabric, and a relaxed drape make it the kind of shirt you reach for when the work matters and comfort has to keep up.',
@@ -265,14 +265,14 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
       },
     },
     fr: {
-      title: 'T-shirt Studio NextBlock',
+      title: 'T-shirt Studio NextBlock™',
       slug: 'nextblock-studio-tee-fr',
       shortDescription:
         'Un t-shirt lourd et confortable pense pour les longues sessions de build, les lancements tardifs et les jours ou il faut rester dans le flow.',
       description: {
         headline: 'L uniforme du studio pour les jours de livraison',
         lead:
-          'Le T-shirt Studio NextBlock mise sur un coton epais, une ligne propre et une allure simple qui fonctionne autant au bureau qu en session de production tardive.',
+          'Le T-shirt Studio NextBlock™ mise sur un coton epais, une ligne propre et une allure simple qui fonctionne autant au bureau qu en session de production tardive.',
         whyHeading: 'Pourquoi ca marche',
         whyParagraph:
           'Sa matiere robuste et sa coupe detendue offrent un bon equilibre entre maintien, confort et style discret pour les longues journees de travail.',
@@ -290,14 +290,14 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
     price: 2600,
     variantStocks: { small: 6, medium: 10, large: 6 },
     en: {
-      title: 'NextBlock Signal Cap',
+      title: 'NextBlock™ Signal Cap',
       slug: 'nextblock-signal-cap',
       shortDescription:
         'A clean everyday cap with subtle techwear energy and just enough structure to finish a sharp off-duty kit.',
       description: {
         headline: 'Low-key signal, strong presence',
         lead:
-          'The NextBlock Signal Cap brings a crisp shape and understated studio aesthetic to the kind of everyday accessory that quietly pulls an outfit together.',
+          'The NextBlock™ Signal Cap brings a crisp shape and understated studio aesthetic to the kind of everyday accessory that quietly pulls an outfit together.',
         whyHeading: 'Why it works',
         whyParagraph:
           'It keeps the look restrained, modern, and wearable while still feeling intentional enough to stand out in the details.',
@@ -309,14 +309,14 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
       },
     },
     fr: {
-      title: 'Casquette Signal NextBlock',
+      title: 'Casquette Signal NextBlock™',
       slug: 'nextblock-signal-cap-fr',
       shortDescription:
         'Une casquette nette et facile a porter, avec une presence sobre et un esprit techwear leger pour tous les jours.',
       description: {
         headline: 'Un signal discret, une vraie allure',
         lead:
-          'La Casquette Signal NextBlock apporte une forme propre et une estetique studio minimaliste a un accessoire du quotidien qui complete la tenue sans effort.',
+          'La Casquette Signal NextBlock™ apporte une forme propre et une estetique studio minimaliste a un accessoire du quotidien qui complete la tenue sans effort.',
         whyHeading: 'Pourquoi ca marche',
         whyParagraph:
           'Elle garde un style moderne, simple et portable tout en donnant assez de caractere pour finir une tenue avec intention.',
@@ -334,14 +334,14 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
     price: 6800,
     variantStocks: { small: 5, medium: 8, large: 5 },
     en: {
-      title: 'NextBlock Utility Pants',
+      title: 'NextBlock™ Utility Pants',
       slug: 'nextblock-utility-pants',
       shortDescription:
         'Tapered utility pants designed for commute-to-keyboard days, with an easy fit that still feels sharp.',
       description: {
         headline: 'Utility comfort with a refined line',
         lead:
-          'The NextBlock Utility Pants balance movement, structure, and a clean tapered cut so you can move from city errands to keyboard time without changing the tone.',
+          'The NextBlock™ Utility Pants balance movement, structure, and a clean tapered cut so you can move from city errands to keyboard time without changing the tone.',
         whyHeading: 'Why it works',
         whyParagraph:
           'They are practical enough for all-day wear but polished enough to feel intentional, making them an easy anchor piece for a modern work uniform.',
@@ -353,14 +353,14 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
       },
     },
     fr: {
-      title: 'Pantalon utilitaire NextBlock',
+      title: 'Pantalon utilitaire NextBlock™',
       slug: 'nextblock-utility-pants-fr',
       shortDescription:
         'Un pantalon utilitaire a la coupe fuselee pense pour les trajets, les longues heures au clavier et les journees ou il faut rester mobile.',
       description: {
         headline: 'Le confort utilitaire avec une ligne soignee',
         lead:
-          'Le Pantalon utilitaire NextBlock equilibre mobilite, maintien et coupe fuselee pour suivre le rythme entre les deplacements, le studio et les longues sessions de travail.',
+          'Le Pantalon utilitaire NextBlock™ equilibre mobilite, maintien et coupe fuselee pour suivre le rythme entre les deplacements, le studio et les longues sessions de travail.',
         whyHeading: 'Pourquoi ca marche',
         whyParagraph:
           'Il reste assez pratique pour etre porte toute la journee tout en gardant une allure propre, ce qui en fait une base facile pour une garde-robe de travail moderne.',
@@ -594,12 +594,12 @@ async function enrichCommerceProducts(params: {
   enLangId: LanguageId;
   frLangId: LanguageId;
 }) {
-  console.log('[Sandbox Reset] Enriching NextBlock Commerce Pro...');
+  console.log('[Sandbox Reset] Enriching NextBlock™ Commerce Pro...');
 
   const commerceMediaId = await upsertMediaRecord(
     params.sql,
     params.commerceAsset,
-    'Sandbox seed asset: NextBlock Commerce Pro.'
+    'Sandbox seed asset: NextBlock™ Commerce Pro.'
   );
 
   const [product] = await params.sql`
@@ -616,7 +616,7 @@ async function enrichCommerceProducts(params: {
   }
 
   const shortDescEn =
-    'NextBlock Ecommerce is an AI-native, block-based storefront engine for Next.js with a premium developer-first aesthetic and high-performance edge rendering.';
+    'NextBlock™ Ecommerce is an AI-native, block-based storefront engine for Next.js with a premium developer-first aesthetic and high-performance edge rendering.';
 
   const htmlDescriptionEn = {
     type: 'doc',
@@ -631,7 +631,7 @@ async function enrichCommerceProducts(params: {
         content: [
           {
             type: 'text',
-            text: 'NextBlock Ecommerce bridges high-performance headless architecture and intuitive visual editing. Built on the NextBlock Performance Stack, it combines Next.js, Supabase, and Tailwind CSS for fast storefront delivery and a smooth AI-assisted workflow.',
+            text: 'NextBlock™ Ecommerce bridges high-performance headless architecture and intuitive visual editing. Built on the NextBlock™ Performance Stack, it combines Next.js, Supabase, and Tailwind CSS for fast storefront delivery and a smooth AI-assisted workflow.',
           },
         ],
       },
@@ -710,7 +710,7 @@ async function enrichCommerceProducts(params: {
         content: [
           {
             type: 'text',
-            text: 'NextBlock is structured so typed block APIs, schema validation, and agent-friendly workflows stay aligned as the store grows.',
+            text: 'NextBlock™ is structured so typed block APIs, schema validation, and agent-friendly workflows stay aligned as the store grows.',
           },
         ],
       },
@@ -730,7 +730,7 @@ async function enrichCommerceProducts(params: {
   await attachProductMedia(params.sql, product.id as string, commerceMediaId);
 
   const shortDescFr =
-    "NextBlock Ecommerce est un moteur de boutique base sur des blocs et natif de l IA pour Next.js, avec une esthetique premium et un rendu edge haute performance.";
+    "NextBlock™ Ecommerce est un moteur de boutique base sur des blocs et natif de l IA pour Next.js, avec une esthetique premium et un rendu edge haute performance.";
 
   const htmlDescriptionFr = {
     type: 'doc',
@@ -745,7 +745,7 @@ async function enrichCommerceProducts(params: {
         content: [
           {
             type: 'text',
-            text: 'NextBlock Ecommerce relie une architecture headless tres rapide a une edition visuelle intuitive. Construit sur la NextBlock Performance Stack, il combine Next.js, Supabase et Tailwind CSS pour offrir une boutique fluide et moderne.',
+            text: 'NextBlock™ Ecommerce relie une architecture headless tres rapide a une edition visuelle intuitive. Construit sur la NextBlock™ Performance Stack, il combine Next.js, Supabase et Tailwind CSS pour offrir une boutique fluide et moderne.',
           },
         ],
       },
@@ -837,7 +837,7 @@ async function enrichCommerceProducts(params: {
     )
     VALUES (
       ${product.sku},
-      'NextBlock Commerce Pro - Licence Commerce',
+      'NextBlock™ Commerce Pro - Licence Commerce',
       ${String(product.slug) + '-fr'},
       ${product.price},
       ${product.sale_price},
@@ -1194,7 +1194,7 @@ async function ensureShopPagesAndNavigation(params: {
           'Shop Our Products',
           'shop',
           'published',
-          'NextBlock Store',
+          'NextBlock™ Store',
           'Browse our premium products'
         )
         RETURNING id, translation_group_id
@@ -1218,7 +1218,7 @@ async function ensureShopPagesAndNavigation(params: {
               block_type: 'heading',
               content: {
                 level: 1,
-                text_content: 'NextBlock Store',
+                text_content: 'NextBlock™ Store',
                 textAlign: 'center',
                 textColor: 'background',
               },
@@ -1307,7 +1307,7 @@ async function ensureShopPagesAndNavigation(params: {
           'Boutique en Ligne',
           'boutique',
           'published',
-          'Boutique NextBlock',
+          'Boutique NextBlock™',
           'Decouvrez nos produits premium',
           ${globalShopGroupId ?? null}
         )
@@ -1331,7 +1331,7 @@ async function ensureShopPagesAndNavigation(params: {
               block_type: 'heading',
               content: {
                 level: 1,
-                text_content: 'Boutique NextBlock',
+                text_content: 'Boutique NextBlock™',
                 textAlign: 'center',
                 textColor: 'background',
               },
@@ -1593,7 +1593,7 @@ export async function GET(request: NextRequest) {
           /*
           // Post-sync enrichment: Add image and rich description to the Commerce Pro product
           try {
-            console.log('[Sandbox Reset] Enriching NextBlock Commerce Pro...');
+            console.log('[Sandbox Reset] Enriching NextBlock™ Commerce Pro...');
             const commerceLogoKey = 'images/commerce-square.webp';
             
             // 0. Get language IDs
@@ -1610,7 +1610,7 @@ export async function GET(request: NextRequest) {
               RETURNING id
             `;
 
-            // 2. Find the synced product (NextBlock Commerce Pro)
+            // 2. Find the synced product (NextBlock™ Commerce Pro)
             const [product] = await db`
               SELECT * FROM public.products 
               WHERE freemius_product_id = '24851' AND language_id = ${enLangId}
@@ -1626,7 +1626,7 @@ export async function GET(request: NextRequest) {
               `;
 
               // 4. Update English descriptions
-              const shortDescEn = "NextBlock Ecommerce is an AI-native, block-based storefront engine for Next.js. Featuring a premium, developer-first aesthetic and high-performance edge rendering.";
+              const shortDescEn = "NextBlock™ Ecommerce is an AI-native, block-based storefront engine for Next.js. Featuring a premium, developer-first aesthetic and high-performance edge rendering.";
               
               const htmlDescriptionEn = {
                 type: "doc",
@@ -1641,7 +1641,7 @@ export async function GET(request: NextRequest) {
                     content: [
                       {
                         type: "text",
-                        text: "NextBlock Ecommerce bridges the gap between high-performance headless architecture and intuitive visual editing. Built on the NextBlock Performance Stack (NPS), it leverages Next.js 15/16, Supabase, and Tailwind CSS to deliver sub-millisecond latency and a seamless \"Vibe Coding\" experience."
+                        text: "NextBlock™ Ecommerce bridges the gap between high-performance headless architecture and intuitive visual editing. Built on the NextBlock™ Performance Stack (NPS), it leverages Next.js 15/16, Supabase, and Tailwind CSS to deliver sub-millisecond latency and a seamless \"Vibe Coding\" experience."
                       }
                     ]
                   },
@@ -1720,7 +1720,7 @@ export async function GET(request: NextRequest) {
                     content: [
                       {
                         type: "text",
-                        text: "NextBlock is built from the ground up to be extendable by AI Agents. Whether you're using Claude, v0, or custom GPTs, our highly typed Block SDK and Zod schema validations ensure every extension stays robust and secure."
+                        text: "NextBlock™ is built from the ground up to be extendable by AI Agents. Whether you're using Claude, v0, or custom GPTs, our highly typed Block SDK and Zod schema validations ensure every extension stays robust and secure."
                       }
                     ]
                   }
@@ -1738,9 +1738,9 @@ export async function GET(request: NextRequest) {
 
               // 5. Create French Version
               if (frLangId) {
-                console.log('[Sandbox Reset] Creating French version of NextBlock Commerce Pro...');
+                console.log('[Sandbox Reset] Creating French version of NextBlock™ Commerce Pro...');
                 
-                const shortDescFr = "NextBlock Ecommerce est un moteur de boutique basé sur des blocs et natif de l'IA pour Next.js. Doté d'une esthétique premium et d'un rendu edge haute performance.";
+                const shortDescFr = "NextBlock™ Ecommerce est un moteur de boutique basé sur des blocs et natif de l'IA pour Next.js. Doté d'une esthétique premium et d'un rendu edge haute performance.";
                 
                 const htmlDescriptionFr = {
                   type: "doc",
@@ -1755,7 +1755,7 @@ export async function GET(request: NextRequest) {
                       content: [
                         {
                           type: "text",
-                          text: "NextBlock Ecommerce comble le fossé entre l'architecture headless haute performance et l'édition visuelle intuitive. Construit sur la NextBlock Performance Stack (NPS), il exploite Next.js 15/16, Supabase et Tailwind CSS pour offrir une latence de moins d'une milliseconde."
+                          text: "NextBlock™ Ecommerce comble le fossé entre l'architecture headless haute performance et l'édition visuelle intuitive. Construit sur la NextBlock™ Performance Stack (NPS), il exploite Next.js 15/16, Supabase et Tailwind CSS pour offrir une latence de moins d'une milliseconde."
                         }
                       ]
                     },
@@ -1836,7 +1836,7 @@ export async function GET(request: NextRequest) {
                     freemius_product_id, freemius_plan_id
                   )
                   VALUES (
-                    ${product.sku}, 'NextBlock Commerce Pro - Licence Commerce', ${product.slug + '-fr'}, 
+                    ${product.sku}, 'NextBlock™ Commerce Pro - Licence Commerce', ${product.slug + '-fr'}, 
                     ${product.price}, ${product.sale_price}, ${product.stock || 99}, ${product.status},
                     ${shortDescFr}, ${db.json(htmlDescriptionFr)},
                     'digital', 'freemius',
@@ -1880,7 +1880,7 @@ export async function GET(request: NextRequest) {
               if (!pageId) {
                 const [newPage] = await db`
                   INSERT INTO public.pages (language_id, title, slug, status, meta_title, meta_description)
-                  VALUES (${langId}, 'Shop Our Products', 'shop', 'published', 'NextBlock Store', 'Browse our premium products')
+                  VALUES (${langId}, 'Shop Our Products', 'shop', 'published', 'NextBlock™ Store', 'Browse our premium products')
                   RETURNING id, translation_group_id
                 `;
                 pageId = newPage.id;
@@ -1902,7 +1902,7 @@ export async function GET(request: NextRequest) {
                         block_type: "heading",
                         content: {
                           level: 1,
-                          text_content: "NextBlock Store",
+                          text_content: "NextBlock™ Store",
                           textAlign: "center",
                           textColor: "background"
                         }
@@ -1971,7 +1971,7 @@ export async function GET(request: NextRequest) {
               if (!pageId) {
                 const [newPage] = await db`
                   INSERT INTO public.pages (language_id, title, slug, status, meta_title, meta_description, translation_group_id)
-                  VALUES (${langId}, 'Boutique en Ligne', 'boutique', 'published', 'Boutique NextBlock', 'Découvrez nos produits premium', ${globalShopGroupId ?? null})
+                  VALUES (${langId}, 'Boutique en Ligne', 'boutique', 'published', 'Boutique NextBlock™', 'Découvrez nos produits premium', ${globalShopGroupId ?? null})
                   RETURNING id
                 `;
                 pageId = newPage.id;
@@ -1992,7 +1992,7 @@ export async function GET(request: NextRequest) {
                         block_type: "heading",
                         content: {
                           level: 1,
-                          text_content: "Boutique NextBlock",
+                          text_content: "Boutique NextBlock™",
                           textAlign: "center",
                           textColor: "background"
                         }

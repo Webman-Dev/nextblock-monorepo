@@ -59,7 +59,7 @@ export function PackageCard({ pkg, isActive, licenseKey }: PackageCardProps) {
                             skipped here for demo purposes.
                         </p>
                         <p className="text-muted-foreground mb-6">
-                            To purchase a real license for your self-hosted NextBlock instance, visit:
+                            To purchase a real license for your self-hosted NextBlock™ instance, visit:
                         </p>
                         <a
                             href="https://nextblock.ca"

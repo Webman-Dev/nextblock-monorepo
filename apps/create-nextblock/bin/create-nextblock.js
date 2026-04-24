@@ -53,18 +53,18 @@ const PACKAGE_VERSION_SOURCES = {
   '@nextblock-cms/sdk': resolve(REPO_ROOT, 'libs/sdk/package.json'),
 };
 
-program.name('create-nextblock').description('NextBlock CMS CLI');
+program.name('create-nextblock').description('NextBlock™ CMS CLI');
 
 program
   .command('create [project-directory]', { isDefault: true })
-  .description('Bootstrap a NextBlock CMS project')
+  .description('Bootstrap a NextBlock™ CMS project')
   .option('--skip-install', 'Skip installing dependencies')
   .option('-y, --yes', 'Skip all interactive prompts and use defaults')
   .action(handleCommand);
 
 program
   .command('activate [module]')
-  .description('Activate a premium NextBlock CMS module')
+  .description('Activate a premium NextBlock™ CMS module')
   .action(handleActivateCommand);
 
 await program.parseAsync(process.argv).catch((error) => {
@@ -184,7 +184,7 @@ async function handleCommand(projectDirectory, options) {
 
     console.log(
       chalk.green(
-        `\nSuccess! Your NextBlock CMS project "${projectName}" is ready.\n`,
+        `\nSuccess! Your NextBlock™ CMS project "${projectName}" is ready.\n`,
       ),
     );
     console.log(chalk.cyan('Next step:'));
@@ -207,7 +207,7 @@ async function handleActivateCommand(moduleName) {
     process.exit(1);
   }
 
-  clack.intro(`🚀 Activating NextBlock module: ${moduleName}`);
+  clack.intro(`🚀 Activating NextBlock™ module: ${moduleName}`);
 
   const projectPath = process.cwd();
 
@@ -450,7 +450,7 @@ async function runSetupWizard(projectDir, projectName) {
   const projectPath = resolve(projectDir);
   process.chdir(projectPath);
 
-  clack.intro('🚀 Welcome to the NextBlock setup wizard!');
+  clack.intro('🚀 Welcome to the NextBlock™ setup wizard!');
 
   const supabaseDir = resolve(projectPath, 'supabase');
   await fs.ensureDir(supabaseDir);
@@ -467,7 +467,7 @@ async function runSetupWizard(projectDir, projectName) {
   clack.note('I will now open your browser to log into Supabase.');
   await runSupabaseCli(['login'], { cwd: projectPath });
 
-  clack.note('Now, please select your NextBlock project when prompted.');
+  clack.note('Now, please select your NextBlock™ project when prompted.');
   await runSupabaseCli(['link'], { cwd: projectPath });
   if (process.stdin.isTTY) {
     try {
@@ -834,7 +834,7 @@ async function runSetupWizard(projectDir, projectName) {
           }),
         fromName: () =>
           clack.text({
-            message: 'SMTP: From Name (e.g., NextBlock):',
+            message: 'SMTP: From Name (e.g., NextBlock™):',
             validate: (val) => (!val ? 'From name is required' : undefined),
           }),
       },
@@ -904,7 +904,7 @@ async function runSetupWizard(projectDir, projectName) {
   }
 
   clack.outro(
-    `🎉 Your NextBlock project ${projectName ? `"${projectName}" ` : ''}is ready!`,
+    `🎉 Your NextBlock™ project ${projectName ? `"${projectName}" ` : ''}is ready!`,
   );
 }
 
@@ -1196,7 +1196,7 @@ async function ensureEnvExample(projectDir) {
     }
   }
 
-  const placeholder = `# Environment variables for NextBlock CMS
+  const placeholder = `# Environment variables for NextBlock™ CMS
 NEXT_PUBLIC_URL=
 # Vercel / Supabase
 SUPABASE_PROJECT_ID=

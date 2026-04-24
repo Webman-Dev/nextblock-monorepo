@@ -1,7 +1,7 @@
 <div align="center">
- <img src="https://cms.nextblock.ca/_next/image?url=%2Fimages%2Fnextblock-logo-small.webp&w=128&q=75" alt="NextBlock CMS Logo" width="200"/>
+ <img src="https://cms.nextblock.ca/_next/image?url=%2Fimages%2Fnextblock-logo-small.webp&w=128&q=75" alt="NextBlock™ CMS Logo" width="200"/>
 
-# NextBlock CMS
+# NextBlock™ CMS
 
 **The AI-Native, Open-Core CMS for Next.js 16**
 
@@ -30,9 +30,9 @@
 
 ---
 
-## 🚀 Why NextBlock?
+## 🚀 Why NextBlock™?
 
-Tired of slow WordPress sites? Finding other headless CMSs too complex? **NextBlock** is the sweet spot.
+Tired of slow WordPress sites? Finding other headless CMSs too complex? **NextBlock™** is the sweet spot.
 
 We combined the **flexibility of a Block Editor** with the **raw power of Next.js 16 Server Components**. The result is a CMS that feels like a static site but manages like a dynamic platform.
 
@@ -44,9 +44,9 @@ We combined the **flexibility of a Block Editor** with the **raw power of Next.j
 - **🧱 Visual Block Editor**: A reusable Tiptap-powered Notion-style editor that your clients will actually enjoy using.
 - **🔓 Open-Core Model**: The core is 100% Free & Open Source (AGPL). Premium features are activated via License Keys.
 
-## 🆚 The NextBlock Advantage
+## 🆚 The NextBlock™ Advantage
 
-| Feature         | NextBlock CMS                  | WordPress                 | Payload / Strapi        |
+| Feature         | NextBlock™ CMS                  | WordPress                 | Payload / Strapi        |
 | :-------------- | :----------------------------- | :------------------------ | :---------------------- |
 | **Tech Stack**  | Next.js 16 + Supabase          | PHP + MySQL               | React / Node.js         |
 | **Architecture**| Nx Monorepo                    | Monolith                  | Monolith / Workspaces   |
@@ -71,7 +71,7 @@ This will run the `create-nextblock` CLI which acts as a scaffolding CLI and tem
 
 > **Note:** You are currently looking at the **Nx Monorepo** (The Factory), not the generated product template.
 > 
-> NextBlock is an Nx monorepo for a Next.js 16 CMS backed by Supabase. The repo contains the canonical application, the `create-nextblock` CLI, shared editor and UI packages, the database and migration layer, and the premium ecommerce module.
+> NextBlock™ is an Nx monorepo for a Next.js 16 CMS backed by Supabase. The repo contains the canonical application, the `create-nextblock` CLI, shared editor and UI packages, the database and migration layer, and the premium ecommerce module.
 
 ### 🧩 Main Surfaces
 
@@ -132,7 +132,7 @@ The root `docs/` folder is the maintained reference set for both contributors an
 Join the community and stay updated on the latest features.
 
 - **X (Twitter):** [@NextBlockCMS](https://x.com/NextBlockCMS)
-- **LinkedIn:** [NextBlock](https://www.linkedin.com/in/nextblock/)
+- **LinkedIn:** [NextBlock™](https://www.linkedin.com/in/nextblock/)
 - **GitHub:** [nextblock-cms/nextblock](https://github.com/nextblock-cms/nextblock)
 - **Medium:** [@nextblockcms](https://medium.com/@nextblockcms)
 - **Dev.to:** [nextblockcms](https://dev.to/nextblockcms)
@@ -140,5 +140,5 @@ Join the community and stay updated on the latest features.
 ---
 
 <p align="center">
-  <sub>Built with ❤️ by the NextBlock Team. Licensed under AGPLv3.</sub>
+  <sub>Built with ❤️ by the NextBlock™ Team. Licensed under AGPLv3.</sub>
 </p>

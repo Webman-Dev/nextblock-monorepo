@@ -116,7 +116,7 @@ function getPostPresentation(slug: string | undefined): PostPresentation {
 function getFallbackDescription(locale: string | undefined) {
   return locale === 'fr'
     ? 'Notes techniques, guides de mise en route et apercus produit de l equipe NextBlock.'
-    : 'Technical breakdowns, launch guides, and product notes from the NextBlock team.';
+    : 'Technical breakdowns, launch guides, and product notes from the NextBlock™ team.';
 }
 
 function getFallbackLabel(slug: string | undefined, locale: string | undefined) {

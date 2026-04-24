@@ -1,6 +1,6 @@
 # apps/nextblock
 
-`apps/nextblock` is the canonical NextBlock application. It contains:
+`apps/nextblock` is the canonical NextBlock™ application. It contains:
 
 - the public site
 - the authenticated CMS

@@ -1,4 +1,4 @@
-# NextBlock CMS: Monetization & Licensing Architecture
+# NextBlock™ CMS: Monetization & Licensing Architecture
 
 **Version:** 2.0
 **Date:** March 19, 2026
@@ -6,7 +6,7 @@
 
 ## 1. Executive Summary
 
-NextBlock CMS uses an **Open Core** model. The core CMS is free and open source (AGPL). Premium features (e.g., E-Commerce) are distributed in the codebase but gated behind a **Freemius License Key**. Freemius acts as the Merchant of Record (MoR), handling global tax compliance, license key generation, and subscription management.
+NextBlock™ CMS uses an **Open Core** model. The core CMS is free and open source (AGPL). Premium features (e.g., E-Commerce) are distributed in the codebase but gated behind a **Freemius License Key**. Freemius acts as the Merchant of Record (MoR), handling global tax compliance, license key generation, and subscription management.
 
 ## 2. Core Business Logic
 
@@ -14,14 +14,14 @@ NextBlock CMS uses an **Open Core** model. The core CMS is free and open source 
 
 - **Core CMS:** Free, Open Source (AGPL).
 - **Premium Packages:** Paid add-ons included in the codebase but locked by default.
-  - **NextBlock Commerce Pro:** Full digital storefront with Stripe & Freemius payments.
+  - **NextBlock™ Commerce Pro:** Full digital storefront with Stripe & Freemius payments.
   - **AI Agents (Future):** Generative content and site building.
 
 ### 2.2 The "Dual-Layer" Payment Strategy
 
 | Layer | Description | Provider |
 |---|---|---|
-| **Layer 1** | Developer buys a NextBlock license key | **Freemius** (MoR) |
+| **Layer 1** | Developer buys a NextBlock™ license key | **Freemius** (MoR) |
 | **Layer 2** | Developer's store sells to end-users | **Stripe** or **Freemius** (configurable) |
 
 Layer 1 keys are purchased at [nextblock.ca](https://nextblock.ca) and activated in the CMS Admin. Layer 2 is handled by the developer's own configured payment provider.
@@ -30,7 +30,7 @@ Layer 1 keys are purchased at [nextblock.ca](https://nextblock.ca) and activated
 
 ### 3.1 The "Phone Home" Validation
 
-Since NextBlock is self-hosted, the user's instance validates licenses against the **Freemius API** as the central authority.
+Since NextBlock™ is self-hosted, the user's instance validates licenses against the **Freemius API** as the central authority.
 
 **Activation Flow:**
 
@@ -116,7 +116,7 @@ Package definitions are hardcoded to avoid requiring ENV variables for products 
 export const NEXTBLOCK_PACKAGES = {
   ecommerce: {
     id: 'ecommerce',
-    name: 'NextBlock Commerce Pro',
+    name: 'NextBlock™ Commerce Pro',
     description: 'Full-featured digital store with Stripe & Freemius.',
     fm_product_id: '24851',   // Freemius Product ID
     fm_plan_id: '41208',      // Freemius Plan ID ($25/mo or $250/yr)
@@ -166,4 +166,4 @@ export function getPaymentProvider(provider: 'stripe' | 'freemius'): PaymentProv
 - **Freemius Product ID (`fm_product_id`):** The numeric ID of the product on Freemius (e.g., `24851`).
 - **Freemius Plan ID (`fm_plan_id`):** The specific pricing plan ID on Freemius (e.g., `41208`).
 - **Instance Name:** The hostname of the self-hosted CMS, used to bind a license key to a specific domain.
-- **Sandbox Mode:** In NextBlock this now has two meanings: the app-wide demo sandbox (`NEXT_PUBLIC_IS_SANDBOX=true`) and the Freemius-only checkout sandbox (`FREEMIUS_SANDBOX_ENABLED=true`).
+- **Sandbox Mode:** In NextBlock™ this now has two meanings: the app-wide demo sandbox (`NEXT_PUBLIC_IS_SANDBOX=true`) and the Freemius-only checkout sandbox (`FREEMIUS_SANDBOX_ENABLED=true`).

@@ -1,5 +1,5 @@
 <div align="center">
-  # 📚 NextBlock CMS Documentation
+  # 📚 NextBlock™ CMS Documentation
   
   **Your comprehensive guide to building, extending, and mastering NextBlock.**
 

@@ -96,7 +96,7 @@ VALUES
   ('ecommerce.go_to_shop', '{"en": "Go to Shop", "fr": "Aller à la boutique"}'::jsonb),
   ('ecommerce.checkout_successful', '{"en": "Checkout Successful", "fr": "Paiement Réussi"}'::jsonb),
   ('ecommerce.sandbox_notice', '{"en": "This is a Sandbox environment. The Freemius checkout is skipped here for demo purposes.", "fr": "Ceci est un environnement de bac à sable. Le paiement Freemius est sauté ici à des fins de démonstration."}'::jsonb),
-  ('ecommerce.license_notice', '{"en": "To purchase a real license for your self-hosted NextBlock instance, visit:", "fr": "Pour acheter une vraie licence pour votre instance NextBlock auto-hébergée, visitez :"}'::jsonb),
+  ('ecommerce.license_notice', '{"en": "To purchase a real license for your self-hosted NextBlock™ instance, visit:", "fr": "Pour acheter une vraie licence pour votre instance NextBlock™ auto-hébergée, visitez :"}'::jsonb),
   ('ecommerce.purchase_at', '{"en": "Purchase at nextblock.ca", "fr": "Acheter sur nextblock.ca"}'::jsonb),
   ('ecommerce.qty', '{"en": "Qty", "fr": "Qté"}'::jsonb),
   ('ecommerce.quantity', '{"en": "Quantity", "fr": "Quantité"}'::jsonb),
