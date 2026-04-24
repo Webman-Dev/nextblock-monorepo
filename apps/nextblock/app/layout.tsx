@@ -139,6 +139,38 @@ const getCachedTranslations = unstable_cache(
   }
 );
 
+const getCachedSiteSettings = unstable_cache(
+  async (): Promise<Record<string, string>> => {
+    const supabase = createStaticSupabaseClient();
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('key, value')
+      .in('key', ['site_title', 'site_description']);
+
+    if (error || !data) {
+      console.error('Error fetching cached site settings:', error);
+      return {
+        site_title: 'Nextblock CMS',
+        site_description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.'
+      };
+    }
+
+    const settings: Record<string, string> = {};
+    data.forEach(item => {
+      if (typeof item.value === 'string') {
+        settings[item.key] = item.value;
+      }
+    });
+
+    return {
+      site_title: settings.site_title || 'Nextblock CMS',
+      site_description: settings.site_description || 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.'
+    };
+  },
+  ['public-site-settings'],
+  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
+);
+
 const getCachedCurrencies = unstable_cache(
   async (): Promise<StoreCurrency[]> => {
     const supabase = createStaticSupabaseClient();
@@ -318,43 +350,51 @@ async function loadLayoutData() {
   };
 }
 
-export const metadata: Metadata = {
-  metadataBase: new URL(defaultUrl),
-  title: 'Nextblock CMS',
-  description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
-  openGraph: {
-    title: 'Nextblock CMS',
-    description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
-    url: defaultUrl,
-    siteName: 'Nextblock CMS',
-    images: [
-      {
-        url: '/images/metadata_image.webp',
-        width: 1200,
-        height: 630,
-        alt: 'Nextblock CMS',
-      },
-    ],
-    locale: 'en_US',
-    type: 'website',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Nextblock CMS',
-    description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
-    images: ['/images/metadata_image.webp'],
-  },
-  icons: {
-    icon: [
-      { url: '/favicon/favicon.ico' },
-      { url: '/favicon/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
-      { url: '/favicon/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
-    ],
-    apple: [{ url: '/favicon/apple-touch-icon.png' }],
-  },
-  manifest: '/favicon/site.webmanifest',
-  robots: process.env.NEXT_PUBLIC_IS_SANDBOX === 'true' ? { index: false, follow: false } : undefined,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const siteSettings = await getCachedSiteSettings();
+  const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
+
+  return {
+    metadataBase: new URL(defaultUrl),
+    title: {
+      default: siteSettings.site_title,
+      template: `%s | ${siteSettings.site_title}`,
+    },
+    description: siteSettings.site_description,
+    openGraph: {
+      title: siteSettings.site_title,
+      description: siteSettings.site_description,
+      url: defaultUrl,
+      siteName: siteSettings.site_title,
+      images: [
+        {
+          url: '/images/metadata_image.webp',
+          width: 1200,
+          height: 630,
+          alt: siteSettings.site_title,
+        },
+      ],
+      locale: 'en_US',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: siteSettings.site_title,
+      description: siteSettings.site_description,
+      images: ['/images/metadata_image.webp'],
+    },
+    icons: {
+      icon: [
+        { url: '/favicon/favicon.ico' },
+        { url: '/favicon/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+        { url: '/favicon/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      ],
+      apple: [{ url: '/favicon/apple-touch-icon.png' }],
+    },
+    manifest: '/favicon/site.webmanifest',
+    robots: isSandbox ? { index: false, follow: false } : { index: true, follow: true },
+  };
+}
 
 export default async function RootLayout({
   children,
@@ -384,8 +424,6 @@ export default async function RootLayout({
   return (
     <html lang={serverDeterminedLocale} suppressHydrationWarning>
       <head>
-        <title>{metadata.title as string}</title>
-        <meta name="description" content={metadata.description as string} />
         <link rel="preconnect" href="https://ppcppwsfnrptznvbxnsz.supabase.co" />
         <link rel="dns-prefetch" href="https://ppcppwsfnrptznvbxnsz.supabase.co" />
         <link rel="dns-prefetch" href="https://aws-0-us-east-1.pooler.supabase.com" />

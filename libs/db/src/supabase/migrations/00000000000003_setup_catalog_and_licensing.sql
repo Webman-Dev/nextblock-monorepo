@@ -19,6 +19,8 @@ CREATE TABLE public.products (
   sale_prices jsonb,
   stock integer DEFAULT 0,
   status text NOT NULL CHECK (status IN ('draft', 'active', 'archived')) DEFAULT 'draft',
+  meta_title text,
+  meta_description text,
   short_description text,
   description_json jsonb,
   metadata jsonb,

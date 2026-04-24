@@ -83,6 +83,8 @@ export const productSchema = z.object({
   sale_price: z.coerce.number().min(0, 'Sale price must be non-negative').optional().nullable(),
   sale_prices: currencySalePriceMapSchema.default({}),
   stock: z.coerce.number().int().min(0, 'Stock must be a non-negative integer'),
+  meta_title: z.string().optional().nullable(),
+  meta_description: z.string().optional().nullable(),
   short_description: z.string().optional(),
   description_json: z.any().optional(), // Using any for Tiptap JSON structure
   freemius_plan_id: z.string().optional(), // ID from Freemius Dashboard

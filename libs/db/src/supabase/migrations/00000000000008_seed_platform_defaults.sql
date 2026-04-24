@@ -20,6 +20,14 @@ VALUES (
 ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO public.site_settings (key, value)
+VALUES ('site_title', '"Nextblock CMS"'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+INSERT INTO public.site_settings (key, value)
+VALUES ('site_description', '"Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture."'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+INSERT INTO public.site_settings (key, value)
 VALUES (
   'ecommerce_inventory_settings',
   '{"track_quantities": true, "enable_taxes": false}'::jsonb

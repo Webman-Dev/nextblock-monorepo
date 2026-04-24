@@ -186,6 +186,8 @@ function buildProductFormDefaults(
       typeof initialData?.sale_price === 'number' ? initialData.sale_price / 100 : null,
     sale_prices: initialSalePrices,
     stock: initialData?.stock || 0,
+    meta_title: initialData?.meta_title || '',
+    meta_description: initialData?.meta_description || '',
     short_description: initialData?.short_description || '',
     description_json:
       initialData?.description_json || {
@@ -965,14 +967,36 @@ export function ProductForm({
         </FormSection>
 
         <FormSection
-          title="Description"
-          description="Write a short SEO summary and a rich product story for the detail page."
+          title="Search Engine Optimization (SEO)"
+          description="Control how this product appears in Google and other search engines."
         >
-          <div className="flex flex-col space-y-4 mb-4">
+          <div className="grid grid-cols-1 gap-6">
             <div>
-              <Label htmlFor="short_description" className="font-semibold text-lg block mb-2">Short Description (SEO)</Label>
-              <Input {...register('short_description')} placeholder="Brief summary (SEO)..." />
+              <Label htmlFor="meta_title">Meta Title (SEO)</Label>
+              <Input id="meta_title" {...register('meta_title')} placeholder="Product Meta Title..." className="mt-1" />
+              <p className="text-[11px] text-muted-foreground mt-1">Recommended: 50-60 characters. Falls back to product title if empty.</p>
             </div>
+            <div>
+              <Label htmlFor="meta_description">Meta Description (SEO)</Label>
+              <textarea
+                id="meta_description"
+                {...register('meta_description')}
+                placeholder="Product Meta Description..."
+                rows={3}
+                className="mt-1 flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">Recommended: 150-160 characters. Falls back to short description if empty.</p>
+            </div>
+          </div>
+        </FormSection>
+
+        <FormSection
+          title="Product Story"
+          description="Write a rich story and detailed description for the product page."
+        >
+          <div className="mb-6">
+            <Label htmlFor="short_description" className="font-semibold mb-2 block">Short Description / Excerpt</Label>
+            <Input id="short_description" {...register('short_description')} placeholder="Brief summary shown on product cards..." />
           </div>
           <Label className="mb-2 block font-semibold text-lg border-t pt-4">Detailed Description</Label>
           <div className="min-h-[400px] border rounded-lg overflow-hidden text-block-editor">

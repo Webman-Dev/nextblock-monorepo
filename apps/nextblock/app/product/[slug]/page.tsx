@@ -58,11 +58,41 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
      }
   }
 
+  const siteUrl = process.env.NEXT_PUBLIC_URL || "";
+  const [languagesResult, productTranslationsResult] = await Promise.all([
+    supabase.from('languages').select('id, code'),
+    supabase
+      .from('products')
+      .select('language_id, slug')
+      .eq('translation_group_id', productRecord.translation_group_id)
+      .eq('status', 'active')
+  ]);
+
+  const { data: languages } = languagesResult;
+  const { data: productTranslations } = productTranslationsResult;
+
+  const alternates: { [key: string]: string } = {};
+  if (languages && productTranslations) {
+    productTranslations.forEach(pt => {
+      const langInfo = languages.find(l => l.id === pt.language_id);
+      if (langInfo) {
+        alternates[langInfo.code] = `${siteUrl}/product/${pt.slug}`;
+      }
+    });
+  }
+
   return {
-    title: productRecord.title,
-    description: productRecord.short_description || `Buy ${productRecord.title}`,
+    title: productRecord.meta_title || productRecord.title,
+    description: productRecord.meta_description || productRecord.short_description || `Buy ${productRecord.title}`,
     openGraph: {
+      title: productRecord.meta_title || productRecord.title,
+      description: productRecord.meta_description || productRecord.short_description || `Buy ${productRecord.title}`,
       images: imageUrl ? [imageUrl] : [],
+      url: `${siteUrl}/product/${slug}`,
+    },
+    alternates: {
+      canonical: `${siteUrl}/product/${slug}`,
+      languages: Object.keys(alternates).length > 0 ? alternates : undefined,
     },
   };
 }

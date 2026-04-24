@@ -970,9 +970,13 @@ export type Database = {
           id: string
           is_taxable: boolean
           language_id: number
+          meta_description: string | null
+          meta_title: string | null
           metadata: Json | null
+          payment_provider: string
           price: number
           prices: Json
+          product_type: string
           sale_price: number | null
           sale_prices: Json | null
           short_description: string | null
@@ -993,9 +997,13 @@ export type Database = {
           id?: string
           is_taxable?: boolean
           language_id: number
+          meta_description?: string | null
+          meta_title?: string | null
           metadata?: Json | null
+          payment_provider: string
           price: number
           prices?: Json
+          product_type: string
           sale_price?: number | null
           sale_prices?: Json | null
           short_description?: string | null
@@ -1016,9 +1024,13 @@ export type Database = {
           id?: string
           is_taxable?: boolean
           language_id?: number
+          meta_description?: string | null
+          meta_title?: string | null
           metadata?: Json | null
+          payment_provider?: string
           price?: number
           prices?: Json
+          product_type?: string
           sale_price?: number | null
           sale_prices?: Json | null
           short_description?: string | null
