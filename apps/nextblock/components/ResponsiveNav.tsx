@@ -5,6 +5,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import type { Database } from '@nextblock-cms/db' // Relative path from components/
 import { useCurrentContent } from '../context/CurrentContentContext';
 import { useTranslations } from '@nextblock-cms/utils';
+import GlobalSearch from './GlobalSearch';
 
 type Logo = Database['public']['Tables']['logos']['Row'] & { media: (Database['public']['Tables']['media']['Row'] & { alt_text: string | null }) | null };
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
@@ -124,7 +125,7 @@ export default function ResponsiveNav({
     } else if (currentContent.type === 'product') {
       editPathDetails = {
         href: `/cms/products/${currentContent.id}/edit`,
-        label: 'Edit Product', // Using hardcoded string as t('edit_product') might not exist yet
+        label: t('edit_product'),
       };
     }
   }
@@ -314,6 +315,7 @@ export default function ResponsiveNav({
 
         {/* Right side: Auth, LangSwitcher (desktop), Hamburger (mobile) */}
         <div className="hidden md:flex items-center space-x-4">
+          <GlobalSearch isEcommerceActive={isEcommerceActive} variant="desktop" />
           {canAccessCms && editPathDetails && (
             <Link href={editPathDetails.href} className="hover:underline font-semibold text-sm text-foreground mr-3 flex items-center">
               <Pencil className="w-4 h-4 mr-2" />
@@ -326,7 +328,8 @@ export default function ResponsiveNav({
           {cartIconComponent}
         </div>
 
-        <div className="md:hidden flex items-center z-[60]">
+        <div className="md:hidden flex items-center gap-2 z-[60]">
+          <GlobalSearch isEcommerceActive={isEcommerceActive} variant="mobile" />
           <button
             ref={menuButtonRef}
             onClick={toggleMobileMenu}

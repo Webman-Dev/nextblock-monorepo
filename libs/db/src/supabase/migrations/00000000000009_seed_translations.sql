@@ -706,3 +706,80 @@ ON CONFLICT (key) DO UPDATE
 SET translations =
   COALESCE(public.translations.translations, '{}'::jsonb)
   || jsonb_build_object('fr', EXCLUDED.translations->>'fr');
+
+-- 00000000000032_seed_global_search_translations.sql
+-- Global storefront search copy.
+INSERT INTO public.translations (key, translations)
+VALUES
+  (
+    'edit_product',
+    '{"en": "Edit Product", "fr": "Modifier le produit"}'::jsonb
+  ),
+  (
+    'global_search.trigger',
+    '{"en": "Search", "fr": "Rechercher"}'::jsonb
+  ),
+  (
+    'global_search.title',
+    '{"en": "Search", "fr": "Rechercher"}'::jsonb
+  ),
+  (
+    'global_search.description',
+    '{"en": "Search published pages, posts, and products.", "fr": "Rechercher dans les pages, articles et produits publies."}'::jsonb
+  ),
+  (
+    'global_search.placeholder',
+    '{"en": "Search...", "fr": "Rechercher..."}'::jsonb
+  ),
+  (
+    'global_search.filter_all',
+    '{"en": "All", "fr": "Tout"}'::jsonb
+  ),
+  (
+    'global_search.filter_pages',
+    '{"en": "Pages", "fr": "Pages"}'::jsonb
+  ),
+  (
+    'global_search.filter_posts',
+    '{"en": "Posts", "fr": "Articles"}'::jsonb
+  ),
+  (
+    'global_search.filter_products',
+    '{"en": "Products", "fr": "Produits"}'::jsonb
+  ),
+  (
+    'global_search.result_page',
+    '{"en": "Page", "fr": "Page"}'::jsonb
+  ),
+  (
+    'global_search.result_post',
+    '{"en": "Post", "fr": "Article"}'::jsonb
+  ),
+  (
+    'global_search.result_product',
+    '{"en": "Product", "fr": "Produit"}'::jsonb
+  ),
+  (
+    'global_search.recent',
+    '{"en": "Recent", "fr": "Recents"}'::jsonb
+  ),
+  (
+    'global_search.error_title',
+    '{"en": "Search is unavailable.", "fr": "La recherche est indisponible."}'::jsonb
+  ),
+  (
+    'global_search.error_description',
+    '{"en": "Please try again in a moment.", "fr": "Veuillez reessayer dans un instant."}'::jsonb
+  ),
+  (
+    'global_search.empty_title',
+    '{"en": "No results found.", "fr": "Aucun resultat trouve."}'::jsonb
+  ),
+  (
+    'global_search.empty_description',
+    '{"en": "Try another search term.", "fr": "Essayez un autre terme de recherche."}'::jsonb
+  )
+ON CONFLICT (key) DO UPDATE
+SET
+  translations = EXCLUDED.translations,
+  updated_at = now();
