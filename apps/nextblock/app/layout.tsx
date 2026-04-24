@@ -353,6 +353,7 @@ export const metadata: Metadata = {
     apple: [{ url: '/favicon/apple-touch-icon.png' }],
   },
   manifest: '/favicon/site.webmanifest',
+  robots: process.env.NEXT_PUBLIC_IS_SANDBOX === 'true' ? { index: false, follow: false } : undefined,
 };
 
 export default async function RootLayout({

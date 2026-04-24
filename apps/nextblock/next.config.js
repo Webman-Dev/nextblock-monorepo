@@ -34,6 +34,21 @@ const nextConfig = {
     '@nextblock-cms/ui',
     '@nextblock-cms/editor',
   ],
+  async headers() {
+    const headers = [];
+    if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+      headers.push({
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-Robots-Tag',
+            value: 'noindex',
+          },
+        ],
+      });
+    }
+    return headers;
+  },
 };
 
 module.exports = nextConfig;
