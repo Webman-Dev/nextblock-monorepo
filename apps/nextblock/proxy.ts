@@ -131,7 +131,7 @@ export default async function proxy(request: NextRequest) {
     user &&
     !pathname.startsWith('/cms') &&
     pathname !== '/profile' &&
-    pathname !== '/reset-password' &&
+    pathname !== '/profile/password' &&
     pathname !== '/checkout/success'
   ) {
     const { data: profile } = await supabase
