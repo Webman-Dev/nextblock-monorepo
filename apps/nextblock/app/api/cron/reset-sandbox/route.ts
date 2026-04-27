@@ -1669,7 +1669,7 @@ export async function GET(request: NextRequest) {
                     content: [
                       {
                         type: "text",
-                        text: "Integrated with Freemius for cryptographic licensing and recurring billing. Features dual-layer payment strategy with Lemon Squeezy MoR and native Stripe support."
+                        text: "Integrated with Freemius for cryptographic licensing and recurring billing. Features dual-layer payment strategy with Freemius MoR and native Stripe support."
                       }
                     ]
                   },
@@ -1783,7 +1783,7 @@ export async function GET(request: NextRequest) {
                       content: [
                         {
                           type: "text",
-                          text: "Intégré avec Freemius pour les licences cryptographiques et la facturation récurrente. Stratégie de paiement à double couche avec Lemon Squeezy MoR et support natif Stripe."
+                          text: "Intégré avec Freemius pour les licences cryptographiques et la facturation récurrente. Stratégie de paiement à double couche avec Freemius MoR et support natif Stripe."
                         }
                       ]
                     },

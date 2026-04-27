@@ -121,9 +121,9 @@ NextBlock™ has formally transitioned to a "Self-Hosted Package Licensing" mode
 
 ### 5.1 The Dual-Layer Payment Strategy
 
-- **Layer 1 (Acquiring Infrastructure):** NextBlock™ uses Lemon Squeezy as its MoR. Developers purchase recurring license keys and input them into the self-hosted interface to unlock latent functionality.
+- **Layer 1 (Acquiring Infrastructure):** NextBlock™ uses Freemius as its MoR. Developers purchase recurring license keys and input them into the self-hosted interface to unlock latent functionality.
 
-- **Layer 2 (Merchant Operations):** A strict Adapter Pattern within `libs/ecommerce` allows the deploying developer to process their own consumer payments to capture revenue. A factory function dynamically returns Stripe or Lemon Squeezy providers based on site settings.
+- **Layer 2 (Merchant Operations):** A strict Adapter Pattern within `libs/ecommerce` allows the deploying developer to process their own consumer payments to capture revenue. A factory function dynamically returns Stripe or Freemius providers based on site settings.
 
 ### 5.2 Defense in Depth Licensing Mechanism
 
@@ -135,7 +135,7 @@ NextBlock™ has formally transitioned to a "Self-Hosted Package Licensing" mode
 | L2 | Server Stub | Core backend API routes aggressively wrap their execution logic in validation checks, actively throwing severe HTTP errors if programmatic requests are made without a corresponding valid local license record, effectively neutralizing any client-side DOM manipulation attacks.
 
 |
-| L3 | Online Check | For high-compute or extreme high-value actions (e.g., executing actual payment capture pipelines or triggering expensive LLM generative AI tokens), the system bypasses local database validation entirely, querying the Lemon Squeezy API in real-time to prevent sophisticated actors with cracked local databases from spoofing commercial compliance.
+| L3 | Online Check | For high-compute or extreme high-value actions (e.g., executing actual payment capture pipelines or triggering expensive LLM generative AI tokens), the system bypasses local database validation entirely, querying the Freemius API in real-time to prevent sophisticated actors with cracked local databases from spoofing commercial compliance.
 
 |
 

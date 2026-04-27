@@ -10,7 +10,7 @@ This guide explains how to purchase, install, and activate these premium "Packag
 
 ## 1. Buying a Package
 
-We use **Lemon Squeezy** as our Merchant of Record.
+We use **Freemius** as our Merchant of Record.
 
 1.  Visit the [NextBlock™ Pricing Page](https://nextblock.ca/pricing).
 2.  Choose the package you want (e.g., **E-Commerce Pro**).
