@@ -7,7 +7,12 @@ export const NEXTBLOCK_PACKAGES = {
     fm_plan_id: '41208', // $25/month or $250/year
     purchase_url: 'https://nextblock.ca',
   },
-  // Future packages (e.g. AI Agents) will be added here
+  ai: {
+    id: 'ai',
+    name: 'NextBlock™ AI Intelligence',
+    description: 'Native JSONB block generation and OpenRouter integration.',
+    purchase_url: 'https://nextblock.dev',
+  }
 } as const;
 
 export type PackageId = keyof typeof NEXTBLOCK_PACKAGES;
