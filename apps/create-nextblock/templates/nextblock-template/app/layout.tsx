@@ -6,11 +6,11 @@ import { EnvVarWarning } from "../components/env-var-warning";
 import { SandboxBanner } from "../components/SandboxBanner";
 import { SpeedInsights } from "@vercel/speed-insights/next"
  
-import { GoogleTagManager } from '@next/third-parties/google'
 import { ThemeSwitcher } from '../components/theme-switcher';
 import type { Metadata } from 'next';
 import Header from "../components/Header";
 import FooterNavigation from "../components/FooterNavigation";
+import { DeferredGoogleTagManager } from '../components/DeferredGoogleTagManager';
 import { Providers } from './providers';
 import { CartDrawer } from '@nextblock-cms/ecommerce';
 import { ToasterProvider } from './ToasterProvider';
@@ -229,7 +229,7 @@ export default async function RootLayout({
 
           {isEcommerceActive && <CartDrawer />}
         </Providers>
-        <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID || ""} />
+        <DeferredGoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID} nonce={nonce} />
       </body>
     </html>
   );

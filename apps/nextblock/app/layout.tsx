@@ -4,13 +4,13 @@ import '@nextblock-cms/editor/styles/editor.css';
 // app/layout.tsx
 import { SpeedInsights } from '@vercel/speed-insights/next';
 
-import { GoogleTagManager } from '@next/third-parties/google';
 import type { Metadata } from 'next';
 import { Providers } from './providers';
 import { CartDrawer } from '@nextblock-cms/ecommerce';
 import { CURRENCY_COOKIE_NAME } from '@nextblock-cms/ecommerce/server';
 import { ToasterProvider } from './ToasterProvider';
 import { AppShell } from '../components/AppShell';
+import { DeferredGoogleTagManager } from '../components/DeferredGoogleTagManager';
 import {
   createClient as createSupabaseServerClient,
   getProfileWithRoleServerSide,
@@ -461,7 +461,7 @@ export default async function RootLayout({
 
           {isEcommerceActive && <CartDrawer />}
         </Providers>
-        <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID || ''} nonce={nonce} />
+        <DeferredGoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID} nonce={nonce} />
       </body>
     </html>
   );

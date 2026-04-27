@@ -112,7 +112,7 @@ const PostsGridClient: React.FC<PostsGridClientProps> = ({
             <PostCardSkeleton key={`skeleton-${index}`} />
           ))
         ) : posts.length > 0 ? (
-          posts.map((post, index) => (
+          posts.map((post) => (
             <Link href={`/article/${post.slug}`} key={post.id} className="block group">
               <div className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card text-card-foreground">
                 {/* Basic Post Card Structure - Enhanced with Feature Image */}
@@ -124,7 +124,7 @@ const PostsGridClient: React.FC<PostsGridClientProps> = ({
                       width={post.feature_image_width && post.feature_image_width > 0 ? post.feature_image_width : DEFAULT_FEATURE_IMAGE_WIDTH}
                       height={post.feature_image_height && post.feature_image_height > 0 ? post.feature_image_height : DEFAULT_FEATURE_IMAGE_HEIGHT}
                       sizes={imageSizes}
-                      priority={index === 0}
+                      loading="lazy"
                       placeholder={post.blur_data_url ? 'blur' : 'empty'}
                       blurDataURL={post.blur_data_url ?? undefined}
                       quality={60}

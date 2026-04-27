@@ -1,7 +1,12 @@
 "use client";
 
 import React from "react";
-import parse, { HTMLReactParserOptions, Element } from 'html-react-parser';
+import Image from "next/image";
+import parse, {
+  HTMLReactParserOptions,
+  Element,
+  attributesToProps,
+} from 'html-react-parser';
 import AlertWidgetRenderer from "./inline/AlertWidgetRenderer";
 import CtaWidgetRenderer from "./inline/CtaWidgetRenderer";
 import type { TextBlockContent } from "./TextBlockRenderer";
@@ -17,14 +22,204 @@ function normalizeHtmlEncodingArtifacts(html: string): string {
     .replaceAll("âœ”", "&#10003;");
 }
 
+function normalizeImageAttributes(attribs: Record<string, string>) {
+  if (attribs['fetchpriority']) {
+    attribs.fetchPriority = attribs['fetchpriority'];
+    delete attribs['fetchpriority'];
+  }
+
+  if (!attribs.loading) {
+    attribs.loading = 'lazy';
+  }
+
+  if (!attribs.decoding) {
+    attribs.decoding = 'async';
+  }
+
+  if (attribs.loading === 'lazy' && attribs.fetchPriority === 'high') {
+    delete attribs.fetchPriority;
+  }
+}
+
+type CmsImageMetadata = {
+  src: `/images/${string}`;
+  width: number;
+  height: number;
+  sizes: string;
+};
+
+type HtmlImageProps = {
+  alt?: unknown;
+  className?: string;
+  id?: string;
+  sizes?: unknown;
+  style?: React.CSSProperties;
+  title?: string;
+};
+
+const inlineImageSizes =
+  '(max-width: 768px) calc(100vw - 2rem), (max-width: 1280px) 42vw, 512px';
+const contentImageSizes =
+  '(max-width: 768px) calc(100vw - 2rem), (max-width: 1280px) 75vw, 768px';
+
+const knownCmsImages: Record<string, CmsImageMetadata> = {
+  'images/NBcover.webp': {
+    src: '/images/NBcover.webp',
+    width: 1024,
+    height: 572,
+    sizes: inlineImageSizes,
+  },
+  'images/cap.webp': {
+    src: '/images/cap.webp',
+    width: 960,
+    height: 960,
+    sizes: inlineImageSizes,
+  },
+  'images/commerce-plan.webp': {
+    src: '/images/commerce-plan.webp',
+    width: 1024,
+    height: 559,
+    sizes: contentImageSizes,
+  },
+  'images/commerce-square.webp': {
+    src: '/images/commerce-square.webp',
+    width: 2048,
+    height: 2048,
+    sizes: inlineImageSizes,
+  },
+  'images/commerce-wide.webp': {
+    src: '/images/commerce-wide.webp',
+    width: 1024,
+    height: 434,
+    sizes: contentImageSizes,
+  },
+  'images/developer.webp': {
+    src: '/images/developer.webp',
+    width: 1024,
+    height: 1024,
+    sizes: '(max-width: 768px) calc(100vw - 2rem), 400px',
+  },
+  'images/extensibility.webp': {
+    src: '/images/extensibility.webp',
+    width: 1024,
+    height: 559,
+    sizes: contentImageSizes,
+  },
+  'images/goals.webp': {
+    src: '/images/goals.webp',
+    width: 1008,
+    height: 1024,
+    sizes: inlineImageSizes,
+  },
+  'images/included.webp': {
+    src: '/images/included.webp',
+    width: 1024,
+    height: 559,
+    sizes: contentImageSizes,
+  },
+  'images/metadata_image.webp': {
+    src: '/images/metadata_image.webp',
+    width: 1200,
+    height: 634,
+    sizes: contentImageSizes,
+  },
+  'images/nextblock-logo-small.webp': {
+    src: '/images/nextblock-logo-small.webp',
+    width: 1162,
+    height: 1164,
+    sizes: '128px',
+  },
+  'images/nx-graph.webp': {
+    src: '/images/nx-graph.webp',
+    width: 541,
+    height: 670,
+    sizes: contentImageSizes,
+  },
+  'images/pants.webp': {
+    src: '/images/pants.webp',
+    width: 740,
+    height: 717,
+    sizes: inlineImageSizes,
+  },
+  'images/programmer-upscaled.webp': {
+    src: '/images/programmer-upscaled.webp',
+    width: 8192,
+    height: 2632,
+    sizes: '(max-width: 768px) calc(100vw - 2rem), (max-width: 1280px) 75vw, 1200px',
+  },
+  'images/t-shirt.webp': {
+    src: '/images/t-shirt.webp',
+    width: 740,
+    height: 717,
+    sizes: inlineImageSizes,
+  },
+};
+
+function normalizeImagePath(src: string) {
+  try {
+    return new URL(src, 'https://nextblock.local').pathname.replace(/^\/+/, '');
+  } catch {
+    return src.replace(/^\/+/, '');
+  }
+}
+
+function getKnownCmsImage(src: string | undefined) {
+  if (!src) return null;
+
+  const imagePath = normalizeImagePath(src);
+  const directMatch = knownCmsImages[imagePath];
+
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const entry = Object.entries(knownCmsImages).find(([knownPath]) =>
+    imagePath.endsWith(knownPath)
+  );
+
+  return entry?.[1] ?? null;
+}
+
+function renderOptimizedCmsImage(attribs: Record<string, string>) {
+  const image = getKnownCmsImage(attribs.src);
+
+  if (!image) {
+    normalizeImageAttributes(attribs);
+    return undefined;
+  }
+
+  const props = attributesToProps(attribs) as HtmlImageProps;
+  const alt = typeof props.alt === 'string' ? props.alt : '';
+  const sizes = typeof props.sizes === 'string' ? props.sizes : image.sizes;
+
+  return (
+    <Image
+      src={image.src}
+      alt={alt}
+      width={image.width}
+      height={image.height}
+      sizes={sizes}
+      quality={60}
+      loading="lazy"
+      decoding="async"
+      className={props.className}
+      style={props.style}
+      title={props.title}
+      id={props.id}
+    />
+  );
+}
+
 const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({ content, languageId }) => {
   void languageId;
   const normalizedHtml = normalizeHtmlEncodingArtifacts(content.html_content || "");
   const options: HTMLReactParserOptions = {
     replace: (domNode) => {
       if (domNode instanceof Element && domNode.attribs) {
-        if (domNode.attribs['fetchpriority']) {
-          domNode.attribs['fetchPriority'] = domNode.attribs['fetchpriority'];
+        if (domNode.name === 'img') {
+          return renderOptimizedCmsImage(domNode.attribs);
+        } else if (domNode.attribs['fetchpriority']) {
+          domNode.attribs.fetchPriority = domNode.attribs['fetchpriority'];
           delete domNode.attribs['fetchpriority'];
         }
 
