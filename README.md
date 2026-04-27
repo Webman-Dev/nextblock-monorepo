@@ -32,7 +32,7 @@
 
 ## 🚀 Why NextBlock™?
 
-Tired of slow WordPress sites? Finding other headless CMSs too complex? **NextBlock™** is the sweet spot.
+Tired of slow WordPress sites? Finding headless CMSs too complex? **NextBlock™** is the sweet spot.
 
 We combined the **flexibility of a Block Editor** with the **raw power of Next.js 16 Server Components**. The result is a CMS that feels like a static site but manages like a dynamic platform.
 
@@ -46,14 +46,14 @@ We combined the **flexibility of a Block Editor** with the **raw power of Next.j
 
 ## 🆚 The NextBlock™ Advantage
 
-| Feature         | NextBlock™ CMS                  | WordPress                 | Payload / Strapi        |
-| :-------------- | :----------------------------- | :------------------------ | :---------------------- |
-| **Tech Stack**  | Next.js 16 + Supabase          | PHP + MySQL               | React / Node.js         |
-| **Architecture**| Nx Monorepo                    | Monolith                  | Monolith / Workspaces   |
-| **Performance** | 🟢 **100/100 (Default)**       | 🔴 Bloated (Plugins)      | 🟡 Spec-dependent       |
-| **Security**    | 🔒 Static/Edge First           | 🔓 Plugin vulnerabilities | 🔒 Secure               |
-| **DX**          | 💎 **React Server Components** | 📜 Legacy PHP Hooks       | 🧩 Config Heavy         |
-| **AI Ready**    | ✅ **Native**                  | ❌ No                     | 🟡 Integration required |
+| Feature          | NextBlock™ CMS                 | WordPress                 | Payload / Strapi        |
+| :--------------- | :----------------------------- | :------------------------ | :---------------------- |
+| **Tech Stack**   | Next.js 16 + Supabase          | PHP + MySQL               | React / Node.js         |
+| **Architecture** | Nx Monorepo                    | Monolith                  | Monolith / Workspaces   |
+| **Performance**  | 🟢 **100/100 (Default)**       | 🔴 Bloated (Plugins)      | 🟡 Spec-dependent       |
+| **Security**     | 🔒 Static/Edge First           | 🔓 Plugin vulnerabilities | 🔒 Secure               |
+| **DX**           | 💎 **React Server Components** | 📜 Legacy PHP Hooks       | 🧩 Config Heavy         |
+| **AI Ready**     | ✅ **Native**                  | ❌ No                     | 🟡 Integration required |
 
 ## 🏁 Get Started in 30 Seconds
 
@@ -70,7 +70,7 @@ This will run the `create-nextblock` CLI which acts as a scaffolding CLI and tem
 ## 🏗️ For Contributors: The Factory
 
 > **Note:** You are currently looking at the **Nx Monorepo** (The Factory), not the generated product template.
-> 
+>
 > NextBlock™ is an Nx monorepo for a Next.js 16 CMS backed by Supabase. The repo contains the canonical application, the `create-nextblock` CLI, shared editor and UI packages, the database and migration layer, and the premium ecommerce module.
 
 ### 🧩 Main Surfaces
@@ -110,18 +110,18 @@ The interactive `setup` wizard will help you automatically configure your `.env.
 
 The root `docs/` folder is the maintained reference set for both contributors and AI agents.
 
-*The template docs are copied from the root docs through the sync pipeline, so this root docs set is the place to maintain first.*
+_The template docs are copied from the root docs through the sync pipeline, so this root docs set is the place to maintain first._
 
-| Document | Purpose |
-| :-- | :-- |
-| [docs/01-PROJECT-OVERVIEW.md](./docs/01-PROJECT-OVERVIEW.md) | Monorepo structure, runtime model, and where each subsystem lives |
-| [docs/02-ECOMMERCE-CAPABILITIES.md](./docs/02-ECOMMERCE-CAPABILITIES.md) | Verified commerce features, checkout providers, currency, tax, shipping, and fulfillment |
-| [docs/03-CMS-AND-EDITOR.md](./docs/03-CMS-AND-EDITOR.md) | Tiptap editor, page builder, widgets, and built-in block system |
-| [docs/04-DATABASE-AND-AUTH.md](./docs/04-DATABASE-AND-AUTH.md) | Supabase clients, auth flow, schema overview, RLS, and migration map |
-| [docs/05-DEVELOPER-GUIDE.md](./docs/05-DEVELOPER-GUIDE.md) | Local setup, scripts, db workflow, sandbox reset, and contributor operations |
-| [docs/06-CLI-AND-SCAFFOLDING.md](./docs/06-CLI-AND-SCAFFOLDING.md) | `create-nextblock`, template sync, and generated-project behavior |
-| [docs/07-BLOCK-SDK-AND-EXTENSIBILITY.md](./docs/07-BLOCK-SDK-AND-EXTENSIBILITY.md) | SDK contract and extensibility model |
-| [docs/README.md](./docs/README.md) | Audience-based docs index |
+| Document                                                                           | Purpose                                                                                  |
+| :--------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
+| [docs/01-PROJECT-OVERVIEW.md](./docs/01-PROJECT-OVERVIEW.md)                       | Monorepo structure, runtime model, and where each subsystem lives                        |
+| [docs/02-ECOMMERCE-CAPABILITIES.md](./docs/02-ECOMMERCE-CAPABILITIES.md)           | Verified commerce features, checkout providers, currency, tax, shipping, and fulfillment |
+| [docs/03-CMS-AND-EDITOR.md](./docs/03-CMS-AND-EDITOR.md)                           | Tiptap editor, page builder, widgets, and built-in block system                          |
+| [docs/04-DATABASE-AND-AUTH.md](./docs/04-DATABASE-AND-AUTH.md)                     | Supabase clients, auth flow, schema overview, RLS, and migration map                     |
+| [docs/05-DEVELOPER-GUIDE.md](./docs/05-DEVELOPER-GUIDE.md)                         | Local setup, scripts, db workflow, sandbox reset, and contributor operations             |
+| [docs/06-CLI-AND-SCAFFOLDING.md](./docs/06-CLI-AND-SCAFFOLDING.md)                 | `create-nextblock`, template sync, and generated-project behavior                        |
+| [docs/07-BLOCK-SDK-AND-EXTENSIBILITY.md](./docs/07-BLOCK-SDK-AND-EXTENSIBILITY.md) | SDK contract and extensibility model                                                     |
+| [docs/README.md](./docs/README.md)                                                 | Audience-based docs index                                                                |
 
 > **Under the hood note:** The migration folder under `libs/db/src/supabase/migrations` is the best source of truth for current platform capabilities.
 
