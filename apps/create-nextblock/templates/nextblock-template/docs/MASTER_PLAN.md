@@ -12,7 +12,7 @@ The global landscape for digital content management systems is experiencing a pr
 
 ## 2. The NextBlock™ Solution & Architectural Vision
 
-NextBlock™ CMS bridges the gap between these competing paradigms. Positioned as an AI-Native, Open-Core CMS, it leverages Next.js 15/16, Supabase, and Tailwind CSS for robust backend architecture while providing a Notion-style visual block interface for content creators.
+NextBlock™ CMS bridges the gap between these competing paradigms. Positioned as an AI-Native, Open-Core CMS, it leverages Next.js 16, Supabase, and Tailwind CSS for robust backend architecture while providing a Notion-style visual block interface for content creators.
 
 ### 2.1 The Nx Monorepo Architecture
 
@@ -85,7 +85,7 @@ NextBlock™ enforces a rigorous 100-Day Roadmap divided into four 25-day phases
 
 The core editing experience is fully abstracted into its own library (`@nextblock-monorepo/editor`) utilizing the Tiptap framework (built on ProseMirror) to solve the "Developer-Editor Gap".
 
-| Tiptap Extension Category | Package Name Integration    | Architectural Purpose within the NextBlock™ Schema                                                                                    |
+| Tiptap Extension Category | Package Name Integration    | Architectural Purpose within the NextBlock™ Schema                                                                                   |
 | ------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | Core Integration          | @tiptap/react, @tiptap/core | Essential frameworks required to bridge the ProseMirror state with the React component lifecycle, managing internal document models. |
 

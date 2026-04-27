@@ -1641,7 +1641,7 @@ export async function GET(request: NextRequest) {
                     content: [
                       {
                         type: "text",
-                        text: "NextBlock™ Ecommerce bridges the gap between high-performance headless architecture and intuitive visual editing. Built on the NextBlock™ Performance Stack (NPS), it leverages Next.js 15/16, Supabase, and Tailwind CSS to deliver sub-millisecond latency and a seamless \"Vibe Coding\" experience."
+                        text: "NextBlock™ Ecommerce bridges the gap between high-performance headless architecture and intuitive visual editing. Built on the NextBlock™ Performance Stack (NPS), it leverages Next.js 16, Supabase, and Tailwind CSS to deliver sub-millisecond latency and a seamless \"Vibe Coding\" experience."
                       }
                     ]
                   },
@@ -1755,7 +1755,7 @@ export async function GET(request: NextRequest) {
                       content: [
                         {
                           type: "text",
-                          text: "NextBlock™ Ecommerce comble le fossé entre l'architecture headless haute performance et l'édition visuelle intuitive. Construit sur la NextBlock™ Performance Stack (NPS), il exploite Next.js 15/16, Supabase et Tailwind CSS pour offrir une latence de moins d'une milliseconde."
+                          text: "NextBlock™ Ecommerce comble le fossé entre l'architecture headless haute performance et l'édition visuelle intuitive. Construit sur la NextBlock™ Performance Stack (NPS), il exploite Next.js 16, Supabase et Tailwind CSS pour offrir une latence de moins d'une milliseconde."
                         }
                       ]
                     },
