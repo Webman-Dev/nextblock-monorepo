@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getOrders } from './actions';
+import { ExportReportsDialog } from './ExportReportsDialog';
 import type { OrderCustomerDetails } from './types';
 
 // Helper to format currency if utils missing
@@ -26,6 +27,7 @@ export async function OrdersPage({
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
         <div className="flex items-center gap-2">
+           <ExportReportsDialog />
            {/* Simple Refresh via Link to same page */}
            <Link href={`/cms/orders?page=${page}&status=${status}`} className="px-3 py-2 text-sm font-medium border rounded hover:bg-gray-50 dark:hover:bg-slate-800">
              Refresh
