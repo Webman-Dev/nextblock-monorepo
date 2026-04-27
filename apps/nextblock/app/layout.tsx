@@ -2,7 +2,6 @@ import '@nextblock-cms/ui/styles/globals.css';
 // eslint-disable-next-line @nx/enforce-module-boundaries
 import '@nextblock-cms/editor/styles/editor.css';
 // app/layout.tsx
-import { SpeedInsights } from '@vercel/speed-insights/next';
 
 import type { Metadata } from 'next';
 import { Providers } from './providers';
@@ -11,6 +10,7 @@ import { CURRENCY_COOKIE_NAME } from '@nextblock-cms/ecommerce/server';
 import { ToasterProvider } from './ToasterProvider';
 import { AppShell } from '../components/AppShell';
 import { DeferredGoogleTagManager } from '../components/DeferredGoogleTagManager';
+import { DeferredSpeedInsights } from '../components/DeferredSpeedInsights';
 import {
   createClient as createSupabaseServerClient,
   getProfileWithRoleServerSide,
@@ -430,8 +430,6 @@ export default async function RootLayout({
         <link rel="dns-prefetch" href="https://db.ppcppwsfnrptznvbxnsz.supabase.co" />
         <link rel="dns-prefetch" href="https://realtime.supabase.com" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        {/* @ts-expect-error - SpeedInsights version might have missing nonce in types but supports it in runtime */}
-        <SpeedInsights nonce={nonce} />
       </head>
       <body className="min-h-screen">
         <Providers
@@ -461,6 +459,7 @@ export default async function RootLayout({
 
           {isEcommerceActive && <CartDrawer />}
         </Providers>
+        <DeferredSpeedInsights />
         <DeferredGoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID} nonce={nonce} />
       </body>
     </html>

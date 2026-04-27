@@ -2,7 +2,8 @@
 import React from "react";
 import dynamic from "next/dynamic";
 import type { Database } from "@nextblock-cms/db";
-import { getBlockDefinition, type SectionBlockContent, type BlockType } from "../lib/blocks/blockRegistry";
+import type { SectionBlockContent } from "../lib/blocks/blockRegistry";
+import { getPublicBlockRendererLoader } from "./blocks/publicRendererLoaders";
 
 type Block = Database['public']['Tables']['blocks']['Row'];
 import HeroBlockRenderer from "./blocks/renderers/HeroBlockRenderer"; // Static import for LCP
@@ -23,9 +24,9 @@ const DynamicBlockRenderer: React.FC<DynamicBlockRendererProps> = ({
   block,
   languageId,
 }) => {
-  const blockDefinition = getBlockDefinition(block.block_type as BlockType);
+  const rendererLoader = getPublicBlockRendererLoader(block.block_type);
   
-  if (!blockDefinition) {
+  if (!rendererLoader) {
     return (
       <div
         key={block.id}
@@ -46,22 +47,9 @@ const DynamicBlockRenderer: React.FC<DynamicBlockRendererProps> = ({
     return <ClientTextBlockRenderer content={block.content as any} languageId={languageId} />;
   }
 
-  // Check if the block definition provides a direct component (e.g., from SDK plugins)
-  if (blockDefinition.RendererComponent) {
-    const RendererComponent = blockDefinition.RendererComponent;
-    return (
-      <RendererComponent
-        content={block.content}
-        languageId={languageId}
-        isInEditor={false} // Assuming public view
-        className="my-4"
-      />
-    );
-  }
-
   // Create dynamic component with proper SSR handling for other blocks
   const RendererComponent = dynamic(
-    () => import(`./blocks/renderers/${blockDefinition.rendererComponentFilename}`),
+    rendererLoader,
     {
       loading: () => (
         <div className="my-4 p-4 border rounded-lg">

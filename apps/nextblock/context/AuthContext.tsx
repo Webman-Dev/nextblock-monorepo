@@ -72,6 +72,10 @@ export const AuthProvider = ({ children, serverUser, serverProfile }: AuthProvid
   }, [serverUser, serverProfile]);
 
   useEffect(() => {
+    if (!serverUser && !serverProfile) {
+      return;
+    }
+
     let isCancelled = false;
 
     const syncBrowserSession = async () => {

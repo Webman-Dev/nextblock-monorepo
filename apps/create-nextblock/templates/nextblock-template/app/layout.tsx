@@ -4,13 +4,13 @@ import '@nextblock-cms/editor/styles/editor.css';
 // app/layout.tsx
 import { EnvVarWarning } from "../components/env-var-warning";
 import { SandboxBanner } from "../components/SandboxBanner";
-import { SpeedInsights } from "@vercel/speed-insights/next"
  
 import { ThemeSwitcher } from '../components/theme-switcher';
 import type { Metadata } from 'next';
 import Header from "../components/Header";
 import FooterNavigation from "../components/FooterNavigation";
 import { DeferredGoogleTagManager } from '../components/DeferredGoogleTagManager';
+import { DeferredSpeedInsights } from '../components/DeferredSpeedInsights';
 import { Providers } from './providers';
 import { CartDrawer } from '@nextblock-cms/ecommerce';
 import { ToasterProvider } from './ToasterProvider';
@@ -183,7 +183,6 @@ export default async function RootLayout({
         <link rel="dns-prefetch" href="https://db.ppcppwsfnrptznvbxnsz.supabase.co" />
         <link rel="dns-prefetch" href="https://realtime.supabase.com" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <SpeedInsights/>
       </head>
       <body className="bg-background text-foreground min-h-screen flex flex-col">
         <Providers
@@ -229,6 +228,7 @@ export default async function RootLayout({
 
           {isEcommerceActive && <CartDrawer />}
         </Providers>
+        <DeferredSpeedInsights />
         <DeferredGoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID} nonce={nonce} />
       </body>
     </html>
