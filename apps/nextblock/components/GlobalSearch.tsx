@@ -13,12 +13,16 @@ import {
 } from 'lucide-react';
 import {
   Button,
+} from '@nextblock-cms/ui/button';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
+} from '@nextblock-cms/ui/dialog';
+import {
   Input,
-} from '@nextblock-cms/ui';
+} from '@nextblock-cms/ui/input';
 import { cn, useTranslations } from '@nextblock-cms/utils';
 import {
   useEffect,

@@ -2,7 +2,7 @@
 'use client';
 
 import { useLanguage } from '../context/LanguageContext';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui/select';
 import { useRouter, usePathname } from 'next/navigation';
 import { getPageTranslations, getPageMetadataBySlugAndLocale } from '../app/actions/languageActions';
 import { Language } from '../app/actions/languageActions';

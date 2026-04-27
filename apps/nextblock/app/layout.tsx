@@ -5,7 +5,7 @@ import '@nextblock-cms/editor/styles/editor.css';
 
 import type { Metadata } from 'next';
 import { Providers } from './providers';
-import { CartDrawer } from '@nextblock-cms/ecommerce';
+import { DeferredCartDrawer } from '../components/DeferredCartDrawer';
 import { CURRENCY_COOKIE_NAME } from '@nextblock-cms/ecommerce/server';
 import { ToasterProvider } from './ToasterProvider';
 import { AppShell } from '../components/AppShell';
@@ -424,11 +424,6 @@ export default async function RootLayout({
   return (
     <html lang={serverDeterminedLocale} suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://ppcppwsfnrptznvbxnsz.supabase.co" />
-        <link rel="dns-prefetch" href="https://ppcppwsfnrptznvbxnsz.supabase.co" />
-        <link rel="dns-prefetch" href="https://aws-0-us-east-1.pooler.supabase.com" />
-        <link rel="dns-prefetch" href="https://db.ppcppwsfnrptznvbxnsz.supabase.co" />
-        <link rel="dns-prefetch" href="https://realtime.supabase.com" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="min-h-screen">
@@ -457,7 +452,7 @@ export default async function RootLayout({
             {children}
           </AppShell>
 
-          {isEcommerceActive && <CartDrawer />}
+          {isEcommerceActive && <DeferredCartDrawer />}
         </Providers>
         <DeferredSpeedInsights />
         <DeferredGoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID} nonce={nonce} />

@@ -2,7 +2,10 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Download, Package, ShieldCheck } from 'lucide-react';
-import { Badge, Button, Label, Separator } from '@nextblock-cms/ui';
+import { Badge } from '@nextblock-cms/ui/badge';
+import { Button } from '@nextblock-cms/ui/button';
+import { Label } from '@nextblock-cms/ui/label';
+import { Separator } from '@nextblock-cms/ui/separator';
 import { formatPrice, useTranslations } from '@nextblock-cms/utils';
 
 import { useProduct } from '../product-context';

@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@nextblock-cms/ui';
+import { Button } from '@nextblock-cms/ui/button';
 import { ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';

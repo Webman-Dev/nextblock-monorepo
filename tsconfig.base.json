@@ -28,6 +28,7 @@
       "@nextblock-cms/ecommerce": ["./libs/ecommerce/src/index.ts"],
       "@nextblock-cms/ecommerce/server": ["./libs/ecommerce/src/server.ts"],
       "@nextblock-cms/ecommerce/actions": ["./libs/ecommerce/src/actions.ts"],
+      "@nextblock-cms/ecommerce/*": ["./libs/ecommerce/src/lib/*"],
 
       // Editor Library
       "@nextblock-cms/editor": ["./libs/editor/src/index.ts"],

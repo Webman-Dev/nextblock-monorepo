@@ -3,7 +3,7 @@ import type { Database } from '@nextblock-cms/db';
 import HeaderAuth from './header-auth';
 import LanguageSwitcher from './LanguageSwitcher';
 import ResponsiveNav from './ResponsiveNav';
-import { CartIcon } from '@nextblock-cms/ecommerce';
+import { CartIcon } from '@nextblock-cms/ecommerce/components/CartIcon';
 
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
 type Logo =

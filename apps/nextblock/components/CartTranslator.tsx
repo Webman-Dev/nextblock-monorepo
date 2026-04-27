@@ -2,14 +2,11 @@
 
 import { useEffect, useRef } from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import {
-  CartItem,
-  isDigitalItem,
-  mapRawVariantRelations,
-  useCartStore,
-  useIsCartHydrated,
-} from '@nextblock-cms/ecommerce';
-import { getTranslatedProductsForCart } from '@nextblock-cms/ecommerce/actions';
+import { useCartStore } from '@nextblock-cms/ecommerce/cart-store';
+import { isDigitalItem, type CartItem } from '@nextblock-cms/ecommerce/types';
+import { useIsCartHydrated } from '@nextblock-cms/ecommerce/use-cart';
+import { mapRawVariantRelations } from '@nextblock-cms/ecommerce/variation-utils';
+import { getTranslatedProductsForCart } from '@nextblock-cms/ecommerce/server-actions/product-actions';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 

@@ -1,4 +1,4 @@
-import { Skeleton } from "@nextblock-cms/ui";
+import { Skeleton } from '@nextblock-cms/ui/Skeleton';
 
 const PostCardSkeleton = () => {
   return (

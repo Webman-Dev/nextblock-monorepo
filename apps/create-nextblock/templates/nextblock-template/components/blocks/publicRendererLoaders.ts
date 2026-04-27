@@ -18,11 +18,6 @@ const publicBlockRendererLoaders: Partial<
   hero: () => import("./renderers/HeroBlockRenderer"),
   form: () => import("./renderers/FormBlockRenderer"),
   testimonial: () => import("./renderers/TestimonialBlockRenderer"),
-  product_grid: () => import("./renderers/ProductGridBlockRenderer"),
-  featured_product: () => import("./renderers/FeaturedProductBlockRenderer"),
-  cart: () => import("./renderers/CartBlockRenderer"),
-  checkout: () => import("./renderers/CheckoutBlockRenderer"),
-  product_details: () => import("./renderers/ProductDetailsBlockRenderer"),
 };
 
 export function getPublicBlockRendererLoader(blockType: string) {

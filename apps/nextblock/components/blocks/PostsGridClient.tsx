@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useLanguage } from '../../context/LanguageContext';
 import type { PostWithMediaDimensions } from './types';
 import Image from 'next/image';
-import { Button } from '@nextblock-cms/ui'; // Adjusted path
+import { Button } from '@nextblock-cms/ui/button';
 import PostCardSkeleton from './PostCardSkeleton'; // Added import
 
 interface PostsGridClientProps {

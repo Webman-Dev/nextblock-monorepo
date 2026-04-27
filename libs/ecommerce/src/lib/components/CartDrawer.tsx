@@ -5,9 +5,9 @@ import {
   SheetContent, 
   SheetHeader, 
   SheetTitle,
-  Button,
-  Badge,
-} from '@nextblock-cms/ui';
+} from '@nextblock-cms/ui/sheet';
+import { Badge } from '@nextblock-cms/ui/badge';
+import { Button } from '@nextblock-cms/ui/button';
 import { useRouter } from 'next/navigation';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { getCartItemActivePrice, useCartSubtotal } from '../cart-store';

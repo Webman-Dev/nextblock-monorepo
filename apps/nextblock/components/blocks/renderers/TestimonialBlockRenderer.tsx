@@ -1,11 +1,6 @@
 import React from "react";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-  Card,
-  CardContent,
-} from "@nextblock-cms/ui";
+import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar";
+import { Card, CardContent } from "@nextblock-cms/ui/card";
 import { MessageSquareQuote } from "lucide-react";
 
 type TestimonialBlockContent = {

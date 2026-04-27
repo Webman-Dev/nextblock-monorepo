@@ -6,7 +6,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@nextblock-cms/ui';
+} from '@nextblock-cms/ui/select';
 
 import { useCurrency } from '../CurrencyProvider';
 

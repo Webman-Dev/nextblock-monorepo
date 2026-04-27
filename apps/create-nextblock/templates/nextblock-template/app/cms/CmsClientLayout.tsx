@@ -9,10 +9,10 @@ import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package,
 } from "lucide-react"
-import { Button } from "@nextblock-cms/ui"
-import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
+import { Button } from "@nextblock-cms/ui/button"
+import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar"
 import { cn } from "@nextblock-cms/utils"
-// removed signOutAction import
+import { signOutAction } from "../actions"
 import Image from "next/image";
 import { FeedbackModal } from "./components/FeedbackModal";
 
@@ -103,7 +103,7 @@ const CollapsibleNavItem = ({ icon: Icon, title, children, isActive, adminOnly, 
 
 
 export default function CmsClientLayout({ children, isEcommerceActive = false }: { children: ReactNode, isEcommerceActive?: boolean }) {
-  const { user, profile, role, isLoading, isAdmin, isWriter, supabase } = useAuth();
+  const { user, profile, role, isLoading, isAdmin, isWriter } = useAuth();
   const router = useRouter();
   const pathname = usePathname(); // Use the usePathname hook
   const [cmsSidebarOpen, setCmsSidebarOpen] = React.useState(false);
@@ -148,9 +148,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
   };
 
   const handleSignOut = async () => {
-    if (supabase) {
-      await supabase.auth.signOut();
-    }
+    await signOutAction();
   };
 
 

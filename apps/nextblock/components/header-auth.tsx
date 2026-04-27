@@ -2,9 +2,10 @@
 
 import { hasPublicEnvVars } from "@nextblock-cms/utils";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Badge } from "@nextblock-cms/ui";
-import { Button } from "@nextblock-cms/ui";
+import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar";
+import { Badge } from "@nextblock-cms/ui/badge";
+import { Button } from "@nextblock-cms/ui/button";
+import { signOutAction } from "../app/actions";
 import { useAuth } from "../context/AuthContext";
 import { useTranslations } from "@nextblock-cms/utils";
 
@@ -15,24 +16,17 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Avatar,
-  AvatarFallback,
-  AvatarImage
-} from "@nextblock-cms/ui";
+} from "@nextblock-cms/ui/dropdown-menu";
 import { User, LogOut, LayoutDashboard } from "lucide-react";
 
 export default function AuthButton() {
-  const { user, profile, isAdmin, isWriter, supabase } = useAuth();
+  const { user, profile, isAdmin, isWriter } = useAuth();
   const { t } = useTranslations();
-  const router = useRouter();
   const displayName = profile?.full_name || profile?.github_username || user?.email || null;
   const showAdminLink = isAdmin || isWriter;
 
   const handleSignOut = async () => {
-    if (supabase) {
-      await supabase.auth.signOut();
-      window.location.href = '/sign-in';
-    }
+    await signOutAction();
   };
 
   if (!hasPublicEnvVars) {

@@ -1,7 +1,7 @@
-import { FeaturedProduct } from '@nextblock-cms/ecommerce';
+import { FeaturedProduct } from '@nextblock-cms/ecommerce/components/FeaturedProduct';
 import { getProduct } from '@nextblock-cms/ecommerce/server';
-import { getVariantEffectivePriceRange } from '@nextblock-cms/ecommerce';
-import { normalizePriceMap, normalizeSalePriceMap } from '@nextblock-cms/ecommerce';
+import { normalizePriceMap, normalizeSalePriceMap } from '@nextblock-cms/ecommerce/currency';
+import { getVariantEffectivePriceRange } from '@nextblock-cms/ecommerce/variation-utils';
 
 import { FeaturedProductBlockContent } from './ecommerce-block-schemas';
 import { getSsgSupabaseClient } from '@nextblock-cms/db/server';

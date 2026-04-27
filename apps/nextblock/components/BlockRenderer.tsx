@@ -9,6 +9,20 @@ type Block = Database['public']['Tables']['blocks']['Row'];
 import HeroBlockRenderer from "./blocks/renderers/HeroBlockRenderer"; // Static import for LCP
 import ClientTextBlockRenderer from "./blocks/renderers/ClientTextBlockRenderer"; // Static import for client component
 
+const ECOMMERCE_BLOCK_TYPES = new Set([
+  "product_grid",
+  "featured_product",
+  "cart",
+  "checkout",
+  "product_details",
+]);
+
+function loadEcommerceBlockRenderer(blockType: string) {
+  return import("./blocks/ecommerceRendererLoaders").then((module) =>
+    module.loadEcommerceBlockRenderer(blockType)
+  );
+}
+
 interface BlockRendererProps {
   blocks: Block[];
   languageId: number;
@@ -33,6 +47,31 @@ const DynamicBlockRenderer: React.FC<DynamicBlockRendererProps> = ({
   const rendererLoader = getPublicBlockRendererLoader(block.block_type);
   
   if (!rendererLoader) {
+    if (ECOMMERCE_BLOCK_TYPES.has(block.block_type)) {
+      const EcommerceRendererComponent = dynamic(
+        () => loadEcommerceBlockRenderer(block.block_type),
+        {
+          loading: () => (
+            <div className="my-4 p-4 border rounded-lg">
+              <div className="h-8 w-1/2 mb-4 bg-muted/40 animate-pulse rounded" />
+              <div className="h-4 w-full mb-2 bg-muted/40 animate-pulse rounded" />
+              <div className="h-4 w-3/4 bg-muted/40 animate-pulse rounded" />
+            </div>
+          ),
+          ssr: true,
+        }
+      ) as React.ComponentType<any>;
+
+      return (
+        <EcommerceRendererComponent
+          content={block.content}
+          languageId={languageId}
+          excludeProductId={excludeProductId}
+          excludeTranslationGroupId={excludeTranslationGroupId}
+        />
+      );
+    }
+
     return (
       <div
         key={block.id}

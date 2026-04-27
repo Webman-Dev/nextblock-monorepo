@@ -12,7 +12,7 @@ import FooterNavigation from "../components/FooterNavigation";
 import { DeferredGoogleTagManager } from '../components/DeferredGoogleTagManager';
 import { DeferredSpeedInsights } from '../components/DeferredSpeedInsights';
 import { Providers } from './providers';
-import { CartDrawer } from '@nextblock-cms/ecommerce';
+import { DeferredCartDrawer } from '../components/DeferredCartDrawer';
 import { ToasterProvider } from './ToasterProvider';
 import { createClient as createSupabaseServerClient, getProfileWithRoleServerSide } from '@nextblock-cms/db/server';
 import { getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
@@ -177,11 +177,6 @@ export default async function RootLayout({
       <head>
         <title>{metadata.title as string}</title>
         <meta name="description" content={metadata.description as string} />
-        <link rel="preconnect" href="https://ppcppwsfnrptznvbxnsz.supabase.co" />
-        <link rel="dns-prefetch" href="https://ppcppwsfnrptznvbxnsz.supabase.co" />
-        <link rel="dns-prefetch" href="https://aws-0-us-east-1.pooler.supabase.com" />
-        <link rel="dns-prefetch" href="https://db.ppcppwsfnrptznvbxnsz.supabase.co" />
-        <link rel="dns-prefetch" href="https://realtime.supabase.com" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="bg-background text-foreground min-h-screen flex flex-col">
@@ -226,7 +221,7 @@ export default async function RootLayout({
             </footer>
           </div>
 
-          {isEcommerceActive && <CartDrawer />}
+          {isEcommerceActive && <DeferredCartDrawer />}
         </Providers>
         <DeferredSpeedInsights />
         <DeferredGoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID} nonce={nonce} />

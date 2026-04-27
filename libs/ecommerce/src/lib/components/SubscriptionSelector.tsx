@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Button, Skeleton } from '@nextblock-cms/ui';
+import { Button } from '@nextblock-cms/ui/button';
+import { Skeleton } from '@nextblock-cms/ui/Skeleton';
 import { useCart } from '../use-cart';
 import { ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';

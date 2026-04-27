@@ -1,17 +1,17 @@
 'use client';
 
+import { Badge } from '@nextblock-cms/ui/badge';
+import { Button } from '@nextblock-cms/ui/button';
 import {
-  Badge,
-  Button,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-  Checkbox,
-  Input,
-  Label,
-  Separator,
-} from '@nextblock-cms/ui';
+} from '@nextblock-cms/ui/card';
+import { Checkbox } from '@nextblock-cms/ui/checkbox';
+import { Input } from '@nextblock-cms/ui/input';
+import { Label } from '@nextblock-cms/ui/label';
+import { Separator } from '@nextblock-cms/ui/separator';
 import { Checkout as FreemiusCheckout } from '@freemius/checkout';
 import { getCartItemActivePrice } from '../cart-store';
 import { useCart } from '../use-cart';

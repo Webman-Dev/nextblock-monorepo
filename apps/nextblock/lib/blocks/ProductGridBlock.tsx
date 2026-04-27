@@ -1,7 +1,7 @@
-import { ProductGrid } from '@nextblock-cms/ecommerce';
+import { ProductGrid } from '@nextblock-cms/ecommerce/components/ProductGrid';
 import { getProducts } from '@nextblock-cms/ecommerce/server';
-import { getVariantEffectivePriceRange } from '@nextblock-cms/ecommerce';
-import { normalizePriceMap, normalizeSalePriceMap } from '@nextblock-cms/ecommerce';
+import { normalizePriceMap, normalizeSalePriceMap } from '@nextblock-cms/ecommerce/currency';
+import { getVariantEffectivePriceRange } from '@nextblock-cms/ecommerce/variation-utils';
 
 
 import { ProductGridBlockContent } from './ecommerce-block-schemas';

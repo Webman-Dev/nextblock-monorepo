@@ -1,16 +1,16 @@
 'use client';
 
 import { useMemo } from 'react';
+import { Badge } from '@nextblock-cms/ui/badge';
+import { Button } from '@nextblock-cms/ui/button';
 import {
-  Button,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Badge,
-} from '@nextblock-cms/ui';
+} from '@nextblock-cms/ui/table';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { getCartItemActivePrice, useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';

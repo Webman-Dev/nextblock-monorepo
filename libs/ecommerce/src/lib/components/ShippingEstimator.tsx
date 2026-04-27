@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, Input, Label } from '@nextblock-cms/ui';
+import { Button } from '@nextblock-cms/ui/button';
+import { Input } from '@nextblock-cms/ui/input';
+import { Label } from '@nextblock-cms/ui/label';
 import { Truck, Calculator, Loader2 } from 'lucide-react';
 import { countries } from '../countries';
 import { getShippingEstimates } from '../server-actions/shipping-actions';

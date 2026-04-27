@@ -1,4 +1,4 @@
-import { ProductGrid } from '@nextblock-cms/ecommerce';
+import { ProductGrid } from '@nextblock-cms/ecommerce/components/ProductGrid';
 import { getProducts } from '@nextblock-cms/ecommerce/server';
 
 
