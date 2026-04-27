@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { GoogleTagManager } from "@next/third-parties/google";
+import { useEffect, useState, type ComponentType } from "react";
 
 interface DeferredGoogleTagManagerProps {
   gtmId?: string;
@@ -15,20 +14,40 @@ const interactionEvents: Array<keyof WindowEventMap> = [
   "touchstart",
 ];
 
+type GoogleTagManagerComponent = ComponentType<{
+  gtmId: string;
+  nonce?: string;
+}>;
+
 export function DeferredGoogleTagManager({
   gtmId,
   nonce,
 }: DeferredGoogleTagManagerProps) {
-  const [shouldLoad, setShouldLoad] = useState(false);
+  const [GoogleTagManager, setGoogleTagManager] =
+    useState<GoogleTagManagerComponent | null>(null);
 
   useEffect(() => {
     if (!gtmId) {
       return;
     }
 
-    const enableGtm = () => {
-      setShouldLoad(true);
-    };
+    let isMounted = true;
+
+    function removeListeners() {
+      interactionEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, enableGtm);
+      });
+    }
+
+    function enableGtm() {
+      removeListeners();
+
+      void import("@next/third-parties/google").then(({ GoogleTagManager }) => {
+        if (isMounted) {
+          setGoogleTagManager(() => GoogleTagManager as GoogleTagManagerComponent);
+        }
+      });
+    }
 
     interactionEvents.forEach((eventName) => {
       window.addEventListener(eventName, enableGtm, {
@@ -38,13 +57,12 @@ export function DeferredGoogleTagManager({
     });
 
     return () => {
-      interactionEvents.forEach((eventName) => {
-        window.removeEventListener(eventName, enableGtm);
-      });
+      isMounted = false;
+      removeListeners();
     };
   }, [gtmId]);
 
-  if (!gtmId || !shouldLoad) {
+  if (!gtmId || !GoogleTagManager) {
     return null;
   }
 

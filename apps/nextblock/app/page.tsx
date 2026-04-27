@@ -11,8 +11,6 @@ const DEFAULT_LOCALE = 'en';
 const LANGUAGE_COOKIE_KEY = 'NEXT_USER_LOCALE';
 
 export const revalidate = 360;
-export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
 
 interface PageTranslation {
   slug: string;

@@ -46,6 +46,7 @@ type CmsImageMetadata = {
   width: number;
   height: number;
   sizes: string;
+  priority?: boolean;
 };
 
 type HtmlImageProps = {
@@ -68,6 +69,7 @@ const knownCmsImages: Record<string, CmsImageMetadata> = {
     width: 1024,
     height: 572,
     sizes: inlineImageSizes,
+    priority: true,
   },
   'images/cap.webp': {
     src: '/images/cap.webp',
@@ -191,6 +193,7 @@ function renderOptimizedCmsImage(attribs: Record<string, string>) {
   const props = attributesToProps(attribs) as HtmlImageProps;
   const alt = typeof props.alt === 'string' ? props.alt : '';
   const sizes = typeof props.sizes === 'string' ? props.sizes : image.sizes;
+  const priority = image.priority === true;
 
   return (
     <Image
@@ -200,7 +203,9 @@ function renderOptimizedCmsImage(attribs: Record<string, string>) {
       height={image.height}
       sizes={sizes}
       quality={60}
-      loading="lazy"
+      priority={priority}
+      fetchPriority={priority ? 'high' : undefined}
+      loading={priority ? undefined : 'lazy'}
       decoding="async"
       className={props.className}
       style={props.style}
