@@ -8,7 +8,7 @@ import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
-  ExternalLink,
+  ExternalLink, BrainCircuit,
 } from "lucide-react"
 import { Button } from "@nextblock-cms/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar"
@@ -202,6 +202,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
   else if (pathname.startsWith("/cms/settings/extra-translations")) pageTitle = "Extra Translations";
   else if (pathname.startsWith("/cms/settings/currencies")) pageTitle = "Currency Settings";
   else if (pathname.startsWith("/cms/settings/taxes")) pageTitle = "Tax Settings";
+  else if (pathname.startsWith("/cms/settings/cortex-ai")) pageTitle = "Cortex AI";
   else if (pathname.startsWith("/cms/payments")) pageTitle = "Payment Settings";
 
   else if (pathname.startsWith("/cms/settings/packages")) pageTitle = "Packages";
@@ -341,6 +342,9 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                     </NavItem>
                     <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Extra Translations
+                    </NavItem>
+                    <NavItem href="/cms/settings/cortex-ai" icon={BrainCircuit} isActive={pathname.startsWith("/cms/settings/cortex-ai")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Cortex AI
                     </NavItem>
                  </CollapsibleNavItem>
                 </>

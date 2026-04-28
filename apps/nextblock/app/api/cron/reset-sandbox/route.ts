@@ -12,6 +12,7 @@ import {
 } from '@nextblock-cms/ecommerce/server';
 import postgres from 'postgres';
 
+import { CORTEX_AI_PACKAGE_ID } from '../../../../lib/ai-config';
 import { SANDBOX_RESET_SQL } from './sandboxResetSql';
 
 export const dynamic = 'force-dynamic';
@@ -2061,25 +2062,34 @@ export async function GET(request: NextRequest) {
           }
         }
       }
+
+      if (process.env.FREEMIUS_AI_SANDBOX_KEY) {
+        const { error: cortexActivationError } = await supabaseAdmin
+          .from('package_activations')
+          .upsert(
+            {
+              package_id: CORTEX_AI_PACKAGE_ID,
+              license_key: process.env.FREEMIUS_AI_SANDBOX_KEY,
+              status: 'active',
+              instance_name: siteUrl,
+              last_validated_at: new Date().toISOString(),
+            },
+            { onConflict: 'license_key, package_id' }
+          );
+
+        if (cortexActivationError) {
+          console.error(
+            '[Sandbox Reset] Failed to activate Cortex AI package:',
+            cortexActivationError.message
+          );
+          throw cortexActivationError;
+        } else {
+          console.log('[Sandbox Reset] Successfully activated Cortex AI package.');
+        }
+      }
     } finally {
       await db.end();
     }
-
-    // Extensibility: AI Agents package (uncomment and update when released)
-    // if (process.env.FREEMIUS_AI_SANDBOX_KEY) {
-    //   const { error: aiActivationError } = await supabaseAdmin.from('package_activations').insert({
-    //     package_id: 'ai-agents',
-    //     license_key: process.env.FREEMIUS_AI_SANDBOX_KEY,
-    //     status: 'active',
-    //     instance_name: siteUrl,
-    //   });
-    //   
-    //   if (aiActivationError) {
-    //     console.error('[Sandbox Reset] Failed to activate ai-agents package:', aiActivationError.message);
-    //   } else {
-    //     console.log('[Sandbox Reset] Successfully activated ai-agents package.');
-    //   }
-    // }
 
     console.log('[Sandbox Reset] Complete.');
     return NextResponse.json({ success: true, message: 'Sandbox hard reset completed successfully' });

@@ -1,8 +1,9 @@
 // libs/editor/src/lib/NotionEditor.tsx
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent, JSONContent } from '@tiptap/react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { editorExtensions } from './kit';
 import { EditorBubbleMenu } from './components/menus/BubbleMenu';
 import { EditorFloatingMenu } from './components/menus/FloatingMenu';
@@ -23,6 +24,7 @@ interface NotionEditorProps {
   placeholder?: string;
   editable?: boolean;
   showToolbar?: boolean;
+  showAiPrompt?: boolean;
   showCharacterCount?: boolean;
   className?: string;
   onFocus?: () => void;
@@ -38,6 +40,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   placeholder,
   editable = true,
   showToolbar = true,
+  showAiPrompt = true,
   showCharacterCount = true,
   className,
   onFocus,
@@ -45,6 +48,9 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   openImagePicker,
 }) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [isGeneratingAiContent, setIsGeneratingAiContent] = useState(false);
   const editor = useEditor({
     extensions: editorExtensions,
     content: (content || initialContent),
@@ -224,6 +230,49 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   const characters = characterCount?.characters?.() ?? 0;
   const words = characterCount?.words?.() ?? 0;
 
+  const handleAiGenerate = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const prompt = aiPrompt.trim();
+
+    if (!prompt || isGeneratingAiContent) {
+      return;
+    }
+
+    setAiError(null);
+    setIsGeneratingAiContent(true);
+
+    try {
+      const response = await fetch('/api/ai/generate-blocks', {
+        body: JSON.stringify({ prompt }),
+        headers: {
+          'content-type': 'application/json',
+        },
+        method: 'POST',
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Cortex AI could not generate content.');
+      }
+
+      if (!payload || payload.type !== 'doc' || !Array.isArray(payload.content)) {
+        throw new Error('Cortex AI returned an invalid editor document.');
+      }
+
+      if (editor.isEmpty) {
+        editor.commands.setContent(payload);
+      } else {
+        editor.chain().focus().insertContent(payload.content).run();
+      }
+
+      setAiPrompt('');
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'Cortex AI could not generate content.');
+    } finally {
+      setIsGeneratingAiContent(false);
+    }
+  };
+
   return (
     <div
       ref={wrapperRef}
@@ -236,6 +285,43 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
       )}
     >
       {showToolbar && <EditorToolbar editor={editor} />}
+
+      {showAiPrompt && editable && (
+        <form
+          onSubmit={handleAiGenerate}
+          className="flex items-center gap-2 border-b bg-muted/30 px-3 py-2"
+        >
+          <label htmlFor="cortex-ai-editor-prompt" className="sr-only">
+            Cortex AI prompt
+          </label>
+          <input
+            id="cortex-ai-editor-prompt"
+            value={aiPrompt}
+            onChange={(event) => setAiPrompt(event.target.value)}
+            disabled={isGeneratingAiContent}
+            placeholder="Ask Cortex AI"
+            className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          />
+          <button
+            type="submit"
+            disabled={!aiPrompt.trim() || isGeneratingAiContent}
+            title="Generate editor blocks"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-background text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isGeneratingAiContent ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+          </button>
+        </form>
+      )}
+
+      {aiError && (
+        <div className="border-b bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {aiError}
+        </div>
+      )}
 
       <EditorBubbleMenu editor={editor} />
       <EditorFloatingMenu editor={editor} />

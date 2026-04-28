@@ -1,0 +1,79 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  buildCortexAiModelFallbackChain,
+  CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY,
+  CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
+  CortexAiRoutingError,
+  isOpenRouterRateLimitError,
+  runWithCortexAiModelFallback,
+} from './ai-model-registry';
+
+describe('Cortex AI OpenRouter routing', () => {
+  it('builds a free-model fallback chain with preferred overrides', () => {
+    expect(buildCortexAiModelFallbackChain()).toEqual([
+      CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
+      ...CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY,
+    ]);
+
+    expect(
+      buildCortexAiModelFallbackChain({
+        modelId: 'openai/gpt-oss-120b:free',
+      })
+    ).toEqual([
+      'openai/gpt-oss-120b:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
+    ]);
+  });
+
+  it('detects OpenRouter rate limit errors across common error shapes', () => {
+    expect(isOpenRouterRateLimitError({ statusCode: 429 })).toBe(true);
+    expect(isOpenRouterRateLimitError({ response: { status: 429 } })).toBe(true);
+    expect(isOpenRouterRateLimitError({ cause: { status: 429 } })).toBe(true);
+    expect(isOpenRouterRateLimitError({ statusCode: 500 })).toBe(false);
+  });
+
+  it('retries alternate free models after a 429', async () => {
+    const tried: string[] = [];
+    const result = await runWithCortexAiModelFallback({
+      modelIds: [
+        CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
+        'nvidia/nemotron-3-super-120b-a12b:free',
+      ],
+      execute: async (modelId) => {
+        tried.push(modelId);
+
+        if (modelId === CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL) {
+          throw { statusCode: 429 };
+        }
+
+        return `ok:${modelId}`;
+      },
+    });
+
+    expect(tried).toEqual([
+      CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
+      'nvidia/nemotron-3-super-120b-a12b:free',
+    ]);
+    expect(result.modelId).toBe('nvidia/nemotron-3-super-120b-a12b:free');
+    expect(result.result).toBe('ok:nvidia/nemotron-3-super-120b-a12b:free');
+    expect(result.attempts.map((attempt) => attempt.status)).toEqual([
+      'rate_limited',
+      'success',
+    ]);
+  });
+
+  it('stops retrying on non-rate-limit failures', async () => {
+    await expect(
+      runWithCortexAiModelFallback({
+        modelIds: [
+          CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
+          'nvidia/nemotron-3-super-120b-a12b:free',
+        ],
+        execute: async () => {
+          throw { statusCode: 401 };
+        },
+      })
+    ).rejects.toBeInstanceOf(CortexAiRoutingError);
+  });
+});
