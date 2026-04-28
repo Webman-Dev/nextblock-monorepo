@@ -5,9 +5,9 @@ import {
   Badge, Button
 } from "@nextblock-cms/ui"
 import { 
-  ArrowUpRight, ShoppingCart, TrendingUp, Receipt, 
-  Zap, Brain, Sparkles, ArrowRight, ExternalLink,
-  Globe, CreditCard, DollarSign, Package
+  ShoppingCart, 
+  Zap, Sparkles, ArrowRight, 
+  Globe, CreditCard
 } from "lucide-react"
 import { formatPrice } from "@nextblock-cms/utils"
 import Link from "next/link"

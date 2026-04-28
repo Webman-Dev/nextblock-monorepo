@@ -1,5 +1,5 @@
 import { Alert, AlertDescription, AlertTitle, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@nextblock-cms/ui"
-import { Calendar, FileText, PenTool, Users, Eye, TrendingUp, DollarSign, Receipt, ShoppingCart, Sparkles } from "lucide-react"
+import { Calendar, FileText, PenTool, Users, Eye, TrendingUp, DollarSign, Receipt, ShoppingCart } from "lucide-react"
 import { getDashboardStats } from "./actions"
 import { MetricCard, SalesLedger, PremiumCTA } from "./components/DashboardComponents"
 import { formatPrice } from "@nextblock-cms/utils"
