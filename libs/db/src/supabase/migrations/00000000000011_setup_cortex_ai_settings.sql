@@ -16,15 +16,13 @@ CREATE POLICY site_settings_read_policy
   ON public.site_settings
   FOR SELECT
   TO public
-  USING (key <> 'cortex_ai_openrouter_api_key');
-
-CREATE POLICY site_settings_sensitive_read_policy
-  ON public.site_settings
-  FOR SELECT
-  TO authenticated
   USING (
-    key = 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    key <> 'cortex_ai_openrouter_api_key'
+    OR (
+      key = 'cortex_ai_openrouter_api_key'
+      AND (SELECT auth.role()) = 'authenticated'
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
   );
 
 CREATE POLICY site_settings_insert_policy
@@ -32,17 +30,14 @@ CREATE POLICY site_settings_insert_policy
   FOR INSERT
   TO authenticated
   WITH CHECK (
-    key <> 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-  );
-
-CREATE POLICY site_settings_sensitive_insert_policy
-  ON public.site_settings
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    key = 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    (
+      key <> 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key = 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
   );
 
 CREATE POLICY site_settings_update_policy
@@ -50,25 +45,24 @@ CREATE POLICY site_settings_update_policy
   FOR UPDATE
   TO authenticated
   USING (
-    key <> 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    (
+      key <> 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key = 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
   )
   WITH CHECK (
-    key <> 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-  );
-
-CREATE POLICY site_settings_sensitive_update_policy
-  ON public.site_settings
-  FOR UPDATE
-  TO authenticated
-  USING (
-    key = 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) = 'ADMIN'
-  )
-  WITH CHECK (
-    key = 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    (
+      key <> 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key = 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
   );
 
 CREATE POLICY site_settings_delete_policy
@@ -76,15 +70,12 @@ CREATE POLICY site_settings_delete_policy
   FOR DELETE
   TO authenticated
   USING (
-    key <> 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-  );
-
-CREATE POLICY site_settings_sensitive_delete_policy
-  ON public.site_settings
-  FOR DELETE
-  TO authenticated
-  USING (
-    key = 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    (
+      key <> 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key = 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
   );

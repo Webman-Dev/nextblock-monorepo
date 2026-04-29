@@ -1299,7 +1299,6 @@ CREATE OR REPLACE FUNCTION public.get_current_user_role()
 RETURNS public.user_role
 LANGUAGE sql
 STABLE
-SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT role FROM public.profiles WHERE id = auth.uid();
@@ -1309,7 +1308,6 @@ CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS boolean
 LANGUAGE sql
 STABLE
-SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT role = 'ADMIN' FROM public.profiles WHERE id = auth.uid();
@@ -1390,6 +1388,8 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
+
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
 
 DO $$
 DECLARE
@@ -1473,7 +1473,6 @@ $$;
 CREATE OR REPLACE FUNCTION public.handle_media_update()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
@@ -1485,7 +1484,6 @@ $$;
 CREATE OR REPLACE FUNCTION public.handle_posts_update()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
@@ -1497,7 +1495,6 @@ $$;
 CREATE OR REPLACE FUNCTION public.handle_pages_update()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
@@ -1509,7 +1506,6 @@ $$;
 CREATE OR REPLACE FUNCTION public.handle_blocks_update()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
@@ -1521,7 +1517,6 @@ $$;
 CREATE OR REPLACE FUNCTION public.handle_navigation_items_update()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
@@ -1579,7 +1574,6 @@ CREATE OR REPLACE FUNCTION public.get_ecommerce_track_quantities()
 RETURNS boolean
 LANGUAGE plpgsql
 STABLE
-SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -1637,7 +1631,6 @@ CREATE OR REPLACE FUNCTION public.assign_order_invoice_metadata(
 )
 RETURNS TABLE(invoice_number text, paid_at timestamptz)
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -1671,7 +1664,6 @@ $$;
 CREATE OR REPLACE FUNCTION public.upsert_product_with_variants(product_payload jsonb)
 RETURNS uuid
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path = public
 AS $function$
 DECLARE
@@ -1865,7 +1857,6 @@ $function$;
 CREATE OR REPLACE FUNCTION public.handle_inventory_items_update()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
@@ -1877,7 +1868,6 @@ $$;
 CREATE OR REPLACE FUNCTION public.sync_inventory_cache_for_sku(p_sku text)
 RETURNS void
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -1934,7 +1924,6 @@ $$;
 CREATE OR REPLACE FUNCTION public.handle_inventory_item_change()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -1948,7 +1937,6 @@ $$;
 CREATE OR REPLACE FUNCTION public.apply_order_inventory_deduction(p_order_id uuid)
 RETURNS void
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -5082,15 +5070,13 @@ CREATE POLICY site_settings_read_policy
   ON public.site_settings
   FOR SELECT
   TO public
-  USING (key <> 'cortex_ai_openrouter_api_key');
-
-CREATE POLICY site_settings_sensitive_read_policy
-  ON public.site_settings
-  FOR SELECT
-  TO authenticated
   USING (
-    key = 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    key <> 'cortex_ai_openrouter_api_key'
+    OR (
+      key = 'cortex_ai_openrouter_api_key'
+      AND (SELECT auth.role()) = 'authenticated'
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
   );
 
 CREATE POLICY site_settings_insert_policy
@@ -5098,17 +5084,14 @@ CREATE POLICY site_settings_insert_policy
   FOR INSERT
   TO authenticated
   WITH CHECK (
-    key <> 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-  );
-
-CREATE POLICY site_settings_sensitive_insert_policy
-  ON public.site_settings
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    key = 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    (
+      key <> 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key = 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
   );
 
 CREATE POLICY site_settings_update_policy
@@ -5116,25 +5099,24 @@ CREATE POLICY site_settings_update_policy
   FOR UPDATE
   TO authenticated
   USING (
-    key <> 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    (
+      key <> 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key = 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
   )
   WITH CHECK (
-    key <> 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-  );
-
-CREATE POLICY site_settings_sensitive_update_policy
-  ON public.site_settings
-  FOR UPDATE
-  TO authenticated
-  USING (
-    key = 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) = 'ADMIN'
-  )
-  WITH CHECK (
-    key = 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    (
+      key <> 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key = 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
   );
 
 CREATE POLICY site_settings_delete_policy
@@ -5142,17 +5124,14 @@ CREATE POLICY site_settings_delete_policy
   FOR DELETE
   TO authenticated
   USING (
-    key <> 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-  );
-
-CREATE POLICY site_settings_sensitive_delete_policy
-  ON public.site_settings
-  FOR DELETE
-  TO authenticated
-  USING (
-    key = 'cortex_ai_openrouter_api_key'
-    AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    (
+      key <> 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key = 'cortex_ai_openrouter_api_key'
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
   );
 
 
