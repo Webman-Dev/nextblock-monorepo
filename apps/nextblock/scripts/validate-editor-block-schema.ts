@@ -68,7 +68,7 @@ async function readDatabaseSample() {
 }
 
 function loadEditorBlockSchemas() {
-  return require('../../../schemas/editor-blocks') as typeof import('../../../schemas/editor-blocks');
+  return require('@nextblock-cms/utils') as typeof import('@nextblock-cms/utils');
 }
 
 async function main() {

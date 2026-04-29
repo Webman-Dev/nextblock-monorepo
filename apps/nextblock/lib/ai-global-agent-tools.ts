@@ -381,7 +381,7 @@ function validateCortexBlockContent(blockType: BlockType, content: Record<string
 }
 
 function getEditorBlockDocumentSchema() {
-  const { editorBlockDocumentSchema } = require('../../../schemas/editor-blocks') as typeof import('../../../schemas/editor-blocks');
+  const { editorBlockDocumentSchema } = require('@nextblock-cms/utils') as typeof import('@nextblock-cms/utils');
   return editorBlockDocumentSchema;
 }
 

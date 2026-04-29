@@ -3,7 +3,7 @@ const { join } = require('path');
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  presets: [require('../../libs/ui/tailwind.config.js')],
+  presets: [require('@nextblock-cms/ui/tailwind.config.js')],
   content: (() => {
     const projectGlobs = [
       join(

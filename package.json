@@ -100,7 +100,7 @@
     "@supabase/supabase-js": "^2.105.1",
     "@svgr/webpack": "^8.1.0",
     "@swc-node/register": "1.11.1",
-    "@swc/cli": "0.8.1",
+    "@swc/cli": "0.7.10",
     "@swc/core": "^1.15.32",
     "@swc/helpers": "0.5.21",
     "@swc/wasm": "^1.15.32",

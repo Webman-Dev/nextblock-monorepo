@@ -50,6 +50,7 @@ export function CustomSelectWithInput({
   const selectValue = isCustomValue ? "custom" : value
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowCustomInput(isCustomValue)
   }, [isCustomValue])
 

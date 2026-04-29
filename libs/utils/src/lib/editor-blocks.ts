@@ -121,7 +121,9 @@ type EditorBlockNodeShape = {
   type: string;
 };
 
+// eslint-disable-next-line prefer-const
 let inlineNodeSchema: z.ZodType<EditorInlineNodeShape>;
+// eslint-disable-next-line prefer-const
 let blockNodeSchema: z.ZodType<EditorBlockNodeShape>;
 
 const inlineContentSchema: z.ZodType<EditorInlineNodeShape[]> = z.lazy(() =>
