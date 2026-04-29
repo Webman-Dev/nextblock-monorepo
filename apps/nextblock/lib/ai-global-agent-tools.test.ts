@@ -19,7 +19,7 @@ type MockDatabase = {
 class MockQuery {
   private filters: Array<{ column: string; value: unknown }> = [];
   private limitCount: number | null = null;
-  private operation: 'delete' | 'insert' | 'select' | 'upsert' = 'select';
+  private operation: 'delete' | 'insert' | 'select' | 'update' | 'upsert' = 'select';
   private payload: MockRow | MockRow[] | null = null;
 
   constructor(
@@ -53,6 +53,13 @@ class MockQuery {
     this.operation = 'insert';
     this.payload = payload;
     this.calls.push({ operation: 'insert', payload, table: this.table });
+    return this;
+  }
+
+  update(payload: MockRow) {
+    this.operation = 'update';
+    this.payload = payload;
+    this.calls.push({ operation: 'update', payload, table: this.table });
     return this;
   }
 
@@ -119,6 +126,26 @@ class MockQuery {
 
       return {
         data: inserted,
+        error: null,
+      };
+    }
+
+    if (this.operation === 'update') {
+      const payload = Array.isArray(this.payload) ? this.payload[0] : this.payload;
+      const updated: MockRow[] = [];
+
+      this.database[this.table] = this.database[this.table].map((row) => {
+        if (!this.matchesFilters(row)) {
+          return row;
+        }
+
+        const nextRow = { ...row, ...payload };
+        updated.push(nextRow);
+        return nextRow;
+      });
+
+      return {
+        data: updated,
         error: null,
       };
     }
@@ -334,6 +361,106 @@ describe('Cortex AI global agent tool executors', () => {
       parent_id: null,
       url: 'mailto:info@nextblock.dev',
     });
+  });
+
+  it('updates a single existing header navigation item without replacing the menu', async () => {
+    const { database, supabase } = createMockSupabase({
+      languages: [
+        { code: 'en', id: 1, is_active: true, name: 'English' },
+        { code: 'fr', id: 2, is_active: true, name: 'French' },
+      ],
+      navigation_items: [
+        { id: 1, label: 'Accueil', language_id: 2, menu_key: 'HEADER', order: 0, url: '/' },
+        {
+          id: 2,
+          label: 'Contact',
+          language_id: 2,
+          menu_key: 'HEADER',
+          order: 1,
+          url: 'mailto:info@nextblock.dev',
+        },
+        { id: 3, label: 'Articles', language_id: 2, menu_key: 'HEADER', order: 2, url: '/articles' },
+      ],
+    });
+
+    const result = await executeUpdateNavigationBar(
+      {
+        items: [
+          {
+            label: 'Nous Contacter',
+            target: '_self',
+            url: 'mailto:info@nextblock.dev',
+          },
+        ],
+        languageCode: 'French',
+        match: { label: 'Contact' },
+        mode: 'update',
+      },
+      { revalidatePath: () => undefined, supabase }
+    );
+
+    expect(result).toEqual({
+      insertedCount: 0,
+      languageCode: 'fr',
+      menuKey: 'HEADER',
+      mode: 'update',
+      skippedCount: 0,
+      success: true,
+      updatedCount: 1,
+    });
+    expect(database.navigation_items).toEqual([
+      { id: 1, label: 'Accueil', language_id: 2, menu_key: 'HEADER', order: 0, url: '/' },
+      {
+        id: 2,
+        label: 'Nous Contacter',
+        language_id: 2,
+        menu_key: 'HEADER',
+        order: 1,
+        url: 'mailto:info@nextblock.dev',
+      },
+      { id: 3, label: 'Articles', language_id: 2, menu_key: 'HEADER', order: 2, url: '/articles' },
+    ]);
+  });
+
+  it('refuses destructive partial header navigation replacements', async () => {
+    const { database, supabase } = createMockSupabase({
+      navigation_items: [
+        { id: 1, label: 'Home', language_id: 1, menu_key: 'HEADER', order: 0, url: '/' },
+        { id: 2, label: 'Articles', language_id: 1, menu_key: 'HEADER', order: 1, url: '/articles' },
+        {
+          id: 3,
+          label: 'Contact',
+          language_id: 1,
+          menu_key: 'HEADER',
+          order: 2,
+          url: 'mailto:info@nextblock.dev',
+        },
+      ],
+    });
+
+    await expect(
+      executeUpdateNavigationBar(
+        {
+          items: [{ label: 'Nous Contacter', url: 'mailto:info@nextblock.dev' }],
+          languageCode: 'en',
+          mode: 'replace',
+        },
+        { revalidatePath: () => undefined, supabase }
+      )
+    ).rejects.toThrow('Refusing destructive HEADER navigation replacement');
+
+    expect(database.navigation_items).toEqual([
+      { id: 1, label: 'Home', language_id: 1, menu_key: 'HEADER', order: 0, url: '/' },
+      { id: 2, label: 'Articles', language_id: 1, menu_key: 'HEADER', order: 1, url: '/articles' },
+      {
+        id: 3,
+        label: 'Contact',
+        language_id: 1,
+        menu_key: 'HEADER',
+        order: 2,
+        url: 'mailto:info@nextblock.dev',
+      },
+    ]);
   });
 
   it('skips duplicate header navigation append requests by URL', async () => {

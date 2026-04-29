@@ -230,8 +230,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   const characters = characterCount?.characters?.() ?? 0;
   const words = characterCount?.words?.() ?? 0;
 
-  const handleAiGenerate = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleAiGenerate = async () => {
     const prompt = aiPrompt.trim();
 
     if (!prompt || isGeneratingAiContent) {
@@ -241,6 +240,9 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
     setAiError(null);
     setIsGeneratingAiContent(true);
 
+    const abortController = new AbortController();
+    const timeoutId = window.setTimeout(() => abortController.abort(), 150_000);
+
     try {
       const response = await fetch('/api/ai/generate-blocks', {
         body: JSON.stringify({ prompt }),
@@ -248,6 +250,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
           'content-type': 'application/json',
         },
         method: 'POST',
+        signal: abortController.signal,
       });
       const payload = await response.json();
 
@@ -267,10 +270,26 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
 
       setAiPrompt('');
     } catch (error) {
-      setAiError(error instanceof Error ? error.message : 'Cortex AI could not generate content.');
+      setAiError(
+        error instanceof DOMException && error.name === 'AbortError'
+          ? 'Cortex AI took too long to generate content. Please try again with a shorter prompt.'
+          : error instanceof Error
+            ? error.message
+            : 'Cortex AI could not generate content.'
+      );
     } finally {
+      window.clearTimeout(timeoutId);
       setIsGeneratingAiContent(false);
     }
+  };
+
+  const handleAiPromptKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    event.preventDefault();
+    void handleAiGenerate();
   };
 
   return (
@@ -287,8 +306,9 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
       {showToolbar && <EditorToolbar editor={editor} />}
 
       {showAiPrompt && editable && (
-        <form
-          onSubmit={handleAiGenerate}
+        <div
+          role="group"
+          aria-label="Cortex AI content generation"
           className="flex items-center gap-2 border-b bg-muted/30 px-3 py-2"
         >
           <label htmlFor="cortex-ai-editor-prompt" className="sr-only">
@@ -298,12 +318,14 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
             id="cortex-ai-editor-prompt"
             value={aiPrompt}
             onChange={(event) => setAiPrompt(event.target.value)}
+            onKeyDown={handleAiPromptKeyDown}
             disabled={isGeneratingAiContent}
             placeholder="Ask Cortex AI"
             className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
           />
           <button
-            type="submit"
+            type="button"
+            onClick={() => void handleAiGenerate()}
             disabled={!aiPrompt.trim() || isGeneratingAiContent}
             title="Generate editor blocks"
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-background text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
@@ -314,7 +336,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
               <Sparkles className="h-4 w-4" />
             )}
           </button>
-        </form>
+        </div>
       )}
 
       {aiError && (

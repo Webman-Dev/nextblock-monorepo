@@ -19,7 +19,7 @@ type MockDatabase = {
 class MockQuery {
   private filters: Array<{ column: string; value: unknown }> = [];
   private limitCount: number | null = null;
-  private operation: 'delete' | 'insert' | 'select' | 'upsert' = 'select';
+  private operation: 'delete' | 'insert' | 'select' | 'update' | 'upsert' = 'select';
   private payload: MockRow | MockRow[] | null = null;
 
   constructor(
@@ -48,6 +48,12 @@ class MockQuery {
 
   insert(payload: MockRow | MockRow[]) {
     this.operation = 'insert';
+    this.payload = payload;
+    return this;
+  }
+
+  update(payload: MockRow) {
+    this.operation = 'update';
     this.payload = payload;
     return this;
   }
@@ -103,6 +109,23 @@ class MockQuery {
       });
       this.database[this.table].push(...inserted);
       return { data: inserted, error: null };
+    }
+
+    if (this.operation === 'update') {
+      const payload = Array.isArray(this.payload) ? this.payload[0] : this.payload;
+      const updated: MockRow[] = [];
+
+      this.database[this.table] = this.database[this.table].map((row) => {
+        if (!this.matchesFilters(row)) {
+          return row;
+        }
+
+        const nextRow = { ...row, ...payload };
+        updated.push(nextRow);
+        return nextRow;
+      });
+
+      return { data: updated, error: null };
     }
 
     if (this.operation === 'upsert') {
@@ -247,6 +270,53 @@ async function main() {
         item.url === 'mailto:info@nextblock.dev'
     ),
     true
+  );
+
+  const frenchRenameResult = await executeUpdateNavigationBar(
+    {
+      items: [
+        { label: 'Nous Contacter', url: 'mailto:info@nextblock.dev' },
+      ],
+      languageCode: 'French',
+      match: { label: 'Contact' },
+      mode: 'update',
+    },
+    { revalidatePath: () => undefined, supabase }
+  );
+
+  assert.equal(frenchRenameResult.success, true);
+  assert.equal(frenchRenameResult.languageCode, 'fr');
+  assert.equal(frenchRenameResult.updatedCount, 1);
+  assert.equal(
+    database.navigation_items.some(
+      (item) =>
+        item.menu_key === 'HEADER' &&
+        item.language_id === 2 &&
+        item.label === 'Nous Contacter' &&
+        item.url === 'mailto:info@nextblock.dev'
+    ),
+    true
+  );
+  assert.equal(
+    database.navigation_items.some(
+      (item) => item.menu_key === 'HEADER' && item.language_id === 2 && item.url === '/ancien'
+    ),
+    true
+  );
+
+  await assert.rejects(
+    () =>
+      executeUpdateNavigationBar(
+        {
+          items: [
+            { label: 'Only Link', url: '/only' },
+          ],
+          languageCode: 'fr',
+          mode: 'replace',
+        },
+        { revalidatePath: () => undefined, supabase }
+      ),
+    /Refusing destructive HEADER navigation replacement/
   );
 
   const footerResult = await executeUpdateFooter(

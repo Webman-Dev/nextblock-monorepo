@@ -6,8 +6,9 @@ import {
   createCortexAiOpenRouterClient,
 } from './ai-client';
 import {
+  CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY,
   getHttpStatusCode,
-  isOpenRouterRateLimitError,
+  isOpenRouterRecoverableRoutingError,
   runWithCortexAiModelFallback,
   type CortexAiModelAttempt,
   type CortexAiOpenRouterModelId,
@@ -32,6 +33,8 @@ export type GenerateEditorBlockDocumentResult = {
   modelId: CortexAiOpenRouterModelId;
 };
 
+const CORTEX_AI_BLOCK_GENERATION_ATTEMPT_TIMEOUT_MS = 60_000;
+
 function loadEditorBlockSchemas() {
   return require('../../../schemas/editor-blocks') as typeof import('../../../schemas/editor-blocks');
 }
@@ -41,7 +44,10 @@ function buildStructuralCmsArchitectSystemPrompt(schemaAwarenessString: string) 
   'You are a Structural CMS Architect for NextBlock Cortex AI.',
   'Your only job is to generate strict Tiptap JSON content for a block-based CMS editor.',
   schemaAwarenessString,
-  'Use semantic Tiptap structures. For pricing tables, return exactly one table with a single header row and one body row per tier. Every table must contain tableRow nodes; every row must contain tableHeader or tableCell nodes; every cell must contain at least one paragraph with text.',
+  'Use semantic Tiptap structures. If the user asks for descriptive copy plus a table, place the descriptive copy in separate top-level heading or paragraph nodes before the table, never inside a table cell.',
+  'For every table, the first row must contain only tableHeader cells with short column labels. Every following row must contain only tableCell cells, use the exact same number of cells as the header row, and must not contain blank leading or trailing cells.',
+  'For ingredient, material, or composition tables, use exactly two columns named Ingredient and Description. Put material names such as Cotton or Polyester under Ingredient, and explanatory copy under Description.',
+  'For pricing tables, return a single header row and one body row per tier. Every table cell must contain at least one paragraph with text.',
   'Always return at least one meaningful top-level block in content.',
   'Prefer concise, production-ready copy. Keep generated content editable and avoid unsupported custom node types.',
   'Return ONLY the raw JSON object conforming to the schema. Do not include markdown code blocks, conversational text, or explanations. The output must be ready for immediate PostgreSQL JSONB insertion.',
@@ -52,6 +58,14 @@ function buildGenerationPrompt(params: GenerateEditorBlocksRequest) {
   return [
     'Generate a Tiptap JSON document for this editor request:',
     params.prompt,
+    getRequiredNodeTypeForPrompt(params.prompt)
+      ? [
+          'Table layout requirements:',
+          '- Keep normal descriptive prose outside the table as top-level paragraph or heading nodes.',
+          '- The first table row is headers only.',
+          '- Body rows must align under those headers with no shifted or empty cells.',
+        ].join('\n')
+      : null,
     params.context ? `Context: ${params.context}` : null,
   ]
     .filter(Boolean)
@@ -65,7 +79,7 @@ function isRecoverableStructuredGenerationError(error: unknown) {
     return false;
   }
 
-  if (isOpenRouterRateLimitError(error)) {
+  if (isOpenRouterRecoverableRoutingError(error)) {
     return true;
   }
 
@@ -74,7 +88,7 @@ function isRecoverableStructuredGenerationError(error: unknown) {
   }
 
   const message = error instanceof Error ? error.message : String(error);
-  return /NoObjectGenerated|No object generated|NoContentGenerated|No content generated|could not parse|Invalid JSON response|Provider returned error|TypeValidation|JSONParse|response_format|schema|required editor node|No endpoints found/i.test(
+  return /NoObjectGenerated|No object generated|NoContentGenerated|No content generated|could not parse|Invalid JSON response|Provider returned error|TypeValidation|JSONParse|response_format|schema|required editor node|generated table|No endpoints found|aborted|abort|timeout|timed out/i.test(
     message
   );
 }
@@ -99,10 +113,24 @@ function getRequiredNodeTypeForPrompt(prompt: string) {
   return /\b(table|pricing table|comparison table)\b/i.test(prompt) ? 'table' : null;
 }
 
+function isStandaloneTablePrompt(prompt: string) {
+  if (!getRequiredNodeTypeForPrompt(prompt)) {
+    return false;
+  }
+
+  return !/\b(also|and|description|descriptive|detail|detailed|copy|content|paragraph|section|write|expand|exaggerated|long[-\s]?form|article)\b/i.test(
+    prompt
+  );
+}
+
 function getMinimumTableRowsForPrompt(prompt: string) {
   const tierMatch = prompt.match(/\b(\d+|three|four|five)[-\s]?tier\b/i);
 
   if (!tierMatch) {
+    if (/\b(ingredient|ingredients|material|materials|composition|fabric|cotton|polyester)\b/i.test(prompt)) {
+      return 3;
+    }
+
     return /\bpricing table\b/i.test(prompt) ? 4 : 2;
   }
 
@@ -123,6 +151,103 @@ function getMinimumTableColumnsForPrompt(prompt: string) {
   return /\bpricing table\b/i.test(prompt) ? 3 : 2;
 }
 
+type JsonNode = {
+  attrs?: Record<string, unknown>;
+  content?: unknown;
+  text?: unknown;
+  type?: unknown;
+};
+
+function getContentArray(node: unknown) {
+  return node && typeof node === 'object' && Array.isArray((node as JsonNode).content)
+    ? ((node as JsonNode).content as unknown[])
+    : [];
+}
+
+function collectNodesByType(node: unknown, type: string): JsonNode[] {
+  if (!node || typeof node !== 'object') {
+    return [];
+  }
+
+  const record = node as JsonNode;
+  const matches = record.type === type ? [record] : [];
+  return matches.concat(getContentArray(record).flatMap((child) => collectNodesByType(child, type)));
+}
+
+function getNodeText(node: unknown): string {
+  if (!node || typeof node !== 'object') {
+    return '';
+  }
+
+  const record = node as JsonNode;
+  const ownText = typeof record.text === 'string' ? record.text : '';
+  const childText = getContentArray(record).map(getNodeText).join(' ');
+
+  return [ownText, childText]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function assertGeneratedTablesAreWellFormed(
+  document: EditorBlockDocument,
+  params: { minColumns: number; minRows: number }
+) {
+  const tables = collectNodesByType(document, 'table');
+
+  if (tables.length === 0) {
+    throw new Error('Generated document did not include required editor node: table');
+  }
+
+  for (const table of tables) {
+    const rows = getContentArray(table);
+
+    if (rows.length < params.minRows) {
+      throw new Error(`Generated table had fewer than ${params.minRows} rows.`);
+    }
+
+    const headerCells = getContentArray(rows[0]);
+    const columnCount = headerCells.length;
+
+    if (columnCount < params.minColumns) {
+      throw new Error(`Generated table had fewer than ${params.minColumns} columns.`);
+    }
+
+    if (!headerCells.every((cell) => (cell as JsonNode)?.type === 'tableHeader')) {
+      throw new Error('Generated table header row must contain only tableHeader cells.');
+    }
+
+    for (const headerCell of headerCells) {
+      const headerText = getNodeText(headerCell);
+
+      if (!headerText) {
+        throw new Error('Generated table contained a blank header cell.');
+      }
+
+      if (headerText.length > 80 || /[.!?]\s+\S/.test(headerText)) {
+        throw new Error('Generated table header cells must be short column labels, not body copy.');
+      }
+    }
+
+    for (const row of rows.slice(1)) {
+      const cells = getContentArray(row);
+
+      if (cells.length !== columnCount) {
+        throw new Error('Generated table body rows must match the header column count.');
+      }
+
+      if (!cells.every((cell) => (cell as JsonNode)?.type === 'tableCell')) {
+        throw new Error('Generated table body rows must contain only tableCell cells.');
+      }
+
+      if (cells.some((cell) => !getNodeText(cell))) {
+        throw new Error('Generated table contained a blank body cell.');
+      }
+    }
+  }
+}
+
 export async function generateEditorBlockDocument(
   params: GenerateEditorBlocksRequest & {
     fallbackModelIds?: readonly CortexAiOpenRouterModelId[];
@@ -134,56 +259,77 @@ export async function generateEditorBlockDocument(
   const client = await createCortexAiOpenRouterClient();
   const {
     createEditorGeneratedTableDocumentSchema,
+    createEditorGeneratedMixedTableDocumentSchema,
     editorBlockDocumentSchema,
     editorGeneratedBlockDocumentSchema,
     getEditorBlocksSchemaAwarenessString,
   } = loadEditorBlockSchemas();
   const requiredNodeType = getRequiredNodeTypeForPrompt(request.prompt);
+  const tableConstraints = requiredNodeType === 'table'
+    ? {
+        minColumns: getMinimumTableColumnsForPrompt(request.prompt),
+        minRows: getMinimumTableRowsForPrompt(request.prompt),
+      }
+    : null;
   const outputSchema =
-    requiredNodeType === 'table'
-      ? createEditorGeneratedTableDocumentSchema({
-          minColumns: getMinimumTableColumnsForPrompt(request.prompt),
-          minRows: getMinimumTableRowsForPrompt(request.prompt),
-        })
+    tableConstraints && isStandaloneTablePrompt(request.prompt)
+      ? createEditorGeneratedTableDocumentSchema(tableConstraints)
+      : tableConstraints
+        ? createEditorGeneratedMixedTableDocumentSchema(tableConstraints)
       : editorGeneratedBlockDocumentSchema;
   const modelIds = buildCortexAiModelFallbackChain({
     fallbackModelIds,
-    modelId,
+    modelId: modelId || CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY[0],
   });
 
   const generation = await runWithCortexAiModelFallback({
     modelIds,
     shouldRetry: isRecoverableStructuredGenerationError,
     execute: async (attemptModelId) => {
-      const result = await generateObject({
-        maxOutputTokens: 5000,
-        maxRetries: 0,
-        model: client.model(attemptModelId),
-        prompt: buildGenerationPrompt(request),
-        providerOptions: {
-          openrouter: {
-            plugins: [{ id: 'response-healing' }],
-            provider: {
-              require_parameters: true,
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(
+        () => abortController.abort(),
+        CORTEX_AI_BLOCK_GENERATION_ATTEMPT_TIMEOUT_MS
+      );
+
+      try {
+        const result = await generateObject({
+          abortSignal: abortController.signal,
+          maxOutputTokens: 5000,
+          maxRetries: 0,
+          model: client.model(attemptModelId),
+          prompt: buildGenerationPrompt(request),
+          providerOptions: {
+            openrouter: {
+              plugins: [{ id: 'response-healing' }],
+              provider: {
+                require_parameters: true,
+              },
             },
           },
-        },
-        schema: outputSchema,
-        schemaDescription:
-          'A strict Tiptap JSON document for immediate insertion into a PostgreSQL JSONB editor field.',
-        schemaName: 'NextBlockTiptapDocument',
-        system: buildStructuralCmsArchitectSystemPrompt(getEditorBlocksSchemaAwarenessString()),
-        temperature: 0.2,
-      });
+          schema: outputSchema,
+          schemaDescription:
+            'A strict Tiptap JSON document for immediate insertion into a PostgreSQL JSONB editor field.',
+          schemaName: 'NextBlockTiptapDocument',
+          system: buildStructuralCmsArchitectSystemPrompt(getEditorBlocksSchemaAwarenessString()),
+          temperature: 0.2,
+        });
 
-      const document = outputSchema.parse(result.object);
-      const validatedDocument = editorBlockDocumentSchema.parse(document);
+        const document = outputSchema.parse(result.object);
+        const validatedDocument = editorBlockDocumentSchema.parse(document);
 
-      if (requiredNodeType && !containsNodeType(validatedDocument, requiredNodeType)) {
-        throw new Error(`Generated document did not include required editor node: ${requiredNodeType}`);
+        if (requiredNodeType && !containsNodeType(validatedDocument, requiredNodeType)) {
+          throw new Error(`Generated document did not include required editor node: ${requiredNodeType}`);
+        }
+
+        if (tableConstraints) {
+          assertGeneratedTablesAreWellFormed(validatedDocument, tableConstraints);
+        }
+
+        return validatedDocument;
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      return validatedDocument;
     },
   });
 

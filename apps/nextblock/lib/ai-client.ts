@@ -193,6 +193,7 @@ export {
   CORTEX_AI_OPENROUTER_BASE_URL,
   CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
   CortexAiRoutingError,
+  isOpenRouterRecoverableRoutingError,
   isOpenRouterRateLimitError,
   runWithCortexAiModelFallback,
 } from './ai-model-registry';

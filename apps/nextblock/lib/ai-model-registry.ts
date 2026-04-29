@@ -4,25 +4,18 @@ export const CORTEX_AI_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 export const CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL = 'openrouter/free';
 
 export const CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY = [
-  'nvidia/nemotron-3-super-120b-a12b:free',
-  'openai/gpt-oss-120b:free',
-  'inclusionai/ling-2.6-1t:free',
-  'inclusionai/ling-2.6-flash:free',
   'qwen/qwen3-next-80b-a3b-instruct:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
   'nvidia/nemotron-nano-9b-v2:free',
 ] as const;
 
 export const CORTEX_AI_MODEL_REGISTRY = {
   defaultFreeRouter: CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
+  defaultStructuredOutputModel: CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY[0],
+  defaultToolCallingModel: CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY[0],
   freeFallbacks: CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY,
-  structuredJsonPreferred: [
-    CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
-    ...CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY,
-  ],
-  toolCallingPreferred: [
-    CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
-    ...CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY,
-  ],
+  structuredJsonPreferred: CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY,
+  toolCallingPreferred: CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY,
 } as const;
 
 export type CortexAiOpenRouterModelId =
@@ -57,7 +50,7 @@ export function buildCortexAiModelFallbackChain(params?: {
   modelId?: CortexAiOpenRouterModelId | null;
 }) {
   return uniqueModelIds([
-    params?.modelId || CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
+    params?.modelId || CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY[0],
     ...(params?.fallbackModelIds || CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY),
   ]);
 }
@@ -103,6 +96,37 @@ export function isOpenRouterRateLimitError(error: unknown) {
   return getHttpStatusCode(error) === 429;
 }
 
+function getDeepErrorMessage(error: unknown): string {
+  if (!error) {
+    return '';
+  }
+
+  if (error instanceof Error) {
+    const causeMessage = 'cause' in error ? getDeepErrorMessage(error.cause) : '';
+    return [error.message, causeMessage].filter(Boolean).join('\n');
+  }
+
+  if (typeof error === 'object') {
+    const record = error as Record<string, unknown>;
+    return ['message', 'error', 'text', 'cause']
+      .map((key) => getDeepErrorMessage(record[key]))
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  return String(error);
+}
+
+export function isOpenRouterRecoverableRoutingError(error: unknown) {
+  if (isOpenRouterRateLimitError(error)) {
+    return true;
+  }
+
+  return /No endpoints found|no longer available|not available as a free model|transitioned to a paid model/i.test(
+    getDeepErrorMessage(error)
+  );
+}
+
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown OpenRouter error.';
 }
@@ -117,7 +141,7 @@ export async function runWithCortexAiModelFallback<T>(params: {
   result: T;
 }> {
   const modelIds = uniqueModelIds(params.modelIds);
-  const shouldRetry = params.shouldRetry || isOpenRouterRateLimitError;
+  const shouldRetry = params.shouldRetry || isOpenRouterRecoverableRoutingError;
   let attempts: readonly CortexAiModelAttempt[] = [];
   let lastError: unknown = null;
 

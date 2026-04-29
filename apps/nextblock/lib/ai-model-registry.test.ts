@@ -5,6 +5,7 @@ import {
   CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY,
   CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
   CortexAiRoutingError,
+  isOpenRouterRecoverableRoutingError,
   isOpenRouterRateLimitError,
   runWithCortexAiModelFallback,
 } from './ai-model-registry';
@@ -12,7 +13,6 @@ import {
 describe('Cortex AI OpenRouter routing', () => {
   it('builds a free-model fallback chain with preferred overrides', () => {
     expect(buildCortexAiModelFallbackChain()).toEqual([
-      CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
       ...CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY,
     ]);
 
@@ -22,7 +22,9 @@ describe('Cortex AI OpenRouter routing', () => {
       })
     ).toEqual([
       'openai/gpt-oss-120b:free',
-      'nvidia/nemotron-3-super-120b-a12b:free',
+      ...CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY.filter(
+        (modelId) => modelId !== 'openai/gpt-oss-120b:free'
+      ),
     ]);
   });
 
@@ -31,6 +33,20 @@ describe('Cortex AI OpenRouter routing', () => {
     expect(isOpenRouterRateLimitError({ response: { status: 429 } })).toBe(true);
     expect(isOpenRouterRateLimitError({ cause: { status: 429 } })).toBe(true);
     expect(isOpenRouterRateLimitError({ statusCode: 500 })).toBe(false);
+  });
+
+  it('detects recoverable OpenRouter routing errors for unavailable free models', () => {
+    expect(
+      isOpenRouterRecoverableRoutingError(
+        new Error('No endpoints found that can handle the requested parameters.')
+      )
+    ).toBe(true);
+    expect(
+      isOpenRouterRecoverableRoutingError(
+        new Error('Model is no longer available as a free model.')
+      )
+    ).toBe(true);
+    expect(isOpenRouterRecoverableRoutingError({ statusCode: 401 })).toBe(false);
   });
 
   it('retries alternate free models after a 429', async () => {
@@ -63,7 +79,7 @@ describe('Cortex AI OpenRouter routing', () => {
     ]);
   });
 
-  it('stops retrying on non-rate-limit failures', async () => {
+  it('stops retrying on non-recoverable failures', async () => {
     await expect(
       runWithCortexAiModelFallback({
         modelIds: [

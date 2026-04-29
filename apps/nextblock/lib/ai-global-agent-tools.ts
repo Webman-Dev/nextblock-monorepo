@@ -56,6 +56,15 @@ export const navigationItemInputSchema = navigationChildItemSchema.extend({
   children: z.array(navigationChildItemSchema).max(20).optional(),
 });
 
+const navigationItemMatchSchema = z
+  .strictObject({
+    label: z.string().trim().min(1).max(120).optional(),
+    url: urlSchema.optional(),
+  })
+  .refine((value) => Boolean(value.label || value.url), {
+    message: 'Navigation item match requires label or url.',
+  });
+
 export const updateNavigationBarInputSchema = z.strictObject({
   items: z.array(navigationItemInputSchema).min(1).max(30),
   languageCode: z
@@ -65,7 +74,10 @@ export const updateNavigationBarInputSchema = z.strictObject({
     .max(80)
     .default('en')
     .describe('Locale code or language name, for example "en", "fr", "English", or "French".'),
-  mode: z.enum(['append', 'replace']).default('replace'),
+  match: navigationItemMatchSchema
+    .optional()
+    .describe('For mode "update", identifies the existing navigation item to update.'),
+  mode: z.enum(['append', 'replace', 'update']).default('append'),
 });
 
 export const updateFooterInputSchema = z.strictObject({
@@ -139,6 +151,14 @@ function serializeError(error: unknown) {
 
 function normalizeNavigationUrl(value: unknown) {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function normalizeNavigationLabel(value: unknown) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function countNavigationInputItems(items: NavigationItemInput[]) {
+  return items.reduce((count, item) => count + 1 + (item.children?.length || 0), 0);
 }
 
 function normalizeLanguageLookup(value: unknown) {
@@ -229,6 +249,27 @@ async function replaceNavigationMenu<TMenuKey extends MenuKey>(params: {
   supabase: SupabaseLike;
 }) {
   const language = await getLanguageRecord(params.supabase, params.languageCode);
+  const { data: existingItems, error: existingItemsError } = await params.supabase
+    .from('navigation_items')
+    .select('id, parent_id')
+    .eq('menu_key', params.menuKey)
+    .eq('language_id', language.id);
+
+  if (existingItemsError) {
+    throw new Error(
+      `Failed to inspect existing ${params.menuKey} navigation items: ${serializeError(existingItemsError)}`
+    );
+  }
+
+  const existingRows = Array.isArray(existingItems) ? existingItems : [];
+  const existingTopLevelCount = existingRows.filter((item: any) => item.parent_id == null).length;
+  const replacementItemCount = countNavigationInputItems(params.items);
+
+  if (existingRows.length > 0 && replacementItemCount < existingRows.length) {
+    throw new Error(
+      `Refusing destructive ${params.menuKey} navigation replacement for ${language.code}: existing menu has ${existingRows.length} items (${existingTopLevelCount} top-level), but the replacement only contains ${replacementItemCount}. Use mode "update" for renaming or changing a single link, or provide the full menu.`
+    );
+  }
 
   const { error: deleteError } = await params.supabase
     .from('navigation_items')
@@ -270,6 +311,72 @@ async function replaceNavigationMenu<TMenuKey extends MenuKey>(params: {
     languageCode: language.code,
     menuKey: params.menuKey,
     skippedCount: 0,
+    updatedCount: 0,
+  };
+}
+
+async function updateNavigationMenuItem(params: {
+  items: NavigationItemInput[];
+  languageCode: string;
+  match?: z.infer<typeof navigationItemMatchSchema>;
+  menuKey: MenuKey;
+  supabase: SupabaseLike;
+}) {
+  if (params.items.length !== 1) {
+    throw new Error('mode "update" requires exactly one navigation item.');
+  }
+
+  const language = await getLanguageRecord(params.supabase, params.languageCode);
+  const item = params.items[0];
+  const matchUrl = normalizeNavigationUrl(params.match?.url) || normalizeNavigationUrl(item.url);
+  const matchLabel = normalizeNavigationLabel(params.match?.label);
+  const { data: existingItems, error: existingItemsError } = await params.supabase
+    .from('navigation_items')
+    .select('id, label, url, parent_id, order')
+    .eq('menu_key', params.menuKey)
+    .eq('language_id', language.id);
+
+  if (existingItemsError) {
+    throw new Error(
+      `Failed to load existing ${params.menuKey} navigation items: ${serializeError(existingItemsError)}`
+    );
+  }
+
+  const existingRows = Array.isArray(existingItems) ? existingItems : [];
+  const matchedItem = existingRows.find((row: any) => {
+    const rowUrl = normalizeNavigationUrl(row.url);
+    const rowLabel = normalizeNavigationLabel(row.label);
+
+    return Boolean(
+      (matchUrl && rowUrl === matchUrl) ||
+        (matchLabel && rowLabel === matchLabel)
+    );
+  });
+
+  if (!matchedItem?.id) {
+    throw new Error(
+      `Could not find a ${params.menuKey} navigation item to update in ${language.code}. Use a matching label or url.`
+    );
+  }
+
+  const { error: updateError } = await params.supabase
+    .from('navigation_items')
+    .update({
+      label: item.label,
+      url: item.url,
+    })
+    .eq('id', matchedItem.id);
+
+  if (updateError) {
+    throw new Error(`Failed to update ${params.menuKey} navigation item: ${serializeError(updateError)}`);
+  }
+
+  return {
+    insertedCount: 0,
+    languageCode: language.code,
+    menuKey: params.menuKey,
+    skippedCount: 0,
+    updatedCount: 1,
   };
 }
 
@@ -358,6 +465,7 @@ async function appendNavigationMenuItems(params: {
     languageCode: language.code,
     menuKey: params.menuKey,
     skippedCount,
+    updatedCount: 0,
   };
 }
 
@@ -368,19 +476,27 @@ export async function executeUpdateNavigationBar(
   const parsed = updateNavigationBarInputSchema.parse(input);
   const supabase = getSupabase(context);
   const result =
-    parsed.mode === 'append'
-      ? await appendNavigationMenuItems({
+    parsed.mode === 'update'
+      ? await updateNavigationMenuItem({
           items: parsed.items,
           languageCode: parsed.languageCode,
+          match: parsed.match,
           menuKey: 'HEADER',
           supabase,
         })
-      : await replaceNavigationMenu({
-          items: parsed.items,
-          languageCode: parsed.languageCode,
-          menuKey: 'HEADER',
-          supabase,
-        });
+      : parsed.mode === 'append'
+        ? await appendNavigationMenuItems({
+            items: parsed.items,
+            languageCode: parsed.languageCode,
+            menuKey: 'HEADER',
+            supabase,
+          })
+        : await replaceNavigationMenu({
+            items: parsed.items,
+            languageCode: parsed.languageCode,
+            menuKey: 'HEADER',
+            supabase,
+          });
 
   revalidateGlobalCmsSurfaces(context);
 
@@ -404,6 +520,8 @@ export async function executeUpdateFooter(input: UpdateFooterInput, context?: To
         insertedCount: number;
         languageCode: string;
         menuKey: 'FOOTER';
+        skippedCount: number;
+        updatedCount: number;
       }
     | null = null;
 
@@ -541,7 +659,7 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
     }),
     update_navigation_bar: tool({
       description:
-        'Update the public header navigation bar for a locale. Use mode "append" when the user asks to add links while preserving existing navigation. Use mode "replace" only when the user asks to rebuild or replace the complete header.',
+        'Update the public header navigation bar for a locale. Use mode "append" when adding links while preserving existing navigation. Use mode "update" when renaming or changing an existing single link. Use mode "replace" only when the user asks to rebuild the complete header and you provide the full menu; destructive partial replacements are refused.',
       execute: (input) => executeUpdateNavigationBar(input, context),
       inputSchema: updateNavigationBarInputSchema,
       strict: true,

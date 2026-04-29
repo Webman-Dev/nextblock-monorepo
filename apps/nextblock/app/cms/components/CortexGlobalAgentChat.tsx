@@ -104,15 +104,16 @@ function createId() {
 }
 
 function isChatMessage(message: unknown): message is ChatMessage {
+  if (!message || typeof message !== "object") {
+    return false;
+  }
+
+  const candidate = message as Partial<ChatMessage>;
+
   return (
-    Boolean(message) &&
-    typeof message === "object" &&
-    "id" in message &&
-    "role" in message &&
-    "content" in message &&
-    typeof (message as ChatMessage).id === "string" &&
-    ((message as ChatMessage).role === "assistant" || (message as ChatMessage).role === "user") &&
-    typeof (message as ChatMessage).content === "string"
+    typeof candidate.id === "string" &&
+    (candidate.role === "assistant" || candidate.role === "user") &&
+    typeof candidate.content === "string"
   );
 }
 
@@ -145,13 +146,15 @@ function createChatThread(messages: ChatMessage[] = []): ChatThread {
 }
 
 function isChatThread(thread: unknown): thread is ChatThread {
+  if (!thread || typeof thread !== "object") {
+    return false;
+  }
+
+  const candidate = thread as Partial<ChatThread>;
+
   return (
-    Boolean(thread) &&
-    typeof thread === "object" &&
-    "id" in thread &&
-    "messages" in thread &&
-    typeof (thread as ChatThread).id === "string" &&
-    Array.isArray((thread as ChatThread).messages)
+    typeof candidate.id === "string" &&
+    Array.isArray(candidate.messages)
   );
 }
 

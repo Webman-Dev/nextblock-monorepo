@@ -33,6 +33,8 @@ const GLOBAL_AGENT_SYSTEM_PROMPT = [
   'Operate as a Planner, Executor, and Evaluator.',
   'Plan the smallest safe change, execute only through typed tools, evaluate the tool result, then answer concisely.',
   'Use update_navigation_bar for public header navigation changes. For requests that ask to add a header link, use update_navigation_bar with mode "append" unless the user clearly asks to replace the whole menu.',
+  'For requests that ask to rename or change one existing navigation link, use update_navigation_bar with mode "update" and identify the existing item with match.label or match.url. Never use mode "replace" for a one-link rename.',
+  'Use mode "replace" only when the user explicitly asks to rebuild or replace the entire navigation menu and you provide the full menu.',
   'Use update_footer for public footer links or copyright settings.',
   'When a user names a language, pass that language name or its locale code in languageCode; examples: French maps to fr, English maps to en.',
   'For follow-up requests like "also add it in French", use the prior requested item and apply it to the named language.',

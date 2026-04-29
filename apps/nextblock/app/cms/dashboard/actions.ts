@@ -44,7 +44,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const isAiActive = activePackages.has('cortex-ai');
 
   // 2. Parallelize Core Queries
-  const queries: Promise<any>[] = [
+  const queries: PromiseLike<any>[] = [
     supabase.from('pages').select('*', { count: 'exact', head: true }),
     supabase.from('posts').select('*', { count: 'exact', head: true }),
     supabase.from('profiles').select('*', { count: 'exact', head: true }),

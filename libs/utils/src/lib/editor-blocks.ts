@@ -595,6 +595,19 @@ function createGeneratedStrictTableNodeSchema(params?: { minColumns?: number; mi
   });
 }
 
+export const editorGeneratedNonTableBlockNodeSchema = z.discriminatedUnion('type', [
+  generatedParagraphNodeSchema,
+  generatedHeadingNodeSchema,
+  generatedBlockquoteNodeSchema,
+  generatedCodeBlockNodeSchema,
+  generatedBulletListNodeSchema,
+  generatedOrderedListNodeSchema,
+  generatedTaskListNodeSchema,
+  generatedHorizontalRuleNodeSchema,
+  generatedAlertWidgetNodeSchema,
+  generatedCtaWidgetNodeSchema,
+]);
+
 export const editorGeneratedBlockNodeSchema = z.discriminatedUnion('type', [
   generatedParagraphNodeSchema,
   generatedHeadingNodeSchema,
@@ -613,6 +626,18 @@ export const editorGeneratedBlockDocumentSchema = z.strictObject({
   content: z.array(editorGeneratedBlockNodeSchema).min(1),
   type: z.literal('doc'),
 });
+
+export function createEditorGeneratedMixedTableDocumentSchema(params?: {
+  minColumns?: number;
+  minRows?: number;
+}) {
+  return z.strictObject({
+    content: z
+      .array(z.union([editorGeneratedNonTableBlockNodeSchema, createGeneratedStrictTableNodeSchema(params)]))
+      .min(1),
+    type: z.literal('doc'),
+  });
+}
 
 export function createEditorGeneratedTableDocumentSchema(params?: {
   minColumns?: number;
