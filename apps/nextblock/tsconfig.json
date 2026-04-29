@@ -10,6 +10,7 @@
     "noEmit": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "composite": false,
     "incremental": true,
     "plugins": [
       {
