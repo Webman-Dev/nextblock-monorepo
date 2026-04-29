@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 
-import { generateEditorBlockDocument } from '../lib/ai-block-generation';
+import { generateEditorHtmlFragment } from '../lib/ai-block-generation';
 
 dotenv.config({ path: '.env.local' });
 
@@ -11,31 +11,15 @@ const prompt =
   'Generate a 3-tier pricing table';
 const modelId = modelFlag?.slice('--model='.length);
 
-function containsNodeType(node: unknown, type: string): boolean {
-  if (!node || typeof node !== 'object') {
-    return false;
-  }
-
-  const record = node as { content?: unknown; type?: unknown };
-
-  if (record.type === type) {
-    return true;
-  }
-
-  return Array.isArray(record.content)
-    ? record.content.some((child) => containsNodeType(child, type))
-    : false;
-}
-
 async function main() {
-  const result = await generateEditorBlockDocument({
+  const result = await generateEditorHtmlFragment({
     fallbackModelIds: modelId ? [] : undefined,
     modelId,
     prompt,
   });
-  const hasTable = containsNodeType(result.document, 'table');
+  const hasTable = /<table\b/i.test(result.html);
 
-  console.log(JSON.stringify(result.document, null, 2));
+  console.log(result.html);
   console.error(
     JSON.stringify(
       {
@@ -46,7 +30,7 @@ async function main() {
         credentialSource: result.credentialSource,
         hasTable,
         modelId: result.modelId,
-        topLevelBlocks: result.document.content?.length || 0,
+        outputCharacters: result.html.length,
       },
       null,
       2

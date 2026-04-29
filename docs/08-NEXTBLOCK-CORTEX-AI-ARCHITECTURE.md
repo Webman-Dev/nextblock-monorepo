@@ -17,13 +17,14 @@ The package currently implements three major capabilities:
 1. Premium package activation and BYOK key management.
 2. OpenRouter-backed model routing with free-model fallback behavior.
 3. AI features inside the CMS:
-   - Strict Tiptap JSON document generation for the editor.
-   - A global dashboard agent that can update navigation/footer state and search CMS documentation-like content.
+   - Inline Tiptap rich-text assistance that generates clean HTML fragments and lets the editor parse them normally.
+   - A page-aware global dashboard agent that can update navigation/footer state, search CMS documentation-like content, and mutate current page/post/product fields or blocks through typed tools.
 
-The implementation follows a schema-first approach:
+The implementation now splits editing responsibilities:
 
-- Anything inserted into the editor is validated against Zod schemas representing the allowed Tiptap JSON structure.
-- Global agent tools use strict Zod tool arguments.
+- The inline editor path is HTML-first and intentionally lightweight. It is for rich-text fragments inside the active Tiptap document, not full CMS block generation.
+- Full page, product, post, section, and block editing goes through the global agent and strict Zod tool arguments.
+- Existing editor JSON schemas remain important for stored product `description_json`, schema diagnostics, and global-agent field validation.
 - Server-side key handling is isolated in server-only modules.
 - Database writes happen through authenticated server actions or service-role Supabase calls, not client-side mutation.
 
@@ -41,14 +42,18 @@ Implemented:
 - Cortex AI settings page under `/cms/settings/cortex-ai`.
 - OpenRouter client, free-model fallback registry, and stored-BYOK paid model selection.
 - Tiptap editor JSON schemas and schema-to-JSON-schema helper.
-- `/api/ai/generate-blocks` endpoint.
+- `/api/ai/generate-blocks` endpoint for inline HTML fragment generation.
 - Editor prompt UI in `NotionEditor`.
-- `/api/ai/global-agent` endpoint with tool calling and SSE streaming.
+- `/api/ai/global-agent` endpoint with page context, tool calling, and SSE streaming.
 - Persistent dashboard chat UI with local browser chat threads.
 - Tools for:
   - `update_navigation_bar`
   - `update_footer`
   - `search_documentation`
+  - `read_current_cms_item`
+  - `update_current_cms_fields`
+  - `update_content_block`
+  - `update_section_column_block`
 - Multilingual navigation/footer tool arguments using either language codes or language names.
 - Guardrails against OpenRouter free-model rate limits, raw tool-call leakage, and stuck loading streams.
 
@@ -57,7 +62,7 @@ Known incomplete or future work:
 - Footer link updates currently replace footer links for the selected locale. Footer append mode is not yet implemented.
 - Documentation search is keyword/scored search over `posts` and `pages`, not a vector embedding RAG system yet.
 - The sandbox should eventually seed a visible product/package item for Cortex AI, similar to ecommerce. The preferred image asset is `apps/nextblock/public/images/cortex-ai-square.webp`.
-- More agent tools can be added, but every tool must be schema-first and server-side only.
+- Block insertion is intentionally left for a follow-up pass with explicit idempotency keys.
 
 ## Important Files
 
@@ -88,15 +93,15 @@ Known incomplete or future work:
 | `apps/nextblock/lib/ai-model-registry.ts` | Free model registry, routing policy builder, model filtering/parsing helpers, rate-limit detection, fallback runner. |
 | `apps/nextblock/scripts/verify-cortex-ai-routing.ts` | Manual verification script for OpenRouter routing. |
 
-### Structured Editor Generation
+### Inline Editor Assistance
 
 | File | Purpose |
 | --- | --- |
-| `libs/utils/src/lib/editor-blocks.ts` | Main Tiptap JSON Zod schemas, allowed node/mark types, JSON Schema extraction. |
+| `libs/utils/src/lib/editor-blocks.ts` | Main Tiptap JSON Zod schemas, allowed node/mark types, JSON Schema extraction. Still used for product descriptions and agent validation. |
 | `schemas/editor-blocks.ts` | Re-export shim for schema imports from app scripts/lib code. |
-| `apps/nextblock/lib/ai-block-generation.ts` | Structured block generation orchestration using `generateObject`. |
-| `apps/nextblock/app/api/ai/generate-blocks/route.ts` | Route handler for editor block generation. |
-| `libs/editor/src/lib/NotionEditor.tsx` | Editor prompt UI and insertion behavior. |
+| `apps/nextblock/lib/ai-block-generation.ts` | Inline editor HTML-fragment generation using `generateText`, routing fallback, and lightweight output validation. |
+| `apps/nextblock/app/api/ai/generate-blocks/route.ts` | Compatibility route for inline editor generation. Returns `{ html, credentialSource, modelId }`. |
+| `libs/editor/src/lib/NotionEditor.tsx` | Editor prompt UI and HTML insertion behavior via normal Tiptap parsing. |
 | `apps/nextblock/scripts/validate-editor-block-schema.ts` | Validates editor schema against sample content and emits diagnostics. |
 | `apps/nextblock/scripts/verify-cortex-ai-generate-blocks.ts` | Manual live generation verification script. |
 
@@ -107,6 +112,7 @@ Known incomplete or future work:
 | `apps/nextblock/lib/ai-global-agent-tools.ts` | Tool schemas and execution functions. |
 | `apps/nextblock/app/api/ai/global-agent/route.ts` | Global agent route and SSE streaming orchestration. |
 | `apps/nextblock/app/cms/components/CortexGlobalAgentChat.tsx` | Persistent dashboard chat UI with thread history. |
+| `apps/nextblock/app/cms/components/CortexAiPageContext.tsx` | Client page-context provider/registrar used by CMS edit screens and the global chat. |
 | `apps/nextblock/lib/ai-global-agent-tools.test.ts` | Unit tests for tool executors. |
 | `apps/nextblock/scripts/verify-cortex-ai-global-tools.ts` | Focused verifier for global tools. |
 
@@ -115,7 +121,7 @@ Known incomplete or future work:
 | File | Purpose |
 | --- | --- |
 | `apps/nextblock/app/cms/layout.tsx` | Server layout checks package activation for ecommerce and Cortex AI. |
-| `apps/nextblock/app/cms/CmsClientLayout.tsx` | Adds Cortex AI settings nav item and conditionally renders global chat. |
+| `apps/nextblock/app/cms/CmsClientLayout.tsx` | Adds Cortex AI settings nav item, wraps CMS in the page-context provider, and conditionally renders global chat. |
 | `apps/nextblock/app/cms/settings/cortex-ai/page.tsx` | Settings page for activation/key status, BYOK forms, and compatible model selection. |
 | `apps/nextblock/app/cms/settings/cortex-ai/actions.ts` | Server actions for reading, saving, and clearing BYOK keys and model selections. |
 | `apps/nextblock/app/cms/dashboard/actions.ts` | Dashboard package state; checks `cortex-ai` to hide/show AI premium CTA. |
@@ -193,7 +199,7 @@ Important: `openrouter/free` is a free model-router id, not a replacement for au
 
 When the active credential source is `env`, Cortex AI always routes through exactly the configured `CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY` list. Non-free explicit model requests are ignored for env-only routing.
 
-**Sandbox Behavior:** When `NEXT_PUBLIC_IS_SANDBOX=true`, the server environments won't save any OpenRouter key or model selection to the database. The user will be requested to input a key that is stored purely in their browser's `localStorage` (`cortex_ai_sandbox_openrouter_api_key`) and passed as HTTP headers (`x-sandbox-openrouter-key`) for all AI requests.
+**Sandbox Behavior:** When `NEXT_PUBLIC_IS_SANDBOX=true`, the server environments won't save any OpenRouter key or model selection to the database. The user will be requested to input a key that is stored purely in their browser's `localStorage` (`cortex_ai_sandbox_openrouter_api_key`) with browser-local model selection (`cortex_ai_sandbox_openrouter_model_selection`). The inline editor and global chat pass those values as request headers (`x-sandbox-openrouter-key` and `x-sandbox-openrouter-model`) for the user's own request only.
 
 OpenRouter free models can still hit free-model rate limits. A user with no credits or no credit card can see errors like `free-models-per-day`. Cortex AI catches these where possible and falls back to configured alternate models, but OpenRouter account-level limits may still block all free requests.
 
@@ -340,17 +346,17 @@ nvidia/nemotron-nano-9b-v2:free
 
 Registries:
 
-- `structuredJsonPreferred`: retained as the structured-generation free default list.
+- `structuredJsonPreferred`: retained for compatibility with older structured-generation code paths and schema diagnostics.
 - `toolCallingPreferred`: retained as the global-agent free default list.
 
-Both registries intentionally use the same model list. Future agent tools are expected to mutate broader CMS state through strict schemas, so every default free model must be able to support both structured JSON and tool calling.
+Both registries intentionally use the same model list. The inline editor no longer depends on model-native structured JSON output, but current paid model selection still requires `tools` and `structured_outputs` because the global agent needs tool calling and existing schema utilities still validate structured editor documents.
 
 Paid model selection:
 
 - `CORTEX_AI_REQUIRED_MODEL_PARAMETERS = ['tools', 'structured_outputs']`.
 - `apps/nextblock/lib/ai-model-catalog.ts` fetches `https://openrouter.ai/api/v1/models?supported_parameters=tools,structured_outputs&output_modalities=text`.
 - Catalog filtering keeps only non-expired text-output models that advertise all required parameters.
-- `buildCortexAiRoutingPolicy` is the single policy entrypoint for editor generation, global agent routing, and shared text generation.
+- `buildCortexAiRoutingPolicy` is the single policy entrypoint for inline editor generation, global agent routing, and shared text generation.
 - Env-key routing always returns exactly the free fallback registry.
 - Stored-BYOK routing returns `[selectedModel, ...freeFallbacks]` when a selected compatible model exists, otherwise it returns the free fallback registry.
 - Manual-key routing can use a requested model id, mainly for tests and scripts.
@@ -360,8 +366,9 @@ Fallback behavior:
 
 - `runWithCortexAiModelFallback` deduplicates model ids.
 - Default retry condition is OpenRouter HTTP 429.
-- Structured block generation overrides the retry predicate to also retry recoverable parse/schema/content/5xx errors.
-- 401/402/403 are treated as non-recoverable for structured generation.
+- Inline HTML generation overrides the retry predicate to also retry recoverable empty/invalid fragment, provider, timeout, and 5xx errors.
+- 401/402/403 are treated as non-recoverable for inline generation.
+- Routing errors are summarized for the UI from first/last real model attempt messages while full per-model attempts stay in server logs.
 
 Rate-limit detection:
 
@@ -441,11 +448,17 @@ There are two related schema surfaces:
    - Allows the existing editor/database content surface.
    - Includes richer node types such as `image`, `divBlock`, `svg`, `styleTag`, and `scriptTag`.
 2. Generated-content schema.
-   - Smaller and safer subset for LLM output.
+   - Smaller and safer subset from the previous strict generated-output flow.
    - Prevents the model from generating unsafe or overly complex structures.
    - Includes paragraphs, headings, blockquotes, code blocks, lists, task lists, tables, horizontal rules, alert widgets, and CTA widgets.
 
-For table prompts, block generation uses a special strict table schema:
+The inline editor no longer asks the model to emit this JSON directly. These schemas remain useful for:
+
+- Stored product `description_json`.
+- Schema verification scripts.
+- Global-agent tools that update product descriptions or other stored editor JSON.
+
+The legacy strict JSON generator kept a special strict table schema:
 
 - Exactly one top-level `table`.
 - Minimum rows based on prompt.
@@ -453,9 +466,9 @@ For table prompts, block generation uses a special strict table schema:
 - Every row must contain cells/headers.
 - Every cell/header must contain at least one paragraph with text.
 
-This was added because generic structured generation often produced weak or invalid pricing tables.
+This was added for the old strict JSON path because generic structured generation often produced weak or invalid pricing tables. The replacement inline assistant asks for valid HTML table markup and relies on Tiptap's HTML parser.
 
-## Structured Block Generation
+## Inline HTML Editor Assistance
 
 High-level flow:
 
@@ -463,11 +476,11 @@ High-level flow:
 NotionEditor prompt
   -> POST /api/ai/generate-blocks
   -> require ADMIN or WRITER
-  -> generateEditorBlockDocument()
-  -> Vercel AI SDK generateObject()
-  -> Zod output schema
-  -> return pure Tiptap doc JSON
-  -> editor setContent() or insertContent()
+  -> generateEditorHtmlFragment()
+  -> Vercel AI SDK generateText()
+  -> lightweight HTML fragment validation
+  -> return { html, credentialSource, modelId }
+  -> editor setContent(html) or insertContent(html)
 ```
 
 Route:
@@ -492,7 +505,16 @@ Access:
 
 Response:
 
-- Returns only the generated Tiptap JSON document.
+- Returns:
+
+```ts
+{
+  html: string;
+  credentialSource: 'env' | 'stored' | 'manual';
+  modelId: string;
+}
+```
+
 - Adds diagnostic headers:
   - `x-cortex-ai-credential-source`
   - `x-cortex-ai-model`
@@ -506,31 +528,26 @@ apps/nextblock/lib/ai-block-generation.ts
 Prompt persona:
 
 ```txt
-Structural CMS Architect
+NextBlock Cortex AI inline rich-text assistant
 ```
 
 Important prompt rules:
 
-- Generate strict Tiptap JSON only.
-- Use schema awareness string.
-- Return only raw JSON.
+- Return only an HTML fragment.
 - No markdown code fences.
 - No explanations.
-- Output must be ready for PostgreSQL JSONB insertion.
+- Do not include `<!doctype>`, `<html>`, `<head>`, or `<body>`.
+- Use semantic headings, paragraphs, lists, tables, blockquotes, code blocks, and horizontal rules.
+- For tables, use valid `<table>`, `<thead>`, `<tbody>`, `<tr>`, `<th>`, and `<td>`.
+- Use `<style>` or `<script>` only when explicitly requested. The editor already has `StyleTagNode`, `ScriptTagNode`, and source-mode parsing for those tags.
 
 Vercel AI SDK usage:
 
 ```ts
-generateObject({
-  schema: outputSchema,
-  schemaName: 'NextBlockTiptapDocument',
-  schemaDescription: 'A strict Tiptap JSON document...',
-  providerOptions: {
-    openrouter: {
-      plugins: [{ id: 'response-healing' }],
-      provider: { require_parameters: true },
-    },
-  },
+generateText({
+  prompt,
+  system,
+  maxRetries: 0,
 })
 ```
 
@@ -542,9 +559,15 @@ libs/editor/src/lib/NotionEditor.tsx
 
 Behavior:
 
-- If the editor is empty, Cortex AI uses `editor.commands.setContent(payload)`.
-- If the editor already has content, it inserts `payload.content` at the cursor via `insertContent`.
-- The editor performs a defensive client check that payload is a `doc` with an array `content`.
+- If the editor is empty, Cortex AI uses `editor.commands.setContent(payload.html)`.
+- If the editor already has content and there is no active text selection, it appends `payload.html` at the end of the document.
+- If there is an active text selection, it replaces that selection with `payload.html`.
+- Existing content is preserved for non-empty editors.
+- The client sends insertion context (`append-to-end`, `replace-selection`, or empty document), selected text when present, and a trailing slice of existing editor text so the model can continue without duplicating content.
+- The server rejects empty fragments, markdown fences, full HTML documents, obvious conversational wrappers, plain text with no HTML tags, uneven table rows, and tables with empty cells.
+- The server also strips empty top-level paragraphs/headings and normalizes generated tables to remove blank spacer rows/columns before insertion.
+
+The old strict `generateObject()` Tiptap JSON path is replaced for inline prompts. The route name remains `/api/ai/generate-blocks` for compatibility, but the successful payload is now HTML-first.
 
 ## Global Agent Architecture
 
@@ -566,12 +589,21 @@ Exported tool schemas:
 - `updateNavigationBarInputSchema`
 - `updateFooterInputSchema`
 - `searchDocumentationInputSchema`
+- `cortexAiPageContextSchema`
+- `readCurrentCmsItemInputSchema`
+- `updateCurrentCmsFieldsInputSchema`
+- `updateContentBlockInputSchema`
+- `updateSectionColumnBlockInputSchema`
 
 Exported executors:
 
 - `executeUpdateNavigationBar`
 - `executeUpdateFooter`
 - `executeSearchDocumentation`
+- `executeReadCurrentCmsItem`
+- `executeUpdateCurrentCmsFields`
+- `executeUpdateContentBlock`
+- `executeUpdateSectionColumnBlock`
 
 Tool factory:
 
@@ -580,6 +612,8 @@ createCortexGlobalAgentTools(context)
 ```
 
 Tools are passed to Vercel AI SDK `streamText`.
+
+The new CMS editing tools require a current `pageContext` supplied by the chat request. They are admin-only for this rollout because the global-agent route requires `ADMIN`.
 
 ### update_navigation_bar
 
@@ -598,7 +632,8 @@ Input:
     children?: Array<{ label: string; url: string; target?: '_self' | '_blank' }>;
   }>;
   languageCode?: string; // locale code or language name
-  mode?: 'append' | 'replace';
+  mode?: 'append' | 'replace' | 'update';
+  match?: { label?: string; url?: string };
 }
 ```
 
@@ -623,6 +658,7 @@ Important behavior:
 
 - `append` preserves existing links.
 - `replace` deletes all existing items for `menu_key = HEADER` and the selected language.
+- `update` changes one existing item found by `match.label`, `match.url`, or the replacement URL.
 - Append is idempotent by normalized URL.
 - If the same URL already exists for that menu/language, it increments `skippedCount` instead of inserting a duplicate.
 - Children are inserted with `parent_id`.
@@ -690,6 +726,99 @@ Behavior:
 
 Future RAG work should replace or augment this with an embeddings table and vector similarity search.
 
+### read_current_cms_item
+
+Purpose:
+
+- Read the page, post, or product currently being edited.
+- Return page/post/product metadata and, for pages/posts, ordered block summaries or full block content.
+
+Input:
+
+```ts
+{
+  includeBlocks?: boolean; // default true
+  includeBlockContent?: boolean; // default false
+}
+```
+
+Behavior:
+
+- Requires `pageContext` from the chat request.
+- Fetches from `pages`, `posts`, or `products` by current entity id.
+- For pages/posts, fetches `blocks` by `page_id` or `post_id` and sorts by `order`.
+- Omits block `content` unless `includeBlockContent` is true, keeping normal reads compact.
+
+### update_current_cms_fields
+
+Purpose:
+
+- Update metadata fields on the current page, post, or product.
+
+Supported fields:
+
+- Pages: `title`, `slug`, `status`, `meta_title`, `meta_description`.
+- Posts: `title`, `slug`, `status`, `label`, `subtitle`, `excerpt`, `published_at`, `feature_image_id`, `meta_title`, `meta_description`.
+- Products: `title`, `slug`, `status`, `short_description`, `description_json`, `meta_title`, `meta_description`.
+
+Behavior:
+
+- Requires `pageContext`.
+- Validates page/post status as `draft`, `published`, or `archived`.
+- Validates product status as `draft`, `active`, or `archived`.
+- Validates product `description_json` against `editorBlockDocumentSchema`.
+- Revalidates the CMS edit path and public page/post/product path.
+
+### update_content_block
+
+Purpose:
+
+- Update an existing top-level block on the current page or post.
+
+Input:
+
+```ts
+{
+  blockId: number;
+  blockType?: BlockType; // assertion only
+  content: Record<string, unknown>;
+}
+```
+
+Behavior:
+
+- Requires current page/post `pageContext`.
+- Refuses to update blocks outside the current page/post.
+- Treats `blockType` as an assertion, not a type-changing request.
+- Validates `content` with `validateBlockContent(existingBlockType, content)`.
+- Updates only `blocks.content` and `updated_at`.
+
+### update_section_column_block
+
+Purpose:
+
+- Update an existing nested block inside a current page/post `section` or `hero` block.
+
+Input:
+
+```ts
+{
+  parentBlockId: number;
+  columnIndex: number;
+  blockIndex: number;
+  blockType?: BlockType; // assertion only
+  content: Record<string, unknown>;
+}
+```
+
+Behavior:
+
+- Requires current page/post `pageContext`.
+- Refuses to update parent blocks outside the current page/post.
+- Parent must be `section` or `hero`.
+- Validates nested content against the nested block type.
+- Validates final parent section/hero content before saving.
+
 ### Revalidation
 
 Tool mutations call:
@@ -699,7 +828,7 @@ revalidatePath('/', 'layout')
 revalidatePath('/cms/navigation')
 ```
 
-This keeps public layout/nav and CMS navigation screens in sync after tool updates.
+Navigation/footer mutations keep public layout/nav and CMS navigation screens in sync. Current CMS item/block mutations revalidate the active edit screen and the public page, article, or product URL when a slug is available.
 
 ## Global Agent Route
 
@@ -722,8 +851,22 @@ Request schema:
     role: 'system' | 'user' | 'assistant';
     content: string;
   }>;
+  pageContext?: {
+    contentType: 'page' | 'post' | 'product';
+    entityId: number | string;
+    slug?: string | null;
+    title?: string | null;
+    languageId?: number | null;
+    currentEditor?: {
+      blockId?: number | string | null;
+      blockType?: string | null;
+      field?: string | null;
+    };
+  } | null;
 }
 ```
+
+Old `{ messages }` requests remain valid. If no `pageContext` is supplied, the agent can still use navigation/footer/search tools but should not perform current-item mutations.
 
 Limits:
 
@@ -745,6 +888,8 @@ System prompt:
 - Explicit Planner -> Executor -> Evaluator behavior.
 - Use typed tools for mutations.
 - Append header links unless replacement is clearly requested.
+- Use current page/post/product context for phrases like "this page", "this product", or "this block".
+- Do not update content outside the supplied current CMS context.
 - Map language names to codes, e.g. French -> fr.
 - Follow-up language requests should reuse prior requested item.
 
@@ -779,7 +924,7 @@ Raw tool-call leak detection checks for:
 - `<toolcall`
 - `</toolcall`
 - `"arguments"`
-- tool names such as `"update_navigation_bar"`
+- tool names such as `"update_navigation_bar"`, `"update_current_cms_fields"`, and `"update_section_column_block"`
 
 Rate-limit text detection checks for:
 
@@ -795,6 +940,8 @@ Fallback strategy:
   - `Done. I updated the navigation bar.`
   - `That navigation link already exists, so I left the header unchanged.`
   - `Done. I updated the footer.`
+  - `Done. I updated the current CMS fields.`
+  - `Done. I updated the current content block.`
 
 This was added after a real issue where:
 
@@ -829,6 +976,7 @@ Features:
 - Floating brain icon launcher.
 - Right-side popup panel.
 - Persistent local browser thread history.
+- Sends current CMS page/post/product context with chat requests when available.
 - New thread button.
 - Delete old thread button.
 - Stop streaming button.
@@ -856,6 +1004,7 @@ Important behavior:
 - The UI aborts requests after timeout and shows a clean error instead of leaving a spinner forever.
 - The UI cancels the stream reader after receiving `finish`.
 - The component returns `null` until mounted, preventing SSR/client localStorage mismatches.
+- `CortexAiPageContextProvider` wraps the CMS layout. Edit screens register page, post, and product context via `CortexAiPageContextRegistrar`; the chat also parses `/cms/pages/:id/edit`, `/cms/posts/:id/edit`, and `/cms/products/:id/edit` as a fallback.
 
 ## Hydration Fixes Related to Cortex AI Work
 
@@ -867,6 +1016,7 @@ Fixes:
 - `Header` passes render functions instead of reusing the same React element instance in both desktop and mobile nav sections.
 - `FeedbackModal` renders a plain trigger button before mount, then wraps it with Radix `Dialog` after hydration.
 - `CortexGlobalAgentChat` is also mounted only after the client has loaded thread state.
+- `ProductFormClientShell` renders a deterministic placeholder on SSR/initial hydration, then mounts the Radix-heavy product form controls client-side.
 
 These choices keep SSR and first client render aligned while preserving interactive behavior after hydration.
 
@@ -914,6 +1064,7 @@ npm run verify:cortex-ai-routing -- --mode=both
 npm run verify:cortex-ai-generate-blocks -- "Generate a 3-tier pricing table"
 npm run verify:editor-block-schema
 npx nx lint nextblock --skip-nx-cache
+npx nx build nextblock --skip-nx-cache
 ```
 
 Vitest files:
@@ -958,6 +1109,18 @@ Mitigations:
 - Add OpenRouter credits.
 - Save a stored BYOK and select a compatible paid model in `/cms/settings/cortex-ai`.
 - Add or change fallback models in `ai-model-registry.ts`.
+
+### Inline editor generation fails with a generic fallback error
+
+The inline route now summarizes first/last real model errors from routing attempts and returns that message in the JSON body. Server logs still include the full per-model `attempts` array.
+
+Check:
+
+- Sandbox BYOK is present in `localStorage` under `cortex_ai_sandbox_openrouter_api_key`.
+- Sandbox model selection is present under `cortex_ai_sandbox_openrouter_model_selection`.
+- Request headers include `x-sandbox-openrouter-key` and `x-sandbox-openrouter-model` in sandbox.
+- Env-only routing is not expected to use paid models; it always uses the free registry.
+- The model returned an HTML fragment, not markdown fences, a full HTML document, or conversational prose.
 
 ### The agent added a link but then showed an error
 
@@ -1008,6 +1171,7 @@ Known fixed areas:
 - Public nav Radix controls are client-only after mount.
 - Feedback modal trigger is stable before mount.
 - Chat component waits until mounted.
+- Product edit form controls wait until mounted through `ProductFormClientShell`.
 
 If new warnings appear, inspect for:
 
@@ -1055,17 +1219,18 @@ Rules:
 
 1. Confirm the node exists in the actual Tiptap extension set.
 2. Add it to the full schema in `libs/utils/src/lib/editor-blocks.ts`.
-3. Decide if it is safe for generated AI output.
-4. If safe, add it to the generated schema.
+3. Decide if it is safe for stored AI-authored JSON fields such as product `description_json`.
+4. If safe, add it to the generated/schema-constrained JSON surface used by validators and agent tools.
 5. Update `EDITOR_BLOCK_ALLOWED_NODE_TYPES`.
 6. Update schema awareness string if needed.
-7. Run:
+7. If the node has an HTML representation, verify the inline assistant can insert it through Tiptap's normal HTML parser/source-mode path.
+8. Run:
 
 ```bash
 npm run verify:editor-block-schema
 ```
 
-8. Test generation with:
+9. Test inline generation with:
 
 ```bash
 npm run verify:cortex-ai-generate-blocks -- "Generate content using the new node type"
@@ -1076,7 +1241,7 @@ npm run verify:cortex-ai-generate-blocks -- "Generate content using the new node
 1. Add the model id to `CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY`.
 2. Confirm the model supports the target feature:
    - tool calling for global agent
-   - structured outputs or reliable JSON for editor generation
+   - clean text/HTML fragment generation for the inline editor
 3. Run:
 
 ```bash
@@ -1098,8 +1263,9 @@ npm run verify:cortex-ai-generate-blocks -- --model=MODEL_ID "Generate a 3-tier 
 2. Add footer append mode to avoid replacing all footer links for small edits.
 3. Replace keyword documentation search with embedding-based RAG.
 4. Add server-side chat thread persistence if browser-local history is not enough.
-5. Add explicit package gating to editor prompt visibility if desired. The current route enforces access/credentials, but the editor prompt UI is not itself hidden by package state in `NotionEditor`.
-6. Consider search/filter affordances in the model picker if the compatible OpenRouter catalog becomes too large for a basic select.
+5. Add page-aware block insertion tools with explicit idempotency keys.
+6. Add explicit package gating to editor prompt visibility if desired. The current route enforces access/credentials, but the editor prompt UI is not itself hidden by package state in `NotionEditor`.
+7. Consider search/filter affordances in the model picker if the compatible OpenRouter catalog becomes too large for a basic select.
 
 ## Mental Model for Future Agents
 
@@ -1111,9 +1277,10 @@ When modifying Cortex AI, keep these invariants:
 4. Env-only routing must stay locked to the three explicit free models.
 5. Stored BYOK requires `CORTEX_AI_ENCRYPTION_KEY`.
 6. Stored model selection must only use models with `tools` and `structured_outputs`.
-7. Editor generation must use Zod-bound structured output.
-8. Global mutations must go through typed tools.
-9. Side-effecting tools should be idempotent when possible.
-10. If a side-effecting tool succeeds and the model fails afterward, report the tool result instead of retrying blindly.
-11. Free OpenRouter models are useful but unstable; guard against 429s, malformed tool-call text, and no-object generation.
-12. Multilingual mutations should use active rows from `languages`, not hardcoded assumptions.
+7. Inline editor generation returns HTML fragments, not strict Tiptap JSON.
+8. Stored product descriptions and global-agent editor JSON fields still validate against editor schemas.
+9. Global mutations must go through typed tools.
+10. Side-effecting tools should be idempotent when possible.
+11. If a side-effecting tool succeeds and the model fails afterward, report the tool result instead of retrying blindly.
+12. Free OpenRouter models are useful but unstable; guard against 429s, malformed tool-call text, invalid HTML fragments, and no-output generation.
+13. Multilingual mutations should use active rows from `languages`, not hardcoded assumptions.

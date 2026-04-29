@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   Brain,
   CheckCircle2,
@@ -17,6 +18,10 @@ import { Badge } from "@nextblock-cms/ui/badge";
 import { Button } from "@nextblock-cms/ui/button";
 import { Textarea } from "@nextblock-cms/ui/textarea";
 import { cn } from "@nextblock-cms/utils";
+import {
+  useCortexAiPageContext,
+  type CortexAiPageContext,
+} from "./CortexAiPageContext";
 
 type ChatRole = "assistant" | "user";
 
@@ -97,7 +102,46 @@ const TOOL_COPY: Record<string, { done: string; running: string }> = {
     done: "Navigation bar updated",
     running: "Updating navigation bar...",
   },
+  read_current_cms_item: {
+    done: "Current item read",
+    running: "Reading current item...",
+  },
+  update_current_cms_fields: {
+    done: "Current item updated",
+    running: "Updating current item...",
+  },
+  update_content_block: {
+    done: "Content block updated",
+    running: "Updating content block...",
+  },
+  update_section_column_block: {
+    done: "Section block updated",
+    running: "Updating section block...",
+  },
 };
+
+function buildFallbackPageContext(pathname: string | null): CortexAiPageContext | null {
+  if (!pathname) {
+    return null;
+  }
+
+  const pageMatch = pathname.match(/^\/cms\/pages\/(\d+)\/edit$/);
+  if (pageMatch?.[1]) {
+    return { contentType: "page", entityId: Number(pageMatch[1]) };
+  }
+
+  const postMatch = pathname.match(/^\/cms\/posts\/(\d+)\/edit$/);
+  if (postMatch?.[1]) {
+    return { contentType: "post", entityId: Number(postMatch[1]) };
+  }
+
+  const productMatch = pathname.match(/^\/cms\/products\/([^/]+)\/edit$/);
+  if (productMatch?.[1]) {
+    return { contentType: "product", entityId: productMatch[1] };
+  }
+
+  return null;
+}
 
 function createId() {
   return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
@@ -314,6 +358,8 @@ function ToolActivityRow({ activity }: { activity: ToolActivity }) {
 }
 
 export function CortexGlobalAgentChat() {
+  const pathname = usePathname();
+  const cortexAiPageContext = useCortexAiPageContext();
   const [isMounted, setIsMounted] = useState(false);
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -370,6 +416,8 @@ export function CortexGlobalAgentChat() {
   );
   const messages = activeThread?.messages ?? [];
   const canSubmit = useMemo(() => input.trim().length > 0 && !isStreaming, [input, isStreaming]);
+  const fallbackPageContext = useMemo(() => buildFallbackPageContext(pathname), [pathname]);
+  const pageContext = cortexAiPageContext?.pageContext ?? fallbackPageContext;
 
   const updateThreadMessages = (
     threadId: string,
@@ -621,7 +669,10 @@ export function CortexGlobalAgentChat() {
       }
 
       const response = await fetch("/api/ai/global-agent", {
-        body: JSON.stringify({ messages: requestMessages }),
+        body: JSON.stringify({
+          messages: requestMessages,
+          ...(pageContext ? { pageContext } : {}),
+        }),
         headers,
         method: "POST",
         signal: abortController.signal,

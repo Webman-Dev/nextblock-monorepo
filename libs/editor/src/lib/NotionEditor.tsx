@@ -230,6 +230,44 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   const characters = characterCount?.characters?.() ?? 0;
   const words = characterCount?.words?.() ?? 0;
 
+  const scrollEditorToBottom = () => {
+    window.requestAnimationFrame(() => {
+      const scrollContainer = wrapperRef.current?.querySelector(
+        '[data-editor-scroll-area="true"]'
+      ) as HTMLElement | null;
+
+      scrollContainer?.scrollTo({
+        behavior: 'smooth',
+        top: scrollContainer.scrollHeight,
+      });
+    });
+  };
+
+  const buildAiEditorContext = (params: {
+    insertionMode: 'append-to-end' | 'replace-empty-document' | 'replace-selection';
+    selectedText: string;
+  }) => {
+    if (params.insertionMode === 'replace-empty-document') {
+      return 'Insertion target: empty editor. Create the initial content for this document.';
+    }
+
+    const currentText = editor.getText().trim();
+    const contextParts = [
+      `Insertion target: ${params.insertionMode}.`,
+      params.insertionMode === 'append-to-end'
+        ? 'Continue after the existing content. Do not repeat existing headings, paragraphs, or lists unless the user explicitly asks for a rewrite.'
+        : 'Replace only the selected content. Keep surrounding editor content in mind for continuity.',
+      params.selectedText
+        ? `Selected text:\n${params.selectedText.slice(0, 600)}`
+        : null,
+      currentText
+        ? `Existing editor text:\n${currentText.slice(-1400)}`
+        : null,
+    ];
+
+    return contextParts.filter(Boolean).join('\n\n').slice(0, 2000);
+  };
+
   const handleAiGenerate = async () => {
     const prompt = aiPrompt.trim();
 
@@ -242,6 +280,21 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
 
     const abortController = new AbortController();
     const timeoutId = window.setTimeout(() => abortController.abort(), 150_000);
+    const wasEditorEmpty = editor.isEmpty;
+    const selectionBeforeGeneration = editor.state.selection;
+    const hasSelection = !selectionBeforeGeneration.empty;
+    const selectedText = hasSelection
+      ? editor.state.doc.textBetween(
+          selectionBeforeGeneration.from,
+          selectionBeforeGeneration.to,
+          ' '
+        ).trim()
+      : '';
+    const insertionMode = wasEditorEmpty
+      ? 'replace-empty-document'
+      : hasSelection
+        ? 'replace-selection'
+        : 'append-to-end';
 
     try {
       const headers: Record<string, string> = {
@@ -259,8 +312,12 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
         }
       }
 
+      const context = buildAiEditorContext({
+        insertionMode,
+        selectedText,
+      });
       const response = await fetch('/api/ai/generate-blocks', {
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ context, prompt }),
         headers,
         method: 'POST',
         signal: abortController.signal,
@@ -271,14 +328,21 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
         throw new Error(payload?.error || 'Cortex AI could not generate content.');
       }
 
-      if (!payload || payload.type !== 'doc' || !Array.isArray(payload.content)) {
-        throw new Error('Cortex AI returned an invalid editor document.');
+      if (!payload || typeof payload.html !== 'string' || !payload.html.trim()) {
+        throw new Error('Cortex AI returned an invalid HTML fragment.');
       }
 
-      if (editor.isEmpty) {
-        editor.commands.setContent(payload);
+      if (wasEditorEmpty || editor.isEmpty) {
+        editor.commands.setContent(payload.html);
+      } else if (hasSelection) {
+        const docEnd = editor.state.doc.content.size;
+        const from = Math.min(selectionBeforeGeneration.from, docEnd);
+        const to = Math.min(selectionBeforeGeneration.to, docEnd);
+
+        editor.chain().focus().insertContentAt({ from, to }, payload.html).run();
       } else {
-        editor.chain().focus().insertContent(payload.content).run();
+        editor.chain().focus().insertContentAt(editor.state.doc.content.size, payload.html).run();
+        scrollEditorToBottom();
       }
 
       setAiPrompt('');
@@ -340,7 +404,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
             type="button"
             onClick={() => void handleAiGenerate()}
             disabled={!aiPrompt.trim() || isGeneratingAiContent}
-            title="Generate editor blocks"
+            title="Generate rich text"
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-background text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isGeneratingAiContent ? (
@@ -363,7 +427,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
       <ImageToolbar editor={editor} />
       <TableToolbar editor={editor} />
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto" data-editor-scroll-area="true">
         <EditorContent editor={editor} />
       </div>
 

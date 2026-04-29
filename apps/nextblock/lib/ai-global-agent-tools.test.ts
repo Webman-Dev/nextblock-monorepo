@@ -1,18 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  executeReadCurrentCmsItem,
   executeSearchDocumentation,
+  executeUpdateContentBlock,
+  executeUpdateCurrentCmsFields,
   executeUpdateFooter,
   executeUpdateNavigationBar,
+  executeUpdateSectionColumnBlock,
 } from './ai-global-agent-tools';
 
 type MockRow = Record<string, any>;
 
 type MockDatabase = {
+  blocks: MockRow[];
   languages: MockRow[];
   navigation_items: MockRow[];
   pages: MockRow[];
   posts: MockRow[];
+  products: MockRow[];
   site_settings: MockRow[];
 };
 
@@ -190,12 +196,14 @@ class MockQuery {
 function createMockSupabase(overrides?: Partial<MockDatabase>) {
   const calls: MockRow[] = [];
   const database: MockDatabase = {
+    blocks: [],
     languages: [{ code: 'en', id: 1 }],
     navigation_items: [
       { id: 1, label: 'Old', language_id: 1, menu_key: 'HEADER', order: 0, url: '/old' },
     ],
     pages: [],
     posts: [],
+    products: [],
     site_settings: [],
     ...overrides,
   };
@@ -607,6 +615,247 @@ describe('Cortex AI global agent tool executors', () => {
         },
       ],
       success: true,
+    });
+  });
+
+  it('reads the current page context with block summaries', async () => {
+    const { supabase } = createMockSupabase({
+      blocks: [
+        {
+          block_type: 'text',
+          content: { html_content: '<p>Hello</p>' },
+          id: 11,
+          language_id: 1,
+          order: 2,
+          page_id: 7,
+          post_id: null,
+        },
+        {
+          block_type: 'heading',
+          content: { level: 2, text_content: 'Intro' },
+          id: 10,
+          language_id: 1,
+          order: 1,
+          page_id: 7,
+          post_id: null,
+        },
+      ],
+      pages: [
+        {
+          id: 7,
+          language_id: 1,
+          meta_description: null,
+          slug: 'home',
+          status: 'published',
+          title: 'Home',
+        },
+      ],
+    });
+
+    const result = await executeReadCurrentCmsItem(
+      { includeBlockContent: false, includeBlocks: true },
+      {
+        pageContext: { contentType: 'page', entityId: 7, slug: 'home', title: 'Home' },
+        supabase,
+      }
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.item.title).toBe('Home');
+    expect(result.blocks).toEqual([
+      {
+        blockType: 'heading',
+        content: undefined,
+        id: 10,
+        languageId: 1,
+        order: 1,
+        pageId: 7,
+        postId: null,
+      },
+      {
+        blockType: 'text',
+        content: undefined,
+        id: 11,
+        languageId: 1,
+        order: 2,
+        pageId: 7,
+        postId: null,
+      },
+    ]);
+  });
+
+  it('updates validated product fields including description_json', async () => {
+    const revalidated: string[] = [];
+    const { database, supabase } = createMockSupabase({
+      products: [
+        {
+          description_json: null,
+          id: 'prod_1',
+          language_id: 1,
+          meta_description: null,
+          meta_title: null,
+          short_description: 'Old short copy',
+          slug: 'studio-tee',
+          status: 'draft',
+          title: 'Studio Tee',
+        },
+      ],
+    });
+    const descriptionJson = {
+      content: [
+        {
+          content: [{ text: 'NextBlock tee description.', type: 'text' }],
+          type: 'paragraph',
+        },
+      ],
+      type: 'doc',
+    };
+
+    const result = await executeUpdateCurrentCmsFields(
+      {
+        fields: {
+          description_json: descriptionJson,
+          short_description: 'Soft cotton tee for builders.',
+          status: 'active',
+        },
+      },
+      {
+        pageContext: {
+          contentType: 'product',
+          entityId: 'prod_1',
+          slug: 'studio-tee',
+          title: 'Studio Tee',
+        },
+        revalidatePath: (path) => revalidated.push(path),
+        supabase,
+      }
+    );
+
+    expect(result).toMatchObject({
+      contentType: 'product',
+      entityId: 'prod_1',
+      slug: 'studio-tee',
+      success: true,
+      updatedFields: ['description_json', 'short_description', 'status'],
+    });
+    expect(database.products[0]).toMatchObject({
+      description_json: descriptionJson,
+      short_description: 'Soft cotton tee for builders.',
+      status: 'active',
+    });
+    expect(revalidated).toEqual([
+      '/cms/products/prod_1/edit',
+      '/product/studio-tee',
+      '/cms/products',
+    ]);
+  });
+
+  it('updates only blocks that belong to the current page context', async () => {
+    const { database, supabase } = createMockSupabase({
+      blocks: [
+        {
+          block_type: 'text',
+          content: { html_content: '<p>Old</p>' },
+          id: 12,
+          language_id: 1,
+          order: 0,
+          page_id: 7,
+          post_id: null,
+        },
+      ],
+    });
+
+    await expect(
+      executeUpdateContentBlock(
+        {
+          blockId: 12,
+          blockType: 'text',
+          content: { html_content: '<p>Wrong page</p>' },
+        },
+        {
+          pageContext: { contentType: 'page', entityId: 8 },
+          supabase,
+        }
+      )
+    ).rejects.toThrow('does not belong to the current page');
+
+    const result = await executeUpdateContentBlock(
+      {
+        blockId: 12,
+        blockType: 'text',
+        content: { html_content: '<p>Updated</p>' },
+      },
+      {
+        pageContext: { contentType: 'page', entityId: 7, slug: 'docs/setup' },
+        revalidatePath: () => undefined,
+        supabase,
+      }
+    );
+
+    expect(result).toMatchObject({
+      blockId: 12,
+      blockType: 'text',
+      contentUpdated: true,
+      success: true,
+    });
+    expect(database.blocks[0].content).toEqual({ html_content: '<p>Updated</p>' });
+  });
+
+  it('updates a validated nested section column block', async () => {
+    const sectionContent = {
+      background: { type: 'none' },
+      column_blocks: [
+        [
+          {
+            block_type: 'text',
+            content: { html_content: '<p>Old nested copy</p>' },
+          },
+        ],
+      ],
+      column_gap: 'md',
+      container_type: 'container',
+      padding: { bottom: 'md', top: 'md' },
+      responsive_columns: { desktop: 1, mobile: 1, tablet: 1 },
+    };
+    const { database, supabase } = createMockSupabase({
+      blocks: [
+        {
+          block_type: 'section',
+          content: sectionContent,
+          id: 20,
+          language_id: 1,
+          order: 0,
+          page_id: 7,
+          post_id: null,
+        },
+      ],
+    });
+
+    const result = await executeUpdateSectionColumnBlock(
+      {
+        blockIndex: 0,
+        blockType: 'text',
+        columnIndex: 0,
+        content: { html_content: '<p>New nested copy</p>' },
+        parentBlockId: 20,
+      },
+      {
+        pageContext: { contentType: 'page', entityId: 7, slug: 'home' },
+        revalidatePath: () => undefined,
+        supabase,
+      }
+    );
+
+    expect(result).toMatchObject({
+      blockIndex: 0,
+      columnIndex: 0,
+      nestedBlockType: 'text',
+      parentBlockId: 20,
+      parentBlockType: 'section',
+      success: true,
+    });
+    expect(database.blocks[0].content.column_blocks[0][0].content).toEqual({
+      html_content: '<p>New nested copy</p>',
     });
   });
 });

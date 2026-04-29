@@ -1,18 +1,24 @@
 import assert from 'node:assert/strict';
 
 import {
+  executeReadCurrentCmsItem,
   executeSearchDocumentation,
+  executeUpdateContentBlock,
+  executeUpdateCurrentCmsFields,
   executeUpdateFooter,
   executeUpdateNavigationBar,
+  executeUpdateSectionColumnBlock,
 } from '../lib/ai-global-agent-tools';
 
 type MockRow = Record<string, any>;
 
 type MockDatabase = {
+  blocks: MockRow[];
   languages: MockRow[];
   navigation_items: MockRow[];
   pages: MockRow[];
   posts: MockRow[];
+  products: MockRow[];
   site_settings: MockRow[];
 };
 
@@ -61,6 +67,10 @@ class MockQuery {
   upsert(payload: MockRow | MockRow[]) {
     this.operation = 'upsert';
     this.payload = payload;
+    return this;
+  }
+
+  order() {
     return this;
   }
 
@@ -171,6 +181,40 @@ function createMockSupabase(database: MockDatabase) {
 
 async function main() {
   const database: MockDatabase = {
+    blocks: [
+      {
+        block_type: 'text',
+        content: { html_content: '<p>Old page text</p>' },
+        id: 10,
+        language_id: 1,
+        order: 0,
+        page_id: 1,
+        post_id: null,
+      },
+      {
+        block_type: 'section',
+        content: {
+          background: { type: 'none' },
+          column_blocks: [
+            [
+              {
+                block_type: 'text',
+                content: { html_content: '<p>Old nested text</p>' },
+              },
+            ],
+          ],
+          column_gap: 'md',
+          container_type: 'container',
+          padding: { bottom: 'md', top: 'md' },
+          responsive_columns: { desktop: 1, mobile: 1, tablet: 1 },
+        },
+        id: 11,
+        language_id: 1,
+        order: 1,
+        page_id: 1,
+        post_id: null,
+      },
+    ],
     languages: [
       { code: 'en', id: 1, is_active: true, name: 'English' },
       { code: 'fr', id: 2, is_active: true, name: 'French' },
@@ -198,6 +242,19 @@ async function main() {
         status: 'published',
         subtitle: null,
         title: 'Supabase Auth Guide',
+      },
+    ],
+    products: [
+      {
+        description_json: null,
+        id: 'prod_1',
+        language_id: 1,
+        meta_description: null,
+        meta_title: null,
+        short_description: 'Old short description',
+        slug: 'studio-tee',
+        status: 'draft',
+        title: 'Studio Tee',
       },
     ],
     site_settings: [{ key: 'footer_copyright', value: { en: 'Old' } }],
@@ -342,6 +399,106 @@ async function main() {
   assert.equal(searchResult.success, true);
   assert.equal(searchResult.results[0]?.title, 'Supabase Auth Guide');
   assert.equal(searchResult.results[1]?.title, 'Setup Guide');
+
+  const readCurrentResult = await executeReadCurrentCmsItem(
+    { includeBlockContent: false, includeBlocks: true },
+    {
+      pageContext: { contentType: 'page', entityId: 1, slug: 'docs/setup', title: 'Setup Guide' },
+      supabase,
+    }
+  );
+
+  assert.equal(readCurrentResult.success, true);
+  assert.equal(readCurrentResult.blocks.length, 2);
+  assert.equal(readCurrentResult.blocks[0]?.blockType, 'text');
+  assert.equal(readCurrentResult.blocks[0]?.content, undefined);
+
+  const updatedBlockResult = await executeUpdateContentBlock(
+    {
+      blockId: 10,
+      blockType: 'text',
+      content: { html_content: '<p>Updated page text</p>' },
+    },
+    {
+      pageContext: { contentType: 'page', entityId: 1, slug: 'docs/setup' },
+      revalidatePath: () => undefined,
+      supabase,
+    }
+  );
+
+  assert.equal(updatedBlockResult.success, true);
+  assert.deepEqual(database.blocks.find((block) => block.id === 10)?.content, {
+    html_content: '<p>Updated page text</p>',
+  });
+
+  await assert.rejects(
+    () =>
+      executeUpdateContentBlock(
+        {
+          blockId: 10,
+          blockType: 'text',
+          content: { html_content: '<p>Wrong page</p>' },
+        },
+        {
+          pageContext: { contentType: 'page', entityId: 2 },
+          supabase,
+        }
+      ),
+    /does not belong to the current page/
+  );
+
+  const nestedBlockResult = await executeUpdateSectionColumnBlock(
+    {
+      blockIndex: 0,
+      blockType: 'text',
+      columnIndex: 0,
+      content: { html_content: '<p>Updated nested text</p>' },
+      parentBlockId: 11,
+    },
+    {
+      pageContext: { contentType: 'page', entityId: 1, slug: 'docs/setup' },
+      revalidatePath: () => undefined,
+      supabase,
+    }
+  );
+
+  assert.equal(nestedBlockResult.success, true);
+  assert.deepEqual(database.blocks.find((block) => block.id === 11)?.content.column_blocks[0][0].content, {
+    html_content: '<p>Updated nested text</p>',
+  });
+
+  const productDescriptionJson = {
+    content: [
+      {
+        content: [{ text: 'A Studio Tee description.', type: 'text' }],
+        type: 'paragraph',
+      },
+    ],
+    type: 'doc',
+  };
+  const productFieldResult = await executeUpdateCurrentCmsFields(
+    {
+      fields: {
+        description_json: productDescriptionJson,
+        short_description: 'Soft cotton tee for Cortex AI builders.',
+        status: 'active',
+      },
+    },
+    {
+      pageContext: {
+        contentType: 'product',
+        entityId: 'prod_1',
+        slug: 'studio-tee',
+        title: 'Studio Tee',
+      },
+      revalidatePath: () => undefined,
+      supabase,
+    }
+  );
+
+  assert.equal(productFieldResult.success, true);
+  assert.equal(database.products[0].status, 'active');
+  assert.deepEqual(database.products[0].description_json, productDescriptionJson);
 
   console.log('Cortex AI global tool verifier passed.');
 }

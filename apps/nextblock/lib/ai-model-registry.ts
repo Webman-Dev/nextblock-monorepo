@@ -421,8 +421,42 @@ export function isOpenRouterRecoverableRoutingError(error: unknown) {
   );
 }
 
+function truncateErrorMessage(message: string, maxLength = 900) {
+  const normalized = message.replace(/\s+/g, ' ').trim();
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength - 1).trimEnd()}...`
+    : normalized;
+}
+
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Unknown OpenRouter error.';
+  const message = getDeepErrorMessage(error);
+  return message ? truncateErrorMessage(message) : 'Unknown OpenRouter error.';
+}
+
+export function summarizeCortexAiRoutingError(
+  error: unknown,
+  fallbackMessage = 'Cortex AI request failed.'
+) {
+  if (error instanceof CortexAiRoutingError) {
+    const attemptMessages = error.attempts
+      .map((attempt) => attempt.errorMessage)
+      .filter((message): message is string => Boolean(message?.trim()));
+    const firstAttemptMessage = attemptMessages[0];
+    const lastAttemptMessage = attemptMessages[attemptMessages.length - 1];
+    const causeMessage = truncateErrorMessage(getDeepErrorMessage(error.cause));
+
+    if (
+      firstAttemptMessage &&
+      lastAttemptMessage &&
+      firstAttemptMessage !== lastAttemptMessage
+    ) {
+      return `First model error: ${firstAttemptMessage} Last model error: ${lastAttemptMessage}`;
+    }
+
+    return lastAttemptMessage || firstAttemptMessage || causeMessage || error.message;
+  }
+
+  return truncateErrorMessage(getDeepErrorMessage(error)) || fallbackMessage;
 }
 
 export async function runWithCortexAiModelFallback<T>(params: {

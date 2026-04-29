@@ -1,6 +1,28 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 
+export const availableCortexAiBlockTypes = [
+  'text',
+  'heading',
+  'image',
+  'button',
+  'posts_grid',
+  'video_embed',
+  'section',
+  'hero',
+  'form',
+  'testimonial',
+  'product_grid',
+  'featured_product',
+  'cart',
+  'checkout',
+  'product_details',
+] as const;
+type BlockType = (typeof availableCortexAiBlockTypes)[number];
+type SectionBlockContent = Record<string, any> & {
+  column_blocks: Array<Array<{ block_type: BlockType; content: Record<string, unknown>; temp_id?: string }>>;
+};
+
 type SupabaseLike = {
   from: (table: string) => any;
 };
@@ -9,6 +31,7 @@ type RevalidateFn = (path: string, type?: 'layout' | 'page') => void;
 type MenuKey = 'HEADER' | 'FOOTER';
 
 type ToolExecutionContext = {
+  pageContext?: CortexAiPageContext | null;
   revalidatePath?: RevalidateFn;
   supabase?: SupabaseLike;
 };
@@ -97,10 +120,68 @@ export const searchDocumentationInputSchema = z.strictObject({
   query: z.string().trim().min(2).max(300),
 });
 
+export const cortexAiPageContextSchema = z.strictObject({
+  contentType: z.enum(['page', 'post', 'product']),
+  currentEditor: z
+    .strictObject({
+      blockId: z.union([z.number().int().positive(), z.string().trim().min(1).max(120)]).nullable().optional(),
+      blockType: z.string().trim().min(1).max(80).nullable().optional(),
+      field: z.string().trim().min(1).max(120).nullable().optional(),
+    })
+    .optional(),
+  entityId: z.union([z.number().int().positive(), z.string().trim().min(1).max(120)]),
+  languageId: z.number().int().positive().nullable().optional(),
+  slug: z.string().trim().min(1).max(300).nullable().optional(),
+  title: z.string().trim().min(1).max(300).nullable().optional(),
+});
+
+export const readCurrentCmsItemInputSchema = z.strictObject({
+  includeBlockContent: z.boolean().default(false),
+  includeBlocks: z.boolean().default(true),
+});
+
+export const updateCurrentCmsFieldsInputSchema = z.strictObject({
+  fields: z
+    .strictObject({
+      description_json: z.unknown().optional(),
+      excerpt: z.string().max(2000).nullable().optional(),
+      feature_image_id: z.string().trim().min(1).max(120).nullable().optional(),
+      label: z.string().max(120).nullable().optional(),
+      meta_description: z.string().max(500).nullable().optional(),
+      meta_title: z.string().max(160).nullable().optional(),
+      published_at: z.string().max(80).nullable().optional(),
+      short_description: z.string().max(2000).nullable().optional(),
+      slug: z.string().trim().min(1).max(300).optional(),
+      status: z.enum(['draft', 'published', 'active', 'archived']).optional(),
+      subtitle: z.string().max(300).nullable().optional(),
+      title: z.string().trim().min(1).max(300).optional(),
+    })
+    .partial(),
+});
+
+export const updateContentBlockInputSchema = z.strictObject({
+  blockId: z.number().int().positive(),
+  blockType: z.enum(availableCortexAiBlockTypes).optional(),
+  content: z.record(z.string(), z.unknown()),
+});
+
+export const updateSectionColumnBlockInputSchema = z.strictObject({
+  blockIndex: z.number().int().min(0),
+  blockType: z.enum(availableCortexAiBlockTypes).optional(),
+  columnIndex: z.number().int().min(0),
+  content: z.record(z.string(), z.unknown()),
+  parentBlockId: z.number().int().positive(),
+});
+
 export type NavigationItemInput = z.infer<typeof navigationItemInputSchema>;
 export type UpdateNavigationBarInput = z.infer<typeof updateNavigationBarInputSchema>;
 export type UpdateFooterInput = z.infer<typeof updateFooterInputSchema>;
 export type SearchDocumentationInput = z.infer<typeof searchDocumentationInputSchema>;
+export type CortexAiPageContext = z.infer<typeof cortexAiPageContextSchema>;
+export type ReadCurrentCmsItemInput = z.infer<typeof readCurrentCmsItemInputSchema>;
+export type UpdateCurrentCmsFieldsInput = z.infer<typeof updateCurrentCmsFieldsInputSchema>;
+export type UpdateContentBlockInput = z.infer<typeof updateContentBlockInputSchema>;
+export type UpdateSectionColumnBlockInput = z.infer<typeof updateSectionColumnBlockInputSchema>;
 
 type DocumentationSnippet = {
   excerpt: string;
@@ -108,6 +189,201 @@ type DocumentationSnippet = {
   title: string;
   url: string;
 };
+
+type BlockValidationResult = {
+  errors: string[];
+  isValid: boolean;
+  warnings: string[];
+};
+
+const cortexAiBlockTypeSchema = z.enum(availableCortexAiBlockTypes);
+const gradientSchema = z.object({
+  direction: z.string().optional(),
+  stops: z.array(z.object({ color: z.string(), position: z.number() })),
+  type: z.enum(['linear', 'radial']),
+});
+const backgroundSchema = z.object({
+  gradient: gradientSchema.optional(),
+  image: z
+    .object({
+      alt_text: z.string().optional(),
+      blur_data_url: z.string().optional(),
+      height: z.number().optional(),
+      media_id: z.string(),
+      object_key: z.string(),
+      overlay: z
+        .object({
+          gradient: gradientSchema,
+          type: z.literal('gradient'),
+        })
+        .optional(),
+      position: z.enum(['center', 'top', 'bottom', 'left', 'right']),
+      quality: z.number().nullable().optional(),
+      size: z.enum(['cover', 'contain']),
+      width: z.number().optional(),
+    })
+    .optional(),
+  min_height: z.string().optional(),
+  solid_color: z.string().optional(),
+  theme: z.enum(['primary', 'secondary', 'muted', 'accent', 'destructive']).optional(),
+  type: z.enum(['none', 'theme', 'solid', 'gradient', 'image']),
+});
+const blockInColumnSchema = z.object({
+  block_type: cortexAiBlockTypeSchema,
+  content: z.record(z.string(), z.any()),
+  temp_id: z.string().optional(),
+});
+const sectionBlockFallbackSchema = z.object({
+  background: backgroundSchema,
+  column_blocks: z.array(z.array(blockInColumnSchema)),
+  column_gap: z.enum(['none', 'sm', 'md', 'lg', 'xl']),
+  container_type: z.enum(['full-width', 'container', 'container-sm', 'container-lg', 'container-xl']),
+  padding: z.object({
+    bottom: z.enum(['none', 'sm', 'md', 'lg', 'xl']),
+    top: z.enum(['none', 'sm', 'md', 'lg', 'xl']),
+  }),
+  responsive_columns: z.object({
+    desktop: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+    mobile: z.union([z.literal(1), z.literal(2)]),
+    tablet: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  }),
+  vertical_alignment: z.enum(['start', 'center', 'end', 'stretch']).optional(),
+});
+const fallbackBlockSchemas: Record<BlockType, z.ZodTypeAny> = {
+  button: z.object({
+    position: z.enum(['left', 'center', 'right']).optional(),
+    size: z.enum(['default', 'sm', 'lg', 'full']).optional(),
+    text: z.string(),
+    url: z.string(),
+    variant: z.enum(['default', 'outline', 'secondary', 'ghost', 'link']).optional(),
+  }),
+  cart: z.object({}),
+  checkout: z.object({}),
+  featured_product: z.object({
+    imagePosition: z.enum(['left', 'right']).default('left'),
+    productId: z.string().min(1),
+    showBackground: z.boolean().default(false),
+  }),
+  form: z.object({
+    fields: z.array(
+      z.object({
+        field_type: z.enum(['text', 'email', 'textarea', 'select', 'radio', 'checkbox']),
+        is_required: z.boolean(),
+        label: z.string(),
+        options: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
+        placeholder: z.string().optional(),
+        temp_id: z.string(),
+      })
+    ),
+    recipient_email: z.string().email(),
+    submit_button_text: z.string(),
+    success_message: z.string(),
+  }),
+  heading: z.object({
+    level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]),
+    textAlign: z.enum(['left', 'center', 'right', 'justify']).optional(),
+    textColor: z.enum(['primary', 'secondary', 'accent', 'muted', 'destructive', 'background']).optional(),
+    text_content: z.string(),
+  }),
+  hero: sectionBlockFallbackSchema,
+  image: z.object({
+    alt_text: z.string().optional(),
+    caption: z.string().optional(),
+    height: z.number().nullable().optional(),
+    media_id: z.string().nullable(),
+    object_key: z.string().nullable().optional(),
+    width: z.number().nullable().optional(),
+  }),
+  posts_grid: z.object({
+    columns: z.number().min(1).max(6),
+    postsPerPage: z.number().min(1).max(50),
+    showPagination: z.boolean(),
+    title: z.string().optional(),
+  }),
+  product_details: z.object({}),
+  product_grid: z.object({
+    categoryId: z.string().optional(),
+    limit: z.number().min(1).max(20).default(6),
+    title: z.string().optional(),
+    type: z.enum(['latest', 'category']).default('latest'),
+  }),
+  section: sectionBlockFallbackSchema,
+  testimonial: z.object({
+    author_name: z.string().min(1),
+    author_title: z.string().optional(),
+    image_url: z.string().url().optional().or(z.literal('')),
+    quote: z.string().min(1),
+  }),
+  text: z.object({
+    html_content: z.string(),
+  }),
+  video_embed: z.object({
+    autoplay: z.boolean().optional(),
+    controls: z.boolean().optional(),
+    title: z.string().optional(),
+    url: z.string(),
+  }),
+};
+let runtimeBlockContentValidator:
+  | false
+  | ((blockType: BlockType, content: Record<string, any>) => BlockValidationResult)
+  | null = null;
+
+function isValidBlockType(blockType: string): blockType is BlockType {
+  return (availableCortexAiBlockTypes as readonly string[]).includes(blockType);
+}
+
+function getRuntimeBlockContentValidator() {
+  if (runtimeBlockContentValidator !== null) {
+    return runtimeBlockContentValidator || null;
+  }
+
+  try {
+    const registry = require('./blocks/blockRegistry') as {
+      validateBlockContent?: (
+        blockType: BlockType,
+        content: Record<string, any>
+      ) => BlockValidationResult;
+    };
+
+    runtimeBlockContentValidator =
+      typeof registry.validateBlockContent === 'function'
+        ? registry.validateBlockContent
+        : false;
+  } catch {
+    runtimeBlockContentValidator = false;
+  }
+
+  return runtimeBlockContentValidator || null;
+}
+
+function validateCortexBlockContent(blockType: BlockType, content: Record<string, unknown>) {
+  const runtimeValidator = getRuntimeBlockContentValidator();
+
+  if (runtimeValidator) {
+    return runtimeValidator(blockType, content);
+  }
+
+  const result = fallbackBlockSchemas[blockType].safeParse(content);
+
+  if (result.success) {
+    return { errors: [], isValid: true, warnings: [] };
+  }
+
+  return {
+    errors: result.error.issues.map((issue) => {
+      const path = issue.path.join('.');
+      return path ? `${path}: ${issue.message}` : issue.message;
+    }),
+    isValid: false,
+    warnings: [],
+  };
+}
+
+function getEditorBlockDocumentSchema() {
+  const { editorBlockDocumentSchema } = require('../../../schemas/editor-blocks') as typeof import('../../../schemas/editor-blocks');
+  return editorBlockDocumentSchema;
+}
 
 function getDefaultRevalidatePath(): RevalidateFn | null {
   try {
@@ -124,6 +400,107 @@ function getSupabase(context?: ToolExecutionContext) {
   }
 
   return context.supabase;
+}
+
+function getCurrentCmsContext(context?: ToolExecutionContext) {
+  const parsed = cortexAiPageContextSchema.safeParse(context?.pageContext);
+
+  if (!parsed.success) {
+    throw new Error(
+      'No current CMS page context is available. Open a page, post, or product edit screen before using this editing tool.'
+    );
+  }
+
+  return parsed.data;
+}
+
+function getNumericEntityId(pageContext: CortexAiPageContext) {
+  const id =
+    typeof pageContext.entityId === 'number'
+      ? pageContext.entityId
+      : Number.parseInt(pageContext.entityId, 10);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error(`Current ${pageContext.contentType} id must be a positive integer.`);
+  }
+
+  return id;
+}
+
+function getStringEntityId(pageContext: CortexAiPageContext) {
+  const id = String(pageContext.entityId || '').trim();
+
+  if (!id) {
+    throw new Error(`Current ${pageContext.contentType} id is missing.`);
+  }
+
+  return id;
+}
+
+function getCmsEntityId(pageContext: CortexAiPageContext) {
+  return pageContext.contentType === 'product'
+    ? getStringEntityId(pageContext)
+    : getNumericEntityId(pageContext);
+}
+
+function normalizePublicSlug(slug: unknown) {
+  return typeof slug === 'string' ? slug.trim().replace(/^\/+|\/+$/g, '') : '';
+}
+
+function getPublicCmsPath(pageContext: CortexAiPageContext, slugOverride?: unknown) {
+  const slug = normalizePublicSlug(slugOverride ?? pageContext.slug);
+
+  if (!slug) {
+    return null;
+  }
+
+  if (pageContext.contentType === 'page') {
+    return slug === 'home' ? '/' : `/${slug}`;
+  }
+
+  if (pageContext.contentType === 'post') {
+    return `/article/${slug}`;
+  }
+
+  return `/product/${slug}`;
+}
+
+function getCmsEditPath(pageContext: CortexAiPageContext) {
+  const entityId = String(pageContext.entityId);
+
+  if (pageContext.contentType === 'page') {
+    return `/cms/pages/${entityId}/edit`;
+  }
+
+  if (pageContext.contentType === 'post') {
+    return `/cms/posts/${entityId}/edit`;
+  }
+
+  return `/cms/products/${entityId}/edit`;
+}
+
+function revalidateCurrentCmsSurfaces(
+  context: ToolExecutionContext | undefined,
+  pageContext: CortexAiPageContext,
+  slugOverride?: unknown
+) {
+  const revalidatePath = context?.revalidatePath ?? getDefaultRevalidatePath();
+
+  if (!revalidatePath) {
+    return;
+  }
+
+  revalidatePath(getCmsEditPath(pageContext));
+
+  const publicPath = getPublicCmsPath(pageContext, slugOverride);
+
+  if (publicPath) {
+    revalidatePath(publicPath);
+  }
+
+  if (pageContext.contentType === 'product') {
+    revalidatePath('/cms/products');
+  }
 }
 
 function revalidateGlobalCmsSurfaces(context?: ToolExecutionContext) {
@@ -147,6 +524,74 @@ function serializeError(error: unknown) {
   }
 
   return String(error);
+}
+
+function cloneJsonRecord(value: unknown, label: string) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} content must be a JSON object.`);
+  }
+
+  return JSON.parse(JSON.stringify(value)) as Record<string, any>;
+}
+
+function assertBlockBelongsToCurrentContext(block: any, pageContext: CortexAiPageContext) {
+  if (pageContext.contentType === 'product') {
+    throw new Error('Products do not have page/post content blocks in this editor context.');
+  }
+
+  const parentId = getNumericEntityId(pageContext);
+  const actualParentId =
+    pageContext.contentType === 'page' ? Number(block.page_id) : Number(block.post_id);
+
+  if (actualParentId !== parentId) {
+    throw new Error(
+      `Block ${block.id} does not belong to the current ${pageContext.contentType} being edited.`
+    );
+  }
+}
+
+function resolveExistingBlockType(blockType: unknown, label: string): BlockType {
+  const normalizedBlockType = typeof blockType === 'string' ? blockType : '';
+
+  if (!isValidBlockType(normalizedBlockType)) {
+    throw new Error(`${label} has unsupported block type "${normalizedBlockType || 'unknown'}".`);
+  }
+
+  return normalizedBlockType;
+}
+
+function assertRequestedBlockTypeMatches(
+  requestedBlockType: BlockType | undefined,
+  existingBlockType: BlockType,
+  label: string
+) {
+  if (requestedBlockType && requestedBlockType !== existingBlockType) {
+    throw new Error(
+      `${label} is a "${existingBlockType}" block. Refusing to update it as "${requestedBlockType}".`
+    );
+  }
+}
+
+function assertValidBlockContent(blockType: BlockType, content: Record<string, unknown>, label: string) {
+  const validation = validateCortexBlockContent(blockType, content);
+
+  if (!validation.isValid) {
+    throw new Error(
+      `${label} content is invalid for block type "${blockType}": ${validation.errors.join('; ')}`
+    );
+  }
+}
+
+function summarizeBlockRow(block: any, includeContent: boolean) {
+  return {
+    blockType: block.block_type,
+    content: includeContent ? block.content : undefined,
+    id: block.id,
+    languageId: block.language_id,
+    order: block.order,
+    pageId: block.page_id,
+    postId: block.post_id,
+  };
 }
 
 function normalizeNavigationUrl(value: unknown) {
@@ -641,8 +1086,395 @@ export async function executeSearchDocumentation(
   };
 }
 
+export async function executeReadCurrentCmsItem(
+  input: ReadCurrentCmsItemInput,
+  context?: ToolExecutionContext
+) {
+  const parsed = readCurrentCmsItemInputSchema.parse(input);
+  const supabase = getSupabase(context);
+  const pageContext = getCurrentCmsContext(context);
+  const entityId = getCmsEntityId(pageContext);
+  const table =
+    pageContext.contentType === 'page'
+      ? 'pages'
+      : pageContext.contentType === 'post'
+        ? 'posts'
+        : 'products';
+  const { data: item, error: itemError } = await supabase
+    .from(table)
+    .select('*')
+    .eq('id', entityId)
+    .single();
+
+  if (itemError || !item) {
+    throw new Error(
+      `Failed to read current ${pageContext.contentType}: ${serializeError(itemError)}`
+    );
+  }
+
+  let blocks: ReturnType<typeof summarizeBlockRow>[] = [];
+
+  if (parsed.includeBlocks && pageContext.contentType !== 'product') {
+    const blockParentColumn = pageContext.contentType === 'page' ? 'page_id' : 'post_id';
+    const { data: blockRows, error: blocksError } = await supabase
+      .from('blocks')
+      .select('id, page_id, post_id, language_id, block_type, content, order')
+      .eq(blockParentColumn, entityId);
+
+    if (blocksError) {
+      throw new Error(`Failed to read current ${pageContext.contentType} blocks: ${serializeError(blocksError)}`);
+    }
+
+    blocks = (Array.isArray(blockRows) ? blockRows : [])
+      .slice()
+      .sort((a: any, b: any) => Number(a.order) - Number(b.order))
+      .map((block: any) => summarizeBlockRow(block, parsed.includeBlockContent));
+  }
+
+  return {
+    blocks,
+    context: pageContext,
+    item,
+    success: true,
+  };
+}
+
+const PAGE_FIELD_NAMES = new Set(['meta_description', 'meta_title', 'slug', 'status', 'title']);
+const POST_FIELD_NAMES = new Set([
+  'excerpt',
+  'feature_image_id',
+  'label',
+  'meta_description',
+  'meta_title',
+  'published_at',
+  'slug',
+  'status',
+  'subtitle',
+  'title',
+]);
+const PRODUCT_FIELD_NAMES = new Set([
+  'description_json',
+  'meta_description',
+  'meta_title',
+  'short_description',
+  'slug',
+  'status',
+  'title',
+]);
+const NULLABLE_TEXT_FIELD_NAMES = new Set([
+  'excerpt',
+  'feature_image_id',
+  'label',
+  'meta_description',
+  'meta_title',
+  'published_at',
+  'short_description',
+  'subtitle',
+]);
+
+function getAllowedFieldNames(contentType: CortexAiPageContext['contentType']) {
+  if (contentType === 'page') {
+    return PAGE_FIELD_NAMES;
+  }
+
+  if (contentType === 'post') {
+    return POST_FIELD_NAMES;
+  }
+
+  return PRODUCT_FIELD_NAMES;
+}
+
+function normalizeCmsFieldValue(fieldName: string, value: unknown) {
+  if (NULLABLE_TEXT_FIELD_NAMES.has(fieldName) && value === '') {
+    return null;
+  }
+
+  return value;
+}
+
+function assertValidStatusForContentType(
+  contentType: CortexAiPageContext['contentType'],
+  status: unknown
+) {
+  if (typeof status !== 'string') {
+    return;
+  }
+
+  const allowedStatuses =
+    contentType === 'product'
+      ? ['active', 'archived', 'draft']
+      : ['archived', 'draft', 'published'];
+
+  if (!allowedStatuses.includes(status)) {
+    throw new Error(
+      `Status "${status}" is not valid for ${contentType}. Allowed statuses: ${allowedStatuses.join(', ')}.`
+    );
+  }
+}
+
+function buildCurrentCmsFieldUpdate(
+  fields: UpdateCurrentCmsFieldsInput['fields'],
+  pageContext: CortexAiPageContext
+) {
+  const allowedFieldNames = getAllowedFieldNames(pageContext.contentType);
+  const updatePayload: Record<string, unknown> = {};
+
+  for (const [fieldName, rawValue] of Object.entries(fields)) {
+    if (rawValue === undefined) {
+      continue;
+    }
+
+    if (!allowedFieldNames.has(fieldName)) {
+      throw new Error(
+        `Field "${fieldName}" cannot be updated for ${pageContext.contentType} content.`
+      );
+    }
+
+    if (fieldName === 'status') {
+      assertValidStatusForContentType(pageContext.contentType, rawValue);
+    }
+
+    if (fieldName === 'description_json') {
+      if (pageContext.contentType !== 'product') {
+        throw new Error('description_json can only be updated for products.');
+      }
+
+      const descriptionValidation = getEditorBlockDocumentSchema().safeParse(rawValue);
+
+      if (!descriptionValidation.success) {
+        throw new Error(
+          `Product description_json failed editor document validation: ${descriptionValidation.error.issues
+            .map((issue) => issue.message)
+            .join('; ')}`
+        );
+      }
+
+      updatePayload.description_json = descriptionValidation.data;
+      continue;
+    }
+
+    updatePayload[fieldName] = normalizeCmsFieldValue(fieldName, rawValue);
+  }
+
+  return updatePayload;
+}
+
+export async function executeUpdateCurrentCmsFields(
+  input: UpdateCurrentCmsFieldsInput,
+  context?: ToolExecutionContext
+) {
+  const parsed = updateCurrentCmsFieldsInputSchema.parse(input);
+  const supabase = getSupabase(context);
+  const pageContext = getCurrentCmsContext(context);
+  const entityId = getCmsEntityId(pageContext);
+  const updatePayload = buildCurrentCmsFieldUpdate(parsed.fields, pageContext);
+  const updatedFields = Object.keys(updatePayload);
+
+  if (updatedFields.length === 0) {
+    throw new Error('update_current_cms_fields requires at least one supported field.');
+  }
+
+  const table =
+    pageContext.contentType === 'page'
+      ? 'pages'
+      : pageContext.contentType === 'post'
+        ? 'posts'
+        : 'products';
+  const { data: item, error } = await supabase
+    .from(table)
+    .update({
+      ...updatePayload,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', entityId)
+    .select('id, language_id, slug, status, title')
+    .single();
+
+  if (error || !item) {
+    throw new Error(
+      `Failed to update current ${pageContext.contentType}: ${serializeError(error)}`
+    );
+  }
+
+  revalidateCurrentCmsSurfaces(context, pageContext, item.slug);
+
+  return {
+    contentType: pageContext.contentType,
+    entityId,
+    slug: item.slug,
+    success: true,
+    updatedFields,
+  };
+}
+
+export async function executeUpdateContentBlock(
+  input: UpdateContentBlockInput,
+  context?: ToolExecutionContext
+) {
+  const parsed = updateContentBlockInputSchema.parse(input);
+  const supabase = getSupabase(context);
+  const pageContext = getCurrentCmsContext(context);
+  const { data: block, error: blockError } = await supabase
+    .from('blocks')
+    .select('id, page_id, post_id, language_id, block_type, content, order')
+    .eq('id', parsed.blockId)
+    .single();
+
+  if (blockError || !block) {
+    throw new Error(`Failed to read block ${parsed.blockId}: ${serializeError(blockError)}`);
+  }
+
+  assertBlockBelongsToCurrentContext(block, pageContext);
+
+  const existingBlockType = resolveExistingBlockType(block.block_type, `Block ${parsed.blockId}`);
+  assertRequestedBlockTypeMatches(parsed.blockType, existingBlockType, `Block ${parsed.blockId}`);
+  assertValidBlockContent(existingBlockType, parsed.content, `Block ${parsed.blockId}`);
+
+  const { data: updatedBlock, error: updateError } = await supabase
+    .from('blocks')
+    .update({
+      content: parsed.content,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', parsed.blockId)
+    .select('id, block_type, order')
+    .single();
+
+  if (updateError || !updatedBlock) {
+    throw new Error(`Failed to update block ${parsed.blockId}: ${serializeError(updateError)}`);
+  }
+
+  revalidateCurrentCmsSurfaces(context, pageContext);
+
+  return {
+    blockId: updatedBlock.id,
+    blockType: updatedBlock.block_type,
+    contentUpdated: true,
+    success: true,
+  };
+}
+
+export async function executeUpdateSectionColumnBlock(
+  input: UpdateSectionColumnBlockInput,
+  context?: ToolExecutionContext
+) {
+  const parsed = updateSectionColumnBlockInputSchema.parse(input);
+  const supabase = getSupabase(context);
+  const pageContext = getCurrentCmsContext(context);
+  const { data: parentBlock, error: blockError } = await supabase
+    .from('blocks')
+    .select('id, page_id, post_id, language_id, block_type, content, order')
+    .eq('id', parsed.parentBlockId)
+    .single();
+
+  if (blockError || !parentBlock) {
+    throw new Error(
+      `Failed to read parent block ${parsed.parentBlockId}: ${serializeError(blockError)}`
+    );
+  }
+
+  assertBlockBelongsToCurrentContext(parentBlock, pageContext);
+
+  const parentBlockType = resolveExistingBlockType(
+    parentBlock.block_type,
+    `Parent block ${parsed.parentBlockId}`
+  );
+
+  if (parentBlockType !== 'section' && parentBlockType !== 'hero') {
+    throw new Error(
+      `Parent block ${parsed.parentBlockId} must be a section or hero block, not "${parentBlockType}".`
+    );
+  }
+
+  const parentContent = cloneJsonRecord(
+    parentBlock.content,
+    `Parent block ${parsed.parentBlockId}`
+  ) as SectionBlockContent;
+  assertValidBlockContent(parentBlockType, parentContent, `Parent block ${parsed.parentBlockId}`);
+
+  const targetColumn = parentContent.column_blocks?.[parsed.columnIndex];
+  const targetNestedBlock = targetColumn?.[parsed.blockIndex];
+
+  if (!targetNestedBlock) {
+    throw new Error(
+      `Nested block was not found at column ${parsed.columnIndex}, index ${parsed.blockIndex}.`
+    );
+  }
+
+  const nestedBlockType = resolveExistingBlockType(
+    targetNestedBlock.block_type,
+    `Nested block ${parsed.columnIndex}:${parsed.blockIndex}`
+  );
+  assertRequestedBlockTypeMatches(
+    parsed.blockType,
+    nestedBlockType,
+    `Nested block ${parsed.columnIndex}:${parsed.blockIndex}`
+  );
+  assertValidBlockContent(
+    nestedBlockType,
+    parsed.content,
+    `Nested block ${parsed.columnIndex}:${parsed.blockIndex}`
+  );
+
+  const nextColumnBlocks = parentContent.column_blocks.map((column, columnIndex) =>
+    columnIndex === parsed.columnIndex
+      ? column.map((nestedBlock, blockIndex) =>
+          blockIndex === parsed.blockIndex
+            ? {
+                ...nestedBlock,
+                content: parsed.content,
+              }
+            : nestedBlock
+        )
+      : column
+  );
+  const nextParentContent: SectionBlockContent = {
+    ...parentContent,
+    column_blocks: nextColumnBlocks,
+  };
+  assertValidBlockContent(
+    parentBlockType,
+    nextParentContent,
+    `Updated parent block ${parsed.parentBlockId}`
+  );
+
+  const { data: updatedParentBlock, error: updateError } = await supabase
+    .from('blocks')
+    .update({
+      content: nextParentContent,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', parsed.parentBlockId)
+    .select('id, block_type')
+    .single();
+
+  if (updateError || !updatedParentBlock) {
+    throw new Error(
+      `Failed to update parent block ${parsed.parentBlockId}: ${serializeError(updateError)}`
+    );
+  }
+
+  revalidateCurrentCmsSurfaces(context, pageContext);
+
+  return {
+    blockIndex: parsed.blockIndex,
+    columnIndex: parsed.columnIndex,
+    nestedBlockType,
+    parentBlockId: updatedParentBlock.id,
+    parentBlockType: updatedParentBlock.block_type,
+    success: true,
+  };
+}
+
 export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
   return {
+    read_current_cms_item: tool({
+      description:
+        'Read the CMS item currently being edited. Requires pageContext and returns page/post/product metadata plus page/post block summaries or content.',
+      execute: (input) => executeReadCurrentCmsItem(input, context),
+      inputSchema: readCurrentCmsItemInputSchema,
+      strict: true,
+    }),
     search_documentation: tool({
       description:
         'Search the NextBlock documentation database and return concise source snippets for factual CMS guidance.',
@@ -657,11 +1489,32 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
       inputSchema: updateFooterInputSchema,
       strict: true,
     }),
+    update_content_block: tool({
+      description:
+        'Update the JSON content of an existing top-level page/post block that belongs to the current CMS edit context. The content must match the existing block type schema.',
+      execute: (input) => executeUpdateContentBlock(input, context),
+      inputSchema: updateContentBlockInputSchema,
+      strict: true,
+    }),
+    update_current_cms_fields: tool({
+      description:
+        'Update validated metadata fields on the current page, post, or product. For products, description_json must be a valid NextBlock editor document JSON object.',
+      execute: (input) => executeUpdateCurrentCmsFields(input, context),
+      inputSchema: updateCurrentCmsFieldsInputSchema,
+      strict: true,
+    }),
     update_navigation_bar: tool({
       description:
         'Update the public header navigation bar for a locale. Use mode "append" when adding links while preserving existing navigation. Use mode "update" when renaming or changing an existing single link. Use mode "replace" only when the user asks to rebuild the complete header and you provide the full menu; destructive partial replacements are refused.',
       execute: (input) => executeUpdateNavigationBar(input, context),
       inputSchema: updateNavigationBarInputSchema,
+      strict: true,
+    }),
+    update_section_column_block: tool({
+      description:
+        'Update one nested block inside a section or hero block that belongs to the current CMS edit context. Validates both nested content and the final section/hero content.',
+      execute: (input) => executeUpdateSectionColumnBlock(input, context),
+      inputSchema: updateSectionColumnBlockInputSchema,
       strict: true,
     }),
   };

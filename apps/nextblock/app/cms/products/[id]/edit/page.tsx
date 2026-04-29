@@ -27,6 +27,7 @@ import {
   buildGlobalAttributesForForm,
   buildProductFormInitialData,
 } from '../../productFormData';
+import { CortexAiPageContextRegistrar } from '../../../components/CortexAiPageContext';
 
 export default async function EditProductPage({
   params,
@@ -108,6 +109,15 @@ export default async function EditProductPage({
 
   return (
     <div className="space-y-8 w-full max-w-[1400px] mx-auto px-6 py-8">
+      <CortexAiPageContextRegistrar
+        context={{
+          contentType: 'product',
+          entityId: product.id,
+          languageId: product.language_id,
+          slug: product.slug,
+          title: product.title,
+        }}
+      />
       <div className="flex justify-between items-center flex-wrap gap-4 w-full">
         <div className="flex items-center gap-3">
           <Button variant="outline" size="icon" aria-label="Back to products" asChild>

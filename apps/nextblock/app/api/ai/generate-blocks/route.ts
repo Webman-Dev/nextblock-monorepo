@@ -3,10 +3,13 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@nextblock-cms/db/server';
 
 import {
-  generateEditorBlockDocument,
+  generateEditorHtmlFragment,
   generateEditorBlocksRequestSchema,
 } from '../../../../lib/ai-block-generation';
-import { safeParseCortexAiModelSelection } from '../../../../lib/ai-model-registry';
+import {
+  safeParseCortexAiModelSelection,
+  summarizeCortexAiRoutingError,
+} from '../../../../lib/ai-model-registry';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,22 +64,32 @@ export async function POST(request: Request) {
       }
     }
 
-    const result = await generateEditorBlockDocument({
+    const result = await generateEditorHtmlFragment({
       ...parsedRequest.data,
       apiKey: sandboxKey || undefined,
       modelSelection: sandboxKey && modelSelection ? modelSelection : undefined,
     });
 
-    return NextResponse.json(result.document, {
+    return NextResponse.json({
+      credentialSource: result.credentialSource,
+      html: result.html,
+      modelId: result.modelId,
+    }, {
       headers: {
         'x-cortex-ai-credential-source': result.credentialSource,
         'x-cortex-ai-model': result.modelId,
       },
     });
   } catch (error) {
-    console.error('[Cortex AI] Failed to generate editor blocks:', error);
+    if (error && typeof error === 'object' && 'attempts' in error) {
+      console.error(
+        '[Cortex AI] Failed to generate editor HTML after model attempts:',
+        JSON.stringify((error as { attempts: unknown }).attempts, null, 2)
+      );
+    }
+    console.error('[Cortex AI] Failed to generate editor HTML:', error);
     return jsonError(
-      error instanceof Error ? error.message : 'Failed to generate editor blocks.',
+      summarizeCortexAiRoutingError(error, 'Failed to generate editor HTML.'),
       500
     );
   }

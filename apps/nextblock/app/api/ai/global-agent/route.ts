@@ -13,9 +13,14 @@ import {
   createCortexAiOpenRouterClient,
   isOpenRouterRateLimitError,
   omitUnsupportedCortexAiModelOptions,
+  summarizeCortexAiRoutingError,
 } from '../../../../lib/ai-client';
 import { safeParseCortexAiModelSelection } from '../../../../lib/ai-model-registry';
-import { createCortexGlobalAgentTools } from '../../../../lib/ai-global-agent-tools';
+import {
+  cortexAiPageContextSchema,
+  createCortexGlobalAgentTools,
+  type CortexAiPageContext,
+} from '../../../../lib/ai-global-agent-tools';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +33,7 @@ const globalAgentMessageSchema = z.strictObject({
 
 const globalAgentRequestSchema = z.strictObject({
   messages: z.array(globalAgentMessageSchema).min(1).max(40),
+  pageContext: cortexAiPageContextSchema.nullable().optional(),
 });
 
 const GLOBAL_AGENT_SYSTEM_PROMPT = [
@@ -38,6 +44,8 @@ const GLOBAL_AGENT_SYSTEM_PROMPT = [
   'For requests that ask to rename or change one existing navigation link, use update_navigation_bar with mode "update" and identify the existing item with match.label or match.url. Never use mode "replace" for a one-link rename.',
   'Use mode "replace" only when the user explicitly asks to rebuild or replace the entire navigation menu and you provide the full menu.',
   'Use update_footer for public footer links or copyright settings.',
+  'When editing a CMS page, post, product, or block, use page-aware tools only. Use read_current_cms_item before updating content unless the user provided exact field/block data.',
+  'Use update_current_cms_fields for current page/post/product metadata and product description_json. Use update_content_block for top-level page/post blocks. Use update_section_column_block for nested blocks inside section or hero blocks.',
   'When a user names a language, pass that language name or its locale code in languageCode; examples: French maps to fr, English maps to en.',
   'For follow-up requests like "also add it in French", use the prior requested item and apply it to the named language.',
   'Use search_documentation before answering implementation or CMS usage questions that require factual project context.',
@@ -121,8 +129,39 @@ function encodeStreamEvent(event: CortexAgentStreamEvent) {
   return encoder.encode(`data: ${JSON.stringify(event)}\n\n`);
 }
 
+function formatPageContextForPrompt(pageContext: CortexAiPageContext | null | undefined) {
+  if (!pageContext) {
+    return 'No current CMS edit context was supplied. Ask the user to open the relevant edit screen before using page-aware editing tools.';
+  }
+
+  return [
+    `Current CMS edit context: contentType=${pageContext.contentType}`,
+    `entityId=${String(pageContext.entityId)}`,
+    pageContext.slug ? `slug=${pageContext.slug}` : null,
+    pageContext.title ? `title=${pageContext.title}` : null,
+    pageContext.languageId ? `languageId=${pageContext.languageId}` : null,
+    pageContext.currentEditor?.field ? `currentField=${pageContext.currentEditor.field}` : null,
+    pageContext.currentEditor?.blockId ? `currentBlockId=${pageContext.currentEditor.blockId}` : null,
+    pageContext.currentEditor?.blockType ? `currentBlockType=${pageContext.currentEditor.blockType}` : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
+function buildGlobalAgentSystemPrompt(pageContext: CortexAiPageContext | null | undefined) {
+  return [
+    GLOBAL_AGENT_SYSTEM_PROMPT,
+    formatPageContextForPrompt(pageContext),
+    'When the user says "this page", "this post", "this product", "this field", or "this block", interpret that through the supplied current CMS edit context.',
+    'Do not update content outside the supplied current CMS context.',
+  ].join(' ');
+}
+
 function serializeStreamError(error: unknown) {
-  return error instanceof Error ? error.message : 'Cortex AI global agent failed.';
+  return summarizeCortexAiRoutingError(
+    error,
+    error instanceof Error ? error.message : 'Cortex AI global agent failed.'
+  );
 }
 
 function getToolCallId(part: CortexAgentStreamPart) {
@@ -138,7 +177,11 @@ function looksLikeRawToolCallLeak(value: string) {
     normalized.includes('"arguments"') ||
     normalized.includes('"update_navigation_bar"') ||
     normalized.includes('"update_footer"') ||
-    normalized.includes('"search_documentation"')
+    normalized.includes('"search_documentation"') ||
+    normalized.includes('"read_current_cms_item"') ||
+    normalized.includes('"update_current_cms_fields"') ||
+    normalized.includes('"update_content_block"') ||
+    normalized.includes('"update_section_column_block"')
   );
 }
 
@@ -179,6 +222,22 @@ function getToolCompletionMessage(toolName?: string, output?: unknown) {
 
   if (toolName === 'search_documentation') {
     return 'I searched the documentation, but the model was interrupted before it could finish a summary.';
+  }
+
+  if (toolName === 'read_current_cms_item') {
+    return 'I read the current CMS item, but the model was interrupted before it could finish a summary.';
+  }
+
+  if (toolName === 'update_current_cms_fields') {
+    return 'Done. I updated the current CMS fields.';
+  }
+
+  if (toolName === 'update_content_block') {
+    return 'Done. I updated the current content block.';
+  }
+
+  if (toolName === 'update_section_column_block') {
+    return 'Done. I updated the nested section block.';
   }
 
   return 'Done. I completed the requested update.';
@@ -264,9 +323,12 @@ export async function POST(request: Request) {
       selectedModel: client.modelSelection,
     });
     const modelIds = routingPolicy.modelIds;
+    const pageContext = parsedRequest.data.pageContext ?? null;
     const tools = createCortexGlobalAgentTools({
+      pageContext,
       supabase: getServiceRoleSupabaseClient(),
     });
+    const systemPrompt = buildGlobalAgentSystemPrompt(pageContext);
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -299,7 +361,7 @@ export async function POST(request: Request) {
                 messages: parsedRequest.data.messages,
                 maxRetries: 0,
                 stopWhen: stepCountIs(6),
-                system: GLOBAL_AGENT_SYSTEM_PROMPT,
+                system: systemPrompt,
                 temperature: 0.1,
                 tools,
               } as Record<string, unknown>,

@@ -20,6 +20,7 @@ import CopyContentFromLanguage from "../../../components/CopyContentFromLanguage
 import { UploadFolderProvider } from '../../../media/UploadFolderContext';
 import RevisionHistoryButton from "../../../revisions/RevisionHistoryButton";
 import { resolveMediaUrl } from "../../../../../lib/media/resolveMediaUrl";
+import { CortexAiPageContextRegistrar } from "../../../components/CortexAiPageContext";
 
 interface PostWithBlocks extends PostType {
   blocks: BlockType[];
@@ -113,6 +114,15 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
   
   return (
     <UploadFolderProvider defaultFolder={`posts/${postWithBlocks.slug}/`}>
+    <CortexAiPageContextRegistrar
+      context={{
+        contentType: "post",
+        entityId: postWithBlocks.id,
+        languageId: postWithBlocks.language_id,
+        slug: postWithBlocks.slug,
+        title: postWithBlocks.title,
+      }}
+    />
     <div className="space-y-8 w-full mx-auto px-6">
       <div className="flex justify-between items-center flex-wrap gap-4 w-full">
         <div className="flex items-center gap-3">

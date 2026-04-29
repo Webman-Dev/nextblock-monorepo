@@ -240,6 +240,7 @@ export {
   isOpenRouterRateLimitError,
   omitUnsupportedCortexAiModelOptions,
   runWithCortexAiModelFallback,
+  summarizeCortexAiRoutingError,
 } from './ai-model-registry';
 export {
   listCortexAiCompatibleOpenRouterModels,
