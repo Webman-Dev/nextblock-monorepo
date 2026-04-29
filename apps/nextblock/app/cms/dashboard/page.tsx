@@ -76,7 +76,7 @@ export default async function CmsDashboardPage() {
             description="Gross revenue this month" 
             icon={DollarSign}
             className="bg-primary/5 border-primary/20"
-            trend={{ value: "+12.5%", positive: true }}
+            trend={stats.ecommerce?.revenueTrend}
           />
           <MetricCard 
             title="Tax Liability" 

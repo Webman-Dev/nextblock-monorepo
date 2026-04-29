@@ -1,7 +1,7 @@
 'use server'
 
 import { createClient } from "@nextblock-cms/db/server";
-import { formatDistanceToNow, startOfMonth } from 'date-fns';
+import { formatDistanceToNow, startOfMonth, subMonths } from 'date-fns';
 
 export type DashboardStats = {
   totalPages: number;
@@ -13,6 +13,10 @@ export type DashboardStats = {
     monthlyRevenue: number;
     taxLiability: number;
     recentSales: any[];
+    revenueTrend?: {
+      value: string;
+      positive: boolean;
+    };
   };
   recentContent: {
     type: 'post' | 'page';
@@ -32,6 +36,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const supabase = await createClient();
   const now = new Date().toISOString();
   const firstOfMonth = startOfMonth(new Date()).toISOString();
+  const lastMonthStart = startOfMonth(subMonths(new Date(), 1)).toISOString();
 
   // 1. Check Package Activations
   const { data: activations } = await supabase
@@ -97,7 +102,14 @@ export async function getDashboardStats(): Promise<DashboardStats> {
           user_id
         `)
         .order('created_at', { ascending: false })
-        .limit(10)
+        .limit(10),
+
+      // Last Month Revenue
+      supabase.from('orders')
+        .select('total')
+        .eq('status', 'paid')
+        .gte('created_at', lastMonthStart)
+        .lt('created_at', firstOfMonth)
     );
   }
 
@@ -118,10 +130,11 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const scheduledPosts = results[5].data;
 
   let ecommerceData = undefined;
-  if (isEcommerceActive && results.length >= 9) {
+  if (isEcommerceActive && results.length >= 10) {
     const revenueData = results[6].data;
     const taxData = results[7].data;
     const orders = (results[8].data as any[]) || [];
+    const lastMonthRevenueData = results[9]?.data || [];
 
     // Fetch Profiles separately for orders (no direct FK between orders and profiles)
     const userIds = Array.from(new Set(orders.map(o => o.user_id).filter(Boolean)));
@@ -143,11 +156,32 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
     const monthlyRevenue = (revenueData || []).reduce((sum: number, o: any) => sum + (o.total || 0), 0);
     const taxLiability = (taxData || []).reduce((sum: number, o: any) => sum + (o.tax_total || 0), 0);
+    const lastMonthRevenue = lastMonthRevenueData.reduce((sum: number, o: any) => sum + (o.total || 0), 0);
+
+    let revenueTrend = undefined;
+    if (lastMonthRevenue > 0) {
+      const percentageChange = ((monthlyRevenue - lastMonthRevenue) / lastMonthRevenue) * 100;
+      revenueTrend = {
+        value: `${percentageChange >= 0 ? '+' : ''}${percentageChange.toFixed(1)}%`,
+        positive: percentageChange >= 0
+      };
+    } else if (monthlyRevenue > 0) {
+      revenueTrend = {
+        value: '+100%',
+        positive: true
+      };
+    } else {
+      revenueTrend = {
+        value: '0%',
+        positive: true
+      };
+    }
 
     ecommerceData = {
       monthlyRevenue,
       taxLiability,
-      recentSales
+      recentSales,
+      revenueTrend
     };
   }
 
