@@ -39,7 +39,7 @@ Implemented:
 - Encrypted OpenRouter BYOK storage in `site_settings`.
 - RLS hardening so `site_settings.key = 'cortex_ai_openrouter_api_key'` is not publicly readable.
 - Cortex AI settings page under `/cms/settings/cortex-ai`.
-- OpenRouter client and model fallback registry.
+- OpenRouter client, free-model fallback registry, and stored-BYOK paid model selection.
 - Tiptap editor JSON schemas and schema-to-JSON-schema helper.
 - `/api/ai/generate-blocks` endpoint.
 - Editor prompt UI in `NotionEditor`.
@@ -84,7 +84,8 @@ Known incomplete or future work:
 | File | Purpose |
 | --- | --- |
 | `apps/nextblock/lib/ai-client.ts` | Creates OpenRouter provider/client with credential resolution and text-generation helper. |
-| `apps/nextblock/lib/ai-model-registry.ts` | Free model registry, fallback-chain builder, rate-limit detection, fallback runner. |
+| `apps/nextblock/lib/ai-model-catalog.ts` | Server-only OpenRouter model catalog fetcher. |
+| `apps/nextblock/lib/ai-model-registry.ts` | Free model registry, routing policy builder, model filtering/parsing helpers, rate-limit detection, fallback runner. |
 | `apps/nextblock/scripts/verify-cortex-ai-routing.ts` | Manual verification script for OpenRouter routing. |
 
 ### Structured Editor Generation
@@ -115,8 +116,8 @@ Known incomplete or future work:
 | --- | --- |
 | `apps/nextblock/app/cms/layout.tsx` | Server layout checks package activation for ecommerce and Cortex AI. |
 | `apps/nextblock/app/cms/CmsClientLayout.tsx` | Adds Cortex AI settings nav item and conditionally renders global chat. |
-| `apps/nextblock/app/cms/settings/cortex-ai/page.tsx` | Settings page for activation/key status and BYOK forms. |
-| `apps/nextblock/app/cms/settings/cortex-ai/actions.ts` | Server actions for reading, saving, and clearing BYOK keys. |
+| `apps/nextblock/app/cms/settings/cortex-ai/page.tsx` | Settings page for activation/key status, BYOK forms, and compatible model selection. |
+| `apps/nextblock/app/cms/settings/cortex-ai/actions.ts` | Server actions for reading, saving, and clearing BYOK keys and model selections. |
 | `apps/nextblock/app/cms/dashboard/actions.ts` | Dashboard package state; checks `cortex-ai` to hide/show AI premium CTA. |
 | `apps/nextblock/components/Header.tsx` and `apps/nextblock/components/ResponsiveNav.tsx` | Hydration-safe public header controls after Radix ID mismatch fixes. |
 | `apps/nextblock/app/cms/components/FeedbackModal.tsx` | Hydration-safe feedback dialog trigger. |
@@ -177,16 +178,20 @@ The upsert uses `onConflict: 'license_key, package_id'` to avoid duplicate reset
 
 ### OPENROUTER_API_KEY
 
-Server-side OpenRouter override. This takes precedence over stored BYOK.
+Server-side OpenRouter key used for sandbox-safe free-model routing when no stored BYOK exists.
 
 Credential priority is:
 
 1. Manual API key passed to helper functions, used mainly in tests/scripts.
-2. `OPENROUTER_API_KEY`.
-3. Encrypted key stored in `site_settings`.
+2. Encrypted key stored in `site_settings`.
+3. `OPENROUTER_API_KEY`.
 4. No credential, which throws an error.
 
+Stored BYOK intentionally takes precedence over `OPENROUTER_API_KEY`. This lets admins keep a sandbox/free environment key in `.env.local` while enabling paid compatible model selection only after they save a stored BYOK in the CMS.
+
 Important: `openrouter/free` is a free model-router id, not a replacement for authentication. The app still needs an OpenRouter API key from either the environment or stored BYOK.
+
+When the active credential source is `env`, Cortex AI always routes through exactly the configured `CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY` list. Non-free explicit model requests are ignored for env-only routing.
 
 OpenRouter free models can still hit free-model rate limits. A user with no credits or no credit card can see errors like `free-models-per-day`. Cortex AI catches these where possible and falls back to configured alternate models, but OpenRouter account-level limits may still block all free requests.
 
@@ -236,13 +241,35 @@ The migration `00000000000011_setup_cortex_ai_settings.sql` hardens RLS:
 - The sensitive row is writable/deletable only by authenticated admins.
 - Existing non-sensitive site settings remain writable by current `ADMIN`/`WRITER` policy.
 
+Stored model selection is saved separately in:
+
+```txt
+public.site_settings.key = cortex_ai_openrouter_model_selection
+```
+
+The value is not secret and uses this shape:
+
+```ts
+{
+  modelId: string,
+  name: string,
+  supportedParameters: string[],
+  pricing: Record<string, string>,
+  contextLength: number | null,
+  updatedAt: string
+}
+```
+
+The selection is only honored when a stored BYOK exists. Clearing the stored BYOK also clears the selected model. Model selection does not require a database migration because `site_settings` is already the platform key/value store and this row is non-sensitive.
+
 Settings UI behavior:
 
 - Page: `/cms/settings/cortex-ai`.
 - Server actions re-check authenticated user role as `ADMIN`.
 - Stored BYOK is never displayed in plaintext.
 - The UI only shows masked `**** last4` status.
-- If `OPENROUTER_API_KEY` exists, UI states that environment override is active.
+- If only `OPENROUTER_API_KEY` exists, UI states that env routing is locked to the three free models.
+- If stored BYOK exists, UI fetches compatible OpenRouter text models that support `tools` and `structured_outputs`, then allows an admin to save one selected model.
 
 ## OpenRouter Client Architecture
 
@@ -269,6 +296,14 @@ Custom OpenRouter headers:
 HTTP-Referer = NEXT_PUBLIC_URL or https://nextblock.dev
 X-Title = NextBlock Cortex AI
 ```
+
+Credential resolution is:
+
+```txt
+manual -> stored BYOK -> OPENROUTER_API_KEY -> none
+```
+
+When the resolved source is `stored`, the client also reads `cortex_ai_openrouter_model_selection` and exposes it to the routing policy. When the source is `env`, model selection is ignored and the policy locks requests to the free registry.
 
 All AI client/config modules intentionally throw if imported into browser code:
 
@@ -302,10 +337,21 @@ nvidia/nemotron-nano-9b-v2:free
 
 Registries:
 
-- `structuredJsonPreferred`: used for structured object/document generation.
-- `toolCallingPreferred`: used for the global agent.
+- `structuredJsonPreferred`: retained as the structured-generation free default list.
+- `toolCallingPreferred`: retained as the global-agent free default list.
 
 Both registries intentionally use the same model list. Future agent tools are expected to mutate broader CMS state through strict schemas, so every default free model must be able to support both structured JSON and tool calling.
+
+Paid model selection:
+
+- `CORTEX_AI_REQUIRED_MODEL_PARAMETERS = ['tools', 'structured_outputs']`.
+- `apps/nextblock/lib/ai-model-catalog.ts` fetches `https://openrouter.ai/api/v1/models?supported_parameters=tools,structured_outputs&output_modalities=text`.
+- Catalog filtering keeps only non-expired text-output models that advertise all required parameters.
+- `buildCortexAiRoutingPolicy` is the single policy entrypoint for editor generation, global agent routing, and shared text generation.
+- Env-key routing always returns exactly the free fallback registry.
+- Stored-BYOK routing returns `[selectedModel, ...freeFallbacks]` when a selected compatible model exists, otherwise it returns the free fallback registry.
+- Manual-key routing can use a requested model id, mainly for tests and scripts.
+- Optional request parameters such as `temperature` are stripped for the selected stored model if its saved `supportedParameters` metadata does not include that parameter.
 
 Fallback behavior:
 
@@ -684,7 +730,7 @@ Limits:
 Model orchestration:
 
 - Uses `streamText`.
-- Uses `CORTEX_AI_MODEL_REGISTRY.toolCallingPreferred`.
+- Uses `buildCortexAiRoutingPolicy`.
 - Uses `stepCountIs(6)`.
 - Temperature is `0.1`.
 - Max output tokens is `2000`.
@@ -871,6 +917,7 @@ Vitest files:
 
 ```txt
 apps/nextblock/lib/ai-key-crypto.test.ts
+apps/nextblock/lib/ai-model-catalog.test.ts
 apps/nextblock/lib/ai-model-registry.test.ts
 apps/nextblock/lib/ai-global-agent-tools.test.ts
 ```
@@ -906,7 +953,7 @@ OpenRouter free models can hit account-level daily limits. This can happen even 
 Mitigations:
 
 - Add OpenRouter credits.
-- Use a paid model id with the user's BYOK.
+- Save a stored BYOK and select a compatible paid model in `/cms/settings/cortex-ai`.
 - Add or change fallback models in `ai-model-registry.ts`.
 
 ### The agent added a link but then showed an error
@@ -1049,7 +1096,7 @@ npm run verify:cortex-ai-generate-blocks -- --model=MODEL_ID "Generate a 3-tier 
 3. Replace keyword documentation search with embedding-based RAG.
 4. Add server-side chat thread persistence if browser-local history is not enough.
 5. Add explicit package gating to editor prompt visibility if desired. The current route enforces access/credentials, but the editor prompt UI is not itself hidden by package state in `NotionEditor`.
-6. Consider a stronger model-selection UI or admin setting for paid models once BYOK is available.
+6. Consider search/filter affordances in the model picker if the compatible OpenRouter catalog becomes too large for a basic select.
 
 ## Mental Model for Future Agents
 
@@ -1057,11 +1104,13 @@ When modifying Cortex AI, keep these invariants:
 
 1. `cortex-ai` is the package id. Do not reintroduce `ai`.
 2. Never put secrets in client code.
-3. `OPENROUTER_API_KEY` overrides stored BYOK.
-4. Stored BYOK requires `CORTEX_AI_ENCRYPTION_KEY`.
-5. Editor generation must use Zod-bound structured output.
-6. Global mutations must go through typed tools.
-7. Side-effecting tools should be idempotent when possible.
-8. If a side-effecting tool succeeds and the model fails afterward, report the tool result instead of retrying blindly.
-9. Free OpenRouter models are useful but unstable; guard against 429s, malformed tool-call text, and no-object generation.
-10. Multilingual mutations should use active rows from `languages`, not hardcoded assumptions.
+3. Stored BYOK overrides `OPENROUTER_API_KEY` so paid model selection can work even in sandbox.
+4. Env-only routing must stay locked to the three explicit free models.
+5. Stored BYOK requires `CORTEX_AI_ENCRYPTION_KEY`.
+6. Stored model selection must only use models with `tools` and `structured_outputs`.
+7. Editor generation must use Zod-bound structured output.
+8. Global mutations must go through typed tools.
+9. Side-effecting tools should be idempotent when possible.
+10. If a side-effecting tool succeeds and the model fails afterward, report the tool result instead of retrying blindly.
+11. Free OpenRouter models are useful but unstable; guard against 429s, malformed tool-call text, and no-object generation.
+12. Multilingual mutations should use active rows from `languages`, not hardcoded assumptions.

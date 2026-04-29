@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { createClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 
 import {
+  CORTEX_AI_OPENROUTER_MODEL_SELECTION_SETTING_KEY,
   CORTEX_AI_OPENROUTER_SETTING_KEY,
   CORTEX_AI_PACKAGE_ID,
   encryptStoredOpenRouterApiKey,
@@ -13,6 +14,12 @@ import {
   getEnvOpenRouterKeyStatus,
   getStoredOpenRouterKeyStatus,
 } from '../../../../lib/ai-config';
+import { listCortexAiCompatibleOpenRouterModels } from '../../../../lib/ai-model-catalog';
+import {
+  createCortexAiStoredModelSelection,
+  safeParseCortexAiModelSelection,
+  type CortexAiStoredModelSelection,
+} from '../../../../lib/ai-model-registry';
 
 const CORTEX_AI_SETTINGS_PATH = '/cms/settings/cortex-ai';
 
@@ -24,6 +31,7 @@ type CortexAiSettingsStatus = {
   isPackageActive: boolean;
   maskedEnvOpenRouterKey: string | null;
   maskedStoredOpenRouterKey: string | null;
+  selectedModel: CortexAiStoredModelSelection | null;
   storedOpenRouterKeyUpdatedAt: string | null;
 };
 
@@ -60,22 +68,28 @@ export async function getCortexAiSettingsStatus(): Promise<CortexAiSettingsStatu
   const env = getCortexAiEnvConfig();
   const envKeyStatus = getEnvOpenRouterKeyStatus();
 
-  const [{ data: storedKeyRow }, isPackageActive] = await Promise.all([
+  const [{ data: storedKeyRow }, { data: selectedModelRow }, isPackageActive] = await Promise.all([
     supabase
       .from('site_settings')
       .select('value')
       .eq('key', CORTEX_AI_OPENROUTER_SETTING_KEY)
       .maybeSingle(),
+    supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', CORTEX_AI_OPENROUTER_MODEL_SELECTION_SETTING_KEY)
+      .maybeSingle(),
     verifyPackageOnline(CORTEX_AI_PACKAGE_ID).catch(() => false),
   ]);
 
   const storedKeyStatus = getStoredOpenRouterKeyStatus(storedKeyRow?.value);
+  const selectedModel = safeParseCortexAiModelSelection(selectedModelRow?.value);
 
   return {
-    activeKeySource: env.hasOpenRouterEnvKey
-      ? 'env'
-      : storedKeyStatus.hasStoredKey
-        ? 'stored'
+    activeKeySource: storedKeyStatus.hasStoredKey
+      ? 'stored'
+      : env.hasOpenRouterEnvKey
+        ? 'env'
         : 'none',
     hasEncryptionKey: env.hasEncryptionKey,
     hasEnvOpenRouterKey: env.hasOpenRouterEnvKey,
@@ -83,6 +97,7 @@ export async function getCortexAiSettingsStatus(): Promise<CortexAiSettingsStatu
     isPackageActive,
     maskedEnvOpenRouterKey: envKeyStatus.maskedEnvOpenRouterKey,
     maskedStoredOpenRouterKey: storedKeyStatus.maskedKey,
+    selectedModel: storedKeyStatus.hasStoredKey ? selectedModel : null,
     storedOpenRouterKeyUpdatedAt: storedKeyStatus.updatedAt,
   };
 }
@@ -122,7 +137,10 @@ export async function clearOpenRouterApiKeyAction() {
     const { error } = await supabase
       .from('site_settings')
       .delete()
-      .eq('key', CORTEX_AI_OPENROUTER_SETTING_KEY);
+      .in('key', [
+        CORTEX_AI_OPENROUTER_SETTING_KEY,
+        CORTEX_AI_OPENROUTER_MODEL_SELECTION_SETTING_KEY,
+      ]);
 
     if (error) {
       throw new Error(error.message);
@@ -136,4 +154,79 @@ export async function clearOpenRouterApiKeyAction() {
 
   revalidatePath(CORTEX_AI_SETTINGS_PATH);
   redirectWithStatus('success', 'Stored OpenRouter key cleared.');
+}
+
+export async function saveCortexAiModelSelectionAction(formData: FormData) {
+  try {
+    const supabase = await requireAdminSupabaseClient();
+    const modelId = String(formData.get('openrouter_model_id') || '').trim();
+
+    if (!modelId) {
+      throw new Error('Choose an OpenRouter model before saving.');
+    }
+
+    const { data: storedKeyRow, error: storedKeyError } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', CORTEX_AI_OPENROUTER_SETTING_KEY)
+      .maybeSingle();
+
+    if (storedKeyError) {
+      throw new Error(storedKeyError.message);
+    }
+
+    const storedKeyStatus = getStoredOpenRouterKeyStatus(storedKeyRow?.value);
+
+    if (!storedKeyStatus.hasStoredKey) {
+      throw new Error('Save a stored OpenRouter BYOK before choosing a paid model.');
+    }
+
+    const compatibleModels = await listCortexAiCompatibleOpenRouterModels();
+    const selectedModel = compatibleModels.find((model) => model.id === modelId);
+
+    if (!selectedModel) {
+      throw new Error(
+        'The selected model is no longer eligible for Cortex AI structured output and tool calling.'
+      );
+    }
+
+    const { error } = await supabase.from('site_settings').upsert({
+      key: CORTEX_AI_OPENROUTER_MODEL_SELECTION_SETTING_KEY,
+      value: createCortexAiStoredModelSelection(selectedModel),
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  } catch (error) {
+    redirectWithStatus(
+      'error',
+      error instanceof Error ? error.message : 'Failed to save Cortex AI model selection.'
+    );
+  }
+
+  revalidatePath(CORTEX_AI_SETTINGS_PATH);
+  redirectWithStatus('success', 'Cortex AI model selection saved.');
+}
+
+export async function clearCortexAiModelSelectionAction() {
+  try {
+    const supabase = await requireAdminSupabaseClient();
+    const { error } = await supabase
+      .from('site_settings')
+      .delete()
+      .eq('key', CORTEX_AI_OPENROUTER_MODEL_SELECTION_SETTING_KEY);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  } catch (error) {
+    redirectWithStatus(
+      'error',
+      error instanceof Error ? error.message : 'Failed to clear Cortex AI model selection.'
+    );
+  }
+
+  revalidatePath(CORTEX_AI_SETTINGS_PATH);
+  redirectWithStatus('success', 'Cortex AI model selection cleared.');
 }

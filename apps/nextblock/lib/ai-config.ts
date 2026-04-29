@@ -16,6 +16,8 @@ if (typeof window !== 'undefined') {
 export const CORTEX_AI_PACKAGE_ID = 'cortex-ai';
 export const CORTEX_AI_PACKAGE_NAME = 'NextBlock Cortex AI';
 export const CORTEX_AI_OPENROUTER_SETTING_KEY = 'cortex_ai_openrouter_api_key';
+export const CORTEX_AI_OPENROUTER_MODEL_SELECTION_SETTING_KEY =
+  'cortex_ai_openrouter_model_selection';
 
 function readEnvValue(name: string) {
   return process.env[name]?.trim() || null;

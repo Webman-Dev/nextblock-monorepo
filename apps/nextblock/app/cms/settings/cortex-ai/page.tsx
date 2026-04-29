@@ -11,20 +11,29 @@ import {
   CardTitle,
   Input,
   Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@nextblock-cms/ui';
 import {
   AlertTriangle,
   BrainCircuit,
   CheckCircle2,
+  Cpu,
   KeyRound,
   ServerCog,
   ShieldCheck,
   Trash2,
 } from 'lucide-react';
 
+import { listCortexAiCompatibleOpenRouterModels } from '../../../../lib/ai-model-catalog';
 import {
+  clearCortexAiModelSelectionAction,
   clearOpenRouterApiKeyAction,
   getCortexAiSettingsStatus,
+  saveCortexAiModelSelectionAction,
   saveOpenRouterApiKeyAction,
 } from './actions';
 
@@ -46,6 +55,36 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatTokenPrice(value: string | undefined) {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount)) {
+    return null;
+  }
+
+  if (amount === 0) {
+    return '$0';
+  }
+
+  const perMillion = amount * 1_000_000;
+  return `$${perMillion < 0.01 ? perMillion.toFixed(4) : perMillion.toFixed(2)}`;
+}
+
+function formatModelPricing(pricing: Record<string, string>) {
+  const promptPrice = formatTokenPrice(pricing.prompt);
+  const completionPrice = formatTokenPrice(pricing.completion);
+
+  if (promptPrice === '$0' && completionPrice === '$0') {
+    return 'Free';
+  }
+
+  if (promptPrice && completionPrice) {
+    return `${promptPrice}/1M input - ${completionPrice}/1M output`;
+  }
+
+  return 'Pricing varies';
+}
+
 export default async function CortexAiSettingsPage({
   searchParams,
 }: CortexAiSettingsPageProps) {
@@ -54,6 +93,38 @@ export default async function CortexAiSettingsPage({
     ? await searchParams
     : {};
   const storedKeyUpdatedAt = formatDate(status.storedOpenRouterKeyUpdatedAt);
+  const selectedModelUpdatedAt = formatDate(status.selectedModel?.updatedAt || null);
+  let compatibleModels: Awaited<ReturnType<typeof listCortexAiCompatibleOpenRouterModels>> = [];
+  let modelCatalogError: string | null = null;
+
+  if (status.hasStoredOpenRouterKey) {
+    try {
+      compatibleModels = await listCortexAiCompatibleOpenRouterModels();
+    } catch (error) {
+      modelCatalogError =
+        error instanceof Error ? error.message : 'Failed to load compatible OpenRouter models.';
+    }
+  }
+
+  const selectedModelIsInCatalog = compatibleModels.some(
+    (model) => model.id === status.selectedModel?.modelId
+  );
+  const modelOptions =
+    status.selectedModel && !selectedModelIsInCatalog
+      ? [
+          {
+            contextLength: status.selectedModel.contextLength,
+            created: null,
+            expirationDate: null,
+            id: status.selectedModel.modelId,
+            name: `${status.selectedModel.name} (saved)`,
+            pricing: status.selectedModel.pricing,
+            supportedParameters: status.selectedModel.supportedParameters,
+          },
+          ...compatibleModels,
+        ]
+      : compatibleModels;
+  const canSelectModel = status.hasStoredOpenRouterKey && compatibleModels.length > 0;
 
   return (
     <div className="w-full max-w-4xl space-y-6">
@@ -83,7 +154,7 @@ export default async function CortexAiSettingsPage({
         </Alert>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -141,14 +212,52 @@ export default async function CortexAiSettingsPage({
             )}
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Cpu className="h-4 w-4" />
+              Model
+            </CardTitle>
+            <CardDescription>Stored BYOK routing</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Badge variant={status.selectedModel ? 'default' : 'outline'}>
+              {status.selectedModel ? 'Selected' : 'Free registry'}
+            </Badge>
+            {status.selectedModel && (
+              <>
+                <p className="text-xs font-medium">{status.selectedModel.name}</p>
+                <p className="break-all font-mono text-xs text-muted-foreground">
+                  {status.selectedModel.modelId}
+                </p>
+                {selectedModelUpdatedAt && (
+                  <p className="text-xs text-muted-foreground">{selectedModelUpdatedAt}</p>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {status.hasEnvOpenRouterKey && (
+      {status.hasEnvOpenRouterKey && !status.hasStoredOpenRouterKey && (
         <Alert>
           <ServerCog className="h-4 w-4" />
-          <AlertTitle>Environment override active</AlertTitle>
+          <AlertTitle>Sandbox free-model lock active</AlertTitle>
           <AlertDescription>
-            Cortex AI will use the server environment key before the stored BYOK key.
+            Cortex AI will only use the three configured free OpenRouter models until a
+            stored BYOK is saved.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {status.hasEnvOpenRouterKey && status.hasStoredOpenRouterKey && (
+        <Alert>
+          <KeyRound className="h-4 w-4" />
+          <AlertTitle>Stored BYOK active</AlertTitle>
+          <AlertDescription>
+            Cortex AI will use the stored BYOK before the server environment key, so the
+            selected compatible OpenRouter model can run across the website.
           </AlertDescription>
         </Alert>
       )}
@@ -201,6 +310,84 @@ export default async function CortexAiSettingsPage({
             >
               <Trash2 className="mr-2 h-4 w-4" />
               Clear Stored Key
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">OpenRouter Model</CardTitle>
+          <CardDescription>
+            Stored BYOK can use compatible text models that support structured outputs and
+            tool calling.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!status.hasStoredOpenRouterKey && (
+            <Alert>
+              <KeyRound className="h-4 w-4" />
+              <AlertTitle>Stored BYOK required</AlertTitle>
+              <AlertDescription>
+                Save an encrypted OpenRouter key before choosing a paid model.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {modelCatalogError && (
+            <Alert variant="warning">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Model catalog unavailable</AlertTitle>
+              <AlertDescription>{modelCatalogError}</AlertDescription>
+            </Alert>
+          )}
+
+          <form action={saveCortexAiModelSelectionAction} className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="openrouter_model_id">Model</Label>
+              <Select
+                name="openrouter_model_id"
+                defaultValue={status.selectedModel?.modelId}
+                disabled={!canSelectModel}
+              >
+                <SelectTrigger id="openrouter_model_id">
+                  <SelectValue placeholder="Select a compatible model" />
+                </SelectTrigger>
+                <SelectContent className="max-h-80">
+                  {modelOptions.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      <span className="flex flex-col gap-0.5">
+                        <span>{model.name}</span>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {model.id} - {formatModelPricing(model.pricing)}
+                        </span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {canSelectModel
+                  ? `${compatibleModels.length} compatible models available`
+                  : 'Cortex AI will use the free registry until model selection is available.'}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button type="submit" disabled={!canSelectModel}>
+                <Cpu className="mr-2 h-4 w-4" />
+                Save Model
+              </Button>
+            </div>
+          </form>
+
+          <form action={clearCortexAiModelSelectionAction}>
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={!status.selectedModel}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Clear Model Selection
             </Button>
           </form>
         </CardContent>

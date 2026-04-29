@@ -9,9 +9,10 @@ import {
 } from '@nextblock-cms/db/server';
 
 import {
-  CORTEX_AI_MODEL_REGISTRY,
+  buildCortexAiRoutingPolicy,
   createCortexAiOpenRouterClient,
   isOpenRouterRateLimitError,
+  omitUnsupportedCortexAiModelOptions,
 } from '../../../../lib/ai-client';
 import { createCortexGlobalAgentTools } from '../../../../lib/ai-global-agent-tools';
 
@@ -242,7 +243,11 @@ export async function POST(request: Request) {
     }
 
     const client = await createCortexAiOpenRouterClient();
-    const modelIds = CORTEX_AI_MODEL_REGISTRY.toolCallingPreferred;
+    const routingPolicy = buildCortexAiRoutingPolicy({
+      credentialSource: client.credentialSource,
+      selectedModel: client.modelSelection,
+    });
+    const modelIds = routingPolicy.modelIds;
     const tools = createCortexGlobalAgentTools({
       supabase: getServiceRoleSupabaseClient(),
     });
@@ -271,16 +276,25 @@ export async function POST(request: Request) {
 
           try {
             const attemptAbort = createAttemptAbortSignal(request.signal);
+            const attemptOptions = omitUnsupportedCortexAiModelOptions(
+              {
+                abortSignal: attemptAbort.signal,
+                maxOutputTokens: 2000,
+                messages: parsedRequest.data.messages,
+                maxRetries: 0,
+                stopWhen: stepCountIs(6),
+                system: GLOBAL_AGENT_SYSTEM_PROMPT,
+                temperature: 0.1,
+                tools,
+              } as Record<string, unknown>,
+              {
+                modelId,
+                modelSelection: routingPolicy.modelSelection,
+              }
+            );
             const result = streamText({
-              abortSignal: attemptAbort.signal,
-              maxOutputTokens: 2000,
-              messages: parsedRequest.data.messages,
+              ...attemptOptions,
               model: client.model(modelId),
-              maxRetries: 0,
-              stopWhen: stepCountIs(6),
-              system: GLOBAL_AGENT_SYSTEM_PROMPT,
-              temperature: 0.1,
-              tools,
             } as Parameters<typeof streamText>[0]);
 
             try {

@@ -1,17 +1,22 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
 import { generateText, type LanguageModel } from 'ai';
 
 import {
+  CORTEX_AI_OPENROUTER_MODEL_SELECTION_SETTING_KEY,
   CORTEX_AI_OPENROUTER_SETTING_KEY,
   CORTEX_AI_PACKAGE_NAME,
   decryptStoredOpenRouterApiKey,
   getOpenRouterEnvApiKey,
 } from './ai-config';
 import {
-  buildCortexAiModelFallbackChain,
+  buildCortexAiRoutingPolicy,
   CORTEX_AI_OPENROUTER_BASE_URL,
+  omitUnsupportedCortexAiModelOptions,
+  safeParseCortexAiModelSelection,
   type CortexAiModelAttempt,
   type CortexAiOpenRouterModelId,
+  type CortexAiStoredModelSelection,
   runWithCortexAiModelFallback,
 } from './ai-model-registry';
 
@@ -36,6 +41,7 @@ export type CortexAiOpenRouterCredential = {
 export type CortexAiOpenRouterClient = {
   credentialSource: Exclude<CortexAiOpenRouterCredentialSource, 'none'>;
   model: (modelId?: CortexAiOpenRouterModelId) => LanguageModel;
+  modelSelection: CortexAiStoredModelSelection | null;
 };
 
 export type CortexAiGenerateTextOptions = AiGenerateTextOptions & {
@@ -76,7 +82,6 @@ export function createCortexAiOpenRouterProvider(params: {
 }
 
 async function readStoredOpenRouterApiKey() {
-  const { getServiceRoleSupabaseClient } = require('../../../libs/db/src/server') as typeof import('../../../libs/db/src/server');
   const supabase = getServiceRoleSupabaseClient();
   const { data, error } = await supabase
     .from('site_settings')
@@ -95,6 +100,21 @@ async function readStoredOpenRouterApiKey() {
   return decryptStoredOpenRouterApiKey(data.value);
 }
 
+export async function getStoredCortexAiModelSelection(): Promise<CortexAiStoredModelSelection | null> {
+  const supabase = getServiceRoleSupabaseClient();
+  const { data, error } = await supabase
+    .from('site_settings')
+    .select('value')
+    .eq('key', CORTEX_AI_OPENROUTER_MODEL_SELECTION_SETTING_KEY)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load Cortex AI OpenRouter model selection: ${error.message}`);
+  }
+
+  return safeParseCortexAiModelSelection(data?.value);
+}
+
 export async function resolveCortexAiOpenRouterCredential(params?: {
   apiKey?: string;
 }): Promise<CortexAiOpenRouterCredential> {
@@ -107,21 +127,21 @@ export async function resolveCortexAiOpenRouterCredential(params?: {
     };
   }
 
-  const envApiKey = getOpenRouterEnvApiKey();
-
-  if (envApiKey) {
-    return {
-      apiKey: envApiKey,
-      source: 'env',
-    };
-  }
-
   const storedApiKey = await readStoredOpenRouterApiKey();
 
   if (storedApiKey) {
     return {
       apiKey: storedApiKey,
       source: 'stored',
+    };
+  }
+
+  const envApiKey = getOpenRouterEnvApiKey();
+
+  if (envApiKey) {
+    return {
+      apiKey: envApiKey,
+      source: 'env',
     };
   }
 
@@ -149,10 +169,13 @@ export async function createCortexAiOpenRouterClient(params?: {
     apiKey: credential.apiKey,
     fetch: params?.fetch,
   });
+  const modelSelection =
+    credential.source === 'stored' ? await getStoredCortexAiModelSelection() : null;
 
   return {
     credentialSource: credential.source,
     model: (modelId?: CortexAiOpenRouterModelId) => provider.chatModel(modelId || 'openrouter/free'),
+    modelSelection,
   };
 }
 
@@ -163,19 +186,32 @@ export async function generateCortexAiText({
   ...options
 }: CortexAiGenerateTextOptions): Promise<CortexAiGenerateTextResult> {
   const client = await createCortexAiOpenRouterClient({ apiKey });
-  const modelIds = buildCortexAiModelFallbackChain({
+  const routingPolicy = buildCortexAiRoutingPolicy({
+    credentialSource: client.credentialSource,
     fallbackModelIds,
-    modelId,
+    requestedModelId: modelId,
+    selectedModel: client.modelSelection,
   });
 
   const generation = await runWithCortexAiModelFallback({
-    modelIds,
-    execute: (attemptModelId) =>
-      generateText({
-        ...options,
-        maxRetries: 0,
+    modelIds: routingPolicy.modelIds,
+    execute: (attemptModelId) => {
+      const attemptOptions = omitUnsupportedCortexAiModelOptions(
+        {
+          ...options,
+          maxRetries: 0,
+        } as Record<string, unknown>,
+        {
+          modelId: attemptModelId,
+          modelSelection: routingPolicy.modelSelection,
+        }
+      );
+
+      return generateText({
+        ...attemptOptions,
         model: client.model(attemptModelId),
-      } as Parameters<typeof generateText>[0]),
+      } as Parameters<typeof generateText>[0]);
+    },
   });
 
   return {
@@ -188,12 +224,18 @@ export async function generateCortexAiText({
 
 export {
   buildCortexAiModelFallbackChain,
+  buildCortexAiRoutingPolicy,
   CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY,
   CORTEX_AI_MODEL_REGISTRY,
   CORTEX_AI_OPENROUTER_BASE_URL,
   CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
+  CORTEX_AI_REQUIRED_MODEL_PARAMETERS,
   CortexAiRoutingError,
   isOpenRouterRecoverableRoutingError,
   isOpenRouterRateLimitError,
+  omitUnsupportedCortexAiModelOptions,
   runWithCortexAiModelFallback,
 } from './ai-model-registry';
+export {
+  listCortexAiCompatibleOpenRouterModels,
+} from './ai-model-catalog';

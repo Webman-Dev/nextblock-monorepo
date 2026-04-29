@@ -2,13 +2,13 @@ import { generateObject } from 'ai';
 import { z } from 'zod';
 
 import {
-  buildCortexAiModelFallbackChain,
+  buildCortexAiRoutingPolicy,
   createCortexAiOpenRouterClient,
 } from './ai-client';
 import {
-  CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY,
   getHttpStatusCode,
   isOpenRouterRecoverableRoutingError,
+  omitUnsupportedCortexAiModelOptions,
   runWithCortexAiModelFallback,
   type CortexAiModelAttempt,
   type CortexAiOpenRouterModelId,
@@ -277,13 +277,15 @@ export async function generateEditorBlockDocument(
       : tableConstraints
         ? createEditorGeneratedMixedTableDocumentSchema(tableConstraints)
       : editorGeneratedBlockDocumentSchema;
-  const modelIds = buildCortexAiModelFallbackChain({
+  const routingPolicy = buildCortexAiRoutingPolicy({
+    credentialSource: client.credentialSource,
     fallbackModelIds,
-    modelId: modelId || CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY[0],
+    requestedModelId: modelId,
+    selectedModel: client.modelSelection,
   });
 
   const generation = await runWithCortexAiModelFallback({
-    modelIds,
+    modelIds: routingPolicy.modelIds,
     shouldRetry: isRecoverableStructuredGenerationError,
     execute: async (attemptModelId) => {
       const abortController = new AbortController();
@@ -293,27 +295,37 @@ export async function generateEditorBlockDocument(
       );
 
       try {
-        const result = await generateObject({
-          abortSignal: abortController.signal,
-          maxOutputTokens: 5000,
-          maxRetries: 0,
-          model: client.model(attemptModelId),
-          prompt: buildGenerationPrompt(request),
-          providerOptions: {
-            openrouter: {
-              plugins: [{ id: 'response-healing' }],
-              provider: {
-                require_parameters: true,
+        const attemptOptions = omitUnsupportedCortexAiModelOptions(
+          {
+            abortSignal: abortController.signal,
+            maxOutputTokens: 5000,
+            maxRetries: 0,
+            prompt: buildGenerationPrompt(request),
+            providerOptions: {
+              openrouter: {
+                plugins: [{ id: 'response-healing' }],
+                provider: {
+                  require_parameters: true,
+                },
               },
             },
-          },
-          schema: outputSchema,
-          schemaDescription:
-            'A strict Tiptap JSON document for immediate insertion into a PostgreSQL JSONB editor field.',
-          schemaName: 'NextBlockTiptapDocument',
-          system: buildStructuralCmsArchitectSystemPrompt(getEditorBlocksSchemaAwarenessString()),
-          temperature: 0.2,
-        });
+            schema: outputSchema,
+            schemaDescription:
+              'A strict Tiptap JSON document for immediate insertion into a PostgreSQL JSONB editor field.',
+            schemaName: 'NextBlockTiptapDocument',
+            system: buildStructuralCmsArchitectSystemPrompt(getEditorBlocksSchemaAwarenessString()),
+            temperature: 0.2,
+          } as Record<string, unknown>,
+          {
+            modelId: attemptModelId,
+            modelSelection: routingPolicy.modelSelection,
+          }
+        );
+
+        const result = await generateObject({
+          ...attemptOptions,
+          model: client.model(attemptModelId),
+        } as Parameters<typeof generateObject>[0]);
 
         const document = outputSchema.parse(result.object);
         const validatedDocument = editorBlockDocumentSchema.parse(document);

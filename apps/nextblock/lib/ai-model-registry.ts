@@ -9,6 +9,19 @@ export const CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY = [
   'nvidia/nemotron-nano-9b-v2:free',
 ] as const;
 
+export const CORTEX_AI_REQUIRED_MODEL_PARAMETERS = ['tools', 'structured_outputs'] as const;
+
+const CORTEX_AI_OPTIONAL_MODEL_PARAMETER_MAP = {
+  frequencyPenalty: 'frequency_penalty',
+  logitBias: 'logit_bias',
+  presencePenalty: 'presence_penalty',
+  seed: 'seed',
+  stopSequences: 'stop',
+  temperature: 'temperature',
+  topK: 'top_k',
+  topP: 'top_p',
+} as const;
+
 export const CORTEX_AI_MODEL_REGISTRY = {
   defaultFreeRouter: CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
   defaultStructuredOutputModel: CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY[0],
@@ -22,6 +35,36 @@ export type CortexAiOpenRouterModelId =
   | typeof CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL
   | (typeof CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY)[number]
   | (string & {});
+
+export type CortexAiRoutingCredentialSource = 'env' | 'manual' | 'stored';
+
+export type CortexAiOpenRouterModelPricing = Record<string, string>;
+
+export type CortexAiCompatibleOpenRouterModel = {
+  contextLength: number | null;
+  created: number | null;
+  expirationDate: string | null;
+  id: CortexAiOpenRouterModelId;
+  name: string;
+  pricing: CortexAiOpenRouterModelPricing;
+  supportedParameters: readonly string[];
+};
+
+export type CortexAiStoredModelSelection = {
+  contextLength: number | null;
+  modelId: CortexAiOpenRouterModelId;
+  name: string;
+  pricing: CortexAiOpenRouterModelPricing;
+  supportedParameters: readonly string[];
+  updatedAt: string;
+};
+
+export type CortexAiRoutingPolicy = {
+  credentialSource: CortexAiRoutingCredentialSource;
+  ignoredRequestedModelId: CortexAiOpenRouterModelId | null;
+  modelIds: readonly CortexAiOpenRouterModelId[];
+  modelSelection: CortexAiStoredModelSelection | null;
+};
 
 export type CortexAiModelAttempt = {
   errorMessage?: string;
@@ -45,6 +88,183 @@ function uniqueModelIds(modelIds: readonly CortexAiOpenRouterModelId[]) {
   return Array.from(new Set(modelIds.filter(Boolean)));
 }
 
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function readStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+}
+
+function readNumberLike(value: unknown) {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function readStringRecord(value: unknown): CortexAiOpenRouterModelPricing {
+  const record = readRecord(value);
+
+  if (!record) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(record)
+      .filter(([, entryValue]) => entryValue !== null && entryValue !== undefined)
+      .map(([key, entryValue]) => [key, String(entryValue)])
+  );
+}
+
+function supportsRequiredModelParameters(supportedParameters: readonly string[]) {
+  const supported = new Set(supportedParameters);
+  return CORTEX_AI_REQUIRED_MODEL_PARAMETERS.every((parameter) => supported.has(parameter));
+}
+
+function isTextOutputModel(record: Record<string, unknown>) {
+  const architecture = readRecord(record.architecture);
+  return readStringArray(architecture?.output_modalities).includes('text');
+}
+
+function getExpirationTimestamp(value: unknown) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    return value > 10_000_000_000 ? value : value * 1000;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function isExpiredOpenRouterModel(value: unknown, now: Date) {
+  const expirationTimestamp = getExpirationTimestamp(value);
+  return expirationTimestamp !== null && expirationTimestamp <= now.getTime();
+}
+
+function readOpenRouterModelContextLength(record: Record<string, unknown>) {
+  const topProvider = readRecord(record.top_provider);
+  return (
+    readNumberLike(record.context_length) ??
+    readNumberLike(record.contextLength) ??
+    readNumberLike(topProvider?.context_length) ??
+    null
+  );
+}
+
+function readOpenRouterModelExpirationDate(record: Record<string, unknown>) {
+  const expirationDate = record.expiration_date ?? record.expirationDate;
+  return typeof expirationDate === 'string' && expirationDate.trim()
+    ? expirationDate.trim()
+    : null;
+}
+
+export function isCortexAiFreeModelId(modelId: CortexAiOpenRouterModelId | null | undefined) {
+  return Boolean(
+    modelId &&
+      (CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY as readonly string[]).includes(modelId)
+  );
+}
+
+export function safeParseCortexAiModelSelection(
+  value: unknown
+): CortexAiStoredModelSelection | null {
+  const record = readRecord(value);
+
+  if (!record) {
+    return null;
+  }
+
+  const modelId = readString(record.modelId);
+  const name = readString(record.name);
+  const supportedParameters = readStringArray(record.supportedParameters);
+  const updatedAt = readString(record.updatedAt);
+
+  if (!modelId || !name || !updatedAt || !supportsRequiredModelParameters(supportedParameters)) {
+    return null;
+  }
+
+  return {
+    contextLength: readNumberLike(record.contextLength),
+    modelId,
+    name,
+    pricing: readStringRecord(record.pricing),
+    supportedParameters,
+    updatedAt,
+  };
+}
+
+export function createCortexAiStoredModelSelection(
+  model: CortexAiCompatibleOpenRouterModel,
+  now = new Date()
+): CortexAiStoredModelSelection {
+  return {
+    contextLength: model.contextLength,
+    modelId: model.id,
+    name: model.name,
+    pricing: model.pricing,
+    supportedParameters: [...model.supportedParameters],
+    updatedAt: now.toISOString(),
+  };
+}
+
+export function filterCortexAiCompatibleOpenRouterModels(
+  value: unknown,
+  now = new Date()
+): CortexAiCompatibleOpenRouterModel[] {
+  const root = readRecord(value);
+  const rawModels = Array.isArray(value)
+    ? value
+    : Array.isArray(root?.data)
+      ? root.data
+      : [];
+
+  const compatibleModels: CortexAiCompatibleOpenRouterModel[] = [];
+
+  for (const rawModel of rawModels) {
+    const record = readRecord(rawModel);
+    const id = readString(record?.id);
+    const name = readString(record?.name);
+    const supportedParameters = readStringArray(record?.supported_parameters);
+
+    if (
+      !record ||
+      !id ||
+      !name ||
+      !isTextOutputModel(record) ||
+      isExpiredOpenRouterModel(record.expiration_date, now) ||
+      !supportsRequiredModelParameters(supportedParameters)
+    ) {
+      continue;
+    }
+
+    compatibleModels.push({
+      contextLength: readOpenRouterModelContextLength(record),
+      created: readNumberLike(record.created),
+      expirationDate: readOpenRouterModelExpirationDate(record),
+      id,
+      name,
+      pricing: readStringRecord(record.pricing),
+      supportedParameters,
+    });
+  }
+
+  return compatibleModels.sort((left, right) => left.name.localeCompare(right.name));
+}
+
 export function buildCortexAiModelFallbackChain(params?: {
   fallbackModelIds?: readonly CortexAiOpenRouterModelId[];
   modelId?: CortexAiOpenRouterModelId | null;
@@ -53,6 +273,80 @@ export function buildCortexAiModelFallbackChain(params?: {
     params?.modelId || CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY[0],
     ...(params?.fallbackModelIds || CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY),
   ]);
+}
+
+export function buildCortexAiRoutingPolicy(params: {
+  credentialSource: CortexAiRoutingCredentialSource;
+  fallbackModelIds?: readonly CortexAiOpenRouterModelId[];
+  requestedModelId?: CortexAiOpenRouterModelId | null;
+  selectedModel?: CortexAiStoredModelSelection | null;
+}): CortexAiRoutingPolicy {
+  const requestedModelId = params.requestedModelId?.trim() || null;
+
+  if (params.credentialSource === 'env') {
+    return {
+      credentialSource: params.credentialSource,
+      ignoredRequestedModelId:
+        requestedModelId && !isCortexAiFreeModelId(requestedModelId)
+          ? requestedModelId
+          : null,
+      modelIds: [...CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY],
+      modelSelection: null,
+    };
+  }
+
+  const fallbackModelIds = uniqueModelIds(
+    params.fallbackModelIds?.length
+      ? params.fallbackModelIds
+      : CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY
+  );
+  const preferredModelId =
+    params.credentialSource === 'stored'
+      ? params.selectedModel?.modelId || fallbackModelIds[0]
+      : requestedModelId || params.selectedModel?.modelId || fallbackModelIds[0];
+
+  return {
+    credentialSource: params.credentialSource,
+    ignoredRequestedModelId:
+      params.credentialSource === 'stored' &&
+      requestedModelId &&
+      requestedModelId !== preferredModelId
+        ? requestedModelId
+        : null,
+    modelIds: uniqueModelIds([preferredModelId, ...fallbackModelIds]),
+    modelSelection: params.selectedModel || null,
+  };
+}
+
+export function omitUnsupportedCortexAiModelOptions<TOptions extends Record<string, unknown>>(
+  options: TOptions,
+  params: {
+    modelId: CortexAiOpenRouterModelId;
+    modelSelection?: CortexAiStoredModelSelection | null;
+  }
+): TOptions {
+  const modelSelection = params.modelSelection;
+
+  if (!modelSelection || modelSelection.modelId !== params.modelId) {
+    return options;
+  }
+
+  const supportedParameters = new Set(modelSelection.supportedParameters);
+  const unsupportedOptionKeys = Object.entries(CORTEX_AI_OPTIONAL_MODEL_PARAMETER_MAP)
+    .filter(([optionKey, parameterName]) => optionKey in options && !supportedParameters.has(parameterName))
+    .map(([optionKey]) => optionKey);
+
+  if (unsupportedOptionKeys.length === 0) {
+    return options;
+  }
+
+  const nextOptions = { ...options };
+
+  for (const optionKey of unsupportedOptionKeys) {
+    delete nextOptions[optionKey as keyof TOptions];
+  }
+
+  return nextOptions;
 }
 
 function readNumericProperty(value: unknown, property: string) {
