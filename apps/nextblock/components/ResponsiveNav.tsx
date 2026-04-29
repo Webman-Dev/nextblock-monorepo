@@ -68,11 +68,21 @@ interface ResponsiveNavProps {
   navItems: NavigationItem[]
   canAccessCms: boolean;
   cmsDashboardLinkHref: string;
-  headerAuthComponent: React.ReactNode;
-  languageSwitcherComponent: React.ReactNode;
-  currencySwitcherComponent?: React.ReactNode;
-  cartIconComponent?: React.ReactNode;
+  renderHeaderAuth: () => React.ReactNode;
+  renderLanguageSwitcher: () => React.ReactNode;
+  renderCurrencySwitcher?: () => React.ReactNode;
+  renderCartIcon?: () => React.ReactNode;
   isEcommerceActive?: boolean;
+}
+
+function ClientOnly({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return mounted ? <>{children}</> : null;
 }
 
 export default function ResponsiveNav({
@@ -80,12 +90,12 @@ export default function ResponsiveNav({
   navItems,
   canAccessCms,
   cmsDashboardLinkHref,
-  headerAuthComponent,
-  languageSwitcherComponent,
-  currencySwitcherComponent,
+  renderHeaderAuth,
+  renderLanguageSwitcher,
+  renderCurrencySwitcher,
   logo,
   siteTitle,
-  cartIconComponent,
+  renderCartIcon,
   isEcommerceActive = false,
 }: ResponsiveNavProps) {
   const { t } = useTranslations();
@@ -315,21 +325,25 @@ export default function ResponsiveNav({
 
         {/* Right side: Auth, LangSwitcher (desktop), Hamburger (mobile) */}
         <div className="hidden min-h-10 items-center gap-4 md:flex">
-          <GlobalSearch isEcommerceActive={isEcommerceActive} variant="desktop" />
           {canAccessCms && editPathDetails && (
             <Link href={editPathDetails.href} className="hover:underline font-semibold text-sm text-foreground mr-3 flex items-center">
               <Pencil className="w-4 h-4 mr-2" />
               {editPathDetails.label}
             </Link>
           )}
-          {headerAuthComponent}
-          {languageSwitcherComponent}
-          {currencySwitcherComponent}
-          {cartIconComponent}
+          <ClientOnly>
+            <GlobalSearch isEcommerceActive={isEcommerceActive} variant="desktop" />
+            {renderHeaderAuth()}
+            {renderLanguageSwitcher()}
+            {renderCurrencySwitcher?.()}
+            {renderCartIcon?.()}
+          </ClientOnly>
         </div>
 
         <div className="md:hidden flex items-center gap-2 z-[60]">
-          <GlobalSearch isEcommerceActive={isEcommerceActive} variant="mobile" />
+          <ClientOnly>
+            <GlobalSearch isEcommerceActive={isEcommerceActive} variant="mobile" />
+          </ClientOnly>
           <button
             ref={menuButtonRef}
             onClick={toggleMobileMenu}
@@ -395,10 +409,12 @@ export default function ResponsiveNav({
           </nav>
 
           <div className="mt-auto pt-6 border-t border-foreground/20 space-y-4">
-            <div >{headerAuthComponent}</div>
-            <div >{cartIconComponent}</div>
-            <div >{currencySwitcherComponent}</div>
-            <div >{languageSwitcherComponent}</div>
+            <ClientOnly>
+              <div>{renderHeaderAuth()}</div>
+              <div>{renderCartIcon?.()}</div>
+              <div>{renderCurrencySwitcher?.()}</div>
+              <div>{renderLanguageSwitcher()}</div>
+            </ClientOnly>
           </div>
         </div>
       </div>

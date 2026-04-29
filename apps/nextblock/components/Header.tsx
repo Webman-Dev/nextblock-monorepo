@@ -35,14 +35,12 @@ export default function Header({
       navItems={navItems}
       canAccessCms={canAccessCms}
       cmsDashboardLinkHref="/cms/dashboard"
-      headerAuthComponent={<HeaderAuth />}
-      languageSwitcherComponent={
-        <LanguageSwitcher currentPageData={currentPageData} />
-      }
-      currencySwitcherComponent={isEcommerceActive ? <CurrencySwitcher /> : null}
+      renderHeaderAuth={() => <HeaderAuth />}
+      renderLanguageSwitcher={() => <LanguageSwitcher currentPageData={currentPageData} />}
+      renderCurrencySwitcher={isEcommerceActive ? () => <CurrencySwitcher /> : undefined}
       logo={logo}
       siteTitle={siteTitle}
-      cartIconComponent={isEcommerceActive ? <CartIcon /> : null}
+      renderCartIcon={isEcommerceActive ? () => <CartIcon /> : undefined}
       isEcommerceActive={isEcommerceActive}
     />
   );

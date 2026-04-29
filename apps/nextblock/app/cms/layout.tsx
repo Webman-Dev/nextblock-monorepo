@@ -7,6 +7,14 @@ export default async function CmsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const isEcommerceActive = await verifyPackageOnline('ecommerce');
-  return <CmsClientLayout isEcommerceActive={isEcommerceActive}>{children}</CmsClientLayout>;
+  const [isEcommerceActive, isCortexAiActive] = await Promise.all([
+    verifyPackageOnline('ecommerce'),
+    verifyPackageOnline('cortex-ai'),
+  ]);
+
+  return (
+    <CmsClientLayout isCortexAiActive={isCortexAiActive} isEcommerceActive={isEcommerceActive}>
+      {children}
+    </CmsClientLayout>
+  );
 }

@@ -16,6 +16,7 @@ import { cn } from "@nextblock-cms/utils"
 import { signOutAction } from "../actions"
 import Image from "next/image";
 import { FeedbackModal } from "./components/FeedbackModal";
+import { CortexGlobalAgentChat } from "./components/CortexGlobalAgentChat";
 
 const LoadingSpinner = () => (
   <div className="flex justify-center items-center h-full w-full py-20">
@@ -103,7 +104,15 @@ const CollapsibleNavItem = ({ icon: Icon, title, children, isActive, adminOnly, 
 };
 
 
-export default function CmsClientLayout({ children, isEcommerceActive = false }: { children: ReactNode, isEcommerceActive?: boolean }) {
+export default function CmsClientLayout({
+  children,
+  isCortexAiActive = false,
+  isEcommerceActive = false,
+}: {
+  children: ReactNode,
+  isCortexAiActive?: boolean,
+  isEcommerceActive?: boolean,
+}) {
   const { user, profile, role, isLoading, isAdmin, isWriter } = useAuth();
   const router = useRouter();
   const pathname = usePathname(); // Use the usePathname hook
@@ -403,6 +412,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
             onClick={() => setCmsSidebarOpen(false)}
         />
       )}
+      {isAdmin && isCortexAiActive && <CortexGlobalAgentChat />}
     </div>
   )
 }

@@ -41,7 +41,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
   const activePackages = new Set(activations?.map(a => a.package_id) || []);
   const isEcommerceActive = activePackages.has('ecommerce');
-  const isAiActive = activePackages.has('ai');
+  const isAiActive = activePackages.has('cortex-ai');
 
   // 2. Parallelize Core Queries
   const queries: Promise<any>[] = [
