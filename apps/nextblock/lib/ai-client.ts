@@ -154,6 +154,7 @@ export async function resolveCortexAiOpenRouterCredential(params?: {
 export async function createCortexAiOpenRouterClient(params?: {
   apiKey?: string;
   fetch?: FetchFunction;
+  modelSelection?: CortexAiStoredModelSelection | null;
 }) {
   const credential = await resolveCortexAiOpenRouterCredential({
     apiKey: params?.apiKey,
@@ -170,7 +171,11 @@ export async function createCortexAiOpenRouterClient(params?: {
     fetch: params?.fetch,
   });
   const modelSelection =
-    credential.source === 'stored' ? await getStoredCortexAiModelSelection() : null;
+    params?.modelSelection !== undefined
+      ? params.modelSelection
+      : credential.source === 'stored'
+        ? await getStoredCortexAiModelSelection()
+        : null;
 
   return {
     credentialSource: credential.source,
@@ -184,8 +189,8 @@ export async function generateCortexAiText({
   fallbackModelIds,
   modelId,
   ...options
-}: CortexAiGenerateTextOptions): Promise<CortexAiGenerateTextResult> {
-  const client = await createCortexAiOpenRouterClient({ apiKey });
+}: CortexAiGenerateTextOptions & { modelSelection?: CortexAiStoredModelSelection | null }): Promise<CortexAiGenerateTextResult> {
+  const client = await createCortexAiOpenRouterClient({ apiKey, modelSelection: options.modelSelection });
   const routingPolicy = buildCortexAiRoutingPolicy({
     credentialSource: client.credentialSource,
     fallbackModelIds,

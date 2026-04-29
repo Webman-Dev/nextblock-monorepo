@@ -193,6 +193,8 @@ Important: `openrouter/free` is a free model-router id, not a replacement for au
 
 When the active credential source is `env`, Cortex AI always routes through exactly the configured `CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY` list. Non-free explicit model requests are ignored for env-only routing.
 
+**Sandbox Behavior:** When `NEXT_PUBLIC_IS_SANDBOX=true`, the server environments won't save any OpenRouter key or model selection to the database. The user will be requested to input a key that is stored purely in their browser's `localStorage` (`cortex_ai_sandbox_openrouter_api_key`) and passed as HTTP headers (`x-sandbox-openrouter-key`) for all AI requests.
+
 OpenRouter free models can still hit free-model rate limits. A user with no credits or no credit card can see errors like `free-models-per-day`. Cortex AI catches these where possible and falls back to configured alternate models, but OpenRouter account-level limits may still block all free requests.
 
 ### CORTEX_AI_ENCRYPTION_KEY
@@ -270,6 +272,7 @@ Settings UI behavior:
 - The UI only shows masked `**** last4` status.
 - If only `OPENROUTER_API_KEY` exists, UI states that env routing is locked to the three free models.
 - If stored BYOK exists, UI fetches compatible OpenRouter text models that support `tools` and `structured_outputs`, then allows an admin to save one selected model.
+- If `NEXT_PUBLIC_IS_SANDBOX=true`, the UI uses a client component to save keys and model selection purely to `localStorage`, and bypasses the database to prevent accidental key leaks across a shared sandbox environment.
 
 ## OpenRouter Client Architecture
 

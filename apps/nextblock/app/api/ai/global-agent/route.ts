@@ -14,6 +14,7 @@ import {
   isOpenRouterRateLimitError,
   omitUnsupportedCortexAiModelOptions,
 } from '../../../../lib/ai-client';
+import { safeParseCortexAiModelSelection } from '../../../../lib/ai-model-registry';
 import { createCortexGlobalAgentTools } from '../../../../lib/ai-global-agent-tools';
 
 export const dynamic = 'force-dynamic';
@@ -242,7 +243,22 @@ export async function POST(request: Request) {
       return jsonError('Invalid Cortex AI global-agent request.', 400);
     }
 
-    const client = await createCortexAiOpenRouterClient();
+    const sandboxKey = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true' ? request.headers.get('x-sandbox-openrouter-key') : null;
+    const sandboxModelRaw = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true' ? request.headers.get('x-sandbox-openrouter-model') : null;
+    
+    let modelSelection = null;
+    if (sandboxModelRaw) {
+      try {
+        modelSelection = safeParseCortexAiModelSelection(JSON.parse(sandboxModelRaw));
+      } catch {
+        // Ignore parse errors from headers
+      }
+    }
+
+    const client = await createCortexAiOpenRouterClient({
+      apiKey: sandboxKey || undefined,
+      modelSelection: sandboxKey && modelSelection ? modelSelection : undefined,
+    });
     const routingPolicy = buildCortexAiRoutingPolicy({
       credentialSource: client.credentialSource,
       selectedModel: client.modelSelection,

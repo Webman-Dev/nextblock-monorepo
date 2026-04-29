@@ -8,7 +8,7 @@ import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
-  ExternalLink, BrainCircuit,
+  ExternalLink, Brain,
 } from "lucide-react"
 import { Button } from "@nextblock-cms/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar"
@@ -267,6 +267,9 @@ export default function CmsClientLayout({
               <NavItem href="/cms/dashboard" icon={LayoutDashboard} isActive={pathname === "/cms/dashboard"} isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Dashboard
               </NavItem>
+              <NavItem href="/cms/settings/cortex-ai" icon={Brain} isActive={pathname.startsWith("/cms/settings/cortex-ai")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Cortex AI
+              </NavItem>
               <NavItem href="/cms/pages" icon={FileText} isActive={pathname.startsWith("/cms/pages")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Pages
               </NavItem>
@@ -275,6 +278,9 @@ export default function CmsClientLayout({
               </NavItem>
               <NavItem href="/cms/media" icon={ImageIconLucide} isActive={pathname.startsWith("/cms/media")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Media
+              </NavItem>
+              <NavItem href="/cms/navigation" icon={ListTree} isActive={pathname.startsWith("/cms/navigation")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                    Navigation
               </NavItem>
 
               {isEcommerceActive && (
@@ -324,9 +330,6 @@ export default function CmsClientLayout({
                       Administration
                     </p>
                   </div>
-                  <NavItem href="/cms/navigation" icon={ListTree} isActive={pathname.startsWith("/cms/navigation")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                    Navigation
-                  </NavItem>
                   <NavItem href="/cms/users" icon={Users} isActive={pathname.startsWith("/cms/users")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Manage Users
                   </NavItem>
@@ -351,9 +354,6 @@ export default function CmsClientLayout({
                     </NavItem>
                     <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Extra Translations
-                    </NavItem>
-                    <NavItem href="/cms/settings/cortex-ai" icon={BrainCircuit} isActive={pathname.startsWith("/cms/settings/cortex-ai")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                      Cortex AI
                     </NavItem>
                  </CollapsibleNavItem>
                 </>

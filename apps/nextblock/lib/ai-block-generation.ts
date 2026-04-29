@@ -12,6 +12,7 @@ import {
   runWithCortexAiModelFallback,
   type CortexAiModelAttempt,
   type CortexAiOpenRouterModelId,
+  type CortexAiStoredModelSelection,
 } from './ai-model-registry';
 
 export const generateEditorBlocksRequestSchema = z.strictObject({
@@ -252,11 +253,13 @@ export async function generateEditorBlockDocument(
   params: GenerateEditorBlocksRequest & {
     fallbackModelIds?: readonly CortexAiOpenRouterModelId[];
     modelId?: CortexAiOpenRouterModelId;
+    apiKey?: string;
+    modelSelection?: CortexAiStoredModelSelection | null;
   }
 ): Promise<GenerateEditorBlockDocumentResult> {
-  const { fallbackModelIds, modelId, ...requestParams } = params;
+  const { fallbackModelIds, modelId, apiKey, modelSelection, ...requestParams } = params;
   const request = generateEditorBlocksRequestSchema.parse(requestParams);
-  const client = await createCortexAiOpenRouterClient();
+  const client = await createCortexAiOpenRouterClient({ apiKey, modelSelection });
   const {
     createEditorGeneratedTableDocumentSchema,
     createEditorGeneratedMixedTableDocumentSchema,

@@ -103,6 +103,10 @@ export async function getCortexAiSettingsStatus(): Promise<CortexAiSettingsStatu
 }
 
 export async function saveOpenRouterApiKeyAction(formData: FormData) {
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+    throw new Error('Sandbox environment cannot save keys to the database.');
+  }
+
   try {
     const supabase = await requireAdminSupabaseClient();
     const apiKey = String(formData.get('openrouter_api_key') || '').trim();
@@ -132,6 +136,10 @@ export async function saveOpenRouterApiKeyAction(formData: FormData) {
 }
 
 export async function clearOpenRouterApiKeyAction() {
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+    throw new Error('Sandbox environment cannot clear keys from the database.');
+  }
+
   try {
     const supabase = await requireAdminSupabaseClient();
     const { error } = await supabase
@@ -157,6 +165,10 @@ export async function clearOpenRouterApiKeyAction() {
 }
 
 export async function saveCortexAiModelSelectionAction(formData: FormData) {
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+    throw new Error('Sandbox environment cannot save model selection to the database.');
+  }
+
   try {
     const supabase = await requireAdminSupabaseClient();
     const modelId = String(formData.get('openrouter_model_id') || '').trim();
@@ -210,6 +222,10 @@ export async function saveCortexAiModelSelectionAction(formData: FormData) {
 }
 
 export async function clearCortexAiModelSelectionAction() {
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+    throw new Error('Sandbox environment cannot clear model selection from the database.');
+  }
+
   try {
     const supabase = await requireAdminSupabaseClient();
     const { error } = await supabase

@@ -6,6 +6,7 @@ import {
   generateEditorBlockDocument,
   generateEditorBlocksRequestSchema,
 } from '../../../../lib/ai-block-generation';
+import { safeParseCortexAiModelSelection } from '../../../../lib/ai-model-registry';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +49,23 @@ export async function POST(request: Request) {
       return jsonError('Invalid Cortex AI block generation request.', 400);
     }
 
-    const result = await generateEditorBlockDocument(parsedRequest.data);
+    const sandboxKey = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true' ? request.headers.get('x-sandbox-openrouter-key') : null;
+    const sandboxModelRaw = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true' ? request.headers.get('x-sandbox-openrouter-model') : null;
+    
+    let modelSelection = null;
+    if (sandboxModelRaw) {
+      try {
+        modelSelection = safeParseCortexAiModelSelection(JSON.parse(sandboxModelRaw));
+      } catch {
+        // Ignore parse errors from headers
+      }
+    }
+
+    const result = await generateEditorBlockDocument({
+      ...parsedRequest.data,
+      apiKey: sandboxKey || undefined,
+      modelSelection: sandboxKey && modelSelection ? modelSelection : undefined,
+    });
 
     return NextResponse.json(result.document, {
       headers: {

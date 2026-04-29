@@ -244,11 +244,24 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
     const timeoutId = window.setTimeout(() => abortController.abort(), 150_000);
 
     try {
+      const headers: Record<string, string> = {
+        'content-type': 'application/json',
+      };
+
+      if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+        const sandboxKey = window.localStorage.getItem('cortex_ai_sandbox_openrouter_api_key');
+        const sandboxModel = window.localStorage.getItem('cortex_ai_sandbox_openrouter_model_selection');
+        if (sandboxKey) {
+          headers['x-sandbox-openrouter-key'] = sandboxKey;
+        }
+        if (sandboxModel) {
+          headers['x-sandbox-openrouter-model'] = sandboxModel;
+        }
+      }
+
       const response = await fetch('/api/ai/generate-blocks', {
         body: JSON.stringify({ prompt }),
-        headers: {
-          'content-type': 'application/json',
-        },
+        headers,
         method: 'POST',
         signal: abortController.signal,
       });

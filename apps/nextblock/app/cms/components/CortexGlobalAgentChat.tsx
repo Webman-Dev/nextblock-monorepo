@@ -605,11 +605,24 @@ export function CortexGlobalAgentChat() {
     setShowHistory(false);
 
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+
+      if (process.env.NEXT_PUBLIC_IS_SANDBOX === "true") {
+        const sandboxKey = window.localStorage.getItem("cortex_ai_sandbox_openrouter_api_key");
+        const sandboxModel = window.localStorage.getItem("cortex_ai_sandbox_openrouter_model_selection");
+        if (sandboxKey) {
+          headers["x-sandbox-openrouter-key"] = sandboxKey;
+        }
+        if (sandboxModel) {
+          headers["x-sandbox-openrouter-model"] = sandboxModel;
+        }
+      }
+
       const response = await fetch("/api/ai/global-agent", {
         body: JSON.stringify({ messages: requestMessages }),
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         method: "POST",
         signal: abortController.signal,
       });
