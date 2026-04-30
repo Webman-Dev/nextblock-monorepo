@@ -40,12 +40,20 @@ const GLOBAL_AGENT_SYSTEM_PROMPT = [
   'You are NextBlock Cortex AI, the global dashboard agent for a block-based CMS.',
   'Operate as a Planner, Executor, and Evaluator.',
   'Plan the smallest safe change, execute only through typed tools, evaluate the tool result, then answer concisely.',
+  'Every mutating tool is confirmed two-step. First call the right tool with the exact normalized payload. If the tool returns requiresConfirmation, do not say the work is done; ask the user to reply exactly with confirmationPhrase.',
+  'When the latest user message is an exact confirmation phrase, call the same mutating tool again with the same payload so the tool can execute. Only report success after the tool result has mutationExecuted=true.',
+  'Use create_cms_page, create_cms_post, and create_cms_product for CMS creation. New pages, posts, and products default to draft unless the user explicitly asks for a public/active status.',
+  'Use update_cms_item_field for one precise field update at a time, such as price, stock, sale_price, title, slug, status, or SEO metadata. Interpret "public" as published for pages/posts and active for products.',
+  'Use prepare_delete_cms_item or delete_cms_item for delete requests. Do not delete anything until the user sends the exact confirmation phrase returned by the tool.',
+  'If a user asks for sale start/end dates or scheduled specials, explain that scheduled specials are not supported by the current schema; you may offer to set or clear sale_price only.',
   'Use update_navigation_bar for public header navigation changes. For requests that ask to add a header link, use update_navigation_bar with mode "append" unless the user clearly asks to replace the whole menu.',
   'For requests that ask to rename or change one existing navigation link, use update_navigation_bar with mode "update" and identify the existing item with match.label or match.url. Never use mode "replace" for a one-link rename.',
   'Use mode "replace" only when the user explicitly asks to rebuild or replace the entire navigation menu and you provide the full menu.',
   'Use update_footer for public footer links or copyright settings.',
   'When editing a CMS page, post, product, or block, use page-aware tools only. Use read_current_cms_item before updating content unless the user provided exact field/block data.',
   'Use update_current_cms_fields for current page/post/product metadata and product description_json. Use update_content_block for top-level page/post blocks. Use update_section_column_block for nested blocks inside section or hero blocks.',
+  'Do not use update_section_column_block to change an existing nested block from one block type to another. That tool edits only the content of the existing nested block type.',
+  'When the user asks to add a new nested block inside a hero or section, such as adding a button to a hero, use update_content_block on the parent hero/section block. Prefer content.append_block, for example { block_type: "button", content: { text: "Contact Us", url: "/contact" } }, so the tool preserves existing column_blocks and layout fields.',
   'When a user names a language, pass that language name or its locale code in languageCode; examples: French maps to fr, English maps to en.',
   'For follow-up requests like "also add it in French", use the prior requested item and apply it to the named language.',
   'Use search_documentation before answering implementation or CMS usage questions that require factual project context.',
@@ -107,7 +115,7 @@ async function requireAdminAccess() {
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
-    return false;
+    return null;
   }
 
   const { data: profile, error: profileError } = await supabase
@@ -116,7 +124,7 @@ async function requireAdminAccess() {
     .eq('id', user.id)
     .single();
 
-  return !profileError && profile?.role === 'ADMIN';
+  return !profileError && profile?.role === 'ADMIN' ? { userId: user.id } : null;
 }
 
 function jsonError(message: string, status: number) {
@@ -180,8 +188,14 @@ function looksLikeRawToolCallLeak(value: string) {
     normalized.includes('"search_documentation"') ||
     normalized.includes('"read_current_cms_item"') ||
     normalized.includes('"update_current_cms_fields"') ||
+    normalized.includes('"update_cms_item_field"') ||
     normalized.includes('"update_content_block"') ||
-    normalized.includes('"update_section_column_block"')
+    normalized.includes('"update_section_column_block"') ||
+    normalized.includes('"create_cms_page"') ||
+    normalized.includes('"create_cms_post"') ||
+    normalized.includes('"create_cms_product"') ||
+    normalized.includes('"prepare_delete_cms_item"') ||
+    normalized.includes('"delete_cms_item"')
   );
 }
 
@@ -204,7 +218,37 @@ function readNumberField(value: unknown, key: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function readStringField(value: unknown, key: string) {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const fieldValue = value[key];
+
+  return typeof fieldValue === 'string' ? fieldValue : null;
+}
+
 function getToolCompletionMessage(toolName?: string, output?: unknown) {
+  if (isRecord(output)) {
+    if (output.requiresConfirmation === true) {
+      const confirmationPhrase = readStringField(output, 'confirmationPhrase');
+
+      return confirmationPhrase
+        ? `Please confirm by replying exactly:\n\n${confirmationPhrase}`
+        : 'Please confirm this change before I apply it.';
+    }
+
+    if (output.unsupported === true || output.success === false) {
+      return readStringField(output, 'message') || 'I could not complete that request.';
+    }
+  }
+
+  const mutationExecuted = isRecord(output) && output.mutationExecuted === true;
+
   if (toolName === 'update_navigation_bar') {
     const insertedCount = readNumberField(output, 'insertedCount');
     const skippedCount = readNumberField(output, 'skippedCount');
@@ -232,12 +276,38 @@ function getToolCompletionMessage(toolName?: string, output?: unknown) {
     return 'Done. I updated the current CMS fields.';
   }
 
+  if (toolName === 'update_cms_item_field') {
+    return mutationExecuted
+      ? 'Done. I updated that CMS field.'
+      : 'I prepared the CMS field update.';
+  }
+
   if (toolName === 'update_content_block') {
     return 'Done. I updated the current content block.';
   }
 
   if (toolName === 'update_section_column_block') {
     return 'Done. I updated the nested section block.';
+  }
+
+  if (toolName === 'create_cms_page') {
+    return mutationExecuted ? 'Done. I created the page.' : 'I prepared the page creation.';
+  }
+
+  if (toolName === 'create_cms_post') {
+    return mutationExecuted ? 'Done. I created the post.' : 'I prepared the post creation.';
+  }
+
+  if (toolName === 'create_cms_product') {
+    return mutationExecuted ? 'Done. I created the product.' : 'I prepared the product creation.';
+  }
+
+  if (toolName === 'prepare_delete_cms_item') {
+    return getToolCompletionMessage('delete_cms_item', output);
+  }
+
+  if (toolName === 'delete_cms_item') {
+    return mutationExecuted ? 'Done. I deleted that CMS item.' : 'I prepared the delete request.';
   }
 
   return 'Done. I completed the requested update.';
@@ -283,9 +353,9 @@ function createAttemptAbortSignal(requestSignal: AbortSignal) {
 
 export async function POST(request: Request) {
   try {
-    const hasAccess = await requireAdminAccess();
+    const adminAccess = await requireAdminAccess();
 
-    if (!hasAccess) {
+    if (!adminAccess) {
       return jsonError('You do not have permission to use the global Cortex AI agent.', 403);
     }
 
@@ -324,7 +394,12 @@ export async function POST(request: Request) {
     });
     const modelIds = routingPolicy.modelIds;
     const pageContext = parsedRequest.data.pageContext ?? null;
+    const latestUserMessage =
+      [...parsedRequest.data.messages].reverse().find((message) => message.role === 'user')
+        ?.content ?? '';
     const tools = createCortexGlobalAgentTools({
+      actorUserId: adminAccess.userId,
+      latestUserMessage,
       pageContext,
       supabase: getServiceRoleSupabaseClient(),
     });

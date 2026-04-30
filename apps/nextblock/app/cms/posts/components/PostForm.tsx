@@ -52,6 +52,28 @@ interface PostFormProps {
   initialFeatureImageId?: string | null; // Pass initial ID as string
 }
 
+function formatDateTimeLocal(value: string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  } catch {
+    return "";
+  }
+}
+
 export default function PostForm({
   post,
   formAction,
@@ -75,22 +97,9 @@ export default function PostForm({
   const [status, setStatus] = useState<PageStatus>(post?.status || "draft");
   const [excerpt, setExcerpt] = useState(post?.excerpt || "");
   const [subtitle, setSubtitle] = useState(post?.subtitle || "");
-  const [publishedAt, setPublishedAt] = useState<string>(() => {
-    if (post?.published_at) {
-      try {
-        const date = new Date(post.published_at);
-        const year = date.getFullYear();
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const day = date.getDate().toString().padStart(2, '0');
-        const hours = date.getHours().toString().padStart(2, '0');
-        const minutes = date.getMinutes().toString().padStart(2, '0');
-        return `${year}-${month}-${day}T${hours}:${minutes}`;
-      } catch {
-        return "";
-      }
-    }
-    return "";
-  });
+  const [publishedAt, setPublishedAt] = useState<string>(() =>
+    formatDateTimeLocal(post?.published_at)
+  );
   const [metaTitle, setMetaTitle] = useState(post?.meta_title || "");
   const [metaDescription, setMetaDescription] = useState(
     post?.meta_description || ""
@@ -111,6 +120,9 @@ export default function PostForm({
   const [hasMoreMedia, setHasMoreMedia] = useState(true);
 
   const [formMessage, setFormMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
 
   useEffect(() => {
     // Update selectedFeatureImage if initial props change
@@ -178,6 +190,36 @@ export default function PostForm({
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    if (!post) {
+      return;
+    }
+
+    setTitle(post.title || "");
+    setSlug(post.slug || "");
+    setLabel(post.label || "");
+    setLanguageId(post.language_id?.toString() || "");
+    setStatus(post.status || "draft");
+    setExcerpt(post.excerpt || "");
+    setSubtitle(post.subtitle || "");
+    setPublishedAt(formatDateTimeLocal(post.published_at));
+    setMetaTitle(post.meta_title || "");
+    setMetaDescription(post.meta_description || "");
+  }, [
+    post?.excerpt,
+    post?.id,
+    post?.label,
+    post?.language_id,
+    post?.meta_description,
+    post?.meta_title,
+    post?.published_at,
+    post?.slug,
+    post?.status,
+    post?.subtitle,
+    post?.title,
+    post?.updated_at,
+  ]);
+
   // Initialize languageId if creating new post and languages are available
   useEffect(() => {
     if (!isEditing && availableLanguages.length > 0 && !languageId) { // check !isEditing too
@@ -218,9 +260,6 @@ export default function PostForm({
   if (!user) {
     return <div>Please log in to manage posts.</div>;
   }
-
-  const formRef = useRef<HTMLFormElement>(null);
-  useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6 w-full mx-auto px-6">

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Brain,
   CheckCircle2,
@@ -88,11 +88,43 @@ const THREADS_STORAGE_KEY = "nextblock-cortex-global-agent-chat-threads";
 const MAX_STORED_MESSAGES = 40;
 const MAX_STORED_THREADS = 20;
 const REQUEST_TIMEOUT_MS = 45000;
+const MUTATING_TOOL_NAMES = new Set([
+  "create_cms_page",
+  "create_cms_post",
+  "create_cms_product",
+  "delete_cms_item",
+  "update_cms_item_field",
+  "update_current_cms_fields",
+  "update_content_block",
+  "update_footer",
+  "update_navigation_bar",
+  "update_section_column_block",
+]);
 
 const TOOL_COPY: Record<string, { done: string; running: string }> = {
   search_documentation: {
     done: "Documentation searched",
     running: "Searching documentation...",
+  },
+  create_cms_page: {
+    done: "Page created",
+    running: "Preparing page...",
+  },
+  create_cms_post: {
+    done: "Post created",
+    running: "Preparing post...",
+  },
+  create_cms_product: {
+    done: "Product created",
+    running: "Preparing product...",
+  },
+  delete_cms_item: {
+    done: "CMS item deleted",
+    running: "Preparing delete...",
+  },
+  prepare_delete_cms_item: {
+    done: "Delete reviewed",
+    running: "Reviewing delete...",
   },
   update_footer: {
     done: "Footer updated",
@@ -109,6 +141,10 @@ const TOOL_COPY: Record<string, { done: string; running: string }> = {
   update_current_cms_fields: {
     done: "Current item updated",
     running: "Updating current item...",
+  },
+  update_cms_item_field: {
+    done: "CMS field updated",
+    running: "Preparing field update...",
   },
   update_content_block: {
     done: "Content block updated",
@@ -269,6 +305,36 @@ function getToolCopy(name: string) {
   );
 }
 
+function isMutatingToolName(name: string | undefined) {
+  return Boolean(name && MUTATING_TOOL_NAMES.has(name));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function toolOutputRequiresConfirmation(output: unknown) {
+  return isRecord(output) && output.requiresConfirmation === true;
+}
+
+function toolOutputExecutedMutation(output: unknown) {
+  return isRecord(output) && output.mutationExecuted === true;
+}
+
+function toolOutputIsNotice(output: unknown) {
+  return isRecord(output) && (output.success === false || output.unsupported === true);
+}
+
+function getToolOutputNavigationPath(output: unknown) {
+  if (!toolOutputExecutedMutation(output) || !isRecord(output)) {
+    return null;
+  }
+
+  const path = output.editPath || output.redirectPath;
+
+  return typeof path === "string" && path.startsWith("/") ? path : null;
+}
+
 function getToolActivityId(event: { toolCallId?: string; toolName?: string }) {
   return event.toolCallId || `${event.toolName || "tool"}-${Date.now()}`;
 }
@@ -335,18 +401,30 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
 function ToolActivityRow({ activity }: { activity: ToolActivity }) {
   const copy = getToolCopy(activity.name);
+  const requiresConfirmation = toolOutputRequiresConfirmation(activity.output);
+  const isNotice = toolOutputIsNotice(activity.output);
   const label =
     activity.status === "running"
       ? copy.running
       : activity.status === "success"
-        ? copy.done
+        ? requiresConfirmation
+          ? "Confirmation needed"
+          : isNotice
+            ? "Tool notice"
+            : copy.done
         : "Tool failed";
+  const iconState =
+    activity.status === "running"
+      ? "running"
+      : activity.status === "success" && !isNotice
+        ? "success"
+        : "error";
 
   return (
     <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-      {activity.status === "running" ? (
+      {iconState === "running" ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-      ) : activity.status === "success" ? (
+      ) : iconState === "success" ? (
         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
       ) : (
         <XCircle className="h-3.5 w-3.5 text-destructive" />
@@ -359,6 +437,7 @@ function ToolActivityRow({ activity }: { activity: ToolActivity }) {
 
 export function CortexGlobalAgentChat() {
   const pathname = usePathname();
+  const router = useRouter();
   const cortexAiPageContext = useCortexAiPageContext();
   const [isMounted, setIsMounted] = useState(false);
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -418,6 +497,23 @@ export function CortexGlobalAgentChat() {
   const canSubmit = useMemo(() => input.trim().length > 0 && !isStreaming, [input, isStreaming]);
   const fallbackPageContext = useMemo(() => buildFallbackPageContext(pathname), [pathname]);
   const pageContext = cortexAiPageContext?.pageContext ?? fallbackPageContext;
+  const hasSuccessfulMutationActivity = useMemo(
+    () =>
+      toolActivities.some(
+        (activity) =>
+          activity.status === "success" &&
+          isMutatingToolName(activity.name) &&
+          toolOutputExecutedMutation(activity.output)
+      ),
+    [toolActivities]
+  );
+  const visibleToolActivities = useMemo(
+    () =>
+      hasSuccessfulMutationActivity
+        ? toolActivities.filter((activity) => activity.status !== "error")
+        : toolActivities,
+    [hasSuccessfulMutationActivity, toolActivities]
+  );
 
   const updateThreadMessages = (
     threadId: string,
@@ -531,6 +627,10 @@ export function CortexGlobalAgentChat() {
     }
 
     if (event.type === "tool-result") {
+      if (isMutatingToolName(event.toolName) && toolOutputExecutedMutation(event.output)) {
+        setStreamError(null);
+      }
+
       setToolActivities((current) => {
         const activityIndex = findMatchingToolActivityIndex(current, event);
 
@@ -651,6 +751,8 @@ export function CortexGlobalAgentChat() {
     setToolActivities([]);
     setIsStreaming(true);
     setShowHistory(false);
+    let shouldRefreshRoute = false;
+    let navigationPath: string | null = null;
 
     try {
       const headers: Record<string, string> = {
@@ -703,6 +805,15 @@ export function CortexGlobalAgentChat() {
           const event = parseStreamFrame(frame);
 
           if (event) {
+            if (
+              event.type === "tool-result" &&
+              isMutatingToolName(event.toolName) &&
+              toolOutputExecutedMutation(event.output)
+            ) {
+              navigationPath = getToolOutputNavigationPath(event.output) || navigationPath;
+              shouldRefreshRoute = !navigationPath;
+            }
+
             applyStreamEvent(event, assistantMessage.id, threadId);
 
             if (event.type === "finish") {
@@ -718,6 +829,15 @@ export function CortexGlobalAgentChat() {
         const event = parseStreamFrame(buffer);
 
         if (event) {
+          if (
+            event.type === "tool-result" &&
+            isMutatingToolName(event.toolName) &&
+            toolOutputExecutedMutation(event.output)
+          ) {
+            navigationPath = getToolOutputNavigationPath(event.output) || navigationPath;
+            shouldRefreshRoute = !navigationPath;
+          }
+
           applyStreamEvent(event, assistantMessage.id, threadId);
         }
       }
@@ -743,6 +863,11 @@ export function CortexGlobalAgentChat() {
       );
     } finally {
       window.clearTimeout(timeoutId);
+      if (navigationPath) {
+        router.push(navigationPath);
+      } else if (shouldRefreshRoute) {
+        router.refresh();
+      }
       setIsStreaming(false);
       abortControllerRef.current = null;
     }
@@ -771,7 +896,7 @@ export function CortexGlobalAgentChat() {
 
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-black/20 md:bg-transparent"
+          className="fixed inset-0 z-40 bg-black/20 md:pointer-events-none md:bg-transparent"
           onClick={() => setOpen(false)}
         />
       )}
@@ -883,9 +1008,9 @@ export function CortexGlobalAgentChat() {
             messages.map((message) => <MessageBubble key={message.id} message={message} />)
           )}
 
-          {toolActivities.length > 0 && (
+          {visibleToolActivities.length > 0 && (
             <div className="space-y-2">
-              {toolActivities.map((activity) => (
+              {visibleToolActivities.map((activity) => (
                 <ToolActivityRow key={activity.id} activity={activity} />
               ))}
             </div>

@@ -14,6 +14,7 @@ type MockRow = Record<string, any>;
 
 type MockDatabase = {
   blocks: MockRow[];
+  currencies: MockRow[];
   languages: MockRow[];
   navigation_items: MockRow[];
   pages: MockRow[];
@@ -179,6 +180,24 @@ function createMockSupabase(database: MockDatabase) {
   };
 }
 
+async function executeConfirmed(
+  executor: (input: any, context?: any) => Promise<any>,
+  input: any,
+  context: any = {}
+) {
+  const preview = await executor(input, context);
+
+  assert.equal(preview.success, true);
+  assert.equal(preview.requiresConfirmation, true);
+  assert.equal(preview.mutationExecuted, false);
+  assert.match(preview.confirmationPhrase, /^CONFIRM .+ #[a-f0-9]{8}$/);
+
+  return executor(input, {
+    ...context,
+    latestUserMessage: preview.confirmationPhrase,
+  });
+}
+
 async function main() {
   const database: MockDatabase = {
     blocks: [
@@ -215,6 +234,7 @@ async function main() {
         post_id: null,
       },
     ],
+    currencies: [{ code: 'USD', id: 1, is_active: true, is_default: true }],
     languages: [
       { code: 'en', id: 1, is_active: true, name: 'English' },
       { code: 'fr', id: 2, is_active: true, name: 'French' },
@@ -261,7 +281,8 @@ async function main() {
   };
   const supabase = createMockSupabase(database);
 
-  const headerResult = await executeUpdateNavigationBar(
+  const headerResult = await executeConfirmed(
+    executeUpdateNavigationBar,
     {
       items: [
         { label: 'Contact', url: '/contact' },
@@ -290,7 +311,8 @@ async function main() {
     true
   );
 
-  const duplicateHeaderResult = await executeUpdateNavigationBar(
+  const duplicateHeaderResult = await executeConfirmed(
+    executeUpdateNavigationBar,
     {
       items: [
         { label: 'Contact', url: '/contact' },
@@ -305,7 +327,8 @@ async function main() {
   assert.equal(duplicateHeaderResult.insertedCount, 0);
   assert.equal(duplicateHeaderResult.skippedCount, 1);
 
-  const frenchHeaderResult = await executeUpdateNavigationBar(
+  const frenchHeaderResult = await executeConfirmed(
+    executeUpdateNavigationBar,
     {
       items: [
         { label: 'Contact', url: 'mailto:info@nextblock.dev' },
@@ -329,7 +352,8 @@ async function main() {
     true
   );
 
-  const frenchRenameResult = await executeUpdateNavigationBar(
+  const frenchRenameResult = await executeConfirmed(
+    executeUpdateNavigationBar,
     {
       items: [
         { label: 'Nous Contacter', url: 'mailto:info@nextblock.dev' },
@@ -376,7 +400,8 @@ async function main() {
     /Refusing destructive HEADER navigation replacement/
   );
 
-  const footerResult = await executeUpdateFooter(
+  const footerResult = await executeConfirmed(
+    executeUpdateFooter,
     {
       copyright: { en: '(c) {year} NextBlock. All rights reserved.' },
       languageCode: 'en',
@@ -413,7 +438,8 @@ async function main() {
   assert.equal(readCurrentResult.blocks[0]?.blockType, 'text');
   assert.equal(readCurrentResult.blocks[0]?.content, undefined);
 
-  const updatedBlockResult = await executeUpdateContentBlock(
+  const updatedBlockResult = await executeConfirmed(
+    executeUpdateContentBlock,
     {
       blockId: 10,
       blockType: 'text',
@@ -447,7 +473,8 @@ async function main() {
     /does not belong to the current page/
   );
 
-  const nestedBlockResult = await executeUpdateSectionColumnBlock(
+  const nestedBlockResult = await executeConfirmed(
+    executeUpdateSectionColumnBlock,
     {
       blockIndex: 0,
       blockType: 'text',
@@ -476,7 +503,8 @@ async function main() {
     ],
     type: 'doc',
   };
-  const productFieldResult = await executeUpdateCurrentCmsFields(
+  const productFieldResult = await executeConfirmed(
+    executeUpdateCurrentCmsFields,
     {
       fields: {
         description_json: productDescriptionJson,
