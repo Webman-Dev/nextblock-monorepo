@@ -792,7 +792,7 @@ export function ProductForm({
             </div>
             <div className="col-span-1 space-y-1">
               <Label htmlFor="upc_ean" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">UPC / EAN</Label>
-              <Input id="upc_ean" placeholder="000000000" {...register('upc_ean')} className="h-8 text-sm font-mono" readOnly={hasVariants} />
+              <Input id="upc_ean" placeholder="000000000" {...register('upc')} className="h-8 text-sm font-mono" readOnly={hasVariants} />
             </div>
           </div>
           <div className="grid grid-cols-4 gap-2.5 mt-2">
