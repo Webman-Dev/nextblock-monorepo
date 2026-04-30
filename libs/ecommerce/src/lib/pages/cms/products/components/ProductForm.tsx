@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import type { z } from 'zod';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -103,21 +104,26 @@ interface FormSectionProps {
   description?: string;
   action?: React.ReactNode;
   children: React.ReactNode;
+  hideHeader?: boolean;
 }
 
-function FormSection({ title, description, action, children }: FormSectionProps) {
+function FormSection({ title, description, action, children, hideHeader }: FormSectionProps) {
   return (
-    <section className="rounded-lg border bg-card p-6 shadow-sm space-y-5">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          {description ? (
-            <p className="text-sm text-muted-foreground max-w-3xl">{description}</p>
-          ) : null}
+    <section className="rounded-lg border bg-card p-3 shadow-sm space-y-3">
+      {!hideHeader && (
+        <div className="flex items-start justify-between gap-4 flex-wrap border-b border-muted/50 pb-2 mb-1">
+          <div className="space-y-0.5">
+            <h2 className="text-sm font-bold tracking-tight">{title}</h2>
+            {description ? (
+              <p className="text-[11px] text-muted-foreground leading-none">{description}</p>
+            ) : null}
+          </div>
+          {action}
         </div>
-        {action}
+      )}
+      <div className={hideHeader ? "" : "pt-1"}>
+        {children}
       </div>
-      {children}
     </section>
   );
 }
@@ -691,19 +697,22 @@ export function ProductForm({
   const variantImageOptions = buildVariantImageOptions(mediaForManager);
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 pb-8">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-2.5 pb-4">
 
       <input type="hidden" {...register('translation_group_id')} />
       <input type="hidden" {...register('payment_provider')} />
 
-      <div className="space-y-8 w-full">
-        <FormSection
-          title="Product Type"
-          description="Choose whether this catalog item is a physical good or a digital product. The payment provider is derived automatically from this choice."
-        >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <Label className="mb-2 block">Type</Label>
+      <div className="space-y-2.5 w-full">
+        <div className="rounded-lg border bg-card p-2.5 px-4 shadow-sm flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-6">
+            <div className="flex h-9 items-center gap-2">
+              <span className="text-sm font-bold whitespace-nowrap leading-none pt-0.5">Product Type</span>
+              {errors.product_type && (
+                <AlertCircle className="h-4 w-4 text-destructive" />
+              )}
+            </div>
+            
+            <div className="flex h-9 items-center">
               <Select
                 onValueChange={(value) =>
                   setValue('product_type', value as ProductFormValues['product_type'], {
@@ -713,153 +722,125 @@ export function ProductForm({
                 }
                 value={productType || undefined}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose product type" />
+                <SelectTrigger className="w-[160px] h-9 text-xs">
+                  <SelectValue placeholder="Select Type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="physical">Physical</SelectItem>
-                  <SelectItem value="digital">Digital</SelectItem>
+                  <SelectItem value="physical">Physical Product</SelectItem>
+                  <SelectItem value="digital">Digital Product</SelectItem>
                 </SelectContent>
               </Select>
-              {errors.product_type && (
-                <p className="text-destructive text-sm">{errors.product_type.message as string}</p>
-              )}
             </div>
-            <div className="rounded-lg border bg-muted/20 p-4">
-              <p className="text-sm font-medium">Derived Payment Provider</p>
-              <p className="mt-1 text-lg font-semibold">
+          </div>
+
+          <div className="flex items-center gap-6">
+            <div className="flex h-9 items-center gap-3">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider leading-none">Payment Provider</span>
+              <Badge variant="outline" className="text-xs py-1 font-bold bg-muted/30 leading-none">
                 {derivedPaymentProvider
                   ? derivedPaymentProvider === 'stripe'
                     ? 'Stripe'
                     : 'Freemius'
-                  : 'Select a product type'}
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Physical products always use Stripe. Digital products always use Freemius.
-              </p>
+                  : '—'}
+              </Badge>
             </div>
-          </div>
 
-          {derivedPaymentProvider ? (
-            <div
-              className={`rounded-lg border p-4 ${
-                isProviderEnabled && isProviderReady
-                  ? 'border-emerald-200 bg-emerald-50/70'
-                  : 'border-amber-200 bg-amber-50/70'
-              }`}
-            >
-              <p className="font-medium">
-                {derivedPaymentProvider === 'stripe' ? 'Stripe' : 'Freemius'} status
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {isProviderEnabled
-                  ? isProviderReady
-                    ? 'This provider is enabled and ready for checkout.'
-                    : 'This provider is enabled in settings, but required environment variables are still missing.'
-                  : 'This provider is currently disabled in Payment Settings.'}
-              </p>
-              {!isProviderReady && configStatus[derivedPaymentProvider].missing.length > 0 ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Missing keys: {configStatus[derivedPaymentProvider].missing.join(', ')}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </FormSection>
-
-        <FormSection
-          title="Product Information"
-          description="Set the core catalog details shoppers and integrations rely on."
-          action={
-            isEdit && initialData?.id ? (
-              <div
-                className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-1 rounded select-all"
-                title="Internal System ID"
-              >
-                ID: {initialData.id}
+            {derivedPaymentProvider && (
+              <div className="flex h-9 items-center gap-2">
+                {isProviderEnabled && isProviderReady ? (
+                  <span className="flex items-center gap-1.5 text-emerald-600 text-[10px] font-bold bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100 uppercase leading-none">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Ready
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-amber-600 text-[10px] font-bold bg-amber-50 px-2 py-1 rounded-full border border-amber-100 uppercase leading-none">
+                    <AlertCircle className="h-3 w-3" />
+                    {isProviderEnabled ? 'Keys Missing' : 'Disabled'}
+                  </span>
+                )}
               </div>
-            ) : null
-          }
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="title">Title</Label>
-              <Input id="title" {...register('title')} placeholder="Product Title" />
-              {errors.title && <p className="text-destructive text-sm">{errors.title.message as string}</p>}
-            </div>
-            <div>
-              <Label htmlFor="slug">Slug</Label>
-              <Input id="slug" {...register('slug')} placeholder="product-slug" className="font-mono text-sm" />
-              {errors.slug && <p className="text-destructive text-sm">{errors.slug.message as string}</p>}
-            </div>
-            <div>
-              <Label htmlFor="sku">SKU</Label>
-              <Input id="sku" {...register('sku')} placeholder="SKU-123" />
-              {errors.sku && <p className="text-destructive text-sm">{errors.sku.message as string}</p>}
-            </div>
-            {isStripeMode && (
-              <div>
-                <Label htmlFor="upc">UPC</Label>
-                <Input
-                  id="upc"
-                  {...register('upc')}
-                  placeholder="012345678905"
-                  readOnly={hasVariants}
-                  className={disabledBaseFieldClass}
-                />
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  {hasVariants
-                    ? 'Parent UPC is ignored once at least one variation exists.'
-                    : 'Use the parent UPC when this product has no variations.'}
-                </p>
+            )}
+            
+            {!isProviderReady && derivedPaymentProvider && configStatus[derivedPaymentProvider].missing.length > 0 && (
+              <div className="hidden xl:flex h-9 items-center gap-1 text-[10px] text-muted-foreground bg-muted/50 px-2 py-1 rounded border border-dashed leading-none">
+                <Info className="h-3 w-3" />
+                Missing: {configStatus[derivedPaymentProvider].missing.join(', ')}
               </div>
             )}
           </div>
-
-          {isStripeMode && (
-            <div className="rounded-lg border bg-muted/20 p-4">
-              <label htmlFor="is-taxable" className="flex cursor-pointer items-start gap-3">
-                <input
-                  id="is-taxable"
-                  type="checkbox"
-                  checked={watch('is_taxable')}
-                  onChange={(event) =>
-                    setValue('is_taxable', event.target.checked, { shouldDirty: true })
-                  }
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                />
-                <span className="space-y-1">
-                  <span className="block font-medium">Charge tax on this product</span>
-                  <span className="block text-sm text-muted-foreground">
-                    Disable this for tax-exempt physical items when Stripe taxes are enabled.
-                  </span>
-                </span>
-              </label>
-            </div>
-          )}
-        </FormSection>
+        </div>
 
         <FormSection
-          title={isStripeMode ? 'Pricing & Inventory' : 'Freemius Configuration'}
-          description={
-            isStripeMode
-              ? 'Keep the parent product simple, or switch to variant-driven pricing and stock when needed.'
-              : 'Connect the product to its Freemius catalog IDs and let synced plan pricing drive the storefront.'
-          }
-          action={
-            <div className="flex items-center gap-2 flex-wrap">
+          title="Product Information"
+          hideHeader
+        >
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            <div className="col-span-2 space-y-1">
+              <Label htmlFor="title" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Title</Label>
+              <Input id="title" placeholder="Product title" {...register('title')} className="h-8 text-sm" />
+              {errors.title && <p className="text-destructive text-[11px] leading-none">{errors.title.message as string}</p>}
+            </div>
+            <div className="col-span-2 space-y-1">
+              <Label htmlFor="slug" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Slug</Label>
+              <Input id="slug" placeholder="product-slug" {...register('slug')} className="h-8 text-sm" />
+              {errors.slug && <p className="text-destructive text-[11px] leading-none">{errors.slug.message as string}</p>}
+            </div>
+            <div className="col-span-1 space-y-1">
+              <Label htmlFor="sku" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">SKU</Label>
+              <Input id="sku" placeholder="SKU" {...register('sku')} className="h-8 text-sm font-mono" />
+              {errors.sku && <p className="text-destructive text-[11px] leading-none">{errors.sku.message as string}</p>}
+            </div>
+            <div className="col-span-1 space-y-1">
+              <Label htmlFor="upc_ean" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">UPC / EAN</Label>
+              <Input id="upc_ean" placeholder="000000000" {...register('upc_ean')} className="h-8 text-sm font-mono" readOnly={hasVariants} />
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-2.5 mt-2">
+            <div className="col-span-1 space-y-1">
+              <Label htmlFor="meta_title" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Meta Title</Label>
+              <Input id="meta_title" {...register('meta_title')} placeholder="SEO page title (50-60 chars)" className="h-8 text-sm" />
+            </div>
+            <div className="col-span-3 space-y-1">
+              <Label htmlFor="meta_description" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Meta Description</Label>
+              <Input id="meta_description" {...register('meta_description')} placeholder="SEO description (150-160 chars)" className="h-8 text-sm" />
+            </div>
+          </div>
+        </FormSection>
+
+        <section className="rounded-lg border bg-card p-3 shadow-sm space-y-3">
+          <div className="flex items-center justify-between gap-4 flex-wrap border-b border-muted/50 pb-2">
+            <div className="flex items-center gap-4">
+              <div className="space-y-0.5">
+                <h2 className="text-sm font-bold tracking-tight">{isStripeMode ? 'Pricing & Inventory' : 'Freemius Configuration'}</h2>
+                <p className="text-[11px] text-muted-foreground leading-none">{isStripeMode ? 'Manage simple or variant pricing.' : 'Freemius sync details.'}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {isStripeMode && (
+                <div className="flex items-center gap-2 bg-muted/40 rounded-md px-2.5 py-1.5">
+                  <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Stock</span>
+                  <Input
+                    id="stock"
+                    type="number"
+                    min="0"
+                    {...register('stock', { valueAsNumber: true })}
+                    placeholder="0"
+                    readOnly={hasVariants}
+                    className={`${disabledBaseFieldClass} h-8 w-20 text-sm text-center font-mono bg-background`}
+                  />
+                </div>
+              )}
               {isStripeMode && hasVariants ? (
-                <Badge variant="secondary">Variant-driven pricing active</Badge>
+                <Badge variant="secondary" className="text-[11px] py-0 px-2 h-5">Variant pricing</Badge>
               ) : null}
               {isFreemiusMode && hasFreemiusProductId ? (
                 <SyncFreemiusPricingButton productId={watch('freemius_product_id') as string} />
               ) : null}
             </div>
-          }
-        >
+          </div>
           {isStripeMode ? (
-            <>
-              <div className="grid grid-cols-1 gap-4">
+            <div className="space-y-3">
+              <div className="w-full">
                 <CurrencyPriceFields
                   idPrefix="product"
                   currencies={currencies}
@@ -873,56 +854,35 @@ export function ProductForm({
                   helperText={
                     hasVariants
                       ? 'Parent prices stay as a fallback, but active variants define the live shopper price.'
-                      : storeManagedPriceCurrencyCodes.length > 0
-                        ? `Store-managed currencies update automatically from ${defaultCurrency?.code || 'the base currency'}. Manual FX fills remain available for the rest.`
-                        : undefined
+                      : undefined
                   }
                 />
                 {errors.price && (
-                  <p className="text-destructive text-sm">{errors.price.message as string}</p>
+                  <p className="text-destructive text-sm mt-1">{errors.price.message as string}</p>
                 )}
                 {errors.sale_price && (
-                  <p className="text-destructive text-sm">{errors.sale_price.message as string}</p>
+                  <p className="text-destructive text-sm mt-1">{errors.sale_price.message as string}</p>
                 )}
-                <div>
-                  <Label htmlFor="stock">Qty</Label>
-                  <Input
-                    id="stock"
-                    type="number"
-                    min="0"
-                    {...register('stock', { valueAsNumber: true })}
-                    placeholder="0"
-                    readOnly={hasVariants}
-                    className={disabledBaseFieldClass}
-                  />
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Products using this same SKU share inventory. Use Inventory for bulk updates and
-                    CSV imports.
-                  </p>
-                  {errors.stock && <p className="text-destructive text-sm">{errors.stock.message as string}</p>}
-                </div>
+                {errors.stock && (
+                  <p className="text-destructive text-[10px] font-medium leading-none mt-1">{errors.stock.message as string}</p>
+                )}
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-dashed p-4">
-                <div>
-                  <p className="font-medium">Variations</p>
-                  <p className="text-sm text-muted-foreground">
-                    {hasVariants
-                      ? 'Variant prices, UPCs, images, and stock override the parent values.'
-                      : 'Create size, color, or packaging options directly under pricing and inventory.'}
-                  </p>
-                </div>
+              <div className="flex items-center justify-between gap-3 rounded border border-dashed p-2.5 bg-muted/5">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{hasVariants ? 'Variations Active' : 'Variations'}</span>
                 <Button
                   type="button"
                   variant={showVariations ? 'outline' : 'default'}
                   onClick={() => setShowVariations((current) => !current)}
+                  size="sm"
+                  className="h-7 text-xs px-3"
                 >
-                  {showVariations ? 'Hide Variations' : 'Create Variations'}
+                  {showVariations ? 'Hide' : 'Manage'}
                 </Button>
               </div>
 
               {showVariations && (
-                <div className="border-t pt-6">
+                <div className="border-t pt-3">
                   <VariationsEditor
                     globalAttributes={globalAttributesProp}
                     currentLanguageCode={currentLanguageCode}
@@ -941,7 +901,7 @@ export function ProductForm({
                   />
                 </div>
               )}
-            </>
+            </div>
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -964,59 +924,30 @@ export function ProductForm({
               )}
             </>
           )}
-        </FormSection>
+        </section>
 
-        <FormSection
-          title="Search Engine Optimization (SEO)"
-          description="Control how this product appears in Google and other search engines."
-        >
-          <div className="grid grid-cols-1 gap-6">
-            <div>
-              <Label htmlFor="meta_title">Meta Title (SEO)</Label>
-              <Input id="meta_title" {...register('meta_title')} placeholder="Product Meta Title..." className="mt-1" />
-              <p className="text-[11px] text-muted-foreground mt-1">Recommended: 50-60 characters. Falls back to product title if empty.</p>
-            </div>
-            <div>
-              <Label htmlFor="meta_description">Meta Description (SEO)</Label>
-              <textarea
-                id="meta_description"
-                {...register('meta_description')}
-                placeholder="Product Meta Description..."
-                rows={3}
-                className="mt-1 flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">Recommended: 150-160 characters. Falls back to short description if empty.</p>
-            </div>
-          </div>
-        </FormSection>
-
-        <FormSection
-          title="Product Story"
-          description="Write a rich story and detailed description for the product page."
-        >
-          <div className="mb-6">
-            <Label htmlFor="short_description" className="font-semibold mb-2 block">Short Description / Excerpt</Label>
-            <Input id="short_description" {...register('short_description')} placeholder="Brief summary shown on product cards..." />
-          </div>
-          <Label className="mb-2 block font-semibold text-lg border-t pt-4">Detailed Description</Label>
-          <div className="min-h-[400px] border rounded-lg overflow-hidden text-block-editor">
-            {editorNode ? (
-              React.cloneElement(editorNode as React.ReactElement<any>, {
-                initialContent: watch('description_json') || {},
-                onUpdate: (content: any) => setValue('description_json', content)
-              })
-            ) : (
-              <div className="p-4 text-sm text-muted-foreground italic text-center mt-10">
-                Editor not injected. Adding descriptions is disabled.
+        <FormSection title="Product Description" hideHeader>
+          <div className="space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="short_description" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Short Description</Label>
+                <Input id="short_description" {...register('short_description')} placeholder="Brief summary for product cards..." className="h-8 text-sm" />
               </div>
-            )}
+            </div>
+            <div className="min-h-[250px] border rounded overflow-hidden text-block-editor bg-muted/5">
+              {editorNode ? (
+                React.cloneElement(editorNode as React.ReactElement<any>, {
+                  initialContent: watch('description_json') || {},
+                  onUpdate: (content: any) => setValue('description_json', content)
+                })
+              ) : (
+                <div className="p-3 text-[10px] text-muted-foreground italic text-center mt-8">Editor disabled.</div>
+              )}
+            </div>
           </div>
         </FormSection>
 
-        <FormSection
-          title="Media Gallery"
-          description="Reorder the gallery to control the parent product image and the variant image options."
-        >
+        <FormSection title="Media Gallery" description="Drag to reorder. First image is the hero.">
           <ProductMediaManager
             initialMedia={mediaForManager}
             onUpdate={onMediaUpdate}
@@ -1025,60 +956,24 @@ export function ProductForm({
           <input type="hidden" {...register('product_media')} />
         </FormSection>
 
-        <FormSection
-          title="Publishing"
-          description="Choose the language and publication status for this catalog entry."
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label className="mb-2 block">Status</Label>
-              <Select
-                onValueChange={(val) => setValue('status', val as any)}
-                value={watch('status')}
-                defaultValue={watch('status')}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
-                </SelectContent>
-              </Select>
-              {errors.status && (
-                <p className="text-destructive text-sm">{errors.status.message as string}</p>
-              )}
-            </div>
-            <div>
-              <Label className="mb-2 block">Language</Label>
-              <Select
-                onValueChange={(val) => setValue('language_id', parseInt(val, 10), { shouldValidate: true })}
-                value={watch('language_id')?.toString()}
-                defaultValue={watch('language_id')?.toString()}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select language" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableLanguagesProp.map((lang) => (
-                    <SelectItem key={lang.id} value={lang.id.toString()}>
-                      {lang.name} ({lang.code.toUpperCase()})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.language_id && <p className="text-destructive text-sm">{errors.language_id.message as string}</p>}
-            </div>
+        <div className="rounded-lg border bg-card p-3 px-4 shadow-sm flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Status</span>
+            <Select onValueChange={(val) => setValue('status', val as any)} value={watch('status')}>
+              <SelectTrigger className="h-8 w-[110px] text-sm">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        </FormSection>
-      </div>
-
-      {/* Bottom Actions */}
-      <div className="flex justify-end pt-4 border-t">
-        <Button disabled={isSubmitting} type="submit" size="lg">
-          {isSubmitting ? 'Saving...' : 'Save Changes'}
-        </Button>
+          <Button disabled={isSubmitting} type="submit" size="sm" className="h-8 text-sm px-5">
+            {isSubmitting ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
       </div>
     </form>
   );

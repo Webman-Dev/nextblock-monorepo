@@ -45,62 +45,50 @@ export function CurrencyPriceFields({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="space-y-1">
-          <p className="font-medium">Currency Pricing</p>
-          <p className="text-sm text-muted-foreground">
-            {helperText ||
-              `Set exact prices for each active currency. ${defaultCurrency.code} is the base currency for FX auto-fill.`}
-          </p>
-        </div>
-        {onAutoFill && hasEditableFxCurrencies ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onAutoFill}
-            disabled={readOnly}
+    <div className="divide-y divide-muted/50">
+      {currencies.map((currency) => {
+        const normalizedCurrency = normalizeCurrencyRecord(currency);
+        const isStoreManaged =
+          normalizedCurrency.is_default !== true &&
+          managedCurrencyCodeSet.has(normalizedCurrency.code);
+        const isInputDisabled = readOnly || isStoreManaged;
+
+        return (
+          <div
+            key={normalizedCurrency.code}
+            className="flex flex-wrap items-center gap-4 py-3 first:pt-0 last:pb-0"
           >
-            Auto-fill manual FX prices
-          </Button>
-        ) : null}
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {currencies.map((currency) => {
-          const normalizedCurrency = normalizeCurrencyRecord(currency);
-          const isStoreManaged =
-            normalizedCurrency.is_default !== true &&
-            managedCurrencyCodeSet.has(normalizedCurrency.code);
-          const isInputDisabled = readOnly || isStoreManaged;
-
-          return (
-            <div
-              key={normalizedCurrency.code}
-              className="rounded-lg border bg-card/70 p-4 shadow-sm"
-            >
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-medium">{normalizedCurrency.code}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {normalizedCurrency.symbol} | rate {normalizedCurrency.exchange_rate}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {describeCurrencyRoundingRule(normalizedCurrency)}
-                  </p>
+            {/* Currency Identity */}
+            <div className="flex items-center gap-3 w-[140px] shrink-0">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold tracking-tight">{normalizedCurrency.code}</span>
+                  {normalizedCurrency.is_default ? (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 h-4 uppercase font-bold">Default</Badge>
+                  ) : null}
+                  {isStoreManaged ? (
+                    <Badge variant="outline" className="text-[10px] px-1.5 h-4 uppercase font-bold">Auto</Badge>
+                  ) : null}
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {normalizedCurrency.is_default ? <Badge>Default</Badge> : null}
-                  {isStoreManaged ? <Badge variant="outline">Auto Price Sync</Badge> : null}
-                </div>
+                <p className="text-[11px] text-muted-foreground leading-none font-medium">
+                  {normalizedCurrency.symbol} · rate {normalizedCurrency.exchange_rate}
+                </p>
               </div>
+            </div>
 
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor={`${idPrefix}-price-${normalizedCurrency.code}`}>
-                    Regular Price ({normalizedCurrency.code})
-                  </Label>
+            {/* Inputs Grid */}
+            <div className="flex-1 grid grid-cols-2 gap-4">
+              <div className="flex items-center gap-3">
+                <Label
+                  htmlFor={`${idPrefix}-price-${normalizedCurrency.code}`}
+                  className="text-xs uppercase font-bold text-muted-foreground tracking-widest shrink-0"
+                >
+                  Price
+                </Label>
+                <div className="relative flex-1">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-bold pointer-events-none">
+                    {normalizedCurrency.symbol}
+                  </span>
                   <Input
                     id={`${idPrefix}-price-${normalizedCurrency.code}`}
                     type="number"
@@ -108,6 +96,7 @@ export function CurrencyPriceFields({
                     min="0"
                     value={prices[normalizedCurrency.code] ?? ''}
                     disabled={isInputDisabled}
+                    className="h-8 text-sm pl-6"
                     onChange={(event) =>
                       onPriceChange(
                         normalizedCurrency.code,
@@ -116,11 +105,19 @@ export function CurrencyPriceFields({
                     }
                   />
                 </div>
+              </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor={`${idPrefix}-sale-price-${normalizedCurrency.code}`}>
-                    Sale Price ({normalizedCurrency.code})
-                  </Label>
+              <div className="flex items-center gap-3">
+                <Label
+                  htmlFor={`${idPrefix}-sale-price-${normalizedCurrency.code}`}
+                  className="text-xs uppercase font-bold text-muted-foreground tracking-widest shrink-0"
+                >
+                  Sale
+                </Label>
+                <div className="relative flex-1">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-bold pointer-events-none">
+                    {normalizedCurrency.symbol}
+                  </span>
                   <Input
                     id={`${idPrefix}-sale-price-${normalizedCurrency.code}`}
                     type="number"
@@ -128,7 +125,8 @@ export function CurrencyPriceFields({
                     min="0"
                     value={salePrices[normalizedCurrency.code] ?? ''}
                     disabled={isInputDisabled}
-                    placeholder={isStoreManaged ? 'Derived from base sale price' : 'Optional'}
+                    placeholder={isStoreManaged ? 'Auto' : '—'}
+                    className="h-8 text-sm pl-6"
                     onChange={(event) =>
                       onSalePriceChange(
                         normalizedCurrency.code,
@@ -139,17 +137,11 @@ export function CurrencyPriceFields({
                     }
                   />
                 </div>
-                {isStoreManaged ? (
-                  <p className="text-xs text-muted-foreground">
-                    This currency is derived from {defaultCurrency.code} using the current FX
-                    rate and rounding rule. Update the base currency price to change it.
-                  </p>
-                ) : null}
               </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
