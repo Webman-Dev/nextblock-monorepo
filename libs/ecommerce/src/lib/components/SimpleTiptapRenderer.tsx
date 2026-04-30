@@ -122,6 +122,14 @@ const renderNode = (node: TiptapNode, index: number): React.ReactNode => {
 
     // ── Block-level text ────────────────────────────────────────
     case 'paragraph': {
+      // Skip empty / whitespace-only paragraphs (spacer artefacts from the editor)
+      const isEmpty =
+        !node.content?.length ||
+        node.content.every(
+          (child) => child.type === 'text' && (!child.text || !child.text.trim())
+        );
+      if (isEmpty) return null;
+
       const textAlign = node.attrs?.textAlign as string | undefined;
       const style: React.CSSProperties = textAlign ? { textAlign: textAlign as React.CSSProperties['textAlign'] } : {};
       return <p key={index} className="mb-4" style={Object.keys(style).length ? style : undefined}>{children}</p>;
