@@ -48,6 +48,7 @@ export default function EditPageClient({
           languageId: page.language_id,
           slug: page.slug,
           title: page.title,
+          translationGroupId: page.translation_group_id,
         }}
       />
       <div className="space-y-8 w-full mx-auto px-6">

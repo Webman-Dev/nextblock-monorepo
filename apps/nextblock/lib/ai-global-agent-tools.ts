@@ -37,8 +37,11 @@ type ToolExecutionContext = {
   latestUserMessage?: string | null;
   pageContext?: CortexAiPageContext | null;
   revalidatePath?: RevalidateFn;
+  skipConfirmation?: boolean;
   supabase?: SupabaseLike;
 };
+
+const SEARCH_DOCUMENTATION_TIMEOUT_MS = 10000;
 
 const LANGUAGE_NAME_ALIASES: Record<string, string> = {
   arabic: 'ar',
@@ -137,6 +140,7 @@ export const cortexAiPageContextSchema = z.strictObject({
   languageId: z.number().int().positive().nullable().optional(),
   slug: z.string().trim().min(1).max(300).nullable().optional(),
   title: z.string().trim().min(1).max(300).nullable().optional(),
+  translationGroupId: z.string().trim().min(1).max(120).nullable().optional(),
 });
 
 export const readCurrentCmsItemInputSchema = z.strictObject({
@@ -190,6 +194,13 @@ const createCmsBlockInputSchema = z.strictObject({
   order: z.number().int().min(0).optional(),
 });
 
+export const insertContentBlockInputSchema = cmsTargetInputSchema.extend({
+  anchorBlockId: z.number().int().positive().optional(),
+  anchorBlockType: z.enum(availableCortexAiBlockTypes).optional(),
+  block: createCmsBlockInputSchema,
+  position: z.enum(['before', 'after', 'start', 'end']).default('end'),
+});
+
 export const createCmsPageInputSchema = z.strictObject({
   blocks: z.array(createCmsBlockInputSchema).max(20).optional(),
   contactEmail: z.string().email().optional(),
@@ -199,6 +210,7 @@ export const createCmsPageInputSchema = z.strictObject({
   slug: z.string().trim().min(1).max(300).optional(),
   status: z.enum(['draft', 'published', 'archived']).default('draft'),
   title: z.string().trim().min(1).max(300),
+  translationGroupId: z.string().trim().min(1).max(120).optional(),
 });
 
 export const createCmsPostInputSchema = z.strictObject({
@@ -214,6 +226,7 @@ export const createCmsPostInputSchema = z.strictObject({
   status: z.enum(['draft', 'published', 'archived']).default('draft'),
   subtitle: z.string().max(300).nullable().optional(),
   title: z.string().trim().min(1).max(300),
+  translationGroupId: z.string().trim().min(1).max(120).optional(),
 });
 
 export const createCmsProductInputSchema = z.strictObject({
@@ -236,6 +249,7 @@ export const createCmsProductInputSchema = z.strictObject({
   status: z.enum(['draft', 'active', 'archived']).default('draft'),
   stock: z.number().int().min(0).default(0),
   title: z.string().trim().min(1).max(300),
+  translationGroupId: z.string().trim().min(1).max(120).optional(),
   upc: z.string().max(120).nullable().optional(),
 });
 
@@ -250,6 +264,285 @@ export const updateCmsItemFieldInputSchema = cmsTargetInputSchema.extend({
 export const prepareDeleteCmsItemInputSchema = cmsTargetInputSchema;
 export const deleteCmsItemInputSchema = cmsTargetInputSchema;
 
+const wrappedCmsActionPlanActionSchema = z.discriminatedUnion('tool', [
+  z.strictObject({ input: createCmsPageInputSchema, tool: z.literal('create_cms_page') }),
+  z.strictObject({ input: createCmsPostInputSchema, tool: z.literal('create_cms_post') }),
+  z.strictObject({ input: createCmsProductInputSchema, tool: z.literal('create_cms_product') }),
+  z.strictObject({ input: deleteCmsItemInputSchema, tool: z.literal('delete_cms_item') }),
+  z.strictObject({ input: updateCmsItemFieldInputSchema, tool: z.literal('update_cms_item_field') }),
+  z.strictObject({ input: updateContentBlockInputSchema, tool: z.literal('update_content_block') }),
+  z.strictObject({ input: insertContentBlockInputSchema, tool: z.literal('insert_content_block') }),
+  z.strictObject({ input: updateCurrentCmsFieldsInputSchema, tool: z.literal('update_current_cms_fields') }),
+  z.strictObject({ input: updateFooterInputSchema, tool: z.literal('update_footer') }),
+  z.strictObject({ input: updateNavigationBarInputSchema, tool: z.literal('update_navigation_bar') }),
+  z.strictObject({ input: updateSectionColumnBlockInputSchema, tool: z.literal('update_section_column_block') }),
+]);
+
+const flatCmsActionPlanActionSchema = z.union([
+  createCmsPageInputSchema
+    .extend({ tool: z.literal('create_cms_page') })
+    .transform(({ tool, ...input }) => ({ input, tool })),
+  createCmsPostInputSchema
+    .extend({ tool: z.literal('create_cms_post') })
+    .transform(({ tool, ...input }) => ({ input, tool })),
+  createCmsProductInputSchema
+    .extend({ tool: z.literal('create_cms_product') })
+    .transform(({ tool, ...input }) => ({ input, tool })),
+  deleteCmsItemInputSchema
+    .extend({ tool: z.literal('delete_cms_item') })
+    .transform(({ tool, ...input }) => ({ input, tool })),
+  updateCmsItemFieldInputSchema
+    .extend({ tool: z.literal('update_cms_item_field') })
+    .transform(({ tool, ...input }) => ({ input, tool })),
+  updateContentBlockInputSchema
+    .extend({ tool: z.literal('update_content_block') })
+    .transform(({ tool, ...input }) => ({ input, tool })),
+  insertContentBlockInputSchema
+    .extend({ tool: z.literal('insert_content_block') })
+    .transform(({ tool, ...input }) => ({ input, tool })),
+  updateCurrentCmsFieldsInputSchema
+    .extend({ tool: z.literal('update_current_cms_fields') })
+    .transform(({ tool, ...input }) => ({ input, tool })),
+  updateFooterInputSchema
+    .extend({ tool: z.literal('update_footer') })
+    .transform(({ tool, ...input }) => ({ input, tool })),
+  updateNavigationBarInputSchema
+    .extend({ tool: z.literal('update_navigation_bar') })
+    .transform(({ tool, ...input }) => ({ input, tool })),
+  updateSectionColumnBlockInputSchema
+    .extend({ tool: z.literal('update_section_column_block') })
+    .transform(({ tool, ...input }) => ({ input, tool })),
+]);
+
+const commandStringCmsActionPlanActionSchema = z.string().transform((value, context) => {
+  const parsed = parseCmsActionPlanCommandString(value);
+
+  if (!parsed.success) {
+    context.addIssue({
+      code: 'custom',
+      message: parsed.message,
+    });
+
+    return z.NEVER;
+  }
+
+  return parsed.action;
+});
+
+const cmsActionPlanActionSchema = z.union([
+  wrappedCmsActionPlanActionSchema,
+  flatCmsActionPlanActionSchema,
+  commandStringCmsActionPlanActionSchema,
+]);
+
+export const executeCmsActionPlanInputSchema = z.strictObject({
+  actions: z.array(cmsActionPlanActionSchema).min(1).max(8),
+  summary: z.string().trim().min(1).max(500).optional(),
+});
+
+function splitTopLevelValues(value: string) {
+  const parts: string[] = [];
+  let current = '';
+  let depth = 0;
+  let quote: '"' | "'" | null = null;
+  let escaping = false;
+
+  for (const char of value) {
+    if (quote) {
+      current += char;
+
+      if (escaping) {
+        escaping = false;
+      } else if (char === '\\') {
+        escaping = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char;
+      current += char;
+      continue;
+    }
+
+    if (char === '[' || char === '{' || char === '(') {
+      depth++;
+      current += char;
+      continue;
+    }
+
+    if (char === ']' || char === '}' || char === ')') {
+      depth = Math.max(0, depth - 1);
+      current += char;
+      continue;
+    }
+
+    if (char === ',' && depth === 0) {
+      if (current.trim()) {
+        parts.push(current.trim());
+      }
+
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.trim()) {
+    parts.push(current.trim());
+  }
+
+  return parts;
+}
+
+function convertSingleQuotedJsonLikeToJson(value: string) {
+  let output = '';
+
+  for (let index = 0; index < value.length; index++) {
+    const char = value[index];
+
+    if (char !== "'") {
+      output += char;
+      continue;
+    }
+
+    let content = '';
+    let escaping = false;
+    index++;
+
+    for (; index < value.length; index++) {
+      const innerChar = value[index];
+
+      if (escaping) {
+        content += innerChar;
+        escaping = false;
+        continue;
+      }
+
+      if (innerChar === '\\') {
+        escaping = true;
+        continue;
+      }
+
+      if (innerChar === "'") {
+        break;
+      }
+
+      content += innerChar;
+    }
+
+    output += JSON.stringify(content);
+  }
+
+  return output
+    .replace(/\bTrue\b/g, 'true')
+    .replace(/\bFalse\b/g, 'false')
+    .replace(/\bNone\b/g, 'null');
+}
+
+function parseCmsActionPlanCommandValue(value: string) {
+  const trimmed = value.trim();
+
+  if (
+    (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+    (trimmed.startsWith('"') && trimmed.endsWith('"'))
+  ) {
+    return JSON.parse(convertSingleQuotedJsonLikeToJson(trimmed));
+  }
+
+  if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+    return JSON.parse(convertSingleQuotedJsonLikeToJson(trimmed));
+  }
+
+  if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+    return Number(trimmed);
+  }
+
+  if (trimmed === 'true' || trimmed === 'True') {
+    return true;
+  }
+
+  if (trimmed === 'false' || trimmed === 'False') {
+    return false;
+  }
+
+  if (trimmed === 'null' || trimmed === 'None') {
+    return null;
+  }
+
+  return trimmed;
+}
+
+function parseCmsActionPlanCommandArguments(value: string) {
+  const input: Record<string, unknown> = {};
+
+  for (const part of splitTopLevelValues(value)) {
+    const separatorIndex = part.indexOf('=');
+
+    if (separatorIndex <= 0) {
+      throw new Error(`Expected key=value argument, received "${part}".`);
+    }
+
+    const key = part.slice(0, separatorIndex).trim();
+
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      throw new Error(`Invalid argument name "${key}".`);
+    }
+
+    input[key] = parseCmsActionPlanCommandValue(part.slice(separatorIndex + 1));
+  }
+
+  return input;
+}
+
+function parseCmsActionPlanCommandString(value: string):
+  | { action: z.infer<typeof wrappedCmsActionPlanActionSchema>; success: true }
+  | { message: string; success: false } {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^([a-z_]+)\(([\s\S]*)\)$/);
+
+  if (!match) {
+    return {
+      message:
+        'Action plan actions must be JSON objects like { "tool": "create_cms_page", "input": { ... } }, not freeform text.',
+      success: false,
+    };
+  }
+
+  const toolName = match[1];
+  let input: Record<string, unknown>;
+
+  try {
+    input = parseCmsActionPlanCommandArguments(match[2]);
+  } catch (error) {
+    return {
+      message: error instanceof Error ? error.message : 'Could not parse action-plan command arguments.',
+      success: false,
+    };
+  }
+
+  const action = { input, tool: toolName };
+  const parsedAction = wrappedCmsActionPlanActionSchema.safeParse(action);
+
+  if (!parsedAction.success) {
+    return {
+      message: `Invalid action-plan command "${toolName}": ${parsedAction.error.issues
+        .map((issue) => issue.message)
+        .join('; ')}`,
+      success: false,
+    };
+  }
+
+  return {
+    action: parsedAction.data,
+    success: true,
+  };
+}
+
 export type NavigationItemInput = z.infer<typeof navigationItemInputSchema>;
 export type UpdateNavigationBarInput = z.infer<typeof updateNavigationBarInputSchema>;
 export type UpdateFooterInput = z.infer<typeof updateFooterInputSchema>;
@@ -258,6 +551,7 @@ export type CortexAiPageContext = z.infer<typeof cortexAiPageContextSchema>;
 export type ReadCurrentCmsItemInput = z.infer<typeof readCurrentCmsItemInputSchema>;
 export type UpdateCurrentCmsFieldsInput = z.infer<typeof updateCurrentCmsFieldsInputSchema>;
 export type UpdateContentBlockInput = z.infer<typeof updateContentBlockInputSchema>;
+export type InsertContentBlockInput = z.infer<typeof insertContentBlockInputSchema>;
 export type UpdateSectionColumnBlockInput = z.infer<typeof updateSectionColumnBlockInputSchema>;
 export type CreateCmsPageInput = z.infer<typeof createCmsPageInputSchema>;
 export type CreateCmsPostInput = z.infer<typeof createCmsPostInputSchema>;
@@ -265,6 +559,86 @@ export type CreateCmsProductInput = z.infer<typeof createCmsProductInputSchema>;
 export type UpdateCmsItemFieldInput = z.infer<typeof updateCmsItemFieldInputSchema>;
 export type PrepareDeleteCmsItemInput = z.infer<typeof prepareDeleteCmsItemInputSchema>;
 export type DeleteCmsItemInput = z.infer<typeof deleteCmsItemInputSchema>;
+export type ExecuteCmsActionPlanInput = z.infer<typeof executeCmsActionPlanInputSchema>;
+
+function normalizePlannerText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function mentionsAny(value: string, terms: string[]) {
+  return terms.some((term) => value.includes(term));
+}
+
+export function buildVisibleContactIntroActionPlan(message: string): ExecuteCmsActionPlanInput | null {
+  const normalized = normalizePlannerText(message);
+  const asksToAdd = mentionsAny(normalized, ['add ', 'insert ', 'put ', 'create ']);
+  const asksVisibleCopy = mentionsAny(normalized, [
+    'title',
+    'heading',
+    'description',
+    'intro',
+    'copy',
+    'paragraph',
+  ]);
+  const asksAboveForm =
+    normalized.includes('form') && mentionsAny(normalized, ['above', 'before']);
+  const asksContactPages =
+    normalized.includes('contact page') ||
+    normalized.includes('contact pages') ||
+    normalized.includes('contact us') ||
+    normalized.includes('contactez-nous');
+  const asksEnglishAndFrench =
+    normalized.includes('english') &&
+    mentionsAny(normalized, ['french', 'francais', 'francaise']);
+
+  if (!asksToAdd || !asksVisibleCopy || !asksAboveForm || !asksContactPages || !asksEnglishAndFrench) {
+    return null;
+  }
+
+  return {
+    actions: [
+      {
+        input: {
+          anchorBlockType: 'form',
+          block: {
+            blockType: 'text',
+            content: {
+              html_content:
+                '<h2>Let us help you move faster</h2><p>Have a question, project idea, or need help choosing the right next step? Send us a message and the NextBlock team will get back to you soon.</p>',
+            },
+          },
+          contentType: 'page',
+          position: 'before',
+          slug: 'contact-us',
+        },
+        tool: 'insert_content_block',
+      },
+      {
+        input: {
+          anchorBlockType: 'form',
+          block: {
+            blockType: 'text',
+            content: {
+              html_content:
+                "<h2>Parlons de votre projet</h2><p>Vous avez une question, une idee de projet ou besoin d'aide pour avancer? Envoyez-nous un message et l'equipe NextBlock vous repondra rapidement.</p>",
+            },
+          },
+          contentType: 'page',
+          position: 'before',
+          slug: 'contactez-nous',
+        },
+        tool: 'insert_content_block',
+      },
+    ],
+    summary:
+      'Add visible title and description copy above the forms on the English and French Contact pages.',
+  };
+}
 
 type DocumentationSnippet = {
   excerpt: string;
@@ -487,6 +861,26 @@ function getSupabase(context?: ToolExecutionContext) {
   return context.supabase;
 }
 
+function withTimeoutFallback<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  createFallback: () => T
+) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timeoutId = setTimeout(() => resolve(createFallback()), timeoutMs);
+  });
+
+  return Promise.race([
+    promise.finally(() => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }),
+    timeoutPromise,
+  ]);
+}
+
 function getCurrentCmsContext(context?: ToolExecutionContext) {
   const parsed = cortexAiPageContextSchema.safeParse(context?.pageContext);
 
@@ -672,6 +1066,80 @@ function buildConfirmationPreview(params: {
   };
 }
 
+function readPreviewString(preview: Record<string, unknown>, key: string) {
+  const value = preview[key];
+
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function readPreviewNumber(preview: Record<string, unknown>, key: string) {
+  const value = Number(preview[key]);
+
+  return Number.isFinite(value) ? value : null;
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function summarizeCmsMutationPreview(toolName: string, preview: Record<string, unknown>) {
+  const explicitSummary = readPreviewString(preview, 'summary');
+
+  if (explicitSummary) {
+    return explicitSummary;
+  }
+
+  const title = readPreviewString(preview, 'title');
+  const slug = readPreviewString(preview, 'slug');
+  const status = readPreviewString(preview, 'status');
+  const contentType = readPreviewString(preview, 'contentType');
+  const field = readPreviewString(preview, 'field');
+  const mode = readPreviewString(preview, 'mode');
+  const languageCode = readPreviewString(preview, 'languageCode');
+  const blockCount = readPreviewNumber(preview, 'blockCount');
+  const itemCount = readPreviewNumber(preview, 'itemCount');
+  const affectedCount = readPreviewNumber(preview, 'affectedCount');
+
+  if (toolName === 'create_cms_page' || toolName === 'create_cms_post') {
+    return `Create ${status || 'draft'} ${toolName === 'create_cms_page' ? 'page' : 'post'} "${title || slug || 'Untitled'}"${slug ? ` at slug "${slug}"` : ''}${blockCount !== null ? ` with ${pluralize(blockCount, 'content block')}` : ''}.`;
+  }
+
+  if (toolName === 'create_cms_product') {
+    return `Create ${status || 'draft'} product "${title || slug || 'Untitled'}"${slug ? ` at slug "${slug}"` : ''}.`;
+  }
+
+  if (toolName === 'update_cms_item_field') {
+    return `Update ${field || 'one field'} on the ${contentType || 'CMS item'} "${title || slug || 'selected item'}".`;
+  }
+
+  if (toolName === 'update_navigation_bar') {
+    return `${mode === 'append' ? 'Add' : mode === 'update' ? 'Update' : 'Replace'} ${itemCount !== null ? pluralize(itemCount, 'navigation item') : 'navigation items'} in the ${languageCode || 'selected'} header navigation.`;
+  }
+
+  if (toolName === 'update_footer') {
+    const linkCount = readPreviewNumber(preview, 'linkCount');
+    return `Update the ${languageCode || 'selected'} footer${linkCount !== null ? ` with ${pluralize(linkCount, 'link')}` : ''}.`;
+  }
+
+  if (toolName === 'update_content_block') {
+    return `Update the selected ${readPreviewString(preview, 'blockType') || 'content'} block.`;
+  }
+
+  if (toolName === 'insert_content_block') {
+    return `Insert ${readPreviewString(preview, 'blockType') || 'content'} block on the ${contentType || 'CMS item'} "${title || slug || 'selected item'}".`;
+  }
+
+  if (toolName === 'update_section_column_block') {
+    return `Update the selected nested ${readPreviewString(preview, 'nestedBlockType') || 'section'} block.`;
+  }
+
+  if (toolName === 'delete_cms_item' || toolName === 'prepare_delete_cms_item') {
+    return `Delete ${affectedCount !== null ? pluralize(affectedCount, contentType || 'CMS item') : `the selected ${contentType || 'CMS item'}`}${title || slug ? ` for "${title || slug}"` : ''}.`;
+  }
+
+  return 'Complete the requested CMS change.';
+}
+
 function getConfirmationPreview(params: {
   action: string;
   context?: ToolExecutionContext;
@@ -679,6 +1147,10 @@ function getConfirmationPreview(params: {
   preview: Record<string, unknown>;
   subject: string;
 }) {
+  if (params.context?.skipConfirmation) {
+    return null;
+  }
+
   const preview = buildConfirmationPreview(params);
   const latestUserMessage = normalizeConfirmationToken(params.context?.latestUserMessage || '');
   const expectedPhrase = normalizeConfirmationToken(preview.confirmationPhrase);
@@ -898,8 +1370,7 @@ function normalizeNestedColumnBlock(value: unknown, label: string): ColumnBlock 
     throw new Error(`${label} cannot be a nested ${blockType} block.`);
   }
 
-  const content = cloneJsonRecord(value.content, label);
-  assertValidBlockContent(blockType, content, label);
+  const content = normalizeBlockContentForType(blockType, cloneJsonRecord(value.content, label), label);
 
   const rawTempId = value.temp_id ?? value.tempId;
   const tempId = typeof rawTempId === 'string' && rawTempId.trim() ? rawTempId : createNestedTempId(blockType);
@@ -1218,9 +1689,11 @@ async function resolveCmsTarget(
     throw new Error('Target contentType is required when no current CMS edit context exists.');
   }
 
-  const entityId = input.entityId ?? pageContext?.entityId;
-  const slug = input.slug ?? pageContext?.slug ?? undefined;
-  const title = input.title ?? pageContext?.title ?? undefined;
+  const hasExplicitTarget =
+    input.entityId !== undefined || Boolean(input.slug) || Boolean(input.title);
+  const entityId = input.entityId ?? (hasExplicitTarget ? undefined : pageContext?.entityId);
+  const slug = input.slug ?? (hasExplicitTarget ? undefined : pageContext?.slug ?? undefined);
+  const title = input.title ?? (hasExplicitTarget ? undefined : pageContext?.title ?? undefined);
   const item = await findSingleCmsItem({
     contentType,
     entityId,
@@ -1243,17 +1716,27 @@ async function insertNavigationItem(params: {
   parentId?: number | null;
   supabase: SupabaseLike;
 }) {
+  const linkedPage = await resolveLinkedPageForNavigationItem({
+    item: params.item,
+    languageId: params.languageId,
+    menuKey: params.menuKey,
+    supabase: params.supabase,
+  });
+  const insertPayload = {
+    label: params.item.label,
+    language_id: params.languageId,
+    menu_key: params.menuKey,
+    order: params.order,
+    page_id: linkedPage?.pageId ?? null,
+    parent_id: params.parentId ?? null,
+    ...(linkedPage?.navigationTranslationGroupId
+      ? { translation_group_id: linkedPage.navigationTranslationGroupId }
+      : {}),
+    url: params.item.url,
+  };
   const { data, error } = await params.supabase
     .from('navigation_items')
-    .insert({
-      label: params.item.label,
-      language_id: params.languageId,
-      menu_key: params.menuKey,
-      order: params.order,
-      parent_id: params.parentId ?? null,
-      page_id: null,
-      url: params.item.url,
-    })
+    .insert(insertPayload)
     .select('id')
     .single();
 
@@ -1262,6 +1745,94 @@ async function insertNavigationItem(params: {
   }
 
   return Number(data.id);
+}
+
+function getNavigationPageSlug(url: string) {
+  const trimmedUrl = url.trim();
+
+  if (!trimmedUrl.startsWith('/') || trimmedUrl.startsWith('//')) {
+    return null;
+  }
+
+  const path = trimmedUrl.split('?')[0]?.split('#')[0] || '';
+  const slug = path === '/' ? 'home' : path.replace(/^\/+|\/+$/g, '');
+
+  return slug && !slug.includes('/') ? slug : null;
+}
+
+async function resolveLinkedPageForNavigationItem(params: {
+  item: NavigationItemInput;
+  languageId: number;
+  menuKey: MenuKey;
+  supabase: SupabaseLike;
+}) {
+  const slug = getNavigationPageSlug(params.item.url);
+
+  if (!slug) {
+    return null;
+  }
+
+  const { data: pageData, error: pageError } = await params.supabase
+    .from('pages')
+    .select('id, slug, translation_group_id, language_id')
+    .eq('slug', slug)
+    .eq('language_id', params.languageId);
+
+  if (pageError) {
+    throw new Error(`Failed to resolve linked page for navigation item: ${serializeError(pageError)}`);
+  }
+
+  const page = Array.isArray(pageData) ? pageData[0] : pageData;
+
+  if (!page?.id) {
+    return null;
+  }
+
+  let navigationTranslationGroupId = createId();
+
+  if (page.translation_group_id) {
+    const { data: relatedPages, error: relatedPagesError } = await params.supabase
+      .from('pages')
+      .select('id')
+      .eq('translation_group_id', page.translation_group_id);
+
+    if (relatedPagesError) {
+      throw new Error(
+        `Failed to inspect linked page translations for navigation item: ${serializeError(relatedPagesError)}`
+      );
+    }
+
+    const relatedPageIds = new Set(
+      (Array.isArray(relatedPages) ? relatedPages : [])
+        .map((relatedPage: any) => String(relatedPage.id))
+        .filter(Boolean)
+    );
+
+    const { data: relatedNavigationItems, error: relatedNavigationItemsError } = await params.supabase
+      .from('navigation_items')
+      .select('id, page_id, translation_group_id, menu_key')
+      .eq('menu_key', params.menuKey);
+
+    if (relatedNavigationItemsError) {
+      throw new Error(
+        `Failed to inspect related navigation translations: ${serializeError(relatedNavigationItemsError)}`
+      );
+    }
+
+    const relatedNavigationItem = (Array.isArray(relatedNavigationItems)
+      ? relatedNavigationItems
+      : []
+    ).find((item: any) => item.translation_group_id && relatedPageIds.has(String(item.page_id)));
+
+    if (relatedNavigationItem?.translation_group_id) {
+      navigationTranslationGroupId = relatedNavigationItem.translation_group_id;
+    }
+  }
+
+  return {
+    navigationTranslationGroupId,
+    pageId: Number(page.id),
+  };
 }
 
 async function replaceNavigationMenu<TMenuKey extends MenuKey>(params: {
@@ -1539,9 +2110,136 @@ async function appendNavigationMenuItems(params: {
   };
 }
 
+function stringifyContentValue(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizeFormFieldType(field: Record<string, unknown>) {
+  const rawType = stringifyContentValue(field.field_type ?? field.fieldType ?? field.type ?? field.input_type)
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+  const label = stringifyContentValue(field.label ?? field.name ?? field.placeholder).toLowerCase();
+
+  if (['email', 'textarea', 'select', 'radio', 'checkbox', 'text'].includes(rawType)) {
+    return rawType;
+  }
+
+  if (label.includes('email')) {
+    return 'email';
+  }
+
+  if (label.includes('message') || label.includes('comment') || label.includes('details')) {
+    return 'textarea';
+  }
+
+  return 'text';
+}
+
+function normalizeFormFields(fields: unknown) {
+  const sourceFields =
+    Array.isArray(fields) && fields.length > 0
+      ? fields
+      : [
+          { field_type: 'text', is_required: true, label: 'Name', placeholder: 'Your name' },
+          { field_type: 'email', is_required: true, label: 'Email', placeholder: 'you@example.com' },
+          { field_type: 'textarea', is_required: true, label: 'Message', placeholder: 'How can we help?' },
+        ];
+
+  return sourceFields.map((field, index) => {
+    const fieldRecord = isPlainJsonRecord(field) ? field : {};
+    const label =
+      stringifyContentValue(fieldRecord.label ?? fieldRecord.name) ||
+      (index === 0 ? 'Name' : index === 1 ? 'Email' : 'Message');
+    const fieldType = normalizeFormFieldType({ ...fieldRecord, label });
+    const rawRequired = fieldRecord.is_required ?? fieldRecord.isRequired ?? fieldRecord.required;
+
+    return {
+      field_type: fieldType,
+      is_required: typeof rawRequired === 'boolean' ? rawRequired : true,
+      label,
+      options: Array.isArray(fieldRecord.options) ? fieldRecord.options : undefined,
+      placeholder: stringifyContentValue(fieldRecord.placeholder) || undefined,
+      temp_id:
+        stringifyContentValue(fieldRecord.temp_id ?? fieldRecord.tempId ?? fieldRecord.id) ||
+        `field-${index + 1}`,
+    };
+  });
+}
+
+function normalizeBlockContentForType(
+  blockType: BlockType,
+  rawContent: Record<string, unknown>,
+  label: string
+) {
+  const content = cloneJsonValue(rawContent);
+
+  if (blockType === 'heading') {
+    content.text_content =
+      stringifyContentValue(content.text_content) ||
+      stringifyContentValue(content.text) ||
+      stringifyContentValue(content.title) ||
+      stringifyContentValue(content.heading) ||
+      'Untitled';
+    content.level = typeof content.level === 'number' ? content.level : 1;
+  }
+
+  if (blockType === 'text') {
+    const htmlContent =
+      stringifyContentValue(content.html_content) ||
+      stringifyContentValue(content.html) ||
+      stringifyContentValue(content.content) ||
+      stringifyContentValue(content.text);
+
+    if (htmlContent) {
+      content.html_content = /<\/?[a-z][\s\S]*>/i.test(htmlContent)
+        ? htmlContent
+        : `<p>${escapeHtml(htmlContent)}</p>`;
+    }
+  }
+
+  if (blockType === 'button') {
+    content.text =
+      stringifyContentValue(content.text) ||
+      stringifyContentValue(content.label) ||
+      stringifyContentValue(content.title) ||
+      'Learn More';
+    content.url =
+      stringifyContentValue(content.url) ||
+      stringifyContentValue(content.href) ||
+      stringifyContentValue(content.link) ||
+      '#';
+  }
+
+  if (blockType === 'form') {
+    content.fields = normalizeFormFields(content.fields);
+    content.submit_button_text =
+      stringifyContentValue(content.submit_button_text ?? content.submitButtonText ?? content.button_text) ||
+      'Send Message';
+    content.success_message =
+      stringifyContentValue(content.success_message ?? content.successMessage) ||
+      'Thanks for reaching out. We will reply as soon as possible.';
+  }
+
+  assertValidBlockContent(blockType, content, label);
+
+  return content;
+}
+
 function normalizeCreateBlock(input: z.infer<typeof createCmsBlockInputSchema>, index: number) {
-  const content = cloneJsonRecord(input.content, `Block ${index}`);
-  assertValidBlockContent(input.blockType, content, `Block ${index}`);
+  const content = normalizeBlockContentForType(
+    input.blockType,
+    cloneJsonRecord(input.content, `Block ${index}`),
+    `Block ${index}`
+  );
 
   return {
     block_type: input.blockType,
@@ -1671,6 +2369,71 @@ async function assertUniqueSlug(params: {
   }
 
   return null;
+}
+
+async function resolveCreateTranslationGroup(params: {
+  contentType: CmsContentType;
+  languageCode: string;
+  languageId: number;
+  suppliedTranslationGroupId?: string;
+  supabase: SupabaseLike;
+}) {
+  if (!params.suppliedTranslationGroupId) {
+    return {
+      translationGroupId: undefined,
+    };
+  }
+
+  const table =
+    params.contentType === 'page'
+      ? 'pages'
+      : params.contentType === 'post'
+        ? 'posts'
+        : 'products';
+  const { data, error } = await params.supabase
+    .from(table)
+    .select('id, title, slug, language_id, translation_group_id')
+    .eq('translation_group_id', params.suppliedTranslationGroupId);
+
+  if (error) {
+    throw new Error(
+      `Failed to inspect ${params.contentType} translation group: ${serializeError(error)}`
+    );
+  }
+
+  const rows = Array.isArray(data) ? data : [];
+
+  if (rows.length === 0) {
+    return {
+      result: {
+        message: `The ${params.contentType} translation group "${params.suppliedTranslationGroupId}" was not found.`,
+        mutationExecuted: false,
+        success: false,
+      },
+      translationGroupId: params.suppliedTranslationGroupId,
+    };
+  }
+
+  const existingTranslation = rows.find(
+    (row: any) => Number(row.language_id) === params.languageId
+  );
+
+  if (existingTranslation) {
+    return {
+      result: {
+        duplicateTranslation: true,
+        existingItem: existingTranslation,
+        message: `A ${params.contentType} translation already exists for ${params.languageCode} in this translation group.`,
+        mutationExecuted: false,
+        success: false,
+      },
+      translationGroupId: params.suppliedTranslationGroupId,
+    };
+  }
+
+  return {
+    translationGroupId: params.suppliedTranslationGroupId,
+  };
 }
 
 async function insertContentBlocks(params: {
@@ -1951,6 +2714,28 @@ export async function executeSearchDocumentation(
     results,
     success: true,
   };
+}
+
+export async function executeSearchDocumentationWithTimeout(
+  input: SearchDocumentationInput,
+  context?: ToolExecutionContext,
+  timeoutMs = SEARCH_DOCUMENTATION_TIMEOUT_MS
+) {
+  const parsed = searchDocumentationInputSchema.safeParse(input);
+  const query = parsed.success ? parsed.data.query : '';
+
+  return withTimeoutFallback(
+    executeSearchDocumentation(input, context),
+    timeoutMs,
+    () => ({
+      message:
+        'Documentation search took too long to respond. Please try again or ask a more specific question.',
+      query,
+      results: [],
+      success: false,
+      timedOut: true,
+    })
+  );
 }
 
 export async function executeReadCurrentCmsItem(
@@ -2283,6 +3068,154 @@ export async function executeUpdateContentBlock(
   };
 }
 
+export async function executeInsertContentBlock(
+  input: InsertContentBlockInput,
+  context?: ToolExecutionContext
+) {
+  const parsed = insertContentBlockInputSchema.parse(input);
+  const supabase = getSupabase(context);
+  const target = await resolveCmsTarget(parsed, context);
+
+  if (target.contentType === 'product') {
+    throw new Error('Products do not have page/post content blocks in this editor context.');
+  }
+
+  const itemId = Number(target.item.id);
+  const parentColumn = target.contentType === 'page' ? 'page_id' : 'post_id';
+  const loadBlocks = async () => {
+    const { data, error } = await supabase
+      .from('blocks')
+      .select('id, page_id, post_id, language_id, block_type, content, order')
+      .eq(parentColumn, itemId);
+
+    if (error) {
+      throw new Error(`Failed to read ${target.contentType} blocks: ${serializeError(error)}`);
+    }
+
+    return (Array.isArray(data) ? data : []).sort(
+      (a: any, b: any) => Number(a.order) - Number(b.order)
+    );
+  };
+  const resolveOrder = (blocks: any[]) => {
+    if (parsed.position === 'start') {
+      return 0;
+    }
+
+    if (parsed.position === 'end') {
+      const orders = blocks.map((block: any) => Number(block.order)).filter(Number.isFinite);
+      return orders.length > 0 ? Math.max(...orders) + 1 : 0;
+    }
+
+    const anchorBlock = parsed.anchorBlockId
+      ? blocks.find((block: any) => Number(block.id) === parsed.anchorBlockId)
+      : parsed.anchorBlockType
+        ? blocks.find((block: any) => block.block_type === parsed.anchorBlockType)
+        : null;
+
+    if (!anchorBlock) {
+      throw new Error(
+        parsed.anchorBlockType
+          ? `Could not find a ${parsed.anchorBlockType} block to insert ${parsed.position}.`
+          : `Could not find block ${parsed.anchorBlockId} to insert ${parsed.position}.`
+      );
+    }
+
+    const anchorOrder = Number(anchorBlock.order);
+
+    return parsed.position === 'before' ? anchorOrder : anchorOrder + 1;
+  };
+  const normalizedBlock = normalizeCreateBlock(parsed.block, 0);
+  const blocks = await loadBlocks();
+  const newOrder = resolveOrder(blocks);
+  const targetContext: CortexAiPageContext = {
+    contentType: target.contentType,
+    entityId: target.item.id,
+    languageId: target.item.language_id,
+    slug: target.item.slug,
+    title: target.item.title,
+    translationGroupId: target.item.translation_group_id,
+  };
+  const confirmation = getConfirmationPreview({
+    action: 'INSERT CONTENT BLOCK',
+    context,
+    payload: {
+      block: normalizedBlock,
+      order: newOrder,
+      target: {
+        contentType: target.contentType,
+        id: target.item.id,
+        slug: target.item.slug,
+      },
+      tool: 'insert_content_block',
+    },
+    preview: {
+      anchorBlockId: parsed.anchorBlockId,
+      anchorBlockType: parsed.anchorBlockType,
+      blockType: normalizedBlock.block_type,
+      contentType: target.contentType,
+      entityId: target.item.id,
+      position: parsed.position,
+      slug: target.item.slug,
+      summary: `Insert ${normalizedBlock.block_type} block ${parsed.position} ${parsed.anchorBlockType ? `the first ${parsed.anchorBlockType} block` : parsed.anchorBlockId ? `block ${parsed.anchorBlockId}` : 'the content'} on ${target.contentType} "${target.item.title || target.item.slug}".`,
+      title: target.item.title,
+    },
+    subject: `${normalizedBlock.block_type} block on ${target.contentType} ${target.item.id}`,
+  });
+
+  if (confirmation) {
+    return confirmation;
+  }
+
+  const latestBlocks = await loadBlocks();
+  const latestOrder = resolveOrder(latestBlocks);
+  const blocksToShift = latestBlocks
+    .filter((block: any) => Number(block.order) >= latestOrder)
+    .sort((a: any, b: any) => Number(b.order) - Number(a.order));
+
+  for (const block of blocksToShift) {
+    const { error } = await supabase
+      .from('blocks')
+      .update({
+        order: Number(block.order) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', block.id);
+
+    if (error) {
+      throw new Error(`Failed to shift block ${block.id}: ${serializeError(error)}`);
+    }
+  }
+
+  const { data: insertedBlock, error: insertError } = await supabase
+    .from('blocks')
+    .insert({
+      block_type: normalizedBlock.block_type,
+      content: normalizedBlock.content,
+      language_id: target.item.language_id,
+      order: latestOrder,
+      page_id: target.contentType === 'page' ? itemId : null,
+      post_id: target.contentType === 'post' ? itemId : null,
+    })
+    .select('id, block_type, order')
+    .single();
+
+  if (insertError || !insertedBlock) {
+    throw new Error(`Failed to insert content block: ${serializeError(insertError)}`);
+  }
+
+  revalidateCurrentCmsSurfaces(context, targetContext);
+
+  return {
+    blockId: insertedBlock.id,
+    blockType: insertedBlock.block_type,
+    contentType: target.contentType,
+    entityId: target.item.id,
+    mutationExecuted: true,
+    order: insertedBlock.order,
+    success: true,
+  };
+}
+
 export async function executeUpdateSectionColumnBlock(
   input: UpdateSectionColumnBlockInput,
   context?: ToolExecutionContext
@@ -2439,6 +3372,18 @@ export async function executeCreateCmsPage(input: CreateCmsPageInput, context?: 
     return duplicate;
   }
 
+  const translationGroup = await resolveCreateTranslationGroup({
+    contentType: 'page',
+    languageCode: language.code,
+    languageId: language.id,
+    suppliedTranslationGroupId: parsed.translationGroupId,
+    supabase,
+  });
+
+  if (translationGroup.result) {
+    return translationGroup.result;
+  }
+
   const payload = {
     blocks,
     item: {
@@ -2448,6 +3393,7 @@ export async function executeCreateCmsPage(input: CreateCmsPageInput, context?: 
       slug,
       status: parsed.status,
       title: parsed.title,
+      translation_group_id: translationGroup.translationGroupId,
     },
     tool: 'create_cms_page',
   };
@@ -2461,6 +3407,7 @@ export async function executeCreateCmsPage(input: CreateCmsPageInput, context?: 
       slug,
       status: parsed.status,
       title: parsed.title,
+      translationGroupId: translationGroup.translationGroupId,
     },
     subject: slug,
   });
@@ -2469,7 +3416,7 @@ export async function executeCreateCmsPage(input: CreateCmsPageInput, context?: 
     return confirmation;
   }
 
-  const translationGroupId = createId();
+  const translationGroupId = translationGroup.translationGroupId || createId();
   const { data: page, error } = await supabase
     .from('pages')
     .insert({
@@ -2513,6 +3460,7 @@ export async function executeCreateCmsPage(input: CreateCmsPageInput, context?: 
     slug,
     success: true,
     title: parsed.title,
+    translationGroupId: page.translation_group_id,
   };
 }
 
@@ -2534,6 +3482,18 @@ export async function executeCreateCmsPost(input: CreateCmsPostInput, context?: 
     return duplicate;
   }
 
+  const translationGroup = await resolveCreateTranslationGroup({
+    contentType: 'post',
+    languageCode: language.code,
+    languageId: language.id,
+    suppliedTranslationGroupId: parsed.translationGroupId,
+    supabase,
+  });
+
+  if (translationGroup.result) {
+    return translationGroup.result;
+  }
+
   const publishedAt =
     parsed.published_at && !Number.isNaN(new Date(parsed.published_at).getTime())
       ? new Date(parsed.published_at).toISOString()
@@ -2552,6 +3512,7 @@ export async function executeCreateCmsPost(input: CreateCmsPostInput, context?: 
       status: parsed.status,
       subtitle: parsed.subtitle ?? null,
       title: parsed.title,
+      translation_group_id: translationGroup.translationGroupId,
     },
     tool: 'create_cms_post',
   };
@@ -2565,6 +3526,7 @@ export async function executeCreateCmsPost(input: CreateCmsPostInput, context?: 
       slug,
       status: parsed.status,
       title: parsed.title,
+      translationGroupId: translationGroup.translationGroupId,
     },
     subject: slug,
   });
@@ -2573,7 +3535,7 @@ export async function executeCreateCmsPost(input: CreateCmsPostInput, context?: 
     return confirmation;
   }
 
-  const translationGroupId = createId();
+  const translationGroupId = translationGroup.translationGroupId || createId();
   const { data: post, error } = await supabase
     .from('posts')
     .insert({
@@ -2618,6 +3580,7 @@ export async function executeCreateCmsPost(input: CreateCmsPostInput, context?: 
     slug,
     success: true,
     title: parsed.title,
+    translationGroupId: post.translation_group_id,
   };
 }
 
@@ -2662,6 +3625,18 @@ export async function executeCreateCmsProduct(input: CreateCmsProductInput, cont
     return duplicate;
   }
 
+  const translationGroup = await resolveCreateTranslationGroup({
+    contentType: 'product',
+    languageCode: language.code,
+    languageId: language.id,
+    suppliedTranslationGroupId: parsed.translationGroupId,
+    supabase,
+  });
+
+  if (translationGroup.result) {
+    return translationGroup.result;
+  }
+
   const { createProduct: createEcommerceProduct, productSchema } = await getEcommerceProductModule();
   const productPayload = productSchema.parse({
     description_json: validateProductDescriptionJson(parsed.description_json),
@@ -2684,6 +3659,7 @@ export async function executeCreateCmsProduct(input: CreateCmsProductInput, cont
     status: parsed.status,
     stock: parsed.stock,
     title: parsed.title,
+    translation_group_id: translationGroup.translationGroupId,
     upc: parsed.upc ?? '',
     variation_attributes: [],
     variants: [],
@@ -2700,6 +3676,7 @@ export async function executeCreateCmsProduct(input: CreateCmsProductInput, cont
       status: productPayload.status,
       stock: productPayload.stock,
       title: productPayload.title,
+      translationGroupId: translationGroup.translationGroupId,
     },
     subject: slug,
   });
@@ -2729,6 +3706,7 @@ export async function executeCreateCmsProduct(input: CreateCmsProductInput, cont
     slug,
     success: true,
     title: parsed.title,
+    translationGroupId: product.translation_group_id,
   };
 }
 
@@ -3038,6 +4016,7 @@ async function buildDeletePreview(
       collectionPath: getCollectionPath('product'),
       contentType: 'product' as const,
       item: target.item,
+      navigationLinkCount: 0,
       publicPaths: target.item.slug ? [`/product/${target.item.slug}`] : [],
       targetIds: [target.item.id],
     };
@@ -3063,15 +4042,46 @@ async function buildDeletePreview(
         : `/article/${row.slug}`
     )
     .filter(Boolean);
+  const publicPathSet = new Set(publicPaths);
+  const { data: navigationItems, error: navigationItemsError } = await getSupabase(context)
+    .from('navigation_items')
+    .select('id, url');
+
+  if (navigationItemsError) {
+    throw new Error(`Failed to inspect related navigation links: ${serializeError(navigationItemsError)}`);
+  }
+
+  const navigationLinkCount = (Array.isArray(navigationItems) ? navigationItems : []).filter(
+    (item: any) => publicPathSet.has(item.url)
+  ).length;
 
   return {
     affectedCount: rows.length,
     collectionPath: getCollectionPath(target.contentType),
     contentType: target.contentType,
     item: target.item,
+    navigationLinkCount,
     publicPaths,
     targetIds: rows.map((row: any) => row.id),
   };
+}
+
+function summarizeDeletePreview(preview: Awaited<ReturnType<typeof buildDeletePreview>>) {
+  const title = preview.item.title || preview.item.slug || 'selected item';
+  const slug = preview.item.slug ? ` (${preview.item.slug})` : '';
+
+  if (preview.contentType === 'product') {
+    return `Delete product "${title}"${slug}.`;
+  }
+
+  const details = [
+    `${pluralize(preview.affectedCount, 'language version')}`,
+    preview.navigationLinkCount > 0
+      ? `${pluralize(preview.navigationLinkCount, 'navigation link')}`
+      : null,
+  ].filter(Boolean);
+
+  return `Delete ${preview.contentType} "${title}"${slug}, including ${details.join(' and ')}.`;
 }
 
 export async function executePrepareDeleteCmsItem(
@@ -3091,8 +4101,10 @@ export async function executePrepareDeleteCmsItem(
       affectedCount: preview.affectedCount,
       collectionPath: preview.collectionPath,
       contentType: preview.contentType,
+      navigationLinkCount: preview.navigationLinkCount,
       publicPaths: preview.publicPaths,
       slug: preview.item.slug,
+      summary: summarizeDeletePreview(preview),
       title: preview.item.title,
     },
     subject: `${preview.item.id} ${preview.item.slug || ''}`,
@@ -3120,8 +4132,10 @@ export async function executeDeleteCmsItem(input: DeleteCmsItemInput, context?: 
       affectedCount: preview.affectedCount,
       collectionPath: preview.collectionPath,
       contentType: preview.contentType,
+      navigationLinkCount: preview.navigationLinkCount,
       publicPaths: preview.publicPaths,
       slug: preview.item.slug,
+      summary: summarizeDeletePreview(preview),
       title: preview.item.title,
     },
     subject: `${preview.item.id} ${preview.item.slug || ''}`,
@@ -3173,6 +4187,193 @@ export async function executeDeleteCmsItem(input: DeleteCmsItemInput, context?: 
   };
 }
 
+async function executeActionPlanChild(
+  action: z.infer<typeof cmsActionPlanActionSchema>,
+  context?: ToolExecutionContext
+) {
+  switch (action.tool) {
+    case 'create_cms_page':
+      return executeCreateCmsPage(action.input, context);
+    case 'create_cms_post':
+      return executeCreateCmsPost(action.input, context);
+    case 'create_cms_product':
+      return executeCreateCmsProduct(action.input, context);
+    case 'delete_cms_item':
+      return executeDeleteCmsItem(action.input, context);
+    case 'update_cms_item_field':
+      return executeUpdateCmsItemField(action.input, context);
+    case 'update_content_block':
+      return executeUpdateContentBlock(action.input, context);
+    case 'insert_content_block':
+      return executeInsertContentBlock(action.input, context);
+    case 'update_current_cms_fields':
+      return executeUpdateCurrentCmsFields(action.input, context);
+    case 'update_footer':
+      return executeUpdateFooter(action.input, context);
+    case 'update_navigation_bar':
+      return executeUpdateNavigationBar(action.input, context);
+    case 'update_section_column_block':
+      return executeUpdateSectionColumnBlock(action.input, context);
+  }
+}
+
+function withActionPlanTranslationGroup(
+  action: z.infer<typeof cmsActionPlanActionSchema>,
+  translationGroupsByCreateTool: Partial<Record<'create_cms_page' | 'create_cms_post' | 'create_cms_product', string>>
+) {
+  if (
+    action.tool !== 'create_cms_page' &&
+    action.tool !== 'create_cms_post' &&
+    action.tool !== 'create_cms_product'
+  ) {
+    return action;
+  }
+
+  if (action.input.translationGroupId || !action.input.languageCode) {
+    return action;
+  }
+
+  const translationGroupId = translationGroupsByCreateTool[action.tool];
+
+  if (!translationGroupId) {
+    return action;
+  }
+
+  return {
+    ...action,
+    input: {
+      ...action.input,
+      translationGroupId,
+    },
+  } as z.infer<typeof cmsActionPlanActionSchema>;
+}
+
+export async function executeCmsActionPlan(
+  input: ExecuteCmsActionPlanInput,
+  context?: ToolExecutionContext
+) {
+  const parsed = executeCmsActionPlanInputSchema.parse(input);
+
+  if (!context?.skipConfirmation) {
+    const actionSummaries: string[] = [];
+
+    for (const action of parsed.actions) {
+      const result = await executeActionPlanChild(action, {
+        ...context,
+        latestUserMessage: null,
+      });
+
+      if (!result || typeof result !== 'object') {
+        return {
+          message: `Could not prepare action ${actionSummaries.length + 1}.`,
+          mutationExecuted: false,
+          success: false,
+        };
+      }
+
+      if ((result as any).success === false || (result as any).unsupported === true) {
+        return result;
+      }
+
+      if ((result as any).requiresConfirmation === true && (result as any).preview) {
+        actionSummaries.push(
+          summarizeCmsMutationPreview(action.tool, (result as any).preview)
+        );
+      } else {
+        actionSummaries.push(`Run ${action.tool.replace(/_/g, ' ')}.`);
+      }
+    }
+
+    const summary =
+      parsed.summary ||
+      `Complete ${pluralize(parsed.actions.length, 'CMS action')}.`;
+    const confirmation = getConfirmationPreview({
+      action: 'EXECUTE CMS ACTION PLAN',
+      context,
+      payload: { actions: parsed.actions, tool: 'execute_cms_action_plan' },
+      preview: {
+        actionCount: parsed.actions.length,
+        actionSummaries,
+        summary,
+      },
+      subject: `${parsed.actions.length} actions`,
+    });
+
+    if (confirmation) {
+      return confirmation;
+    }
+  }
+
+  const childContext = {
+    ...context,
+    skipConfirmation: true,
+  };
+  const results: Array<{ output: unknown; tool: string }> = [];
+  let mutationExecuted = false;
+  let editPath: string | null = null;
+  let redirectPath: string | null = null;
+  const translationGroupsByCreateTool: Partial<Record<'create_cms_page' | 'create_cms_post' | 'create_cms_product', string>> = {};
+
+  for (const [index, action] of parsed.actions.entries()) {
+    const actionToExecute = withActionPlanTranslationGroup(action, translationGroupsByCreateTool);
+    const output = await executeActionPlanChild(actionToExecute, childContext);
+
+    results.push({ output, tool: actionToExecute.tool });
+
+    if (output && typeof output === 'object') {
+      const record = output as Record<string, unknown>;
+
+      if (record.mutationExecuted === true) {
+        mutationExecuted = true;
+      }
+
+      if (!editPath && typeof record.editPath === 'string') {
+        editPath = record.editPath;
+      }
+
+      if (typeof record.redirectPath === 'string') {
+        redirectPath = record.redirectPath;
+      }
+
+      if (
+        (actionToExecute.tool === 'create_cms_page' ||
+          actionToExecute.tool === 'create_cms_post' ||
+          actionToExecute.tool === 'create_cms_product') &&
+        typeof record.translationGroupId === 'string'
+      ) {
+        translationGroupsByCreateTool[actionToExecute.tool] = record.translationGroupId;
+      }
+
+      if (record.success === false || record.unsupported === true) {
+        return {
+          actionCount: parsed.actions.length,
+          failedActionIndex: index,
+          failedTool: actionToExecute.tool,
+          message:
+            typeof record.message === 'string'
+              ? record.message
+              : `Action ${index + 1} failed.`,
+          mutationExecuted,
+          results,
+          success: false,
+          ...(editPath ? { editPath } : {}),
+          ...(redirectPath ? { redirectPath } : {}),
+        };
+      }
+    }
+  }
+
+  return {
+    actionCount: parsed.actions.length,
+    editPath: redirectPath ? undefined : editPath ?? undefined,
+    mutationExecuted,
+    redirectPath: redirectPath ?? undefined,
+    results,
+    success: true,
+    summary: parsed.summary ?? null,
+  };
+}
+
 export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
   return {
     read_current_cms_item: tool({
@@ -3185,27 +4386,27 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
     search_documentation: tool({
       description:
         'Search the NextBlock documentation database and return concise source snippets for factual CMS guidance.',
-      execute: (input) => executeSearchDocumentation(input, context),
+      execute: (input) => executeSearchDocumentationWithTimeout(input, context),
       inputSchema: searchDocumentationInputSchema,
       strict: true,
     }),
     create_cms_page: tool({
       description:
-        'Create a new CMS page with metadata and optional validated page blocks. Mutating: first returns a confirmation phrase; only executes after the user replies with the exact phrase. For contact pages, provide contactEmail or a form block with recipient_email and fields.',
+        'Create a new CMS page with metadata and optional validated page blocks. Mutating: first returns a confirmation phrase; only executes after the user replies with the exact phrase. For translations, pass translationGroupId from the source page/post/product context so the new language is linked to the same backend translation group. For contact pages, provide contactEmail or a form block with recipient_email and fields.',
       execute: (input) => executeCreateCmsPage(input, context),
       inputSchema: createCmsPageInputSchema,
       strict: true,
     }),
     create_cms_post: tool({
       description:
-        'Create a new CMS post with metadata and optional validated post blocks. Mutating: first returns a confirmation phrase; only executes after the user replies with the exact phrase.',
+        'Create a new CMS post with metadata and optional validated post blocks. Mutating: first returns a confirmation phrase; only executes after the user replies with the exact phrase. For translations, pass translationGroupId from the source post context so the new language is linked to the same backend translation group.',
       execute: (input) => executeCreateCmsPost(input, context),
       inputSchema: createCmsPostInputSchema,
       strict: true,
     }),
     create_cms_product: tool({
       description:
-        'Create a new draft-capable product. Defaults missing product fields safely: physical Stripe product, generated SKU, price 0, stock 0, taxable, draft. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
+        'Create a new draft-capable product. Defaults missing product fields safely: physical Stripe product, generated SKU, price 0, stock 0, taxable, draft. For translations, pass translationGroupId from the source product context. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
       execute: (input) => executeCreateCmsProduct(input, context),
       inputSchema: createCmsProductInputSchema,
       strict: true,
@@ -3238,6 +4439,13 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
       inputSchema: updateContentBlockInputSchema,
       strict: true,
     }),
+    insert_content_block: tool({
+      description:
+        'Insert a new validated top-level page/post block before or after an existing block, or at the start/end. Use this for visible content additions like adding a rich text title and paragraph above a form. For "above the form", use position "before" with anchorBlockType "form" and blockType "text" containing html_content. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
+      execute: (input) => executeInsertContentBlock(input, context),
+      inputSchema: insertContentBlockInputSchema,
+      strict: true,
+    }),
     update_current_cms_fields: tool({
       description:
         'Update validated metadata fields on the current page, post, or product. For products, description_json must be a valid NextBlock editor document JSON object. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
@@ -3264,6 +4472,13 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
         'Update the content of one existing nested block inside a section or hero block that belongs to the current CMS edit context. This tool must not change the nested block type. To add a new nested block, update the parent section/hero with update_content_block and preserve existing column_blocks. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
       execute: (input) => executeUpdateSectionColumnBlock(input, context),
       inputSchema: updateSectionColumnBlockInputSchema,
+      strict: true,
+    }),
+    execute_cms_action_plan: tool({
+      description:
+        'Execute multiple CMS mutations as one confirmed plan. Use this whenever the user asks for more than one change in the same prompt, such as creating a page and adding a navigation link. First returns one combined confirmation preview and Confirm button; after confirmation, runs each action in order and stops on the first failure.',
+      execute: (input) => executeCmsActionPlan(input, context),
+      inputSchema: executeCmsActionPlanInputSchema,
       strict: true,
     }),
   };

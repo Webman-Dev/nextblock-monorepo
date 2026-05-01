@@ -116,6 +116,7 @@ export default async function EditProductPage({
           languageId: product.language_id,
           slug: product.slug,
           title: product.title,
+          translationGroupId: product.translation_group_id,
         }}
       />
       <div className="flex justify-between items-center flex-wrap gap-4 w-full">

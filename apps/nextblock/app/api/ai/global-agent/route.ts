@@ -17,8 +17,21 @@ import {
 } from '../../../../lib/ai-client';
 import { safeParseCortexAiModelSelection } from '../../../../lib/ai-model-registry';
 import {
+  buildVisibleContactIntroActionPlan,
   cortexAiPageContextSchema,
   createCortexGlobalAgentTools,
+  executeCmsActionPlan,
+  executeCreateCmsPage,
+  executeCreateCmsPost,
+  executeCreateCmsProduct,
+  executeDeleteCmsItem,
+  executeInsertContentBlock,
+  executeUpdateContentBlock,
+  executeUpdateCmsItemField,
+  executeUpdateCurrentCmsFields,
+  executeUpdateFooter,
+  executeUpdateNavigationBar,
+  executeUpdateSectionColumnBlock,
   type CortexAiPageContext,
 } from '../../../../lib/ai-global-agent-tools';
 
@@ -31,7 +44,27 @@ const globalAgentMessageSchema = z.strictObject({
   role: z.enum(['system', 'user', 'assistant']),
 });
 
+const confirmedToolCallSchema = z.strictObject({
+  confirmationPhrase: z.string().min(1).max(500),
+  input: z.unknown(),
+  toolName: z.enum([
+    'create_cms_page',
+    'create_cms_post',
+    'create_cms_product',
+    'delete_cms_item',
+    'execute_cms_action_plan',
+    'insert_content_block',
+    'update_cms_item_field',
+    'update_content_block',
+    'update_current_cms_fields',
+    'update_footer',
+    'update_navigation_bar',
+    'update_section_column_block',
+  ]),
+});
+
 const globalAgentRequestSchema = z.strictObject({
+  confirmedToolCall: confirmedToolCallSchema.optional(),
   messages: z.array(globalAgentMessageSchema).min(1).max(40),
   pageContext: cortexAiPageContextSchema.nullable().optional(),
 });
@@ -40,7 +73,9 @@ const GLOBAL_AGENT_SYSTEM_PROMPT = [
   'You are NextBlock Cortex AI, the global dashboard agent for a block-based CMS.',
   'Operate as a Planner, Executor, and Evaluator.',
   'Plan the smallest safe change, execute only through typed tools, evaluate the tool result, then answer concisely.',
-  'Every mutating tool is confirmed two-step. First call the right tool with the exact normalized payload. If the tool returns requiresConfirmation, do not say the work is done; ask the user to reply exactly with confirmationPhrase.',
+  'If the user asks for multiple CMS mutations in one prompt, such as creating a page and adding a navigation link, use execute_cms_action_plan so the user sees one combined confirmation and one Confirm button. The action plan must include every requested mutation; do not fall back to confirming only the first task.',
+  'For execute_cms_action_plan, actions must be JSON objects, for example { "tool": "create_cms_page", "input": { "title": "Contact Us" } }, never strings like create_cms_page(...).',
+  'Every mutating tool is confirmed two-step. First call the right tool with the exact normalized payload. If the tool returns requiresConfirmation, do not say the work is done; say "Please confirm for me to complete:" and summarize the requested change. Do not print confirmationPhrase unless the user explicitly asks for the raw phrase.',
   'When the latest user message is an exact confirmation phrase, call the same mutating tool again with the same payload so the tool can execute. Only report success after the tool result has mutationExecuted=true.',
   'Use create_cms_page, create_cms_post, and create_cms_product for CMS creation. New pages, posts, and products default to draft unless the user explicitly asks for a public/active status.',
   'Use update_cms_item_field for one precise field update at a time, such as price, stock, sale_price, title, slug, status, or SEO metadata. Interpret "public" as published for pages/posts and active for products.',
@@ -52,10 +87,12 @@ const GLOBAL_AGENT_SYSTEM_PROMPT = [
   'Use update_footer for public footer links or copyright settings.',
   'When editing a CMS page, post, product, or block, use page-aware tools only. Use read_current_cms_item before updating content unless the user provided exact field/block data.',
   'Use update_current_cms_fields for current page/post/product metadata and product description_json. Use update_content_block for top-level page/post blocks. Use update_section_column_block for nested blocks inside section or hero blocks.',
+  'When the user asks to add a visible title, heading, intro, description, or copy above/below a form or other block, use insert_content_block with a text or heading block. Do not treat visible page copy as meta_title, meta_description, or SEO metadata unless the user explicitly says SEO/meta.',
+  'For requests like "add a title and description to both pages and incite them to contact us", use execute_cms_action_plan with one insert_content_block action per translated page, usually a text block before the form with localized heading and paragraph HTML.',
   'Do not use update_section_column_block to change an existing nested block from one block type to another. That tool edits only the content of the existing nested block type.',
   'When the user asks to add a new nested block inside a hero or section, such as adding a button to a hero, use update_content_block on the parent hero/section block. Prefer content.append_block, for example { block_type: "button", content: { text: "Contact Us", url: "/contact" } }, so the tool preserves existing column_blocks and layout fields.',
   'When a user names a language, pass that language name or its locale code in languageCode; examples: French maps to fr, English maps to en.',
-  'For follow-up requests like "also add it in French", use the prior requested item and apply it to the named language.',
+  'For follow-up requests like "also add it in French", use the prior requested item and apply it to the named language. For page/post/product translations, pass the current translationGroupId into the creation tool so the backend links the language versions.',
   'Use search_documentation before answering implementation or CMS usage questions that require factual project context.',
   'Never invent database fields, raw SQL, markdown content, or unsupported tool arguments.',
 ].join(' ');
@@ -147,6 +184,7 @@ function formatPageContextForPrompt(pageContext: CortexAiPageContext | null | un
     `entityId=${String(pageContext.entityId)}`,
     pageContext.slug ? `slug=${pageContext.slug}` : null,
     pageContext.title ? `title=${pageContext.title}` : null,
+    pageContext.translationGroupId ? `translationGroupId=${pageContext.translationGroupId}` : null,
     pageContext.languageId ? `languageId=${pageContext.languageId}` : null,
     pageContext.currentEditor?.field ? `currentField=${pageContext.currentEditor.field}` : null,
     pageContext.currentEditor?.blockId ? `currentBlockId=${pageContext.currentEditor.blockId}` : null,
@@ -190,10 +228,12 @@ function looksLikeRawToolCallLeak(value: string) {
     normalized.includes('"update_current_cms_fields"') ||
     normalized.includes('"update_cms_item_field"') ||
     normalized.includes('"update_content_block"') ||
+    normalized.includes('"insert_content_block"') ||
     normalized.includes('"update_section_column_block"') ||
     normalized.includes('"create_cms_page"') ||
     normalized.includes('"create_cms_post"') ||
     normalized.includes('"create_cms_product"') ||
+    normalized.includes('"execute_cms_action_plan"') ||
     normalized.includes('"prepare_delete_cms_item"') ||
     normalized.includes('"delete_cms_item"')
   );
@@ -232,14 +272,83 @@ function readStringField(value: unknown, key: string) {
   return typeof fieldValue === 'string' ? fieldValue : null;
 }
 
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function getConfirmationSummary(toolName?: string, output?: unknown) {
+  if (!isRecord(output) || !isRecord(output.preview)) {
+    return 'Complete the requested CMS change.';
+  }
+
+  const preview = output.preview;
+  const summary = readStringField(preview, 'summary');
+
+  if (summary) {
+    const actionSummaries = Array.isArray(preview.actionSummaries)
+      ? preview.actionSummaries.filter((item): item is string => typeof item === 'string')
+      : [];
+
+    return actionSummaries.length > 0
+      ? `${summary}\n\n${actionSummaries.map((item, index) => `${index + 1}. ${item}`).join('\n')}`
+      : summary;
+  }
+
+  const title = readStringField(preview, 'title');
+  const slug = readStringField(preview, 'slug');
+  const status = readStringField(preview, 'status');
+  const contentType = readStringField(preview, 'contentType');
+  const field = readStringField(preview, 'field');
+  const mode = readStringField(preview, 'mode');
+  const languageCode = readStringField(preview, 'languageCode');
+  const blockCount = readNumberField(preview, 'blockCount');
+  const itemCount = readNumberField(preview, 'itemCount');
+  const affectedCount = readNumberField(preview, 'affectedCount');
+
+  if (toolName === 'create_cms_page' || toolName === 'create_cms_post') {
+    return `Create ${status || 'draft'} ${toolName === 'create_cms_page' ? 'page' : 'post'} "${title || slug || 'Untitled'}"${slug ? ` at slug "${slug}"` : ''}${blockCount !== null ? ` with ${pluralize(blockCount, 'content block')}` : ''}.`;
+  }
+
+  if (toolName === 'create_cms_product') {
+    return `Create ${status || 'draft'} product "${title || slug || 'Untitled'}"${slug ? ` at slug "${slug}"` : ''}.`;
+  }
+
+  if (toolName === 'update_cms_item_field') {
+    return `Update ${field || 'one field'} on the ${contentType || 'CMS item'} "${title || slug || 'selected item'}".`;
+  }
+
+  if (toolName === 'update_navigation_bar') {
+    return `${mode === 'append' ? 'Add' : mode === 'update' ? 'Update' : 'Replace'} ${itemCount !== null ? pluralize(itemCount, 'navigation item') : 'navigation items'} in the ${languageCode || 'selected'} header navigation.`;
+  }
+
+  if (toolName === 'update_footer') {
+    const linkCount = readNumberField(preview, 'linkCount');
+    return `Update the ${languageCode || 'selected'} footer${linkCount !== null ? ` with ${pluralize(linkCount, 'link')}` : ''}.`;
+  }
+
+  if (toolName === 'update_content_block') {
+    return `Update the selected ${readStringField(preview, 'blockType') || 'content'} block.`;
+  }
+
+  if (toolName === 'insert_content_block') {
+    return `Insert ${readStringField(preview, 'blockType') || 'content'} block on the ${contentType || 'CMS item'} "${title || slug || 'selected item'}".`;
+  }
+
+  if (toolName === 'update_section_column_block') {
+    return `Update the selected nested ${readStringField(preview, 'nestedBlockType') || 'section'} block.`;
+  }
+
+  if (toolName === 'delete_cms_item' || toolName === 'prepare_delete_cms_item') {
+    return `Delete ${affectedCount !== null ? pluralize(affectedCount, contentType || 'CMS item') : `the selected ${contentType || 'CMS item'}`}${title || slug ? ` for "${title || slug}"` : ''}.`;
+  }
+
+  return 'Complete the requested CMS change.';
+}
+
 function getToolCompletionMessage(toolName?: string, output?: unknown) {
   if (isRecord(output)) {
     if (output.requiresConfirmation === true) {
-      const confirmationPhrase = readStringField(output, 'confirmationPhrase');
-
-      return confirmationPhrase
-        ? `Please confirm by replying exactly:\n\n${confirmationPhrase}`
-        : 'Please confirm this change before I apply it.';
+      return `Please confirm for me to complete:\n\n${getConfirmationSummary(toolName, output)}`;
     }
 
     if (output.unsupported === true || output.success === false) {
@@ -286,6 +395,10 @@ function getToolCompletionMessage(toolName?: string, output?: unknown) {
     return 'Done. I updated the current content block.';
   }
 
+  if (toolName === 'insert_content_block') {
+    return 'Done. I inserted the content block.';
+  }
+
   if (toolName === 'update_section_column_block') {
     return 'Done. I updated the nested section block.';
   }
@@ -310,7 +423,124 @@ function getToolCompletionMessage(toolName?: string, output?: unknown) {
     return mutationExecuted ? 'Done. I deleted that CMS item.' : 'I prepared the delete request.';
   }
 
+  if (toolName === 'execute_cms_action_plan') {
+    const actionCount = readNumberField(output, 'actionCount');
+
+    return mutationExecuted
+      ? `Done. I completed ${actionCount ? pluralize(actionCount, 'CMS action') : 'the CMS action plan'}.`
+      : 'I prepared the CMS action plan.';
+  }
+
   return 'Done. I completed the requested update.';
+}
+
+function completeToolBackedText(text: string, toolName?: string, output?: unknown) {
+  const trimmedText = text.trim();
+
+  if (!isRecord(output)) {
+    return trimmedText || getToolCompletionMessage(toolName, output);
+  }
+
+  if (output.requiresConfirmation === true) {
+    return getToolCompletionMessage(toolName, output);
+  }
+
+  if ((output.unsupported === true || output.success === false) && !trimmedText) {
+    return getToolCompletionMessage(toolName, output);
+  }
+
+  return trimmedText || getToolCompletionMessage(toolName, output);
+}
+
+async function executeConfirmedToolCall(params: {
+  context: Parameters<typeof createCortexGlobalAgentTools>[0];
+  input: unknown;
+  toolName: z.infer<typeof confirmedToolCallSchema>['toolName'];
+}) {
+  switch (params.toolName) {
+    case 'create_cms_page':
+      return executeCreateCmsPage(params.input as any, params.context);
+    case 'create_cms_post':
+      return executeCreateCmsPost(params.input as any, params.context);
+    case 'create_cms_product':
+      return executeCreateCmsProduct(params.input as any, params.context);
+    case 'delete_cms_item':
+      return executeDeleteCmsItem(params.input as any, params.context);
+    case 'execute_cms_action_plan':
+      return executeCmsActionPlan(params.input as any, params.context);
+    case 'update_cms_item_field':
+      return executeUpdateCmsItemField(params.input as any, params.context);
+    case 'update_content_block':
+      return executeUpdateContentBlock(params.input as any, params.context);
+    case 'insert_content_block':
+      return executeInsertContentBlock(params.input as any, params.context);
+    case 'update_current_cms_fields':
+      return executeUpdateCurrentCmsFields(params.input as any, params.context);
+    case 'update_footer':
+      return executeUpdateFooter(params.input as any, params.context);
+    case 'update_navigation_bar':
+      return executeUpdateNavigationBar(params.input as any, params.context);
+    case 'update_section_column_block':
+      return executeUpdateSectionColumnBlock(params.input as any, params.context);
+  }
+}
+
+function createConfirmedToolCallStream(params: {
+  context: Parameters<typeof createCortexGlobalAgentTools>[0];
+  input: unknown;
+  toolName: z.infer<typeof confirmedToolCallSchema>['toolName'];
+}) {
+  return new ReadableStream({
+    async start(controller) {
+      const toolCallId = `confirmed-${Date.now()}`;
+
+      controller.enqueue(
+        encodeStreamEvent({
+          input: params.input,
+          toolCallId,
+          toolName: params.toolName,
+          type: 'tool-call',
+        })
+      );
+
+      try {
+        const output = await executeConfirmedToolCall(params);
+
+        controller.enqueue(
+          encodeStreamEvent({
+            output,
+            toolCallId,
+            toolName: params.toolName,
+            type: 'tool-result',
+          })
+        );
+        controller.enqueue(
+          encodeStreamEvent({
+            text: getToolCompletionMessage(params.toolName, output),
+            type: 'text-delta',
+          })
+        );
+      } catch (error) {
+        controller.enqueue(
+          encodeStreamEvent({
+            message: serializeStreamError(error),
+            toolCallId,
+            toolName: params.toolName,
+            type: 'tool-error',
+          })
+        );
+        controller.enqueue(
+          encodeStreamEvent({
+            message: serializeStreamError(error),
+            type: 'error',
+          })
+        );
+      }
+
+      controller.enqueue(encodeStreamEvent({ type: 'finish' }));
+      controller.close();
+    },
+  });
 }
 
 function getRetryableStreamError(
@@ -372,6 +602,58 @@ export async function POST(request: Request) {
       return jsonError('Invalid Cortex AI global-agent request.', 400);
     }
 
+    const pageContext = parsedRequest.data.pageContext ?? null;
+    const latestUserMessage =
+      [...parsedRequest.data.messages].reverse().find((message) => message.role === 'user')
+        ?.content ?? '';
+
+    if (parsedRequest.data.confirmedToolCall) {
+      const confirmedToolCall = parsedRequest.data.confirmedToolCall;
+      const stream = createConfirmedToolCallStream({
+        context: {
+          actorUserId: adminAccess.userId,
+          latestUserMessage: confirmedToolCall.confirmationPhrase,
+          pageContext,
+          supabase: getServiceRoleSupabaseClient(),
+        },
+        input: confirmedToolCall.input,
+        toolName: confirmedToolCall.toolName,
+      });
+
+      return new Response(stream, {
+        headers: {
+          'Cache-Control': 'no-cache, no-transform',
+          Connection: 'keep-alive',
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'X-Accel-Buffering': 'no',
+        },
+      });
+    }
+
+    const directActionPlan = buildVisibleContactIntroActionPlan(latestUserMessage);
+
+    if (directActionPlan) {
+      const stream = createConfirmedToolCallStream({
+        context: {
+          actorUserId: adminAccess.userId,
+          latestUserMessage,
+          pageContext,
+          supabase: getServiceRoleSupabaseClient(),
+        },
+        input: directActionPlan,
+        toolName: 'execute_cms_action_plan',
+      });
+
+      return new Response(stream, {
+        headers: {
+          'Cache-Control': 'no-cache, no-transform',
+          Connection: 'keep-alive',
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'X-Accel-Buffering': 'no',
+        },
+      });
+    }
+
     const sandboxKey = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true' ? request.headers.get('x-sandbox-openrouter-key') : null;
     const sandboxModelRaw = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true' ? request.headers.get('x-sandbox-openrouter-model') : null;
     
@@ -393,10 +675,6 @@ export async function POST(request: Request) {
       selectedModel: client.modelSelection,
     });
     const modelIds = routingPolicy.modelIds;
-    const pageContext = parsedRequest.data.pageContext ?? null;
-    const latestUserMessage =
-      [...parsedRequest.data.messages].reverse().find((message) => message.role === 'user')
-        ?.content ?? '';
     const tools = createCortexGlobalAgentTools({
       actorUserId: adminAccess.userId,
       latestUserMessage,
@@ -540,7 +818,9 @@ export async function POST(request: Request) {
             } else if (textBuffer.trim() && !looksLikeRawToolCallLeak(textBuffer)) {
               controller.enqueue(
                 encodeStreamEvent({
-                  text: textBuffer,
+                  text: hasSuccessfulToolResult
+                    ? completeToolBackedText(textBuffer, lastToolName, lastToolOutput)
+                    : textBuffer,
                   type: 'text-delta',
                 })
               );
@@ -562,7 +842,7 @@ export async function POST(request: Request) {
             if (hasSuccessfulToolResult) {
               controller.enqueue(
                 encodeStreamEvent({
-                  text: getToolCompletionMessage(lastToolName, lastToolOutput),
+                  text: completeToolBackedText(textBuffer, lastToolName, lastToolOutput),
                   type: 'text-delta',
                 })
               );

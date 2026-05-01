@@ -121,6 +121,7 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
         languageId: postWithBlocks.language_id,
         slug: postWithBlocks.slug,
         title: postWithBlocks.title,
+        translationGroupId: postWithBlocks.translation_group_id,
       }}
     />
     <div className="space-y-8 w-full mx-auto px-6">

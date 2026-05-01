@@ -47,6 +47,12 @@ type ToolActivity = {
   status: "error" | "running" | "success";
 };
 
+type ConfirmedToolCall = {
+  confirmationPhrase: string;
+  input: unknown;
+  toolName: string;
+};
+
 type CortexAgentStreamEvent =
   | {
       credentialSource: string;
@@ -87,12 +93,14 @@ const LEGACY_STORAGE_KEY = "nextblock-cortex-global-agent-chat";
 const THREADS_STORAGE_KEY = "nextblock-cortex-global-agent-chat-threads";
 const MAX_STORED_MESSAGES = 40;
 const MAX_STORED_THREADS = 20;
-const REQUEST_TIMEOUT_MS = 45000;
+const REQUEST_TIMEOUT_MS = 90000;
 const MUTATING_TOOL_NAMES = new Set([
   "create_cms_page",
   "create_cms_post",
   "create_cms_product",
   "delete_cms_item",
+  "execute_cms_action_plan",
+  "insert_content_block",
   "update_cms_item_field",
   "update_current_cms_fields",
   "update_content_block",
@@ -117,6 +125,14 @@ const TOOL_COPY: Record<string, { done: string; running: string }> = {
   create_cms_product: {
     done: "Product created",
     running: "Preparing product...",
+  },
+  execute_cms_action_plan: {
+    done: "CMS plan completed",
+    running: "Preparing CMS plan...",
+  },
+  insert_content_block: {
+    done: "Content block inserted",
+    running: "Inserting content block...",
   },
   delete_cms_item: {
     done: "CMS item deleted",
@@ -335,6 +351,157 @@ function getToolOutputNavigationPath(output: unknown) {
   return typeof path === "string" && path.startsWith("/") ? path : null;
 }
 
+function readNumberField(value: unknown, key: string) {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const parsed = Number(value[key]);
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function readStringField(value: unknown, key: string) {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const fieldValue = value[key];
+
+  return typeof fieldValue === "string" ? fieldValue : null;
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function getConfirmationSummary(activity: ToolActivity) {
+  if (!isRecord(activity.output) || !isRecord(activity.output.preview)) {
+    return "Complete the requested CMS change.";
+  }
+
+  const preview = activity.output.preview;
+  const summary = readStringField(preview, "summary");
+
+  if (summary) {
+    const actionSummaries = Array.isArray(preview.actionSummaries)
+      ? preview.actionSummaries.filter((item): item is string => typeof item === "string")
+      : [];
+
+    return actionSummaries.length > 0
+      ? `${summary}\n\n${actionSummaries
+          .map((item, index) => `${index + 1}. ${item}`)
+          .join("\n")}`
+      : summary;
+  }
+
+  const title = readStringField(preview, "title");
+  const slug = readStringField(preview, "slug");
+  const status = readStringField(preview, "status");
+  const contentType = readStringField(preview, "contentType");
+  const field = readStringField(preview, "field");
+  const mode = readStringField(preview, "mode");
+  const languageCode = readStringField(preview, "languageCode");
+  const blockCount = readNumberField(preview, "blockCount");
+  const itemCount = readNumberField(preview, "itemCount");
+  const affectedCount = readNumberField(preview, "affectedCount");
+
+  if (activity.name === "create_cms_page" || activity.name === "create_cms_post") {
+    return `Create ${status || "draft"} ${activity.name === "create_cms_page" ? "page" : "post"} "${title || slug || "Untitled"}"${slug ? ` at slug "${slug}"` : ""}${blockCount !== null ? ` with ${pluralize(blockCount, "content block")}` : ""}.`;
+  }
+
+  if (activity.name === "create_cms_product") {
+    return `Create ${status || "draft"} product "${title || slug || "Untitled"}"${slug ? ` at slug "${slug}"` : ""}.`;
+  }
+
+  if (activity.name === "update_cms_item_field") {
+    return `Update ${field || "one field"} on the ${contentType || "CMS item"} "${title || slug || "selected item"}".`;
+  }
+
+  if (activity.name === "update_navigation_bar") {
+    return `${mode === "append" ? "Add" : mode === "update" ? "Update" : "Replace"} ${itemCount !== null ? pluralize(itemCount, "navigation item") : "navigation items"} in the ${languageCode || "selected"} header navigation.`;
+  }
+
+  if (activity.name === "update_footer") {
+    const linkCount = readNumberField(preview, "linkCount");
+    return `Update the ${languageCode || "selected"} footer${linkCount !== null ? ` with ${pluralize(linkCount, "link")}` : ""}.`;
+  }
+
+  if (activity.name === "update_content_block") {
+    return `Update the selected ${readStringField(preview, "blockType") || "content"} block.`;
+  }
+
+  if (activity.name === "insert_content_block") {
+    return `Insert ${readStringField(preview, "blockType") || "content"} block on the ${contentType || "CMS item"} "${title || slug || "selected item"}".`;
+  }
+
+  if (activity.name === "update_section_column_block") {
+    return `Update the selected nested ${readStringField(preview, "nestedBlockType") || "section"} block.`;
+  }
+
+  if (activity.name === "delete_cms_item" || activity.name === "prepare_delete_cms_item") {
+    return `Delete ${affectedCount !== null ? pluralize(affectedCount, contentType || "CMS item") : `the selected ${contentType || "CMS item"}`}${title || slug ? ` for "${title || slug}"` : ""}.`;
+  }
+
+  return "Complete the requested CMS change.";
+}
+
+function getConfirmedToolCall(activity: ToolActivity): ConfirmedToolCall | null {
+  if (!toolOutputRequiresConfirmation(activity.output) || !isRecord(activity.output)) {
+    return null;
+  }
+
+  const confirmationPhrase = activity.output.confirmationPhrase;
+
+  if (typeof confirmationPhrase !== "string" || !activity.input) {
+    return null;
+  }
+
+  return {
+    confirmationPhrase,
+    input: activity.input,
+    toolName: activity.name === "prepare_delete_cms_item" ? "delete_cms_item" : activity.name,
+  };
+}
+
+function getConfirmationKey(activity: ToolActivity) {
+  if (!toolOutputRequiresConfirmation(activity.output) || !isRecord(activity.output)) {
+    return null;
+  }
+
+  const phrase = activity.output.confirmationPhrase;
+
+  if (typeof phrase === "string" && phrase.trim()) {
+    return phrase;
+  }
+
+  return `${activity.name}:${getConfirmationSummary(activity)}`;
+}
+
+function getToolActivityDetail(activity: ToolActivity) {
+  if (activity.status === "error" && isRecord(activity.output)) {
+    const error = activity.output.error;
+
+    return typeof error === "string" ? error : null;
+  }
+
+  if (!isRecord(activity.output)) {
+    return null;
+  }
+
+  if (activity.output.requiresConfirmation === true) {
+    return getConfirmationSummary(activity);
+  }
+
+  if (activity.output.unsupported === true || activity.output.success === false) {
+    const message = activity.output.message;
+
+    return typeof message === "string" ? message : null;
+  }
+
+  return null;
+}
+
 function getToolActivityId(event: { toolCallId?: string; toolName?: string }) {
   return event.toolCallId || `${event.toolName || "tool"}-${Date.now()}`;
 }
@@ -399,10 +566,20 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-function ToolActivityRow({ activity }: { activity: ToolActivity }) {
+function ToolActivityRow({
+  activity,
+  disabled,
+  onConfirm,
+}: {
+  activity: ToolActivity;
+  disabled?: boolean;
+  onConfirm: (toolCall: ConfirmedToolCall) => void;
+}) {
   const copy = getToolCopy(activity.name);
   const requiresConfirmation = toolOutputRequiresConfirmation(activity.output);
   const isNotice = toolOutputIsNotice(activity.output);
+  const detail = getToolActivityDetail(activity);
+  const confirmedToolCall = getConfirmedToolCall(activity);
   const label =
     activity.status === "running"
       ? copy.running
@@ -419,8 +596,7 @@ function ToolActivityRow({ activity }: { activity: ToolActivity }) {
       : activity.status === "success" && !isNotice
         ? "success"
         : "error";
-
-  return (
+  const row = (
     <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
       {iconState === "running" ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
@@ -430,8 +606,47 @@ function ToolActivityRow({ activity }: { activity: ToolActivity }) {
         <XCircle className="h-3.5 w-3.5 text-destructive" />
       )}
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <Wrench className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+      {confirmedToolCall ? (
+        <Button
+          className="h-7 rounded-md px-2.5 text-xs"
+          disabled={disabled}
+          onClick={() => onConfirm(confirmedToolCall)}
+          type="button"
+        >
+          Confirm
+        </Button>
+      ) : (
+        <Wrench className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+      )}
     </div>
+  );
+
+  if (confirmedToolCall) {
+    return (
+      <div className="rounded-md">
+        {row}
+        {detail && (
+          <div className="mt-1 whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-5 text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
+            {detail}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (!detail) {
+    return row;
+  }
+
+  return (
+    <details className="group rounded-md">
+      <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden">
+        {row}
+      </summary>
+      <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-5 text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
+        {detail}
+      </pre>
+    </details>
   );
 }
 
@@ -452,6 +667,7 @@ export function CortexGlobalAgentChat() {
     null
   );
   const abortControllerRef = useRef<AbortController | null>(null);
+  const pendingRefreshPathRef = useRef<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -489,6 +705,15 @@ export function CortexGlobalAgentChat() {
     return () => abortControllerRef.current?.abort();
   }, []);
 
+  useEffect(() => {
+    if (!pendingRefreshPathRef.current || pendingRefreshPathRef.current !== pathname) {
+      return;
+    }
+
+    pendingRefreshPathRef.current = null;
+    router.refresh();
+  }, [pathname, router]);
+
   const activeThread = useMemo(
     () => threads.find((thread) => thread.id === activeThreadId) ?? null,
     [activeThreadId, threads]
@@ -509,9 +734,27 @@ export function CortexGlobalAgentChat() {
   );
   const visibleToolActivities = useMemo(
     () =>
-      hasSuccessfulMutationActivity
-        ? toolActivities.filter((activity) => activity.status !== "error")
-        : toolActivities,
+      toolActivities.filter((activity, index) => {
+        if (hasSuccessfulMutationActivity && activity.status === "error") {
+          return false;
+        }
+
+        if (activity.status !== "error") {
+          const confirmationKey = getConfirmationKey(activity);
+
+          if (confirmationKey) {
+            return !toolActivities
+              .slice(index + 1)
+              .some((nextActivity) => getConfirmationKey(nextActivity) === confirmationKey);
+          }
+
+          return true;
+        }
+
+        return !toolActivities
+          .slice(index + 1)
+          .some((nextActivity) => nextActivity.status === "success" && !toolOutputIsNotice(nextActivity.output));
+      }),
     [hasSuccessfulMutationActivity, toolActivities]
   );
 
@@ -627,7 +870,7 @@ export function CortexGlobalAgentChat() {
     }
 
     if (event.type === "tool-result") {
-      if (isMutatingToolName(event.toolName) && toolOutputExecutedMutation(event.output)) {
+      if (isRecord(event.output) && event.output.success !== false) {
         setStreamError(null);
       }
 
@@ -701,15 +944,20 @@ export function CortexGlobalAgentChat() {
     }
   };
 
-  const sendMessage = async () => {
-    const prompt = input.trim();
+  const sendMessage = async (options?: {
+    confirmedToolCall?: ConfirmedToolCall;
+    displayContent?: string;
+    prompt?: string;
+  }) => {
+    const prompt = (options?.prompt ?? input).trim();
+    const displayContent = (options?.displayContent ?? prompt).trim();
 
     if (!prompt || isStreaming) {
       return;
     }
 
     const userMessage: ChatMessage = {
-      content: prompt,
+      content: displayContent || prompt,
       id: createId(),
       role: "user",
     };
@@ -751,7 +999,7 @@ export function CortexGlobalAgentChat() {
     setToolActivities([]);
     setIsStreaming(true);
     setShowHistory(false);
-    let shouldRefreshRoute = false;
+    let shouldRefreshAfterMutation = false;
     let navigationPath: string | null = null;
 
     try {
@@ -772,6 +1020,7 @@ export function CortexGlobalAgentChat() {
 
       const response = await fetch("/api/ai/global-agent", {
         body: JSON.stringify({
+          ...(options?.confirmedToolCall ? { confirmedToolCall: options.confirmedToolCall } : {}),
           messages: requestMessages,
           ...(pageContext ? { pageContext } : {}),
         }),
@@ -811,7 +1060,7 @@ export function CortexGlobalAgentChat() {
               toolOutputExecutedMutation(event.output)
             ) {
               navigationPath = getToolOutputNavigationPath(event.output) || navigationPath;
-              shouldRefreshRoute = !navigationPath;
+              shouldRefreshAfterMutation = true;
             }
 
             applyStreamEvent(event, assistantMessage.id, threadId);
@@ -835,7 +1084,7 @@ export function CortexGlobalAgentChat() {
             toolOutputExecutedMutation(event.output)
           ) {
             navigationPath = getToolOutputNavigationPath(event.output) || navigationPath;
-            shouldRefreshRoute = !navigationPath;
+            shouldRefreshAfterMutation = true;
           }
 
           applyStreamEvent(event, assistantMessage.id, threadId);
@@ -854,6 +1103,17 @@ export function CortexGlobalAgentChat() {
           ? error.message
           : "Cortex AI request failed.";
       setStreamError(message);
+      setToolActivities((current) =>
+        current.map((activity) =>
+          activity.status === "running"
+            ? {
+                ...activity,
+                output: { error: message },
+                status: "error",
+              }
+            : activity
+        )
+      );
       updateThreadMessages(threadId, (threadMessages) =>
         threadMessages.map((chatMessage) =>
           chatMessage.id === assistantMessage.id
@@ -864,8 +1124,17 @@ export function CortexGlobalAgentChat() {
     } finally {
       window.clearTimeout(timeoutId);
       if (navigationPath) {
+        if (shouldRefreshAfterMutation) {
+          pendingRefreshPathRef.current = navigationPath;
+        }
+
         router.push(navigationPath);
-      } else if (shouldRefreshRoute) {
+
+        if (shouldRefreshAfterMutation && pathname === navigationPath) {
+          pendingRefreshPathRef.current = null;
+          router.refresh();
+        }
+      } else if (shouldRefreshAfterMutation) {
         router.refresh();
       }
       setIsStreaming(false);
@@ -876,6 +1145,14 @@ export function CortexGlobalAgentChat() {
   const stopStreaming = () => {
     abortControllerRef.current?.abort();
     setIsStreaming(false);
+  };
+
+  const confirmToolCall = (toolCall: ConfirmedToolCall) => {
+    void sendMessage({
+      confirmedToolCall: toolCall,
+      displayContent: "Confirmed",
+      prompt: toolCall.confirmationPhrase,
+    });
   };
 
   if (!isMounted) {
@@ -1011,7 +1288,12 @@ export function CortexGlobalAgentChat() {
           {visibleToolActivities.length > 0 && (
             <div className="space-y-2">
               {visibleToolActivities.map((activity) => (
-                <ToolActivityRow key={activity.id} activity={activity} />
+                <ToolActivityRow
+                  key={activity.id}
+                  activity={activity}
+                  disabled={isStreaming}
+                  onConfirm={confirmToolCall}
+                />
               ))}
             </div>
           )}

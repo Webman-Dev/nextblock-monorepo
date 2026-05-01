@@ -134,13 +134,17 @@ vi.mock('@nextblock-cms/ecommerce/server', async () => {
 });
 
 import {
+  buildVisibleContactIntroActionPlan,
+  executeCmsActionPlan,
   executeCreateCmsPage,
   executeCreateCmsPost,
   executeCreateCmsProduct,
   executeDeleteCmsItem,
+  executeInsertContentBlock,
   executePrepareDeleteCmsItem,
   executeReadCurrentCmsItem,
   executeSearchDocumentation,
+  executeSearchDocumentationWithTimeout,
   executeUpdateContentBlock,
   executeUpdateCmsItemField,
   executeUpdateCurrentCmsFields,
@@ -545,6 +549,68 @@ describe('Cortex AI global agent tool executors', () => {
     });
   });
 
+  it('links AI-created translated navigation items to page and nav translation groups', async () => {
+    const { database, supabase } = createMockSupabase({
+      languages: [
+        { code: 'en', id: 1, is_active: true, name: 'English' },
+        { code: 'fr', id: 2, is_active: true, name: 'French' },
+      ],
+      navigation_items: [
+        {
+          id: 1,
+          label: 'Contact Us',
+          language_id: 1,
+          menu_key: 'HEADER',
+          order: 0,
+          page_id: 1,
+          translation_group_id: 'group-nav-contact',
+          url: '/contact-us',
+        },
+      ],
+      pages: [
+        {
+          id: 1,
+          language_id: 1,
+          slug: 'contact-us',
+          title: 'Contact Us',
+          translation_group_id: 'group-page-contact',
+        },
+        {
+          id: 2,
+          language_id: 2,
+          slug: 'contactez-nous',
+          title: 'Contactez-nous',
+          translation_group_id: 'group-page-contact',
+        },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeUpdateNavigationBar,
+      {
+        items: [{ label: 'Contactez-nous', url: '/contactez-nous' }],
+        languageCode: 'French',
+        mode: 'append',
+      },
+      { revalidatePath: () => undefined, supabase }
+    );
+
+    expect(result).toMatchObject({
+      insertedCount: 1,
+      languageCode: 'fr',
+      mutationExecuted: true,
+      success: true,
+    });
+    expect(database.navigation_items[1]).toMatchObject({
+      label: 'Contactez-nous',
+      language_id: 2,
+      menu_key: 'HEADER',
+      page_id: 2,
+      translation_group_id: 'group-nav-contact',
+      url: '/contactez-nous',
+    });
+  });
+
   it('updates a single existing header navigation item without replacing the menu', async () => {
     const { database, supabase } = createMockSupabase({
       languages: [
@@ -799,6 +865,38 @@ describe('Cortex AI global agent tool executors', () => {
     });
   });
 
+  it('returns a fallback instead of hanging when documentation search is slow', async () => {
+    const createHangingQuery = () =>
+      ({
+        eq() {
+          return this;
+        },
+        limit() {
+          return new Promise(() => undefined);
+        },
+        select() {
+          return this;
+        },
+      }) as any;
+
+    const result = await executeSearchDocumentationWithTimeout(
+      { limit: 2, query: 'NextBlock project' },
+      {
+        supabase: {
+          from: () => createHangingQuery(),
+        },
+      },
+      5
+    );
+
+    expect(result).toMatchObject({
+      query: 'NextBlock project',
+      results: [],
+      success: false,
+      timedOut: true,
+    });
+  });
+
   it('reads the current page context with block summaries', async () => {
     const { supabase } = createMockSupabase({
       blocks: [
@@ -984,6 +1082,231 @@ describe('Cortex AI global agent tool executors', () => {
       success: true,
     });
     expect(database.blocks[0].content).toEqual({ html_content: '<p>Updated</p>' });
+  });
+
+  it('inserts a visible rich text block before the form on a page', async () => {
+    const { database, supabase } = createMockSupabase({
+      blocks: [
+        {
+          block_type: 'form',
+          content: {
+            fields: [],
+            recipient_email: 'info@nextblock.dev',
+            submit_button_text: 'Send Message',
+            success_message: 'Thanks',
+          },
+          id: 12,
+          language_id: 1,
+          order: 0,
+          page_id: 7,
+          post_id: null,
+        },
+      ],
+      pages: [
+        {
+          id: 7,
+          language_id: 1,
+          slug: 'contact-us',
+          title: 'Contact Us',
+          translation_group_id: 'group-contact',
+        },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeInsertContentBlock,
+      {
+        anchorBlockType: 'form',
+        block: {
+          blockType: 'text',
+          content: {
+            html_content:
+              '<h2>Let us help you move faster</h2><p>Tell us what you are building and the NextBlock team will get back to you.</p>',
+          },
+        },
+        contentType: 'page',
+        slug: 'contact-us',
+        position: 'before',
+      },
+      { revalidatePath: () => undefined, supabase }
+    );
+
+    expect(result).toMatchObject({
+      blockType: 'text',
+      contentType: 'page',
+      entityId: 7,
+      mutationExecuted: true,
+      order: 0,
+      success: true,
+    });
+    expect(database.blocks).toHaveLength(2);
+    expect(database.blocks[0]).toMatchObject({
+      block_type: 'form',
+      order: 1,
+    });
+    expect(database.blocks[1]).toMatchObject({
+      block_type: 'text',
+      order: 0,
+      page_id: 7,
+    });
+    expect(database.blocks[1].content.html_content).toContain('Let us help you move faster');
+  });
+
+  it('builds a deterministic action plan for visible English and French contact intro copy', () => {
+    const plan = buildVisibleContactIntroActionPlan(
+      'can you add a title and description above the form on both contact pages english and french'
+    );
+
+    expect(plan).toMatchObject({
+      actions: [
+        {
+          input: {
+            anchorBlockType: 'form',
+            contentType: 'page',
+            position: 'before',
+            slug: 'contact-us',
+          },
+          tool: 'insert_content_block',
+        },
+        {
+          input: {
+            anchorBlockType: 'form',
+            contentType: 'page',
+            position: 'before',
+            slug: 'contactez-nous',
+          },
+          tool: 'insert_content_block',
+        },
+      ],
+      summary:
+        'Add visible title and description copy above the forms on the English and French Contact pages.',
+    });
+    expect(plan?.actions[0].input.block.content.html_content).toContain('<h2>');
+    expect(plan?.actions[1].input.block.content.html_content).toContain('<h2>');
+  });
+
+  it('uses an action plan to add localized intro copy above forms on both translated pages', async () => {
+    const { database, supabase } = createMockSupabase({
+      blocks: [
+        {
+          block_type: 'form',
+          content: {
+            fields: [],
+            recipient_email: 'info@nextblock.dev',
+            submit_button_text: 'Send Message',
+            success_message: 'Thanks',
+          },
+          id: 12,
+          language_id: 1,
+          order: 0,
+          page_id: 7,
+          post_id: null,
+        },
+        {
+          block_type: 'form',
+          content: {
+            fields: [],
+            recipient_email: 'info@nextblock.dev',
+            submit_button_text: 'Envoyer',
+            success_message: 'Merci',
+          },
+          id: 13,
+          language_id: 2,
+          order: 0,
+          page_id: 8,
+          post_id: null,
+        },
+      ],
+      pages: [
+        {
+          id: 7,
+          language_id: 1,
+          slug: 'contact-us',
+          title: 'Contact Us',
+          translation_group_id: 'group-contact',
+        },
+        {
+          id: 8,
+          language_id: 2,
+          slug: 'contactez-nous',
+          title: 'Contactez-nous',
+          translation_group_id: 'group-contact',
+        },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeCmsActionPlan,
+      {
+        actions: [
+          {
+            input: {
+              anchorBlockType: 'form',
+              block: {
+                blockType: 'text',
+                content: {
+                  html_content:
+                    '<h2>Ready to talk?</h2><p>Share your goals and we will help you choose the right next step.</p>',
+                },
+              },
+              contentType: 'page',
+              position: 'before',
+              slug: 'contact-us',
+            },
+            tool: 'insert_content_block',
+          },
+          {
+            input: {
+              anchorBlockType: 'form',
+              block: {
+                blockType: 'text',
+                content: {
+                  html_content:
+                    '<h2>Prêt à discuter?</h2><p>Parlez-nous de vos objectifs et nous vous aiderons à choisir la prochaine étape.</p>',
+                },
+              },
+              contentType: 'page',
+              position: 'before',
+              slug: 'contactez-nous',
+            },
+            tool: 'insert_content_block',
+          },
+        ],
+      },
+      {
+        pageContext: {
+          contentType: 'page',
+          entityId: 7,
+          slug: 'contact-us',
+          title: 'Contact Us',
+        },
+        revalidatePath: () => undefined,
+        supabase,
+      }
+    );
+
+    expect(result).toMatchObject({
+      actionCount: 2,
+      mutationExecuted: true,
+      success: true,
+    });
+    const englishTextBlocks = database.blocks.filter(
+      (block) => block.block_type === 'text' && block.page_id === 7
+    );
+    const frenchTextBlocks = database.blocks.filter(
+      (block) => block.block_type === 'text' && block.page_id === 8
+    );
+
+    expect(englishTextBlocks).toHaveLength(1);
+    expect(frenchTextBlocks).toHaveLength(1);
+    expect(englishTextBlocks[0]).toMatchObject({ order: 0 });
+    expect(frenchTextBlocks[0]).toMatchObject({ order: 0 });
+    expect(database.blocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ block_type: 'form', page_id: 7, order: 1 }),
+        expect.objectContaining({ block_type: 'form', page_id: 8, order: 1 }),
+      ])
+    );
   });
 
   it('merges partial top-level block content with existing content before validation', async () => {
@@ -1177,6 +1500,191 @@ describe('Cortex AI global agent tool executors', () => {
     ]);
   });
 
+  it('prepares a multi-action CMS plan without mutating', async () => {
+    const { database, supabase } = createMockSupabase({
+      navigation_items: [
+        { id: 1, label: 'Home', language_id: 1, menu_key: 'HEADER', order: 0, url: '/' },
+      ],
+    });
+
+    const preview = await executeCmsActionPlan(
+      {
+        actions: [
+          {
+            input: {
+              contactEmail: 'info@nextblock.dev',
+              title: 'Contact Us',
+            },
+            tool: 'create_cms_page',
+          },
+          {
+            input: {
+              items: [{ label: 'Contact Us', url: '/contact-us' }],
+              languageCode: 'en',
+              mode: 'append',
+            },
+            tool: 'update_navigation_bar',
+          },
+        ],
+      },
+      { actorUserId: 'admin_1', supabase }
+    );
+
+    expectConfirmation(preview);
+    expect(preview.preview).toMatchObject({
+      actionCount: 2,
+      summary: 'Complete 2 CMS actions.',
+    });
+    expect(preview.preview.actionSummaries).toHaveLength(2);
+    expect(database.pages).toEqual([]);
+    expect(database.navigation_items).toEqual([
+      { id: 1, label: 'Home', language_id: 1, menu_key: 'HEADER', order: 0, url: '/' },
+    ]);
+  });
+
+  it('confirms a create-page-plus-navigation action plan in order', async () => {
+    const { database, supabase } = createMockSupabase({
+      navigation_items: [
+        { id: 1, label: 'Home', language_id: 1, menu_key: 'HEADER', order: 0, url: '/' },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeCmsActionPlan,
+      {
+        actions: [
+          {
+            input: {
+              contactEmail: 'info@nextblock.dev',
+              title: 'Contact Us',
+            },
+            tool: 'create_cms_page',
+          },
+          {
+            input: {
+              items: [{ label: 'Contact Us', url: '/contact-us' }],
+              languageCode: 'en',
+              mode: 'append',
+            },
+            tool: 'update_navigation_bar',
+          },
+        ],
+      },
+      { actorUserId: 'admin_1', revalidatePath: () => undefined, supabase }
+    );
+
+    expect(result).toMatchObject({
+      actionCount: 2,
+      editPath: '/cms/pages/1/edit',
+      mutationExecuted: true,
+      success: true,
+    });
+    expect(database.pages[0]).toMatchObject({
+      slug: 'contact-us',
+      title: 'Contact Us',
+    });
+    expect(database.navigation_items[1]).toMatchObject({
+      label: 'Contact Us',
+      language_id: 1,
+      menu_key: 'HEADER',
+      page_id: 1,
+      parent_id: null,
+      url: '/contact-us',
+    });
+    expect(database.navigation_items[1].translation_group_id).toEqual(expect.any(String));
+  });
+
+  it('normalizes command-string action plans and links created language versions', async () => {
+    const { database, supabase } = createMockSupabase({
+      languages: [
+        { code: 'en', id: 1, is_active: true, name: 'English' },
+        { code: 'fr', id: 2, is_active: true, name: 'French' },
+      ],
+      navigation_items: [
+        { id: 1, label: 'Home', language_id: 1, menu_key: 'HEADER', order: 0, url: '/' },
+        { id: 2, label: 'Accueil', language_id: 2, menu_key: 'HEADER', order: 0, url: '/' },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeCmsActionPlan,
+      {
+        actions: [
+          "create_cms_page(title='Contact Us', slug='contact-us', contactEmail='info@nextblock.dev', blocks=[{'blockType': 'form', 'content': {'recipient_email': 'info@nextblock.dev', 'fields': [{'label': 'Name', 'type': 'text'}, {'label': 'Email', 'type': 'email'}, {'label': 'Message', 'type': 'textarea'}]}}])",
+          "update_navigation_bar(items=[{'label': 'Contact Us', 'url': '/contact-us'}], languageCode='en', mode='append')",
+          "create_cms_page(title='Contactez-nous', slug='contactez-nous', languageCode='fr', contactEmail='info@nextblock.dev', blocks=[{'blockType': 'form', 'content': {'recipient_email': 'info@nextblock.dev', 'fields': [{'label': 'Nom', 'type': 'text'}, {'label': 'Email', 'type': 'email'}, {'label': 'Message', 'type': 'textarea'}]}}])",
+          "update_navigation_bar(items=[{'label': 'Contactez-nous', 'url': '/contactez-nous'}], languageCode='fr', mode='append')",
+        ],
+      },
+      { actorUserId: 'admin_1', revalidatePath: () => undefined, supabase }
+    );
+
+    expect(result).toMatchObject({
+      actionCount: 4,
+      editPath: '/cms/pages/1/edit',
+      mutationExecuted: true,
+      success: true,
+    });
+    expect(database.pages).toHaveLength(2);
+    expect(database.pages[0]).toMatchObject({
+      language_id: 1,
+      slug: 'contact-us',
+      title: 'Contact Us',
+    });
+    expect(database.pages[1]).toMatchObject({
+      language_id: 2,
+      slug: 'contactez-nous',
+      title: 'Contactez-nous',
+      translation_group_id: database.pages[0].translation_group_id,
+    });
+    expect(database.navigation_items[2]).toMatchObject({
+      label: 'Contact Us',
+      language_id: 1,
+      page_id: 1,
+      url: '/contact-us',
+    });
+    expect(database.navigation_items[3]).toMatchObject({
+      label: 'Contactez-nous',
+      language_id: 2,
+      page_id: 2,
+      translation_group_id: database.navigation_items[2].translation_group_id,
+      url: '/contactez-nous',
+    });
+  });
+
+  it('confirms a navigation-only action plan without returning a navigation path', async () => {
+    const { supabase } = createMockSupabase({
+      navigation_items: [
+        { id: 1, label: 'Home', language_id: 1, menu_key: 'HEADER', order: 0, url: '/' },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeCmsActionPlan,
+      {
+        actions: [
+          {
+            input: {
+              items: [{ label: 'Contact', url: '/contact' }],
+              languageCode: 'en',
+              mode: 'append',
+            },
+            tool: 'update_navigation_bar',
+          },
+        ],
+      },
+      { actorUserId: 'admin_1', revalidatePath: () => undefined, supabase }
+    );
+
+    expect(result).toMatchObject({
+      actionCount: 1,
+      mutationExecuted: true,
+      success: true,
+    });
+    expect(result.editPath).toBeUndefined();
+    expect(result.redirectPath).toBeUndefined();
+  });
+
   it('creates a confirmed Contact Us page with hero and form blocks', async () => {
     const revalidated: string[] = [];
     const { database, supabase } = createMockSupabase();
@@ -1225,6 +1733,145 @@ describe('Cortex AI global agent tool executors', () => {
       submit_button_text: 'Send Message',
     });
     expect(revalidated).toEqual(['/cms/pages/1/edit', '/contact-us', '/cms/pages']);
+  });
+
+  it('creates a translated page in the supplied translation group', async () => {
+    const { database, supabase } = createMockSupabase({
+      languages: [
+        { code: 'en', id: 1, is_active: true, name: 'English' },
+        { code: 'fr', id: 2, is_active: true, name: 'French' },
+      ],
+      pages: [
+        {
+          id: 1,
+          language_id: 1,
+          slug: 'contact-us',
+          title: 'Contact Us',
+          translation_group_id: 'group-contact',
+        },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeCreateCmsPage,
+      {
+        contactEmail: 'info@nextblock.dev',
+        languageCode: 'French',
+        slug: 'contactez-nous',
+        title: 'Contactez-nous',
+        translationGroupId: 'group-contact',
+      },
+      { actorUserId: 'admin_1', revalidatePath: () => undefined, supabase }
+    );
+
+    expect(result).toMatchObject({
+      contentType: 'page',
+      entityId: 2,
+      mutationExecuted: true,
+      slug: 'contactez-nous',
+      success: true,
+    });
+    expect(database.pages[1]).toMatchObject({
+      language_id: 2,
+      slug: 'contactez-nous',
+      title: 'Contactez-nous',
+      translation_group_id: 'group-contact',
+    });
+  });
+
+  it('refuses to create a second page translation for an existing group language', async () => {
+    const { database, supabase } = createMockSupabase({
+      languages: [
+        { code: 'en', id: 1, is_active: true, name: 'English' },
+        { code: 'fr', id: 2, is_active: true, name: 'French' },
+      ],
+      pages: [
+        {
+          id: 1,
+          language_id: 1,
+          slug: 'contact-us',
+          title: 'Contact Us',
+          translation_group_id: 'group-contact',
+        },
+        {
+          id: 2,
+          language_id: 2,
+          slug: 'contactez-nous',
+          title: 'Contactez-nous',
+          translation_group_id: 'group-contact',
+        },
+      ],
+    });
+
+    const result = await executeCreateCmsPage(
+      {
+        languageCode: 'fr',
+        slug: 'contact-fr-copy',
+        title: 'Contact FR Copy',
+        translationGroupId: 'group-contact',
+      },
+      { actorUserId: 'admin_1', supabase }
+    );
+
+    expect(result).toMatchObject({
+      duplicateTranslation: true,
+      mutationExecuted: false,
+      success: false,
+    });
+    expect(database.pages).toHaveLength(2);
+  });
+
+  it('normalizes common AI-created heading and form block shapes before confirmation', async () => {
+    const { database, supabase } = createMockSupabase();
+    const input = {
+      blocks: [
+        {
+          blockType: 'heading' as const,
+          content: {
+            text: 'Contact Us',
+          },
+        },
+        {
+          blockType: 'form' as const,
+          content: {
+            fields: [
+              { label: 'Name', type: 'text' },
+              { label: 'Email', type: 'email' },
+              { label: 'Message', type: 'textarea' },
+            ],
+            recipient_email: 'info@nextblock.dev',
+          },
+        },
+      ],
+      title: 'Contact Us',
+    };
+
+    const result = await executeConfirmed(
+      executeCreateCmsPage,
+      input,
+      { actorUserId: 'admin_1', revalidatePath: () => undefined, supabase }
+    );
+
+    expect(result).toMatchObject({
+      blockCount: 2,
+      mutationExecuted: true,
+      slug: 'contact-us',
+      success: true,
+    });
+    expect(database.blocks[0].content).toMatchObject({
+      level: 1,
+      text_content: 'Contact Us',
+    });
+    expect(database.blocks[1].content).toMatchObject({
+      recipient_email: 'info@nextblock.dev',
+      submit_button_text: 'Send Message',
+      success_message: 'Thanks for reaching out. We will reply as soon as possible.',
+    });
+    expect(database.blocks[1].content.fields).toEqual([
+      expect.objectContaining({ field_type: 'text', is_required: true, label: 'Name', temp_id: 'field-1' }),
+      expect.objectContaining({ field_type: 'email', is_required: true, label: 'Email', temp_id: 'field-2' }),
+      expect.objectContaining({ field_type: 'textarea', is_required: true, label: 'Message', temp_id: 'field-3' }),
+    ]);
   });
 
   it('creates confirmed posts and products with safe defaults', async () => {
@@ -1480,6 +2127,9 @@ describe('Cortex AI global agent tool executors', () => {
         affectedCount: 2,
         collectionPath: '/cms/pages',
         contentType: 'page',
+        navigationLinkCount: 2,
+        summary:
+          'Delete page "Contact" (contact), including 2 language versions and 2 navigation links.',
       },
     });
 

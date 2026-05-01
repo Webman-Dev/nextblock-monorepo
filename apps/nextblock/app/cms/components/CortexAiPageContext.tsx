@@ -15,6 +15,7 @@ export type CortexAiPageContext = {
   languageId?: number | null;
   slug?: string | null;
   title?: string | null;
+  translationGroupId?: string | null;
 };
 
 type CortexAiPageContextValue = {
