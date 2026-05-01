@@ -30,6 +30,7 @@ import {
 
 const CORTEX_AI_SANDBOX_KEY_LOCAL_STORAGE = 'cortex_ai_sandbox_openrouter_api_key';
 const CORTEX_AI_SANDBOX_MODEL_LOCAL_STORAGE = 'cortex_ai_sandbox_openrouter_model_selection';
+const CORTEX_AI_SETTINGS_CHANGED_EVENT = 'nextblock:cortex-ai-settings-changed';
 
 import type { CortexAiStoredModelSelection } from '../../../../lib/ai-model-registry';
 import { createCortexAiStoredModelSelection } from '../../../../lib/ai-model-registry';
@@ -84,6 +85,10 @@ function getMaskedKey(key: string) {
   return `**** ${key.slice(-4)}`;
 }
 
+function notifyCortexAiSettingsChanged() {
+  window.dispatchEvent(new Event(CORTEX_AI_SETTINGS_CHANGED_EVENT));
+}
+
 export function SandboxCortexAiSettingsClient({
   compatibleModels,
   isPackageActive,
@@ -126,6 +131,7 @@ export function SandboxCortexAiSettingsClient({
       window.localStorage.setItem(CORTEX_AI_SANDBOX_KEY_LOCAL_STORAGE, key);
       setSandboxKey(key);
       setInputValue('');
+      notifyCortexAiSettingsChanged();
       setSuccessMessage('Sandbox OpenRouter key saved to your browser.');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error) {
@@ -139,6 +145,8 @@ export function SandboxCortexAiSettingsClient({
       window.localStorage.removeItem(CORTEX_AI_SANDBOX_MODEL_LOCAL_STORAGE);
       setSandboxKey(null);
       setSandboxModel(null);
+      setModelInput('');
+      notifyCortexAiSettingsChanged();
       setSuccessMessage('Sandbox OpenRouter key cleared from your browser.');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error) {
@@ -162,6 +170,7 @@ export function SandboxCortexAiSettingsClient({
       const storedSelection = createCortexAiStoredModelSelection(selectedModel as any);
       window.localStorage.setItem(CORTEX_AI_SANDBOX_MODEL_LOCAL_STORAGE, JSON.stringify(storedSelection));
       setSandboxModel(storedSelection);
+      notifyCortexAiSettingsChanged();
       setSuccessMessage('Sandbox Cortex AI model selection saved to your browser.');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error) {
@@ -173,6 +182,8 @@ export function SandboxCortexAiSettingsClient({
     try {
       window.localStorage.removeItem(CORTEX_AI_SANDBOX_MODEL_LOCAL_STORAGE);
       setSandboxModel(null);
+      setModelInput('');
+      notifyCortexAiSettingsChanged();
       setSuccessMessage('Sandbox Cortex AI model selection cleared.');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error) {

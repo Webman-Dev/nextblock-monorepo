@@ -35,6 +35,8 @@ import {
   saveOpenRouterApiKeyAction,
 } from './actions';
 
+const CORTEX_AI_SETTINGS_CHANGED_EVENT = 'nextblock:cortex-ai-settings-changed';
+
 type StoredCortexAiSettingsClientProps = {
   compatibleModels: Array<{
     id: string;
@@ -70,6 +72,10 @@ function formatModelPricing(pricing: Record<string, string>) {
   if (promptPrice === '$0' && completionPrice === '$0') return 'Free';
   if (promptPrice && completionPrice) return `${promptPrice}/1M input - ${completionPrice}/1M output`;
   return 'Pricing varies';
+}
+
+function notifyCortexAiSettingsChanged() {
+  window.dispatchEvent(new Event(CORTEX_AI_SETTINGS_CHANGED_EVENT));
 }
 
 export function StoredCortexAiSettingsClient({
@@ -272,7 +278,7 @@ export function StoredCortexAiSettingsClient({
             </CardDescription>
           </div>
           {hasStoredOpenRouterKey && (
-            <form action={clearOpenRouterApiKeyAction}>
+            <form action={clearOpenRouterApiKeyAction} onSubmit={notifyCortexAiSettingsChanged}>
               <Button
                 type="submit"
                 variant="outline"
@@ -286,7 +292,7 @@ export function StoredCortexAiSettingsClient({
           )}
         </CardHeader>
         <CardContent>
-          <form action={saveOpenRouterApiKeyAction}>
+          <form action={saveOpenRouterApiKeyAction} onSubmit={notifyCortexAiSettingsChanged}>
             <div className="flex items-end gap-3">
               <div className="flex-1 space-y-2">
                 <Label htmlFor="openrouter_api_key">OpenRouter API key</Label>
@@ -330,7 +336,7 @@ export function StoredCortexAiSettingsClient({
             </CardDescription>
           </div>
           {selectedModel && (
-            <form action={clearCortexAiModelSelectionAction}>
+            <form action={clearCortexAiModelSelectionAction} onSubmit={notifyCortexAiSettingsChanged}>
               <Button
                 type="submit"
                 variant="outline"
@@ -362,7 +368,7 @@ export function StoredCortexAiSettingsClient({
             </Alert>
           )}
 
-          <form action={saveCortexAiModelSelectionAction}>
+          <form action={saveCortexAiModelSelectionAction} onSubmit={notifyCortexAiSettingsChanged}>
             {/* We need a hidden input because SearchableSelect isn't a native form element that automatically passes 'name' inside form submission natively (unless we do) */}
             <input type="hidden" name="openrouter_model_id" value={modelInput} />
             

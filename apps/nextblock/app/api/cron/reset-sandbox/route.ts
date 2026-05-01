@@ -65,6 +65,7 @@ type ApparelProductSeed = {
 };
 
 const SANDBOX_COMMERCE_PRODUCT_ID = '24851';
+const SANDBOX_CORTEX_AI_PRODUCT_ID = '28609';
 
 const SEEDED_ASSETS: SeedAsset[] = [
   {
@@ -151,6 +152,13 @@ const SEEDED_ASSETS: SeedAsset[] = [
     contentType: 'image/webp',
     description: 'Sandbox seed asset: NextBlock™ Utility Pants.',
   },
+  {
+    source: 'images/cortex-ai-square.webp',
+    dest: 'images/cortex-ai-square.webp',
+    fileName: 'cortex-ai-square.webp',
+    contentType: 'image/webp',
+    description: 'Sandbox seed asset: Cortex AI cover image.',
+  },
 ];
 
 const SIZE_TERM_DEFINITIONS: Array<{
@@ -195,6 +203,10 @@ const CORE_MEDIA_RECORDS: Array<{
   {
     assetKey: 'images/commerce-wide.webp',
     description: 'NextBlock™ Commerce editorial feature image',
+  },
+  {
+    assetKey: 'images/cortex-ai-square.webp',
+    description: 'NextBlock™ Cortex AI cover image',
   },
 ];
 
@@ -872,6 +884,226 @@ async function enrichCommerceProducts(params: {
   }
 
   console.log('[Sandbox Reset] Successfully enriched commerce products (EN & FR).');
+}
+
+async function enrichCortexAiProducts(params: {
+  sql: SqlClient;
+  cortexAsset: UploadedSeedAsset;
+  enLangId: LanguageId;
+  frLangId: LanguageId;
+}) {
+  console.log('[Sandbox Reset] Enriching NextBlock™ Cortex AI...');
+
+  const cortexMediaId = await upsertMediaRecord(
+    params.sql,
+    params.cortexAsset,
+    'Sandbox seed asset: NextBlock™ Cortex AI.'
+  );
+
+  const [product] = await params.sql`
+    SELECT *
+    FROM public.products
+    WHERE freemius_product_id = ${SANDBOX_CORTEX_AI_PRODUCT_ID} AND language_id = ${params.enLangId}
+    LIMIT 1
+  `;
+
+  if (!product) {
+    throw new Error(
+      `Cortex AI product ${SANDBOX_CORTEX_AI_PRODUCT_ID} was not found after Freemius sync.`
+    );
+  }
+
+  const shortDescEn =
+    'NextBlock Cortex AI brings native block-level intelligence to your Next.js application, enabling automated content generation and intelligent structural refactoring.';
+
+  const htmlDescriptionEn = {
+    type: 'doc',
+    content: [
+      {
+        type: 'heading',
+        attrs: { level: 2 },
+        content: [{ type: 'text', text: 'The Intelligence Layer for Modern Content' }],
+      },
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'text',
+            text: 'NextBlock Cortex AI integrates directly into your block editor, allowing teams to generate high-fidelity content, refactor existing structures, and build AI-assisted workflows without leaving the CMS.',
+          },
+        ],
+      },
+      {
+        type: 'heading',
+        attrs: { level: 3 },
+        content: [{ type: 'text', text: 'Native block refactoring' }],
+      },
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'text',
+            text: 'Unlike generic AI wrappers, Cortex AI understands your block schemas. It doesn\'t just generate text; it generates structured JSONB data that maps perfectly to your NextBlock™ components.',
+          },
+        ],
+      },
+      {
+        type: 'heading',
+        attrs: { level: 3 },
+        content: [{ type: 'text', text: 'Key technical specs' }],
+      },
+      {
+        type: 'bulletList',
+        content: [
+          {
+            type: 'listItem',
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Native OpenRouter integration for access to the world\'s best models.' }],
+              },
+            ],
+          },
+          {
+            type: 'listItem',
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Context-aware block generation that respects your design system.' }],
+              },
+            ],
+          },
+          {
+            type: 'listItem',
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Streamlined BYOK (Bring Your Own Key) workflow for complete cost control.' }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  await params.sql`
+    UPDATE public.products
+    SET
+      short_description = ${shortDescEn},
+      description_json = ${params.sql.json(htmlDescriptionEn)},
+      product_type = 'digital',
+      payment_provider = 'freemius'
+    WHERE id = ${product.id}
+  `;
+
+  await attachProductMedia(params.sql, product.id as string, cortexMediaId);
+
+  const shortDescFr =
+    'NextBlock Cortex AI apporte une intelligence native au niveau des blocs à votre application Next.js, permettant la génération automatique de contenu.';
+
+  const htmlDescriptionFr = {
+    type: 'doc',
+    content: [
+      {
+        type: 'heading',
+        attrs: { level: 2 },
+        content: [{ type: 'text', text: 'La couche d’intelligence pour le contenu moderne' }],
+      },
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'text',
+            text: 'NextBlock Cortex AI s’intègre directement dans votre éditeur de blocs, permettant aux équipes de générer du contenu de haute fidélité et de construire des workflows assistés par l’IA.',
+          },
+        ],
+      },
+      {
+        type: 'heading',
+        attrs: { level: 3 },
+        content: [{ type: 'text', text: 'Refactorisation native de blocs' }],
+      },
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'text',
+            text: 'Cortex AI comprend vos schémas de blocs. Il ne se contente pas de générer du texte ; il génère des données JSONB structurées qui correspondent parfaitement à vos composants NextBlock™.',
+          },
+        ],
+      },
+      {
+        type: 'heading',
+        attrs: { level: 3 },
+        content: [{ type: 'text', text: 'Points techniques clés' }],
+      },
+      {
+        type: 'bulletList',
+        content: [
+          {
+            type: 'listItem',
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Intégration native OpenRouter pour un accès aux meilleurs modèles mondiaux.' }],
+              },
+            ],
+          },
+          {
+            type: 'listItem',
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Génération de blocs consciente du contexte respectant votre design system.' }],
+              },
+            ],
+          },
+          {
+            type: 'listItem',
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Workflow BYOK pour un contrôle total des coûts.' }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  const [frProduct] = await params.sql`
+    INSERT INTO public.products (
+      sku, title, slug, price, sale_price, stock, status,
+      short_description, description_json,
+      product_type, payment_provider,
+      language_id, translation_group_id,
+      freemius_product_id, freemius_plan_id
+    )
+    VALUES (
+      ${product.sku}, 'NextBlock Cortex AI - Licence AI', ${String(product.slug) + '-fr'},
+      ${product.price}, ${product.sale_price}, ${product.stock || 99}, ${product.status},
+      ${shortDescFr}, ${params.sql.json(htmlDescriptionFr)},
+      'digital', 'freemius',
+      ${params.frLangId}, ${product.translation_group_id},
+      ${product.freemius_product_id}, ${product.freemius_plan_id}
+    )
+    ON CONFLICT ON CONSTRAINT products_language_id_slug_key DO UPDATE
+    SET
+      title = EXCLUDED.title,
+      short_description = EXCLUDED.short_description,
+      description_json = EXCLUDED.description_json,
+      product_type = EXCLUDED.product_type,
+      payment_provider = EXCLUDED.payment_provider
+    RETURNING id
+  `;
+
+  if (frProduct?.id) {
+    await attachProductMedia(params.sql, frProduct.id as string, cortexMediaId);
+  }
+
+  console.log('[Sandbox Reset] Successfully enriched Cortex AI products (EN & FR).');
 }
 
 async function ensureSandboxCommerceProductSynced(params: {
@@ -1566,6 +1798,18 @@ export async function GET(request: NextRequest) {
               await enrichCommerceProducts({
                 sql: db,
                 commerceAsset,
+                enLangId,
+                frLangId,
+              });
+
+              const cortexAsset = uploadedAssets.get('images/cortex-ai-square.webp');
+              if (!cortexAsset) {
+                throw new Error('Missing uploaded Cortex AI asset after R2 seed step.');
+              }
+
+              await enrichCortexAiProducts({
+                sql: db,
+                cortexAsset,
                 enLangId,
                 frLangId,
               });

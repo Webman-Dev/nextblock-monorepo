@@ -14,7 +14,6 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { Badge } from "@nextblock-cms/ui/badge";
 import { Button } from "@nextblock-cms/ui/button";
 import { Textarea } from "@nextblock-cms/ui/textarea";
 import { cn } from "@nextblock-cms/utils";
@@ -94,6 +93,7 @@ const THREADS_STORAGE_KEY = "nextblock-cortex-global-agent-chat-threads";
 const MAX_STORED_MESSAGES = 40;
 const MAX_STORED_THREADS = 20;
 const REQUEST_TIMEOUT_MS = 90000;
+const CORTEX_AI_SETTINGS_CHANGED_EVENT = "nextblock:cortex-ai-settings-changed";
 const MUTATING_TOOL_NAMES = new Set([
   "create_cms_page",
   "create_cms_post",
@@ -663,7 +663,7 @@ export function CortexGlobalAgentChat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [toolActivities, setToolActivities] = useState<ToolActivity[]>([]);
-  const [metadata, setMetadata] = useState<{ credentialSource: string; modelId: string } | null>(
+  const [, setMetadata] = useState<{ credentialSource: string; modelId: string } | null>(
     null
   );
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -703,6 +703,16 @@ export function CortexGlobalAgentChat() {
 
   useEffect(() => {
     return () => abortControllerRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    const resetProviderMetadata = () => setMetadata(null);
+
+    window.addEventListener(CORTEX_AI_SETTINGS_CHANGED_EVENT, resetProviderMetadata);
+
+    return () => {
+      window.removeEventListener(CORTEX_AI_SETTINGS_CHANGED_EVENT, resetProviderMetadata);
+    };
   }, []);
 
   useEffect(() => {
@@ -1193,16 +1203,6 @@ export function CortexGlobalAgentChat() {
               <h2 className="truncate text-base font-semibold text-foreground">
                 NextBlock Cortex AI
               </h2>
-              <div className="mt-1 flex min-w-0 items-center gap-2">
-                <Badge variant="outline" className="max-w-full truncate rounded-md text-[11px]">
-                  {metadata?.credentialSource || "ready"}
-                </Badge>
-                {metadata?.modelId && (
-                  <span className="min-w-0 truncate text-xs text-slate-500 dark:text-slate-400">
-                    {metadata.modelId}
-                  </span>
-                )}
-              </div>
             </div>
             <Button
               disabled={isStreaming}
