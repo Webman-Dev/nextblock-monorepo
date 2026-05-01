@@ -103,6 +103,7 @@ DECLARE
   v_how_it_works_post_group_id uuid := gen_random_uuid();
   v_setup_post_group_id uuid := gen_random_uuid();
   v_commerce_post_group_id uuid := gen_random_uuid();
+  v_contact_page_group_id uuid := gen_random_uuid();
   v_en_lang_id bigint;
   v_fr_lang_id bigint;
   v_architecture_media_id uuid;
@@ -133,6 +134,14 @@ BEGIN
 
   INSERT INTO public.pages (language_id, title, slug, status, translation_group_id)
   VALUES (v_fr_lang_id, 'Articles', 'articles', 'published', v_blog_page_group_id)
+  ON CONFLICT (language_id, slug) DO UPDATE SET title = EXCLUDED.title, status = EXCLUDED.status;
+
+  INSERT INTO public.pages (language_id, title, slug, status, translation_group_id)
+  VALUES (v_en_lang_id, 'Contact Us', 'contact', 'published', v_contact_page_group_id)
+  ON CONFLICT (language_id, slug) DO UPDATE SET title = EXCLUDED.title, status = EXCLUDED.status;
+
+  INSERT INTO public.pages (language_id, title, slug, status, translation_group_id)
+  VALUES (v_fr_lang_id, 'Contactez-nous', 'contact', 'published', v_contact_page_group_id)
   ON CONFLICT (language_id, slug) DO UPDATE SET title = EXCLUDED.title, status = EXCLUDED.status;
 
   v_architecture_media_id := gen_random_uuid();
@@ -428,6 +437,7 @@ DECLARE
   v_en_lang_id BIGINT;
   v_home_page_id BIGINT;
   v_blog_page_id BIGINT;
+  v_contact_page_id BIGINT;
 BEGIN
   SELECT id INTO v_en_lang_id FROM public.languages WHERE code = 'en' LIMIT 1;
   IF v_en_lang_id IS NULL THEN RAISE EXCEPTION 'English language not found.'; END IF;
@@ -438,8 +448,12 @@ BEGIN
   SELECT id INTO v_blog_page_id FROM public.pages WHERE slug = 'articles' AND language_id = v_en_lang_id ORDER BY created_at DESC LIMIT 1;
   IF v_blog_page_id IS NULL THEN RAISE EXCEPTION 'English Articles page not found.'; END IF;
 
+  SELECT id INTO v_contact_page_id FROM public.pages WHERE slug = 'contact' AND language_id = v_en_lang_id ORDER BY created_at DESC LIMIT 1;
+  IF v_contact_page_id IS NULL THEN RAISE EXCEPTION 'English Contact page not found.'; END IF;
+
   DELETE FROM public.blocks WHERE page_id = v_home_page_id;
   DELETE FROM public.blocks WHERE page_id = v_blog_page_id;
+  DELETE FROM public.blocks WHERE page_id = v_contact_page_id;
 
   INSERT INTO public.blocks (page_id, language_id, block_type, content, "order") VALUES
   (v_home_page_id, v_en_lang_id, 'hero',
@@ -472,7 +486,13 @@ BEGIN
 
   INSERT INTO public.navigation_items (language_id, menu_key, label, url, "order", page_id) VALUES
     (v_en_lang_id, 'HEADER', 'Home', '/', 0, v_home_page_id),
-    (v_en_lang_id, 'HEADER', 'Articles', '/articles', 1, v_blog_page_id);
+    (v_en_lang_id, 'HEADER', 'Articles', '/articles', 1, v_blog_page_id),
+    (v_en_lang_id, 'HEADER', 'Contact', '/contact', 3, v_contact_page_id);
+
+  INSERT INTO public.blocks (page_id, language_id, block_type, content, "order") VALUES
+  (v_contact_page_id, v_en_lang_id, 'hero', '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":1,"text_content":"Let''s Build the Future Together","textAlign":"center","textColor":"white"}},{"block_type":"text","content":{"html_content":"<p class=''text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4''>NextBlock™ is an open-source project driven by community feedback. We''d love to hear your thoughts, ideas, or questions.</p>"}}]]}'::jsonb, 0),
+  (v_contact_page_id, v_en_lang_id, 'section', '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"lg","bottom":"lg"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<div class=''max-w-2xl mx-auto text-center''><h2 class=''text-2xl font-bold mb-4''>Open Source & Community Driven</h2><p class=''text-slate-600 dark:text-slate-400 mb-6''>NextBlock™ is built in the open. We rely on developers and editors like you to help us define the roadmap. Whether it''s a bug report, a feature request, or just a shoutout, every message helps us move faster.</p></div>"}}]]}'::jsonb, 1),
+  (v_contact_page_id, v_en_lang_id, 'form', '{"recipient_email":"contact@nextblock.dev","submit_button_text":"Send Message","success_message":"Thank you for your feedback! We''ll get back to you soon.","fields":[{"temp_id":"name","label":"Name","field_type":"text","is_required":true,"placeholder":"Your name"},{"temp_id":"email","label":"Email","field_type":"email","is_required":true,"placeholder":"your@email.com"},{"temp_id":"message","label":"Message","field_type":"textarea","is_required":true,"placeholder":"How can we help?"}]}'::jsonb, 2);
 END;
 $seed$;
 SELECT id AS home_page_id
@@ -494,23 +514,32 @@ DECLARE
   v_fr_lang_id BIGINT;
   v_home_page_fr_id BIGINT;
   v_blog_page_fr_id BIGINT;
+  v_contact_page_fr_id BIGINT;
 BEGIN
   SELECT id INTO v_fr_lang_id FROM public.languages WHERE code = 'fr' LIMIT 1;
   IF v_fr_lang_id IS NULL THEN RAISE EXCEPTION 'French language not found.'; END IF;
 
   SELECT id INTO v_home_page_fr_id FROM public.pages WHERE slug = 'accueil' AND language_id = v_fr_lang_id ORDER BY created_at DESC LIMIT 1;
   SELECT id INTO v_blog_page_fr_id FROM public.pages WHERE slug = 'articles' AND language_id = v_fr_lang_id ORDER BY created_at DESC LIMIT 1;
+  SELECT id INTO v_contact_page_fr_id FROM public.pages WHERE slug = 'contact' AND language_id = v_fr_lang_id ORDER BY created_at DESC LIMIT 1;
 
   IF v_home_page_fr_id IS NULL THEN RAISE EXCEPTION 'French home page not found.'; END IF;
   IF v_blog_page_fr_id IS NULL THEN RAISE EXCEPTION 'French articles page not found.'; END IF;
+  IF v_contact_page_fr_id IS NULL THEN RAISE EXCEPTION 'French contact page not found.'; END IF;
 
-  DELETE FROM public.blocks WHERE page_id IN (v_home_page_fr_id, v_blog_page_fr_id);
+  DELETE FROM public.blocks WHERE page_id IN (v_home_page_fr_id, v_blog_page_fr_id, v_contact_page_fr_id);
 
   DELETE FROM public.navigation_items WHERE menu_key = 'HEADER' AND language_id = v_fr_lang_id;
 
   INSERT INTO public.navigation_items (language_id, menu_key, label, url, "order", page_id) VALUES
     (v_fr_lang_id, 'HEADER', 'Accueil', '/accueil', 0, v_home_page_fr_id),
-    (v_fr_lang_id, 'HEADER', 'Articles', '/articles', 1, v_blog_page_fr_id);
+    (v_fr_lang_id, 'HEADER', 'Articles', '/articles', 1, v_blog_page_fr_id),
+    (v_fr_lang_id, 'HEADER', 'Contact', '/contact', 3, v_contact_page_fr_id);
+
+  INSERT INTO public.blocks (page_id, language_id, block_type, content, "order") VALUES
+  (v_contact_page_fr_id, v_fr_lang_id, 'hero', '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":1,"text_content":"Bâtissons le futur ensemble","textAlign":"center","textColor":"white"}},{"block_type":"text","content":{"html_content":"<p class=''text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4''>NextBlock™ est un projet open-source propulsé par vos retours. Nous serions ravis d''entendre vos idées ou vos questions.</p>"}}]]}'::jsonb, 0),
+  (v_contact_page_fr_id, v_fr_lang_id, 'section', '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"lg","bottom":"lg"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<div class=''max-w-2xl mx-auto text-center''><h2 class=''text-2xl font-bold mb-4''>Open Source & Communautaire</h2><p class=''text-slate-600 dark:text-slate-400 mb-6''>NextBlock™ est construit en public. Nous comptons sur les développeurs et éditeurs comme vous pour définir notre roadmap. Qu''il s''agisse d''un bug, d''une suggestion ou d''un simple salut, chaque message compte.</p></div>"}}]]}'::jsonb, 1),
+  (v_contact_page_fr_id, v_fr_lang_id, 'form', '{"recipient_email":"contact@nextblock.dev","submit_button_text":"Envoyer le message","success_message":"Merci pour vos retours ! Nous vous répondrons bientôt.","fields":[{"temp_id":"nom","label":"Nom","field_type":"text","is_required":true,"placeholder":"Votre nom"},{"temp_id":"email","label":"Email","field_type":"email","is_required":true,"placeholder":"votre@email.com"},{"temp_id":"message","label":"Message","field_type":"textarea","is_required":true,"placeholder":"Comment pouvons-nous vous aider ?"}]}'::jsonb, 2);
 
   INSERT INTO public.blocks (page_id, language_id, block_type, content, "order") VALUES
   (v_home_page_fr_id, v_fr_lang_id, 'hero',
