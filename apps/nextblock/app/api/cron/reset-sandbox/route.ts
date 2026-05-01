@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   DeleteObjectsCommand,
@@ -395,15 +397,46 @@ async function uploadSeedAssets(params: {
   const uploadedAssets = new Map<string, UploadedSeedAsset>();
 
   for (const asset of SEEDED_ASSETS) {
+    let buffer: Buffer | undefined;
     const fetchUrl = `${params.siteUrl}/${asset.source}`;
-    console.log(`[Sandbox Reset] Fetching ${fetchUrl}...`);
 
-    const res = await fetch(fetchUrl);
-    if (!res.ok) {
-      throw new Error(`Failed to fetch asset: ${fetchUrl} (${res.status})`);
+    // Optimization: If fetching from localhost, try to read from disk first to avoid ECONNRESET
+    if (fetchUrl.includes('localhost') || fetchUrl.includes('127.0.0.1')) {
+      try {
+        const localPath = path.join(process.cwd(), 'apps/nextblock/public', asset.source);
+        if (fs.existsSync(localPath)) {
+          console.log(`[Sandbox Reset] Loading local asset: ${localPath}`);
+          buffer = fs.readFileSync(localPath);
+        }
+      } catch (err) {
+        console.warn(`[Sandbox Reset] Failed to read local asset: ${asset.source}`, err);
+      }
     }
 
-    const buffer = Buffer.from(await res.arrayBuffer());
+    if (!buffer) {
+      console.log(`[Sandbox Reset] Fetching ${fetchUrl}...`);
+      
+      let lastErr: any;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const res = await fetch(fetchUrl);
+          if (!res.ok) {
+            throw new Error(`Failed to fetch asset: ${fetchUrl} (${res.status})`);
+          }
+          buffer = Buffer.from(await res.arrayBuffer());
+          break;
+        } catch (err) {
+          lastErr = err;
+          if (attempt === 3) break;
+          console.warn(`[Sandbox Reset] Fetch failed (attempt ${attempt}): ${fetchUrl}. Retrying in 1s...`);
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      }
+      
+      if (!buffer) {
+        throw new Error(`Failed to fetch asset after 3 attempts: ${fetchUrl}. Last error: ${lastErr?.message}`);
+      }
+    }
 
     await params.s3.send(
       new PutObjectCommand({
@@ -1631,6 +1664,126 @@ async function ensureShopPagesAndNavigation(params: {
   console.log('[Sandbox Reset] Successfully created Shop pages and navigation.');
 }
 
+async function seedFakeStoreData(sql: SqlClient, supabaseAdmin: any) {
+  console.log('[Sandbox Reset] Starting fake store data seeding...');
+  
+  // 1. Ensure Demo User
+  const email = 'demo@nextblock.ca';
+  console.log(`[Sandbox Reset] Checking for demo user: ${email}`);
+  const { data: userData, error: userError } = await supabaseAdmin.auth.admin.listUsers();
+  if (userError) {
+    console.error('[Sandbox Reset] Auth listUsers error:', userError);
+    throw userError;
+  }
+
+  let demoUser = userData.users.find((u: any) => u.email === email);
+  if (!demoUser) {
+    console.log('[Sandbox Reset] Demo user missing in Auth, creating...');
+    const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email: email,
+      password: 'password',
+      email_confirm: true,
+      user_metadata: { full_name: 'Nextblock CMS' }
+    });
+    if (createError) {
+      console.error('[Sandbox Reset] Auth createUser error:', createError);
+      throw createError;
+    }
+    demoUser = newUser.user;
+    console.log(`[Sandbox Reset] Created new demo user with ID: ${demoUser.id}`);
+  } else {
+    console.log(`[Sandbox Reset] Found existing demo user with ID: ${demoUser.id}`);
+  }
+
+  const userId = demoUser.id;
+
+  // 2. Seed Invoice Branding
+  console.log('[Sandbox Reset] Seeding invoice branding...');
+  const branding = {
+    business_name: 'NextBlock CMS',
+    email: 'billing@nextblock.ca',
+    phone: '5143188025',
+    address: {
+      line1: '',
+      line2: '',
+      city: 'Salaberry-de-Valleyfield',
+      state: 'Quebec',
+      postal_code: 'J6S 5B6',
+      country_code: 'CA',
+    },
+    tax_registrations: [],
+  };
+
+  await sql`
+    INSERT INTO public.site_settings (key, value)
+    VALUES ('invoice_settings', ${sql.json(branding)})
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+  `;
+
+  // 3. Seed Profile
+  console.log('[Sandbox Reset] Seeding demo account profile (ADMIN)...');
+  await sql`
+    INSERT INTO public.profiles (id, full_name, website, role, updated_at)
+    VALUES (${userId}, 'Nextblock CMS', 'https://nextblock.dev', 'ADMIN', now())
+    ON CONFLICT (id) DO UPDATE SET
+      full_name = EXCLUDED.full_name,
+      website = EXCLUDED.website,
+      role = 'ADMIN',
+      updated_at = now()
+  `;
+
+  // 4. Seed Orders
+  console.log('[Sandbox Reset] Querying products for order seeding...');
+  const products = await sql`
+    SELECT id, price, title 
+    FROM public.products 
+    WHERE status IN ('active', 'published')
+    LIMIT 10
+  `;
+  
+  console.log(`[Sandbox Reset] Found ${products.length} products for orders.`);
+  
+  if (products.length > 0) {
+    console.log(`[Sandbox Reset] Cleaning up existing orders for user ${userId}...`);
+    await sql`DELETE FROM public.orders WHERE user_id = ${userId}`;
+    
+    console.log('[Sandbox Reset] Inserting 5 fake orders...');
+    for (let i = 0; i < 5; i++) {
+      try {
+        const product = products[i % products.length];
+        const quantity = Math.floor(Math.random() * 2) + 1;
+        const total = (product.price || 0) * quantity;
+        const orderId = crypto.randomUUID();
+        const invoiceNumber = `INV-2024-${1000 + i}`;
+        const hoursAgo = `${i * 2} hours`;
+
+        console.log(`[Sandbox Reset] Creating order ${i+1}/5: ${invoiceNumber} for product ${product.title}`);
+
+        await sql`
+          INSERT INTO public.orders (
+            id, user_id, status, total, subtotal, tax_total, currency,
+            invoice_number, paid_at, created_at, customer_details, provider
+          ) VALUES (
+            ${orderId}, ${userId}, 'paid', ${total}, ${total}, 0, 'USD',
+            ${invoiceNumber}, now() - ${hoursAgo}::interval, now() - ${hoursAgo}::interval,
+            ${sql.json({ email, name: 'Nextblock CMS' })}, 'stripe'
+          )
+        `;
+
+        await sql`
+          INSERT INTO public.order_items (order_id, product_id, quantity, price_at_purchase)
+          VALUES (${orderId}, ${product.id}, ${quantity}, ${product.price})
+        `;
+      } catch (orderErr: any) {
+        console.error(`[Sandbox Reset] Failed to insert order ${i}:`, orderErr.message || orderErr);
+      }
+    }
+    console.log('[Sandbox Reset] Finished order seeding loop.');
+  } else {
+    console.warn('[Sandbox Reset] Skipping order seeding: No products found.');
+  }
+}
+
 export async function GET(request: NextRequest) {
   // 1. Guard: Only run in Sandbox Mode
   if (process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true') {
@@ -2330,6 +2483,14 @@ export async function GET(request: NextRequest) {
         } else {
           console.log('[Sandbox Reset] Successfully activated Cortex AI package.');
         }
+      }
+
+      // Seed additional store data: Branding, Demo Account, and Fake Orders
+      try {
+        await seedFakeStoreData(db, supabaseAdmin);
+        console.log('[Sandbox Reset] Successfully seeded fake store data.');
+      } catch (storeSeedErr: any) {
+        console.error('[Sandbox Reset] Failed to seed store data:', storeSeedErr.message || storeSeedErr);
       }
     } finally {
       await db.end();
