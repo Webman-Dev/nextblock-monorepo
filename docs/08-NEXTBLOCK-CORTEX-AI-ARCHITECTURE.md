@@ -54,6 +54,7 @@ Implemented:
   - `update_current_cms_fields`
   - `update_content_block`
   - `update_section_column_block`
+  - `fetch_ecommerce_stats`
 - Multilingual navigation/footer tool arguments using either language codes or language names.
 - Guardrails against OpenRouter free-model rate limits, raw tool-call leakage, and stuck loading streams.
 
@@ -594,6 +595,7 @@ Exported tool schemas:
 - `updateCurrentCmsFieldsInputSchema`
 - `updateContentBlockInputSchema`
 - `updateSectionColumnBlockInputSchema`
+- `fetchEcommerceStatsInputSchema`
 
 Exported executors:
 
@@ -604,6 +606,7 @@ Exported executors:
 - `executeUpdateCurrentCmsFields`
 - `executeUpdateContentBlock`
 - `executeUpdateSectionColumnBlock`
+- `executeFetchEcommerceStats`
 
 Tool factory:
 
@@ -818,6 +821,33 @@ Behavior:
 - Parent must be `section` or `hero`.
 - Validates nested content against the nested block type.
 - Validates final parent section/hero content before saving.
+
+### fetch_ecommerce_stats
+
+Purpose:
+
+- Fetch quantitative ecommerce statistics and reports from the database.
+- Answer questions about revenue, order counts, and top-selling products over a time range.
+
+Input:
+
+```ts
+{
+  currency?: string; // ISO code, default "USD"
+  query: string; // The analytical question
+  reportType?: 'revenue' | 'orders' | 'products' | 'general';
+  timeRange?: 'last_7_days' | 'last_30_days' | 'last_month' | 'last_90_days' | 'all_time';
+}
+```
+
+Behavior:
+
+- Read-only: does not require confirmation.
+- Queries `order_items` joined with `orders` and `products`.
+- Filters by `orders.status = 'paid'`.
+- Supports aggregation by product and currency.
+- Provides a summary of total orders, total revenue, and a list of top products.
+- Restricted to authenticated admins in the `global-agent` route.
 
 ### Revalidation
 

@@ -94,6 +94,7 @@ const GLOBAL_AGENT_SYSTEM_PROMPT = [
   'When a user names a language, pass that language name or its locale code in languageCode; examples: French maps to fr, English maps to en.',
   'For follow-up requests like "also add it in French", use the prior requested item and apply it to the named language. For page/post/product translations, pass the current translationGroupId into the creation tool so the backend links the language versions.',
   'Use search_documentation before answering implementation or CMS usage questions that require factual project context.',
+  'Use fetch_ecommerce_stats for quantitative questions about revenue, products, or order counts. This tool is read-only.',
   'Never invent database fields, raw SQL, markdown content, or unsupported tool arguments.',
 ].join(' ');
 
@@ -379,6 +380,10 @@ function getToolCompletionMessage(toolName?: string, output?: unknown) {
 
   if (toolName === 'read_current_cms_item') {
     return 'I read the current CMS item, but the model was interrupted before it could finish a summary.';
+  }
+
+  if (toolName === 'fetch_ecommerce_stats') {
+    return 'I fetched the latest ecommerce statistics for you.';
   }
 
   if (toolName === 'update_current_cms_fields') {

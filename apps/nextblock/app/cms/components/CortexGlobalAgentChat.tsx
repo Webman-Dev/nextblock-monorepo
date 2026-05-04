@@ -543,6 +543,86 @@ function parseStreamFrame(frame: string): CortexAgentStreamEvent | null {
   return JSON.parse(data) as CortexAgentStreamEvent;
 }
 
+function FormattedText({ text }: { text: string }) {
+  // Handle bold (**text**) and inline code (`text`)
+  const parts = text.split(/(\*\*.*?\*\*|`.*?`)/g);
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={i}>{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith("`") && part.endsWith("`")) {
+          return (
+            <code
+              key={i}
+              className="rounded bg-slate-200 px-1 py-0.5 font-mono text-[11px] dark:bg-slate-800"
+            >
+              {part.slice(1, -1)}
+            </code>
+          );
+        }
+        return part;
+      })}
+    </>
+  );
+}
+
+function MarkdownContent({ content }: { content: string }) {
+  if (!content) return null;
+
+  const lines = content.split("\n");
+  const elements: React.ReactNode[] = [];
+  let currentList: React.ReactNode[] = [];
+
+  const flushList = () => {
+    if (currentList.length > 0) {
+      elements.push(
+        <ul key={`list-${elements.length}`} className="mb-3 mt-1 list-disc space-y-1 pl-5">
+          {currentList}
+        </ul>
+      );
+      currentList = [];
+    }
+  };
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+
+    // Check for bullet points (* or -)
+    if (trimmed.startsWith("* ") || trimmed.startsWith("- ")) {
+      const text = line.slice(line.indexOf(trimmed[0]) + 2);
+      currentList.push(
+        <li key={`li-${index}`}>
+          <FormattedText text={text} />
+        </li>
+      );
+    } else if (trimmed === "" && currentList.length > 0) {
+      // Empty line breaks the list
+      flushList();
+    } else if (trimmed !== "") {
+      // Regular line
+      flushList();
+      elements.push(
+        <p key={`p-${index}`} className="mb-2 last:mb-0">
+          <FormattedText text={line} />
+        </p>
+      );
+    } else {
+      // Empty line (not in list)
+      flushList();
+      if (index < lines.length - 1) {
+        elements.push(<div key={`br-${index}`} className="h-2" />);
+      }
+    }
+  });
+
+  flushList();
+
+  return <div className="markdown-content">{elements}</div>;
+}
+
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
 
@@ -550,13 +630,19 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[86%] whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-sm leading-6",
+          "max-w-[86%] break-words rounded-lg px-3 py-2 text-sm leading-6",
           isUser
-            ? "bg-primary text-primary-foreground"
+            ? "bg-primary text-primary-foreground whitespace-pre-wrap"
             : "border border-slate-200 bg-slate-50 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         )}
       >
-        {message.content || (
+        {message.content ? (
+          isUser ? (
+            message.content
+          ) : (
+            <MarkdownContent content={message.content} />
+          )
+        ) : (
           <span className="inline-flex items-center gap-2 text-slate-500 dark:text-slate-400">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
           </span>

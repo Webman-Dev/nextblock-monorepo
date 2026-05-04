@@ -127,6 +127,28 @@ export const searchDocumentationInputSchema = z.strictObject({
   query: z.string().trim().min(2).max(300),
 });
 
+export const fetchEcommerceStatsInputSchema = z.object({
+  currency: z
+    .string()
+    .trim()
+    .min(3)
+    .max(3)
+    .optional()
+    .default('USD')
+    .describe('The currency code for monetary values (e.g., USD, CAD).'),
+  query: z.string().describe('The analytical question about orders, products, or revenue.'),
+  reportType: z
+    .enum(['revenue', 'orders', 'products', 'general'])
+    .optional()
+    .default('general')
+    .describe('The focus area of the statistical report.'),
+  timeRange: z
+    .enum(['today', 'this_month', 'last_7_days', 'last_30_days', 'last_month', 'last_90_days', 'all_time'])
+    .optional()
+    .default('last_30_days')
+    .describe('The time period for the report.'),
+});
+
 export const cortexAiPageContextSchema = z.strictObject({
   contentType: z.enum(['page', 'post', 'product']),
   currentEditor: z
@@ -547,6 +569,7 @@ export type NavigationItemInput = z.infer<typeof navigationItemInputSchema>;
 export type UpdateNavigationBarInput = z.infer<typeof updateNavigationBarInputSchema>;
 export type UpdateFooterInput = z.infer<typeof updateFooterInputSchema>;
 export type SearchDocumentationInput = z.infer<typeof searchDocumentationInputSchema>;
+export type FetchEcommerceStatsInput = z.input<typeof fetchEcommerceStatsInputSchema>;
 export type CortexAiPageContext = z.infer<typeof cortexAiPageContextSchema>;
 export type ReadCurrentCmsItemInput = z.infer<typeof readCurrentCmsItemInputSchema>;
 export type UpdateCurrentCmsFieldsInput = z.infer<typeof updateCurrentCmsFieldsInputSchema>;
@@ -2738,6 +2761,114 @@ export async function executeSearchDocumentationWithTimeout(
   );
 }
 
+export async function executeFetchEcommerceStats(
+  input: FetchEcommerceStatsInput,
+  context?: ToolExecutionContext
+) {
+  const parsed = fetchEcommerceStatsInputSchema.parse(input);
+  const supabase = getSupabase(context);
+
+  const now = new Date();
+  let startDate: Date | null = null;
+  let endDate: Date | null = null;
+
+  switch (parsed.timeRange) {
+    case 'today':
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      break;
+    case 'this_month':
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      break;
+    case 'last_7_days':
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      break;
+    case 'last_30_days':
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      break;
+    case 'last_month':
+      startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      break;
+    case 'last_90_days':
+      startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      break;
+    case 'all_time':
+      startDate = null;
+      break;
+  }
+
+  const queryBuilder = supabase
+    .from('order_items')
+    .select(`
+      quantity,
+      price_at_purchase,
+      products!inner (
+        id,
+        title,
+        product_type
+      ),
+      orders!inner (
+        id,
+        status,
+        paid_at,
+        currency
+      )
+    `)
+    .eq('orders.status', 'paid')
+    .eq('orders.currency', parsed.currency);
+
+  if (startDate) {
+    queryBuilder.gte('orders.paid_at', startDate.toISOString());
+  }
+  if (endDate) {
+    queryBuilder.lte('orders.paid_at', endDate.toISOString());
+  }
+
+  const { data, error } = await queryBuilder;
+
+  if (error) {
+    throw new Error(`Failed to fetch ecommerce stats: ${serializeError(error)}`);
+  }
+
+  const rows = Array.isArray(data) ? data : [];
+  const report: Record<string, any> = {
+    currency: parsed.currency,
+    query: parsed.query,
+    reportType: parsed.reportType,
+    timeRange: parsed.timeRange,
+    totalOrders: new Set(rows.map((row: any) => row.orders.id)).size,
+    totalRevenue: rows.reduce((sum: number, row: any) => sum + row.quantity * row.price_at_purchase, 0) / 100,
+  };
+
+  if (parsed.reportType === 'products' || parsed.reportType === 'revenue' || parsed.reportType === 'general') {
+    const productStats: Record<string, { id: string; revenue: number; quantity: number; title: string; type: string }> = {};
+
+    for (const row of rows) {
+      const productId = row.products.id;
+      if (!productStats[productId]) {
+        productStats[productId] = {
+          id: productId,
+          quantity: 0,
+          revenue: 0,
+          title: row.products.title,
+          type: row.products.product_type,
+        };
+      }
+      productStats[productId].quantity += row.quantity;
+      productStats[productId].revenue += (row.quantity * row.price_at_purchase) / 100;
+    }
+
+    report.topProducts = Object.values(productStats)
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
+  }
+
+  return {
+    report,
+    success: true,
+  };
+}
+
 export async function executeReadCurrentCmsItem(
   input: ReadCurrentCmsItemInput,
   context?: ToolExecutionContext
@@ -4376,6 +4507,13 @@ export async function executeCmsActionPlan(
 
 export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
   return {
+    fetch_ecommerce_stats: tool({
+      description:
+        'Fetch quantitative ecommerce statistics and reports from the database. Use this to answer questions about revenue, order counts, and top-selling products over a time range. This tool is read-only and does not require confirmation.',
+      execute: (input) => executeFetchEcommerceStats(input, context),
+      inputSchema: fetchEcommerceStatsInputSchema,
+      strict: true,
+    }),
     read_current_cms_item: tool({
       description:
         'Read the CMS item currently being edited. Requires pageContext and returns page/post/product metadata plus page/post block summaries or content.',
