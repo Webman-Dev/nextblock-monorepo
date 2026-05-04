@@ -50,6 +50,7 @@ export const FeaturedProductBlock = async ({ content }: { content: FeaturedProdu
     stock: productRecord.stock,
     freemius_product_id: productRecord.freemius_product_id || undefined,
     freemius_plan_id: productRecord.freemius_plan_id || undefined,
+    freemius_plans: productRecord.freemius_plans,
     language_id: productRecord.language_id,
     translation_group_id: productRecord.translation_group_id || "",
     has_variants: (productRecord.product_variants?.length || 0) > 0,

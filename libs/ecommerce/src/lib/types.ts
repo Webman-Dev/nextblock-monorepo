@@ -125,6 +125,22 @@ export interface Product {
     sale_price?: number | null;
     sale_prices?: SalePriceMap | null;
   }>;
+  freemius_plans?: Array<{
+    id: string;
+    name: string;
+    title: string | null;
+    freemius_pricing: Array<{
+      id: string;
+      license_quota: number | null;
+      api_monthly_price: number | null;
+      api_annual_price: number | null;
+      api_lifetime_price: number | null;
+      override_monthly_price: number | null;
+      override_annual_price: number | null;
+      override_lifetime_price: number | null;
+      is_active: boolean;
+    }>;
+  }>;
 }
 
 export interface ShippingZone {

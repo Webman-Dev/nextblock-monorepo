@@ -85,6 +85,9 @@ export const ProductGridBlock = async ({
         short_description: p.short_description || undefined,
         language_id: p.language_id as number,
         translation_group_id: p.translation_group_id || "",
+        freemius_product_id: productRecord.freemius_product_id || undefined,
+        freemius_plan_id: productRecord.freemius_plan_id || undefined,
+        freemius_plans: productRecord.freemius_plans,
         has_variants: (p.product_variants?.length || 0) > 0,
         product_variants: (p.product_variants || []).map((variant: any) => ({
           id: variant.id,
