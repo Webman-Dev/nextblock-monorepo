@@ -168,13 +168,13 @@ otp_expiry = 3600
 # For hosted Supabase projects, prefer `npm run configure:supabase-auth`, which reads
 # SMTP_* from your env file and pushes the settings plus branded templates automatically.
 # For local/self-hosted Supabase, you can uncomment this block and keep using env() values.
-# [auth.email.smtp]
-# host = "env(SMTP_HOST)"
-# port = 587
-# user = "env(SMTP_USER)"
-# pass = "env(SMTP_PASS)"
-# admin_email = "env(SMTP_FROM_EMAIL)"
-# sender_name = "env(SMTP_FROM_NAME)"
+[auth.email.smtp]
+host = "env(SMTP_HOST)"
+port = "env(SMTP_PORT)"
+user = "env(SMTP_USER)"
+pass = "env(SMTP_PASS)"
+admin_email = "env(SMTP_FROM_EMAIL)"
+sender_name = "env(SMTP_FROM_NAME)"
 
 [auth.email.template.confirmation]
 subject = "Confirm your email"
