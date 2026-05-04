@@ -31,7 +31,7 @@ function getRequiredRolesForPath(pathname: string): UserRole[] | null {
   return null;
 }
 
-export default async function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   const nonce = crypto.randomUUID();
   requestHeaders.set('x-nonce', nonce);
