@@ -187,16 +187,18 @@ export async function getPublicFreemiusPricing(freemiusProductId: string) {
       id: plan.id,
       name: plan.name,
       title: plan.title,
-      pricing: (plan.freemius_pricing || []).map((pricing: any) => {
-        return {
-          id: pricing.id,
-          license_quota: pricing.license_quota,
-          monthly_price: pricing.override_monthly_price ?? pricing.api_monthly_price,
-          annual_price: pricing.override_annual_price ?? pricing.api_annual_price,
-          lifetime_price: pricing.override_lifetime_price ?? pricing.api_lifetime_price,
-          is_active: pricing.is_active,
-        };
-      })
+      pricing: (plan.freemius_pricing || [])
+        .filter((pricing: any) => pricing.is_active !== false)
+        .map((pricing: any) => {
+          return {
+            id: pricing.id,
+            license_quota: pricing.license_quota,
+            monthly_price: pricing.override_monthly_price ?? pricing.api_monthly_price,
+            annual_price: pricing.override_annual_price ?? pricing.api_annual_price,
+            lifetime_price: pricing.override_lifetime_price ?? pricing.api_lifetime_price,
+            is_active: pricing.is_active,
+          };
+        })
     };
   });
 

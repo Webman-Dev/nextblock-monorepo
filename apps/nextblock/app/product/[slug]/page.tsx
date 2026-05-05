@@ -215,6 +215,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
         : undefined,
     freemius_product_id: productRecord.freemius_product_id || undefined,
     freemius_plan_id: productRecord.freemius_plan_id || undefined,
+    trial_period_days: productRecord.trial_period_days ?? 0,
+    trial_requires_payment_method: productRecord.trial_requires_payment_method ?? false,
     freemius_plans: productRecord.freemius_plans,
     language_id: productRecord.language_id,
     translation_group_id: productRecord.translation_group_id || "",

@@ -15,6 +15,7 @@ import {
 } from '@nextblock-cms/utils';
 import { useCurrency } from '../CurrencyProvider';
 import { convertMinorUnitAmount } from '../currency';
+import { getTrialSummary } from '../trials';
 
 interface SubscriptionSelectorProps {
   product: Product;
@@ -138,6 +139,8 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
       else if (hasLifetime) setSelectedCycle('lifetime');
   }
 
+  const trialSummary = getTrialSummary(product);
+
   let displayPriceMinor = product.price;
   if (selectedCycle === 'monthly' && pricing.monthly_price != null) {
     displayPriceMinor = convertMinorUnitAmount({
@@ -216,11 +219,20 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
           {selectedCycle !== 'lifetime' && (
               <span className="text-muted-foreground ml-2">/ {selectedCycle === 'annual' ? t('ecommerce.year') : t('ecommerce.month')}</span>
           )}
+          {trialSummary && (
+            <div className="mt-3 text-sm font-medium text-emerald-700">
+              {trialSummary.label}
+              <span className="mx-2 text-muted-foreground">|</span>
+              <span className="text-muted-foreground">
+                {trialSummary.paymentRequirementLabel}
+              </span>
+            </div>
+          )}
       </div>
 
       <Button onClick={handleAddToCart} className="w-full h-14 text-lg font-bold shadow-md transition-all hover:shadow-lg active:scale-[0.98]">
         <ShoppingCart className="mr-2 h-5 w-5" />
-        {t('ecommerce.get_license')}
+        {trialSummary?.label ? `Start ${trialSummary.label}` : t('ecommerce.get_license')}
       </Button>
     </div>
   );

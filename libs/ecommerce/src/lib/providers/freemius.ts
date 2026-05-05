@@ -55,6 +55,89 @@ function splitFreemiusCustomerName(name?: string | null) {
     };
 }
 
+function normalizeFreemiusTrialPeriod(value: unknown) {
+    if (value === null || value === undefined || value === '') {
+        return 0;
+    }
+
+    const parsed = Number(value);
+
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        return 0;
+    }
+
+    return Math.round(parsed);
+}
+
+function isFreemiusTruthy(value: unknown) {
+    return value === true || value === 1 || value === '1' || value === 'true';
+}
+
+function getFreemiusCollection(payload: any, key: string) {
+    const value = payload?.[key];
+
+    if (Array.isArray(value)) {
+        return value;
+    }
+
+    if (value && typeof value === 'object') {
+        return [value];
+    }
+
+    return [];
+}
+
+function getFirstFreemiusCollection(payload: any, keys: string[]) {
+    for (const key of keys) {
+        const collection = getFreemiusCollection(payload, key);
+
+        if (collection.length > 0) {
+            return collection;
+        }
+    }
+
+    if (Array.isArray(payload)) {
+        return payload;
+    }
+
+    return [];
+}
+
+function normalizeFreemiusAmount(value: unknown) {
+    if (value === null || value === undefined || value === '') {
+        return null;
+    }
+
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toMinorFreemiusAmount(value: number | null) {
+    if (value === null) {
+        return 0;
+    }
+
+    if (value > 5000) {
+        console.warn(
+            `[Freemius Sync] Suspiciously high price detected: ${value}. Assuming it is already in cents.`
+        );
+        return Math.round(value);
+    }
+
+    return Math.round(value * 100);
+}
+
+function getFreemiusLicenseQuota(value: unknown) {
+    const parsed = Number(value);
+
+    if (!Number.isFinite(parsed) || parsed < 1) {
+        return 1;
+    }
+
+    return Math.round(parsed);
+}
+
 function parseFreemiusCheckoutCredentialsMap():
     | Record<string, FreemiusCheckoutCredentialEntry>
     | null {
@@ -207,7 +290,7 @@ export class FreemiusProvider implements PaymentProvider {
       const item = cartItems[0];
       const { data: product, error: productError } = await supabase
         .from('products')
-        .select('id, title, price, prices, sale_price, sale_prices, freemius_plan_id, freemius_product_id')
+        .select('id, title, price, prices, sale_price, sale_prices, freemius_plan_id, freemius_product_id, trial_period_days, trial_requires_payment_method')
         .eq('id', item.product_id)
         .single();
         
@@ -232,6 +315,14 @@ export class FreemiusProvider implements PaymentProvider {
       });
       const unitAmount = resolvedPrice.sale_price ?? resolvedPrice.price;
       const totalAmount = unitAmount * item.quantity;
+      const trialPeriodDays = normalizeFreemiusTrialPeriod(product.trial_period_days);
+      const trialMode =
+          item.trial_preference ? item.trial_preference :
+          trialPeriodDays > 0
+              ? product.trial_requires_payment_method
+                  ? 'paid'
+                  : 'free'
+              : null;
       const freemiusCustomerName = splitFreemiusCustomerName(
         billingAddress?.recipient_name ?? null
       );
@@ -384,6 +475,12 @@ export class FreemiusProvider implements PaymentProvider {
           url.searchParams.append('user_lastname', freemiusCustomerName.lastName);
       }
       url.searchParams.append('currency', selectedCurrency.code.toLowerCase());
+      if (item.billing_cycle) {
+          url.searchParams.append('billing_cycle', item.billing_cycle);
+      }
+      if (trialMode) {
+          url.searchParams.append('trial', trialMode);
+      }
       
       return { 
           url: url.toString(),
@@ -397,6 +494,10 @@ export class FreemiusProvider implements PaymentProvider {
               user_lastname: freemiusCustomerName.lastName,
               credential_source: checkoutCredentials.source,
               sandbox: sandboxPayload,
+              billing_cycle: item.billing_cycle,
+              trial: trialMode,
+              trial_period_days: trialPeriodDays,
+              trial_requires_payment_method: product.trial_requires_payment_method,
               order_id: order.id
           }
       };
@@ -459,7 +560,7 @@ export async function syncFreemiusProductsToSupabase() {
     try {
         console.log(`[Freemius Sync] Fetching all plugins for developer ${devId}...`);
         const pluginsData = await fetcher(`/v1/developers/${devId}/plugins.json`);
-        const plugins = pluginsData.plugins || [];
+        const plugins = getFirstFreemiusCollection(pluginsData, ['plugins', 'plugin']);
         
         console.log(`[Freemius Sync] Found ${plugins.length} plugins. Syncing plans...`);
 
@@ -473,7 +574,21 @@ export async function syncFreemiusProductsToSupabase() {
         }
 
         for (const plugin of plugins) {
-            const count = await syncSingleFreemiusProductInternal(supabase, devId, plugin.id.toString(), plugin.title, fetcher, enLangId);
+            const pluginId = plugin.id?.toString();
+
+            if (!pluginId) {
+                console.warn('[Freemius Sync] Skipping plugin without an id:', plugin);
+                continue;
+            }
+
+            const count = await syncSingleFreemiusProductInternal(
+                supabase,
+                devId,
+                pluginId,
+                plugin.title || plugin.name || `Freemius Product ${pluginId}`,
+                fetcher,
+                enLangId
+            );
             totalSyncCount += count;
         }
 
@@ -506,9 +621,17 @@ export async function syncSingleFreemiusProduct(productId: string) {
     }
 
     // First fetch the plugin details to get the title
-    const plugin = await fetcher(`/v1/developers/${devId}/plugins/${productId}.json`);
+    const pluginResponse = await fetcher(`/v1/developers/${devId}/plugins/${productId}.json`);
+    const plugin = pluginResponse.plugin ?? pluginResponse;
     
-    const count = await syncSingleFreemiusProductInternal(supabase, devId, productId, plugin.title, fetcher, enLangId);
+    const count = await syncSingleFreemiusProductInternal(
+        supabase,
+        devId,
+        productId,
+        plugin.title || plugin.name || `Freemius Product ${productId}`,
+        fetcher,
+        enLangId
+    );
     return { success: true, count };
 }
 
@@ -526,12 +649,48 @@ async function syncSingleFreemiusProductInternal(
     try {
         const plansPath = `/v1/developers/${devId}/plugins/${productId}/plans.json`;
         const plansData = await fetchFreemius(plansPath);
-        const plans = plansData.plans || [];
+        const plans = getFirstFreemiusCollection(plansData, ['plans', 'plan']);
         console.log(`[Freemius Sync] Received ${plans.length} plans for plugin ${productId}.`);
 
         for (const plan of plans) {
-            const planIdStr = plan.id.toString();
-            console.log(`[Freemius Sync] Processing plan: ${plan.title || plan.name} (${planIdStr})...`);
+            const planIdStr = plan.id?.toString();
+
+            if (!planIdStr) {
+                console.warn('[Freemius Sync] Skipping plan without an id:', plan);
+                continue;
+            }
+
+            const planName = plan.name || plan.title || planIdStr;
+            const planTitle = plan.title || planName;
+
+            console.log(`[Freemius Sync] Processing plan: ${planTitle} (${planIdStr})...`);
+
+            let planDetails = plan;
+            if (
+                planDetails.trial_period === undefined ||
+                planDetails.is_require_subscription === undefined
+            ) {
+                try {
+                    const planDetailsPath = `/v1/developers/${devId}/plugins/${productId}/plans/${planIdStr}.json`;
+                    const fetchedPlanDetails = await fetchFreemius(planDetailsPath);
+                    const fetchedPlanPayload = fetchedPlanDetails.plan ?? fetchedPlanDetails;
+                    planDetails = {
+                        ...planDetails,
+                        ...fetchedPlanPayload,
+                    };
+                } catch (planDetailsErr) {
+                    console.warn(
+                        `[Freemius Sync] Could not fetch trial details for plan ${planIdStr}:`,
+                        planDetailsErr instanceof Error
+                            ? planDetailsErr.message
+                            : planDetailsErr
+                    );
+                }
+            }
+
+            const trialPeriodDays = normalizeFreemiusTrialPeriod(planDetails.trial_period);
+            const trialRequiresPaymentMethod =
+                trialPeriodDays > 0 && isFreemiusTruthy(planDetails.is_require_subscription);
             
             // 1. Fetch pricing for this specific plan
             let price = 0;
@@ -539,33 +698,33 @@ async function syncSingleFreemiusProductInternal(
             try {
                 const pricingPath = `/v1/developers/${devId}/plugins/${productId}/plans/${planIdStr}/pricing.json`;
                 const pricingData = await fetchFreemius(pricingPath);
-                fullPricing = pricingData.pricing || [];
+                fullPricing = getFirstFreemiusCollection(pricingData, [
+                    'pricing',
+                    'prices',
+                    'pricings',
+                ]);
                 if (fullPricing.length > 0) {
-                    // Base price calculation for the main products table fallback
-                    const rawPrice = fullPricing[0].annual_price || fullPricing[0].monthly_price || 0;
-                    
-                    // Defensive check: If rawPrice > 5000, it's probably already in cents (or it's a very expensive plugin).
-                    // Most plugins are not $5,000/year. Freemius sometimes returns cents in certain API versions or configs.
-                    if (rawPrice > 5000) {
-                        console.warn(`[Freemius Sync] Suspiciously high price detected: ${rawPrice}. Assuming it is already in cents.`);
-                        price = Math.round(rawPrice);
-                    } else {
-                        price = Math.round(rawPrice * 100);
-                    }
+                    const firstPricing = fullPricing[0];
+                    const rawPrice =
+                        normalizeFreemiusAmount(firstPricing.annual_price) ??
+                        normalizeFreemiusAmount(firstPricing.monthly_price) ??
+                        normalizeFreemiusAmount(firstPricing.lifetime_price);
+
+                    price = toMinorFreemiusAmount(rawPrice);
                 }
-                console.log(`[Freemius Sync] Plan: ${plan.title || plan.name} -> Resolved Price (cents): ${price}`);
+                console.log(`[Freemius Sync] Plan: ${planTitle} -> Resolved Price (cents): ${price}`);
             } catch (pricingErr) {
                 console.warn(`[Freemius Sync] Could not fetch pricing for plan ${planIdStr}:`, pricingErr instanceof Error ? pricingErr.message : pricingErr);
             }
 
-            const productSlug = `${pluginTitle}-${plan.title || plan.name}`
+            const productSlug = `${pluginTitle}-${planTitle}`
                 .toLowerCase()
                 .replace(/[^\w\s-]/g, '')
                 .replace(/[\s_]+/g, '-')
                 .replace(/^-+|-+$/g, '');
 
             const productPayload = {
-                title: `${pluginTitle} - ${plan.title || plan.name}`,
+                title: `${pluginTitle} - ${planTitle}`,
                 slug: productSlug,
                 short_description: plan.description || '',
                 price: price,
@@ -573,6 +732,8 @@ async function syncSingleFreemiusProductInternal(
                 payment_provider: 'freemius',
                 freemius_plan_id: planIdStr,
                 freemius_product_id: productId,
+                trial_period_days: trialPeriodDays,
+                trial_requires_payment_method: trialRequiresPaymentMethod,
                 status: 'active',
                 stock: 999, 
                 sku: `FM-${productId}-${planIdStr}`,
@@ -593,66 +754,111 @@ async function syncSingleFreemiusProductInternal(
             const localProductId = upsertData[0].id;
 
             // 3. Sync Freemius Plan
-            const { data: existingPlan } = await supabase
+            const { data: existingPlan, error: existingPlanError } = await supabase
                 .from('freemius_plans')
                 .select('id')
                 .eq('product_id', localProductId)
-                .eq('name', plan.name)
-                .single();
+                .eq('name', planName)
+                .maybeSingle();
+
+            if (existingPlanError) {
+                console.warn(
+                    `[Freemius Sync] Could not check existing local plan for ${productPayload.sku}:`,
+                    existingPlanError.message || existingPlanError
+                );
+            }
 
             let localPlanIdStr = '';
 
             if (existingPlan) {
                 localPlanIdStr = existingPlan.id;
-                await supabase
+                const { error: planUpdateError } = await supabase
                     .from('freemius_plans')
-                    .update({ title: plan.title || plan.name, updated_at: new Date().toISOString() })
+                    .update({ title: planTitle, updated_at: new Date().toISOString() })
                     .eq('id', localPlanIdStr);
+
+                if (planUpdateError) {
+                    console.warn(
+                        `[Freemius Sync] Could not update local plan ${localPlanIdStr}:`,
+                        planUpdateError.message || planUpdateError
+                    );
+                }
             } else {
-                const { data: newPlan } = await supabase
+                const { data: newPlan, error: planInsertError } = await supabase
                     .from('freemius_plans')
                     .insert({
                         product_id: localProductId,
-                        name: plan.name,
-                        title: plan.title || plan.name
+                        name: planName,
+                        title: planTitle
                     })
                     .select('id')
                     .single();
+
+                if (planInsertError) {
+                    console.warn(
+                        `[Freemius Sync] Could not insert local plan for ${productPayload.sku}:`,
+                        planInsertError.message || planInsertError
+                    );
+                }
+
                 if (newPlan) localPlanIdStr = newPlan.id;
             }
 
             // 4. Sync Pricing Configurations Safely (Preserving Overrides)
             if (localPlanIdStr && fullPricing.length > 0) {
                 for (const pr of fullPricing) {
-                    const lQuota = pr.licenses || 1;
+                    const lQuota = getFreemiusLicenseQuota(
+                        pr.licenses ?? pr.license_quota ?? pr.quota
+                    );
                     
-                    const { data: existingPricing } = await supabase
+                    const { data: existingPricing, error: existingPricingError } = await supabase
                         .from('freemius_pricing')
                         .select('id')
                         .eq('plan_id', localPlanIdStr)
                         .eq('license_quota', lQuota)
-                        .single();
+                        .maybeSingle();
+
+                    if (existingPricingError) {
+                        console.warn(
+                            `[Freemius Sync] Could not check pricing for plan ${localPlanIdStr}, quota ${lQuota}:`,
+                            existingPricingError.message || existingPricingError
+                        );
+                    }
 
                     const pPayload = {
-                        api_monthly_price: pr.monthly_price ? Number(pr.monthly_price) : null,
-                        api_annual_price: pr.annual_price ? Number(pr.annual_price) : null,
-                        api_lifetime_price: pr.lifetime_price ? Number(pr.lifetime_price) : null,
+                        api_monthly_price: normalizeFreemiusAmount(pr.monthly_price),
+                        api_annual_price: normalizeFreemiusAmount(pr.annual_price),
+                        api_lifetime_price: normalizeFreemiusAmount(pr.lifetime_price),
                         updated_at: new Date().toISOString()
                     };
 
                     if (existingPricing) {
-                        await supabase
+                        const { error: pricingUpdateError } = await supabase
                             .from('freemius_pricing')
                             .update(pPayload)
                             .eq('id', existingPricing.id);
+
+                        if (pricingUpdateError) {
+                            console.warn(
+                                `[Freemius Sync] Could not update pricing ${existingPricing.id}:`,
+                                pricingUpdateError.message || pricingUpdateError
+                            );
+                        }
                     } else {
-                        await supabase
+                        const { error: pricingInsertError } = await supabase
                             .from('freemius_pricing')
                             .insert({
                                 plan_id: localPlanIdStr,
                                 license_quota: lQuota,
                                 ...pPayload
                             });
+
+                        if (pricingInsertError) {
+                            console.warn(
+                                `[Freemius Sync] Could not insert pricing for plan ${localPlanIdStr}, quota ${lQuota}:`,
+                                pricingInsertError.message || pricingInsertError
+                            );
+                        }
                     }
                 }
             }

@@ -5,6 +5,7 @@ import {
   SheetContent, 
   SheetHeader, 
   SheetTitle,
+  SheetDescription,
 } from '@nextblock-cms/ui/sheet';
 import { Badge } from '@nextblock-cms/ui/badge';
 import { Button } from '@nextblock-cms/ui/button';
@@ -15,6 +16,7 @@ import { useCart } from '../use-cart';
 import { formatPrice, useTranslations } from '@nextblock-cms/utils';
 import { isDigitalItem } from '../types';
 import { useCurrency } from '../CurrencyProvider';
+import { getTrialSummary } from '../trials';
 
 
 
@@ -52,6 +54,9 @@ export const CartDrawer = () => {
       <SheetContent className="flex w-full flex-col pr-0 sm:max-w-lg">
         <SheetHeader className="px-1 text-left">
           <SheetTitle>{t('ecommerce.shopping_cart')} ({items.length})</SheetTitle>
+          <SheetDescription className="sr-only">
+            {t('ecommerce.shopping_cart')}
+          </SheetDescription>
         </SheetHeader>
         
         {items.length > 0 ? (
@@ -66,6 +71,7 @@ export const CartDrawer = () => {
                       currencyCode: activeCurrencyCode,
                       currencies,
                     });
+                    const trialSummary = getTrialSummary(item);
 
                     return (
                       <>
@@ -92,6 +98,11 @@ export const CartDrawer = () => {
                         {item.variant_label && (
                           <div className="mt-1 text-xs text-muted-foreground">
                             {item.variant_label}
+                          </div>
+                        )}
+                        {trialSummary && (
+                          <div className="mt-1 text-xs font-medium text-emerald-700">
+                            {trialSummary.label} - {trialSummary.paymentRequirementLabel}
                           </div>
                         )}
                       </div>

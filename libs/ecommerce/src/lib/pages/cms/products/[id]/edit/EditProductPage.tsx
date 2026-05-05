@@ -167,6 +167,8 @@ export async function EditProductPage({
             }, {}),
             freemius_plan_id: product.freemius_plan_id ?? undefined,
             freemius_product_id: product.freemius_product_id ?? undefined,
+            trial_period_days: product.trial_period_days ?? 0,
+            trial_requires_payment_method: product.trial_requires_payment_method ?? false,
             language_id: product.language_id,
             translation_group_id: product.translation_group_id,
             product_media: product.product_media,

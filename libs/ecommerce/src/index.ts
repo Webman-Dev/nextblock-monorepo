@@ -24,6 +24,7 @@ export * from './lib/currency-store';
 export * from './lib/use-cart';
 export * from './lib/customer';
 export * from './lib/types';
+export * from './lib/trials';
 export * from './lib/order-tax-details';
 export * from './lib/invoice';
 export * from './lib/invoice-ui';

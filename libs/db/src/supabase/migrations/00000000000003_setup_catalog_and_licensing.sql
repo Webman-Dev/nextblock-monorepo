@@ -26,6 +26,8 @@ CREATE TABLE public.products (
   metadata jsonb,
   freemius_plan_id text,
   freemius_product_id text,
+  trial_period_days integer NOT NULL DEFAULT 0 CHECK (trial_period_days >= 0),
+  trial_requires_payment_method boolean NOT NULL DEFAULT false,
   upc text,
   is_taxable boolean NOT NULL DEFAULT true,
   created_at timestamptz DEFAULT now(),

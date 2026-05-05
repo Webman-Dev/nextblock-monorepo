@@ -89,6 +89,8 @@ export const productSchema = z.object({
   description_json: z.any().optional(), // Using any for Tiptap JSON structure
   freemius_plan_id: z.string().optional(), // ID from Freemius Dashboard
   freemius_product_id: z.string().optional(), // Product or App ID from Freemius Dashboard
+  trial_period_days: z.coerce.number().int().min(0, 'Trial period must be zero or greater').default(0),
+  trial_requires_payment_method: z.boolean().default(false),
   media_id: z.string().optional(), // For the main product image (backward compat or single select)
   product_media: z.array(z.object({
       media_id: z.string(),

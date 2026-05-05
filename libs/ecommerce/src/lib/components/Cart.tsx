@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation';
 import { formatPrice, useTranslations } from '@nextblock-cms/utils';
 import { ShippingEstimator } from './ShippingEstimator';
 import { useCurrency } from '../CurrencyProvider';
+import { getTrialSummary } from '../trials';
 
 export const Cart = () => {
   const router = useRouter();
@@ -97,6 +98,7 @@ export const Cart = () => {
                     currencyCode: activeCurrencyCode,
                     currencies,
                   });
+                  const trialSummary = getTrialSummary(item);
 
                   return (
                     <TableRow key={item.id}>
@@ -127,6 +129,11 @@ export const Cart = () => {
                             {isDigitalItem(item) && item.billing_cycle && (
                               <div className="mt-1 text-xs capitalize text-muted-foreground">
                                 {item.billing_cycle} Subscription
+                              </div>
+                            )}
+                            {trialSummary && (
+                              <div className="mt-1 text-xs font-medium text-emerald-700">
+                                {trialSummary.label} - {trialSummary.paymentRequirementLabel}
                               </div>
                             )}
                           </div>

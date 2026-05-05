@@ -12,6 +12,7 @@ import { Checkbox } from '@nextblock-cms/ui/checkbox';
 import { Input } from '@nextblock-cms/ui/input';
 import { Label } from '@nextblock-cms/ui/label';
 import { Separator } from '@nextblock-cms/ui/separator';
+import { RadioGroup, RadioGroupItem } from '@nextblock-cms/ui/radio-group';
 import { Checkout as FreemiusCheckout } from '@freemius/checkout';
 import { getCartItemActivePrice } from '../cart-store';
 import { useCart } from '../use-cart';
@@ -42,6 +43,7 @@ import {
   normalizeCustomerAddress,
 } from '../customer';
 import { useCurrency } from '../CurrencyProvider';
+import { getTrialSummary } from '../trials';
 
 const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
 const CHECKOUT_DRAFT_STORAGE_KEY = 'nextblock-checkout-draft-v1';
@@ -268,6 +270,7 @@ function CheckoutSection({
 }
 
 export const Checkout = ({ initialCustomer }: CheckoutProps) => {
+  const [trialPreferences, setTrialPreferences] = useState<Record<string, 'free' | 'paid'>>({});
   const [processingKey, setProcessingKey] = useState<string | null>(null);
   const [checkoutErrors, setCheckoutErrors] = useState<Partial<Record<ProviderName, string>>>({});
   const [email, setEmail] = useState(initialCustomer?.email || '');
@@ -734,6 +737,8 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
         const openConfig = {
           name: t('ecommerce.checkout_overlay_title'),
           plan_id: cp.plan_id,
+          ...(cp.billing_cycle ? { billing_cycle: cp.billing_cycle } : {}),
+          ...(cp.trial ? { trial: cp.trial } : {}),
           user_email: cp.user_email,
           user_firstname: cp.user_firstname,
           user_lastname: cp.user_lastname,
@@ -1007,7 +1012,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
           </div>
 
           <div className="lg:col-span-4 space-y-6">
-            <Card className="sticky top-6">
+            <Card className="top-6">
               <CardHeader>
                 <CardTitle>{t('ecommerce.order_summary')}</CardTitle>
               </CardHeader>
@@ -1018,6 +1023,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                       currencyCode: activeCurrencyCode,
                       currencies,
                     });
+                    const trialSummary = getTrialSummary(item);
 
                     return (
                       <div key={`${item.id}-${item.variant_id || 'base'}`} className="flex items-start justify-between gap-4">
@@ -1042,6 +1048,11 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                             <span className="text-[10px] text-muted-foreground">
                               {t('ecommerce.qty')}: {item.quantity}
                             </span>
+                            {trialSummary ? (
+                              <span className="text-[10px] font-medium text-emerald-700">
+                                {trialSummary.label} - {trialSummary.paymentRequirementLabel}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-0.5 shrink-0">
@@ -1237,6 +1248,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                       currencyCode: activeCurrencyCode,
                       currencies,
                     });
+                    const trialSummary = getTrialSummary(item);
                     const itemKey = `freemius:${item.id}`;
 
                     return (
@@ -1249,15 +1261,66 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                                 {checkoutBillingCycleLabel(item.billing_cycle)}
                               </p>
                             ) : null}
+                            {trialSummary ? (
+                              <p className="text-xs font-medium text-emerald-700">
+                                {trialSummary.label} - {trialSummary.paymentRequirementLabel}
+                              </p>
+                            ) : null}
                           </div>
                           <span className="font-medium">
                             {formatPrice(activePrice.sale_price ?? activePrice.price, activeCurrencyCode)}
                           </span>
                         </div>
+                        
+                        {trialSummary && !item.trial_requires_payment_method && (
+                          <div className="bg-muted/30 p-3 rounded-md border text-sm mt-2 mb-3">
+                            <p className="font-medium mb-3">
+                              {translateOrFallback(
+                                'ecommerce.freemius_trial_preference_title',
+                                'How would you like to start your trial?'
+                              )}
+                            </p>
+                            <RadioGroup
+                              value={trialPreferences[itemKey] || 'paid'}
+                              onValueChange={(val: 'free' | 'paid') => setTrialPreferences(prev => ({ ...prev, [itemKey]: val }))}
+                              className="gap-3"
+                            >
+                              <div className="flex items-start space-x-3">
+                                <RadioGroupItem value="paid" id={`${itemKey}-paid`} className="mt-1" />
+                                <div className="grid gap-1.5">
+                                  <Label htmlFor={`${itemKey}-paid`} className="font-medium leading-none cursor-pointer">
+                                    {translateOrFallback(
+                                      'ecommerce.freemius_trial_with_card',
+                                      'Enter Payment Details Now (Still get full trial length free)'
+                                    )}
+                                  </Label>
+                                  <p className="text-xs text-muted-foreground">
+                                    {translateOrFallback(
+                                      'ecommerce.freemius_trial_with_card_help',
+                                      'You will not be billed until the trial ends. Cancel anytime.'
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-start space-x-3">
+                                <RadioGroupItem value="free" id={`${itemKey}-free`} className="mt-1" />
+                                <div className="grid gap-1.5">
+                                  <Label htmlFor={`${itemKey}-free`} className="font-medium leading-none cursor-pointer">
+                                    {translateOrFallback(
+                                      'ecommerce.freemius_trial_no_card',
+                                      'Start Free Trial (No card required)'
+                                    )}
+                                  </Label>
+                                </div>
+                              </div>
+                            </RadioGroup>
+                          </div>
+                        )}
+
                         <Button
                           className="w-full"
                           variant={freemiusItems.length > 1 ? 'outline' : 'default'}
-                          onClick={() => handlePay('freemius', [item], itemKey)}
+                          onClick={() => handlePay('freemius', [{...item, trial_preference: trialPreferences[itemKey] || 'paid'}], itemKey)}
                           disabled={processingKey !== null}
                         >
                           {processingKey === itemKey ? (

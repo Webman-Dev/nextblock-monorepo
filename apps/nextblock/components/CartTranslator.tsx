@@ -60,6 +60,11 @@ function syncCartItem(item: CartItem, translatedProduct: any, currentLocale: str
     provider: translatedProduct.payment_provider ?? item.provider,
     freemius_product_id: translatedProduct.freemius_product_id ?? item.freemius_product_id,
     freemius_plan_id: translatedProduct.freemius_plan_id ?? item.freemius_plan_id,
+    trial_period_days: translatedProduct.trial_period_days ?? item.trial_period_days ?? 0,
+    trial_requires_payment_method:
+      translatedProduct.trial_requires_payment_method ??
+      item.trial_requires_payment_method ??
+      false,
     prices: translatedProduct.prices || item.prices,
     sale_prices: translatedProduct.sale_prices || item.sale_prices,
     has_variants: Boolean(translatedProduct.product_variants?.length),

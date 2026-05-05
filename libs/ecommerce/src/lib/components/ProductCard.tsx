@@ -9,6 +9,7 @@ import {
   resolvePriceForCurrency,
   resolvePriceRangeForCurrency,
 } from '../currency';
+import { getTrialSummary } from '../trials';
 
 interface ProductCardProps {
   product: Product;
@@ -47,6 +48,7 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
       : formatPrice(resolvedPrice.sale_price ?? resolvedPrice.price, activeCurrencyCode);
 
   const { t } = useTranslations();
+  const trialSummary = getTrialSummary(product);
 
   // Freemius pricing resolution
   const firstPlan = product.freemius_plans?.[0];
@@ -147,6 +149,15 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
             </div>
           )}
         </div>
+
+        {trialSummary && (
+          <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+            <div className="font-semibold">{trialSummary.label}</div>
+            <div className="text-emerald-700">
+              {trialSummary.paymentRequirementLabel}
+            </div>
+          </div>
+        )}
 
         <div className="mt-auto">
           <AddToCartButton 

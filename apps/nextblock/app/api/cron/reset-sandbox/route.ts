@@ -879,7 +879,9 @@ async function enrichCommerceProducts(params: {
       language_id,
       translation_group_id,
       freemius_product_id,
-      freemius_plan_id
+      freemius_plan_id,
+      trial_period_days,
+      trial_requires_payment_method
     )
     VALUES (
       ${product.sku},
@@ -896,7 +898,9 @@ async function enrichCommerceProducts(params: {
       ${params.frLangId},
       ${product.translation_group_id},
       ${product.freemius_product_id},
-      ${product.freemius_plan_id}
+      ${product.freemius_plan_id},
+      ${product.trial_period_days ?? 0},
+      ${product.trial_requires_payment_method ?? false}
     )
     ON CONFLICT ON CONSTRAINT products_language_id_slug_key DO UPDATE
     SET
@@ -908,7 +912,9 @@ async function enrichCommerceProducts(params: {
         stock = EXCLUDED.stock,
         status = EXCLUDED.status,
         product_type = EXCLUDED.product_type,
-        payment_provider = EXCLUDED.payment_provider
+        payment_provider = EXCLUDED.payment_provider,
+        trial_period_days = EXCLUDED.trial_period_days,
+        trial_requires_payment_method = EXCLUDED.trial_requires_payment_method
     RETURNING id
   `;
 
@@ -1112,7 +1118,8 @@ async function enrichCortexAiProducts(params: {
       short_description, description_json,
       product_type, payment_provider,
       language_id, translation_group_id,
-      freemius_product_id, freemius_plan_id
+      freemius_product_id, freemius_plan_id,
+      trial_period_days, trial_requires_payment_method
     )
     VALUES (
       ${product.sku}, 'NextBlock Cortex AI - Licence AI', ${String(product.slug) + '-fr'},
@@ -1120,7 +1127,8 @@ async function enrichCortexAiProducts(params: {
       ${shortDescFr}, ${params.sql.json(htmlDescriptionFr)},
       'digital', 'freemius',
       ${params.frLangId}, ${product.translation_group_id},
-      ${product.freemius_product_id}, ${product.freemius_plan_id}
+      ${product.freemius_product_id}, ${product.freemius_plan_id},
+      ${product.trial_period_days ?? 0}, ${product.trial_requires_payment_method ?? false}
     )
     ON CONFLICT ON CONSTRAINT products_language_id_slug_key DO UPDATE
     SET
@@ -1128,7 +1136,9 @@ async function enrichCortexAiProducts(params: {
       short_description = EXCLUDED.short_description,
       description_json = EXCLUDED.description_json,
       product_type = EXCLUDED.product_type,
-      payment_provider = EXCLUDED.payment_provider
+      payment_provider = EXCLUDED.payment_provider,
+      trial_period_days = EXCLUDED.trial_period_days,
+      trial_requires_payment_method = EXCLUDED.trial_requires_payment_method
     RETURNING id
   `;
 
@@ -1231,6 +1241,8 @@ async function upsertSeededCatalogProduct(params: {
         is_taxable = true,
         product_type = 'physical',
         payment_provider = 'stripe',
+        trial_period_days = 0,
+        trial_requires_payment_method = false,
         updated_at = now()
       WHERE id = ${seededProductId}
       RETURNING id
@@ -1256,7 +1268,9 @@ async function upsertSeededCatalogProduct(params: {
         metadata,
         is_taxable,
         product_type,
-        payment_provider
+        payment_provider,
+        trial_period_days,
+        trial_requires_payment_method
       )
       VALUES (
         ${params.languageId},
@@ -1273,7 +1287,9 @@ async function upsertSeededCatalogProduct(params: {
         ${params.sql.json(metadata)},
         true,
         'physical',
-        'stripe'
+        'stripe',
+        0,
+        false
       )
       ON CONFLICT ON CONSTRAINT products_language_id_slug_key DO UPDATE
       SET
@@ -1290,6 +1306,8 @@ async function upsertSeededCatalogProduct(params: {
         is_taxable = EXCLUDED.is_taxable,
         product_type = EXCLUDED.product_type,
         payment_provider = EXCLUDED.payment_provider,
+        trial_period_days = EXCLUDED.trial_period_days,
+        trial_requires_payment_method = EXCLUDED.trial_requires_payment_method,
         updated_at = now()
       RETURNING id
     `;
@@ -2231,7 +2249,8 @@ export async function GET(request: NextRequest) {
                     short_description, description_json, 
                     product_type, payment_provider,
                     language_id, translation_group_id,
-                    freemius_product_id, freemius_plan_id
+                    freemius_product_id, freemius_plan_id,
+                    trial_period_days, trial_requires_payment_method
                   )
                   VALUES (
                     ${product.sku}, 'NextBlock™ Commerce Pro - Licence Commerce', ${product.slug + '-fr'}, 
@@ -2239,7 +2258,8 @@ export async function GET(request: NextRequest) {
                     ${shortDescFr}, ${db.json(htmlDescriptionFr)},
                     'digital', 'freemius',
                     ${frLangId}, ${product.translation_group_id},
-                    ${product.freemius_product_id}, ${product.freemius_plan_id}
+                    ${product.freemius_product_id}, ${product.freemius_plan_id},
+                    ${product.trial_period_days ?? 0}, ${product.trial_requires_payment_method ?? false}
                   )
                   ON CONFLICT ON CONSTRAINT products_language_id_slug_key DO UPDATE
                   SET
@@ -2247,7 +2267,9 @@ export async function GET(request: NextRequest) {
                     short_description = EXCLUDED.short_description,
                     description_json = EXCLUDED.description_json,
                     product_type = EXCLUDED.product_type,
-                    payment_provider = EXCLUDED.payment_provider
+                    payment_provider = EXCLUDED.payment_provider,
+                    trial_period_days = EXCLUDED.trial_period_days,
+                    trial_requires_payment_method = EXCLUDED.trial_requires_payment_method
                   RETURNING id
                 `;
 

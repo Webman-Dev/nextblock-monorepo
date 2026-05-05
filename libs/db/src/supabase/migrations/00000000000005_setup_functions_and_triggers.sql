@@ -436,6 +436,8 @@ BEGIN
       sale_prices,
       freemius_plan_id,
       freemius_product_id,
+      trial_period_days,
+      trial_requires_payment_method,
       language_id,
       translation_group_id
     )
@@ -468,6 +470,8 @@ BEGIN
       END,
       NULLIF(product_payload->>'freemius_plan_id', ''),
       NULLIF(product_payload->>'freemius_product_id', ''),
+      COALESCE((product_payload->>'trial_period_days')::integer, 0),
+      COALESCE((product_payload->>'trial_requires_payment_method')::boolean, false),
       (product_payload->>'language_id')::bigint,
       COALESCE(v_translation_group_id, gen_random_uuid())
     )
@@ -503,6 +507,8 @@ BEGIN
       END,
       freemius_plan_id = NULLIF(product_payload->>'freemius_plan_id', ''),
       freemius_product_id = NULLIF(product_payload->>'freemius_product_id', ''),
+      trial_period_days = COALESCE((product_payload->>'trial_period_days')::integer, 0),
+      trial_requires_payment_method = COALESCE((product_payload->>'trial_requires_payment_method')::boolean, false),
       language_id = COALESCE((product_payload->>'language_id')::bigint, language_id),
       translation_group_id = COALESCE(v_translation_group_id, translation_group_id),
       updated_at = now()

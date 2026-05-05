@@ -33,6 +33,8 @@ export function DeleteProductButton({
           await deleteAction();
           if (redirectTo) {
             router.push(redirectTo);
+          } else {
+            router.refresh();
           }
         } catch (error) {
           console.error('Failed to delete product:', error);

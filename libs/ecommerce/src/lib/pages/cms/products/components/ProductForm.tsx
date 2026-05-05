@@ -202,6 +202,8 @@ function buildProductFormDefaults(
       },
     freemius_product_id: initialData?.freemius_product_id || '',
     freemius_plan_id: initialData?.freemius_plan_id || '',
+    trial_period_days: initialData?.trial_period_days ?? 0,
+    trial_requires_payment_method: initialData?.trial_requires_payment_method ?? false,
     status: initialData?.status || 'draft',
     language_id: resolveDefaultLanguageId(
       initialData,
@@ -351,6 +353,8 @@ export function ProductForm({
     ? configStatus[derivedPaymentProvider].hasKeys
     : false;
   const hasFreemiusProductId = !!watch('freemius_product_id');
+  const trialPeriodDays = Number(watch('trial_period_days') || 0);
+  const trialRequiresPaymentMethod = Boolean(watch('trial_requires_payment_method'));
   const variants = (watch('variants') || []) as NonNullable<ProductFormValues['variants']>;
   const baseProductPrice = watch('price') as number;
   const baseProductSalePrice = watch('sale_price') as number | null;
@@ -455,7 +459,26 @@ export function ProductForm({
     register('price');
     register('sale_price');
     register('payment_provider');
+    register('trial_requires_payment_method');
   }, [register]);
+
+  useEffect(() => {
+    if (!isFreemiusMode) {
+      setValue('trial_period_days', 0, { shouldDirty: false, shouldValidate: true });
+      setValue('trial_requires_payment_method', false, {
+        shouldDirty: false,
+        shouldValidate: true,
+      });
+      return;
+    }
+
+    if (trialPeriodDays <= 0) {
+      setValue('trial_requires_payment_method', false, {
+        shouldDirty: false,
+        shouldValidate: true,
+      });
+    }
+  }, [isFreemiusMode, setValue, trialPeriodDays]);
 
   useEffect(() => {
     if (!derivedPaymentProvider) {
@@ -641,12 +664,20 @@ export function ProductForm({
         return;
       }
 
+      const normalizedTrialPeriodDays = isStripeMode
+        ? 0
+        : Math.max(0, Number(data.trial_period_days || 0));
       const normalizedData: ProductFormValues = {
         ...data,
         product_type: data.product_type,
         payment_provider: derivedPaymentProvider,
         freemius_product_id: isStripeMode ? '' : data.freemius_product_id,
         freemius_plan_id: isStripeMode ? '' : data.freemius_plan_id,
+        trial_period_days: normalizedTrialPeriodDays,
+        trial_requires_payment_method:
+          !isStripeMode && normalizedTrialPeriodDays > 0
+            ? data.trial_requires_payment_method
+            : false,
         upc: isStripeMode ? data.upc : null,
         is_taxable: isStripeMode ? data.is_taxable : false,
         variation_attributes: isStripeMode ? data.variation_attributes : [],
@@ -808,36 +839,33 @@ export function ProductForm({
         </FormSection>
 
         <section className="rounded-lg border bg-card p-3 shadow-sm space-y-3">
-          <div className="flex items-center justify-between gap-4 flex-wrap border-b border-muted/50 pb-2">
-            <div className="flex items-center gap-4">
-              <div className="space-y-0.5">
-                <h2 className="text-sm font-bold tracking-tight">{isStripeMode ? 'Pricing & Inventory' : 'Freemius Configuration'}</h2>
-                <p className="text-[11px] text-muted-foreground leading-none">{isStripeMode ? 'Manage simple or variant pricing.' : 'Freemius sync details.'}</p>
+          {isStripeMode && (
+            <div className="flex items-center justify-between gap-4 flex-wrap border-b border-muted/50 pb-2">
+              <div className="flex items-center gap-4">
+                <div className="space-y-0.5">
+                  <h2 className="text-sm font-bold tracking-tight">Pricing & Inventory</h2>
+                  <p className="text-[11px] text-muted-foreground leading-none">Manage simple or variant pricing.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 bg-muted/40 rounded-md px-2.5 py-1.5">
+                    <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Stock</span>
+                    <Input
+                      id="stock"
+                      type="number"
+                      min="0"
+                      {...register('stock', { valueAsNumber: true })}
+                      placeholder="0"
+                      readOnly={hasVariants}
+                      className={`${disabledBaseFieldClass} h-8 w-20 text-sm text-center font-mono bg-background`}
+                    />
+                  </div>
+                {hasVariants ? (
+                  <Badge variant="secondary" className="text-[11px] py-0 px-2 h-5">Variant pricing</Badge>
+                ) : null}
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              {isStripeMode && (
-                <div className="flex items-center gap-2 bg-muted/40 rounded-md px-2.5 py-1.5">
-                  <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Stock</span>
-                  <Input
-                    id="stock"
-                    type="number"
-                    min="0"
-                    {...register('stock', { valueAsNumber: true })}
-                    placeholder="0"
-                    readOnly={hasVariants}
-                    className={`${disabledBaseFieldClass} h-8 w-20 text-sm text-center font-mono bg-background`}
-                  />
-                </div>
-              )}
-              {isStripeMode && hasVariants ? (
-                <Badge variant="secondary" className="text-[11px] py-0 px-2 h-5">Variant pricing</Badge>
-              ) : null}
-              {isFreemiusMode && hasFreemiusProductId ? (
-                <SyncFreemiusPricingButton productId={watch('freemius_product_id') as string} />
-              ) : null}
-            </div>
-          </div>
+          )}
           {isStripeMode ? (
             <div className="space-y-3">
               <div className="w-full">
@@ -904,19 +932,55 @@ export function ProductForm({
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="freemius_product_id">Freemius Product ID</Label>
-                  <Input id="freemius_product_id" {...register('freemius_product_id')} />
+              <div className="space-y-4">
+              <div className="flex items-end gap-4 w-full">
+                <div className="flex-1">
+                  <Label htmlFor="freemius_product_id" className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold mb-1.5 block">Freemius Product ID</Label>
+                  <Input id="freemius_product_id" {...register('freemius_product_id')} className="h-9" />
                 </div>
-                <div>
-                  <Label htmlFor="freemius_plan_id">Freemius Plan ID</Label>
-                  <Input id="freemius_plan_id" {...register('freemius_plan_id')} />
+                <div className="flex-1">
+                  <Label htmlFor="freemius_plan_id" className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold mb-1.5 block">Freemius Plan ID</Label>
+                  <Input id="freemius_plan_id" {...register('freemius_plan_id')} className="h-9" />
+                </div>
+                {hasFreemiusProductId ? (
+                  <SyncFreemiusPricingButton productId={watch('freemius_product_id') as string} />
+                ) : null}
+              </div>
+
+              <div className="bg-muted/10 border rounded-md overflow-hidden">
+                <div className="flex flex-wrap items-center gap-6 bg-muted/20 border-b p-2.5 px-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Free Trial</span>
+                    <Badge variant="outline" className="font-mono text-xs shadow-sm bg-background">{String(watch('trial_period_days') || 0)} Days</Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Card Required</span>
+                    <Badge variant={trialRequiresPaymentMethod ? "default" : "secondary"} className="text-xs shadow-sm">
+                       {trialRequiresPaymentMethod ? 'Yes' : 'No'}
+                    </Badge>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground ml-auto">
+                     Managed in Freemius dashboard
+                  </span>
+                  {/* Hidden inputs to preserve form state if needed */}
+                  <input type="hidden" {...register('trial_period_days', { valueAsNumber: true })} />
+                </div>
+
+                <div className="w-full p-4 pt-3">
+                  <CurrencyPriceFields
+                    idPrefix="product"
+                    currencies={currencies}
+                    prices={resolvedProductPriceMaps.prices}
+                    salePrices={resolvedProductPriceMaps.salePrices}
+                    managedCurrencyCodes={storeManagedPriceCurrencyCodes}
+                    onPriceChange={handleProductPriceChange}
+                    onSalePriceChange={handleProductSalePriceChange}
+                    onAutoFill={handleAutoFillProductPrices}
+                    readOnly={true}
+                  />
                 </div>
               </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                <strong>Note:</strong> Freemius products use synchronized plan pricing. Physical inventory and variations are only available in Stripe mode.
-              </p>
+            </div>
               {freemiusDashboardNode && (
                 <div className="pt-2 border-t">
                   {freemiusDashboardNode}

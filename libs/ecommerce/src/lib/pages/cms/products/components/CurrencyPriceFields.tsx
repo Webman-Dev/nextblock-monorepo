@@ -1,9 +1,8 @@
 'use client';
 
-import { Badge, Button, Input, Label } from '@nextblock-cms/ui';
+import { Input, Label } from '@nextblock-cms/ui';
 
 import {
-  describeCurrencyRoundingRule,
   normalizeCurrencyRecord,
   type CurrencyRecord,
 } from '../../../../currency';
@@ -29,23 +28,22 @@ export function CurrencyPriceFields({
   managedCurrencyCodes = [],
   onPriceChange,
   onSalePriceChange,
-  onAutoFill,
   readOnly = false,
   helperText,
 }: CurrencyPriceFieldsProps) {
   const defaultCurrency = currencies.find((currency) => currency.is_default) ?? currencies[0];
   const managedCurrencyCodeSet = new Set(managedCurrencyCodes);
-  const hasEditableFxCurrencies = currencies.some(
-    (currency) =>
-      !currency.is_default && !managedCurrencyCodeSet.has(normalizeCurrencyRecord(currency).code)
-  );
 
   if (!defaultCurrency) {
     return null;
   }
 
   return (
-    <div className="divide-y divide-muted/50">
+    <div className="flex flex-col gap-2">
+      {helperText && (
+        <p className="text-xs text-muted-foreground bg-muted/20 p-2 rounded-md border">{helperText}</p>
+      )}
+      <div className="divide-y divide-muted/50">
       {currencies.map((currency) => {
         const normalizedCurrency = normalizeCurrencyRecord(currency);
         const isStoreManaged =
@@ -59,21 +57,19 @@ export function CurrencyPriceFields({
             className="flex flex-wrap items-center gap-4 py-3 first:pt-0 last:pb-0"
           >
             {/* Currency Identity */}
-            <div className="flex items-center gap-3 w-[140px] shrink-0">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold tracking-tight">{normalizedCurrency.code}</span>
-                  {normalizedCurrency.is_default ? (
-                    <Badge variant="secondary" className="text-[10px] px-1.5 h-4 uppercase font-bold">Default</Badge>
-                  ) : null}
-                  {isStoreManaged ? (
-                    <Badge variant="outline" className="text-[10px] px-1.5 h-4 uppercase font-bold">Auto</Badge>
-                  ) : null}
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-none font-medium">
-                  {normalizedCurrency.symbol} · rate {normalizedCurrency.exchange_rate}
-                </p>
-              </div>
+            <div className="flex items-center gap-2 w-[180px] shrink-0 border-r border-border/50 pr-4 py-1">
+                <span className="text-sm font-black tracking-tighter text-foreground">{normalizedCurrency.code}</span>
+                <span className="text-[11px] text-muted-foreground font-medium">{normalizedCurrency.symbol}</span>
+                {normalizedCurrency.is_default ? (
+                  <span className="text-[9px] uppercase font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded tracking-widest leading-none">Default</span>
+                ) : isStoreManaged ? (
+                  <span className="text-[9px] uppercase font-bold bg-muted text-muted-foreground px-1.5 py-0.5 rounded tracking-widest leading-none">Auto</span>
+                ) : null}
+                {!normalizedCurrency.is_default && (
+                  <span className="text-[9px] text-muted-foreground/80 font-medium tracking-wide leading-none ml-auto">
+                    x{normalizedCurrency.exchange_rate}
+                  </span>
+                )}
             </div>
 
             {/* Inputs Grid */}
@@ -142,6 +138,7 @@ export function CurrencyPriceFields({
           </div>
         );
       })}
+    </div>
     </div>
   );
 }

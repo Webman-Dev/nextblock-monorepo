@@ -108,6 +108,8 @@ export interface Product {
   stock?: number | null;
   freemius_product_id?: string;
   freemius_plan_id?: string;
+  trial_period_days?: number | null;
+  trial_requires_payment_method?: boolean | null;
   custom_props?: any;
   language_id: number;
   translation_group_id: string;
@@ -199,6 +201,8 @@ export type CartItem = Product & {
   provider?: CartItemProvider;
   /** For Freemius items: the selected billing cycle */
   billing_cycle?: BillingCycle;
+  /** For Freemius items: explicitly requested trial mode (free vs paid) */
+  trial_preference?: 'free' | 'paid';
   /** The MSRP/Original price before any sale_price logic */
   original_price?: number;
 };
@@ -274,6 +278,8 @@ export interface FreemiusPlanAPI {
   name: string;
   title: string;
   description: string;
+  trial_period?: number | string | null;
+  is_require_subscription?: boolean | number | string | null;
   created: string;
   updated: string;
 }

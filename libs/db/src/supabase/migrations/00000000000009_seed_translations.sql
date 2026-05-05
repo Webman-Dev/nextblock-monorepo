@@ -168,7 +168,11 @@ INSERT INTO public.translations (key, translations) VALUES
   ('ecommerce.month', '{"en": "month", "es": "mes"}'),
   ('ecommerce.get_license', '{"en": "Get License", "es": "Obtener Licencia"}'),
   ('ecommerce.added_to_cart_success', '{"en": "{item} added to your cart.", "es": "{item} añadido al carrito."}'),
-  ('ecommerce.added_to_cart_error', '{"en": "Could not add item to cart.", "es": "No se pudo añadir el artículo al carrito."}')
+  ('ecommerce.added_to_cart_error', '{"en": "Could not add item to cart.", "es": "No se pudo añadir el artículo al carrito."}'),
+  ('ecommerce.freemius_trial_preference_title', '{"en": "How would you like to start your trial?", "es": "¿Cómo te gustaría comenzar tu prueba?", "fr": "Comment souhaitez-vous commencer votre essai ?"}'),
+  ('ecommerce.freemius_trial_no_card', '{"en": "Start Free Trial (No card required)", "es": "Comenzar prueba gratuita (Sin tarjeta)", "fr": "Commencer l''essai gratuit (Sans carte requise)"}'),
+  ('ecommerce.freemius_trial_with_card', '{"en": "Enter Payment Details Now (Still get full trial length free)", "es": "Ingresar detalles de pago ahora (Aún obtienes toda la duración de la prueba gratis)", "fr": "Entrer les détails de paiement maintenant (Vous bénéficiez toujours de toute la durée de l''essai gratuitement)"}'),
+  ('ecommerce.freemius_trial_with_card_help', '{"en": "You will not be billed until the trial ends. Cancel anytime.", "es": "No se te cobrará hasta que termine la prueba. Cancela en cualquier momento.", "fr": "Vous ne serez pas facturé avant la fin de l''essai. Annulez à tout moment."}')
 ON CONFLICT (key) DO UPDATE
 SET translations = EXCLUDED.translations;
 

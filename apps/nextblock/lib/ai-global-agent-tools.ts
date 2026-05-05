@@ -271,6 +271,8 @@ export const createCmsProductInputSchema = z.strictObject({
   status: z.enum(['draft', 'active', 'archived']).default('draft'),
   stock: z.number().int().min(0).default(0),
   title: z.string().trim().min(1).max(300),
+  trial_period_days: z.number().int().min(0).default(0),
+  trial_requires_payment_method: z.boolean().default(false),
   translationGroupId: z.string().trim().min(1).max(120).optional(),
   upc: z.string().max(120).nullable().optional(),
 });
@@ -3769,6 +3771,9 @@ export async function executeCreateCmsProduct(input: CreateCmsProductInput, cont
   }
 
   const { createProduct: createEcommerceProduct, productSchema } = await getEcommerceProductModule();
+  const isFreemiusProduct =
+    parsed.product_type === 'digital' && parsed.payment_provider === 'freemius';
+  const trialPeriodDays = isFreemiusProduct ? parsed.trial_period_days : 0;
   const productPayload = productSchema.parse({
     description_json: validateProductDescriptionJson(parsed.description_json),
     freemius_plan_id: parsed.freemius_plan_id || '',
@@ -3790,6 +3795,9 @@ export async function executeCreateCmsProduct(input: CreateCmsProductInput, cont
     status: parsed.status,
     stock: parsed.stock,
     title: parsed.title,
+    trial_period_days: trialPeriodDays,
+    trial_requires_payment_method:
+      trialPeriodDays > 0 ? parsed.trial_requires_payment_method : false,
     translation_group_id: translationGroup.translationGroupId,
     upc: parsed.upc ?? '',
     variation_attributes: [],
@@ -3916,6 +3924,11 @@ async function buildProductFormValuesFromRow(
     status: overrides.status ?? product.status ?? 'draft',
     stock: overrides.stock ?? product.stock ?? 0,
     title: overrides.title ?? product.title,
+    trial_period_days: overrides.trial_period_days ?? product.trial_period_days ?? 0,
+    trial_requires_payment_method:
+      overrides.trial_requires_payment_method ??
+      product.trial_requires_payment_method ??
+      false,
     upc: overrides.upc ?? product.upc ?? '',
     variation_attributes: [],
     variants: [],
@@ -3942,6 +3955,9 @@ function buildSingleFieldUpdatePayload(
     sale_price: 'sale_price',
     short_description: 'short_description',
     taxable: 'is_taxable',
+    trial: 'trial_period_days',
+    trial_days: 'trial_period_days',
+    trial_payment_method_required: 'trial_requires_payment_method',
     type: 'product_type',
   };
   const normalizedField = aliases[field] || field;
@@ -3985,6 +4001,8 @@ function buildSingleFieldUpdatePayload(
     'status',
     'stock',
     'title',
+    'trial_period_days',
+    'trial_requires_payment_method',
     'upc',
   ]);
 
@@ -4004,6 +4022,14 @@ function buildSingleFieldUpdatePayload(
 
   if (normalizedField === 'stock' && (!Number.isInteger(value) || Number(value) < 0)) {
     throw new Error('stock must be a non-negative integer.');
+  }
+
+  if (normalizedField === 'trial_period_days' && (!Number.isInteger(value) || Number(value) < 0)) {
+    throw new Error('trial_period_days must be a non-negative integer.');
+  }
+
+  if (normalizedField === 'trial_requires_payment_method' && typeof value !== 'boolean') {
+    throw new Error('trial_requires_payment_method must be a boolean.');
   }
 
   return {

@@ -42,6 +42,12 @@ function serializeVariantsForRpc(variants?: ProductFormValues['variants']) {
 }
 
 function buildProductRpcPayload(data: ProductFormValues, id?: string) {
+  const isFreemiusProduct =
+    data.product_type === 'digital' && data.payment_provider === 'freemius';
+  const trialPeriodDays = isFreemiusProduct
+    ? Math.max(0, Number(data.trial_period_days ?? 0))
+    : 0;
+
   return {
     id,
     product_type: data.product_type,
@@ -64,6 +70,9 @@ function buildProductRpcPayload(data: ProductFormValues, id?: string) {
     sale_prices: serializePriceMap(data.sale_prices),
     freemius_plan_id: data.freemius_plan_id ?? null,
     freemius_product_id: data.freemius_product_id ?? null,
+    trial_period_days: trialPeriodDays,
+    trial_requires_payment_method:
+      trialPeriodDays > 0 ? data.trial_requires_payment_method ?? false : false,
     is_taxable: data.is_taxable,
     language_id: data.language_id,
     translation_group_id: data.translation_group_id || undefined,
@@ -99,7 +108,7 @@ export async function getProducts(
   let query = supabase
     .from('products')
     .select(
-      'id, title, sku, upc, price, prices, sale_price, sale_prices, is_taxable, product_type, payment_provider, short_description, stock, status, slug, language_id, translation_group_id, freemius_product_id, freemius_plan_id, product_media(media(file_path, object_key)), product_variants(id, price, prices, sale_price, sale_prices), freemius_plans(id, name, title, freemius_pricing(id, license_quota, api_monthly_price, api_annual_price, api_lifetime_price, override_monthly_price, override_annual_price, override_lifetime_price, is_active))',
+      'id, title, sku, upc, price, prices, sale_price, sale_prices, is_taxable, product_type, payment_provider, short_description, stock, status, slug, language_id, translation_group_id, freemius_product_id, freemius_plan_id, trial_period_days, trial_requires_payment_method, product_media(media(file_path, object_key)), product_variants(id, price, prices, sale_price, sale_prices), freemius_plans(id, name, title, freemius_pricing(id, license_quota, api_monthly_price, api_annual_price, api_lifetime_price, override_monthly_price, override_annual_price, override_lifetime_price, is_active))',
       { count: 'exact' }
     )
     .range(start, end)
@@ -497,6 +506,8 @@ export async function fetchTranslatedProductsForCartInternal(
       payment_provider,
       freemius_product_id,
       freemius_plan_id,
+      trial_period_days,
+      trial_requires_payment_method,
       is_taxable,
       product_media (
         media (

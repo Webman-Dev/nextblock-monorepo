@@ -42,7 +42,7 @@ function ensureCartHydration() {
  */
 export const useCart = <T>(selector: (state: ReturnType<typeof useCartStore.getState>) => T): T | undefined => {
   const result = useCartStore(selector);
-  const [mounted, setMounted] = useState(() => hasCartHydrated());
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const persistApi = getCartPersistApi();
@@ -67,7 +67,7 @@ export const useCart = <T>(selector: (state: ReturnType<typeof useCartStore.getS
  * Hook to check if the store has hydrated.
  */
 export const useIsCartHydrated = () => {
-  const [hydrated, setHydrated] = useState(() => hasCartHydrated());
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     const persistApi = getCartPersistApi();

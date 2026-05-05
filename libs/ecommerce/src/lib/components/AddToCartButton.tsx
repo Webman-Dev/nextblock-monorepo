@@ -67,6 +67,8 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
       provider,
       freemius_product_id: product.freemius_product_id, // include just in case it wasn't intercepted
       freemius_plan_id: product.freemius_plan_id,
+      trial_period_days: product.trial_period_days ?? 0,
+      trial_requires_payment_method: product.trial_requires_payment_method ?? false,
       has_variants: product.has_variants,
       variant_id: product.variant_id,
       variant_label: product.variant_label,
