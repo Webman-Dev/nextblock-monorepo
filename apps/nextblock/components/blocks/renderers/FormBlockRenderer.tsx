@@ -28,7 +28,7 @@ const FormBlockRenderer: React.FC<FormBlockRendererProps> = ({ content }) => {
   });
 
   if (state.success) {
-    return <div className="p-4 rounded-md bg-green-100 text-green-800">{content.success_message}</div>;
+    return <div className="p-4 rounded-md bg-green-100 text-green-800 text-center">{content.success_message}</div>;
   }
 
   return (

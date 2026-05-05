@@ -88,8 +88,8 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
       : null;
 
   return (
-    <div className={cn("group relative flex flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition-all hover:shadow-md", className)}>
-      <Link href={`/product/${product.slug}`} className="relative aspect-square overflow-hidden bg-neutral-100">
+    <div className={cn("group relative flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm transition-all hover:shadow-md", className)}>
+      <Link href={`/product/${product.slug}`} className="relative aspect-square overflow-hidden bg-muted">
         {product.image_url ? (
           <img
             src={product.image_url}
@@ -119,7 +119,7 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
                     {formatPrice(monthlyPriceResolved.price, activeCurrencyCode)}
                   </span>
                   <span className="text-xs font-medium text-muted-foreground lowercase">
-                    {t('ecommerce.mo')}
+                    / {t('ecommerce.month')}
                   </span>
                 </div>
               )}
@@ -129,7 +129,7 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
                     {formatPrice(annualPriceResolved.price, activeCurrencyCode)}
                   </span>
                   <span className="text-xs font-medium text-muted-foreground lowercase">
-                    {t('ecommerce.yr')}
+                    / {t('ecommerce.year')}
                   </span>
                 </div>
               )}
