@@ -18,6 +18,7 @@ import Image from "next/image";
 import { FeedbackModal } from "./components/FeedbackModal";
 import { CortexGlobalAgentChat } from "./components/CortexGlobalAgentChat";
 import { CortexAiPageContextProvider } from "./components/CortexAiPageContext";
+import { CortexAiActiveProvider } from "./components/CortexAiActiveContext";
 
 const LoadingSpinner = () => (
   <div className="flex justify-center items-center h-full w-full py-20">
@@ -227,6 +228,7 @@ export default function CmsClientLayout({
 
   return (
     <CortexAiPageContextProvider>
+      <CortexAiActiveProvider isActive={isCortexAiActive}>
     <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-slate-50 dark:bg-slate-950 md:flex-row">
       <div className="fixed bottom-4 right-4 z-[60] md:hidden">
         <Button
@@ -269,9 +271,11 @@ export default function CmsClientLayout({
               <NavItem href="/cms/dashboard" icon={LayoutDashboard} isActive={pathname === "/cms/dashboard"} isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Dashboard
               </NavItem>
-              <NavItem href="/cms/settings/cortex-ai" icon={Brain} isActive={pathname.startsWith("/cms/settings/cortex-ai")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                      Cortex AI
-              </NavItem>
+              {isCortexAiActive && (
+                <NavItem href="/cms/settings/cortex-ai" icon={Brain} isActive={pathname.startsWith("/cms/settings/cortex-ai")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                        Cortex AI
+                </NavItem>
+              )}
               <NavItem href="/cms/pages" icon={FileText} isActive={pathname.startsWith("/cms/pages")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Pages
               </NavItem>
@@ -416,6 +420,7 @@ export default function CmsClientLayout({
       )}
       {isAdmin && isCortexAiActive && <CortexGlobalAgentChat />}
     </div>
+      </CortexAiActiveProvider>
     </CortexAiPageContextProvider>
   )
 }

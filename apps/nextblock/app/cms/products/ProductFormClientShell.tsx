@@ -4,12 +4,14 @@ import React from 'react';
 import { ProductForm } from '@nextblock-cms/ecommerce';
 import MediaPickerDialog from '../media/components/MediaPickerDialog';
 import { ClientNotionEditor as NotionEditor } from './ClientNotionEditor';
+import { useCortexAiActive } from '../components/CortexAiActiveContext';
 type ProductFormClientShellProps = React.ComponentProps<typeof ProductForm>;
 
 const productFormSkeletonRows = ['details', 'description', 'media', 'inventory'];
 
 export default function ProductFormClientShell(props: ProductFormClientShellProps) {
   const [isMounted, setIsMounted] = React.useState(false);
+  const isCortexAiActive = useCortexAiActive();
 
   React.useEffect(() => {
     setIsMounted(true);
@@ -29,7 +31,7 @@ export default function ProductFormClientShell(props: ProductFormClientShellProp
           defaultFolder="uploads/products/"
         />
       }
-      editorNode={<NotionEditor />}
+      editorNode={<NotionEditor showAiPrompt={isCortexAiActive} />}
     />
   );
 }

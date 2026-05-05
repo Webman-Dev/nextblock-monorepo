@@ -2,6 +2,7 @@ import { listCortexAiCompatibleOpenRouterModels } from '../../../../lib/ai-model
 import { getCortexAiSettingsStatus } from './actions';
 import { SandboxCortexAiSettingsClient } from './SandboxCortexAiSettingsClient';
 import { StoredCortexAiSettingsClient } from './StoredCortexAiSettingsClient';
+import { redirect } from 'next/navigation';
 
 type CortexAiSettingsPageProps = {
   searchParams?: Promise<{
@@ -25,6 +26,11 @@ export default async function CortexAiSettingsPage({
   searchParams,
 }: CortexAiSettingsPageProps) {
   const status = await getCortexAiSettingsStatus();
+
+  if (!status.isPackageActive) {
+    redirect('/cms/dashboard');
+  }
+
   const params: { error?: string; success?: string } = searchParams
     ? await searchParams
     : {};

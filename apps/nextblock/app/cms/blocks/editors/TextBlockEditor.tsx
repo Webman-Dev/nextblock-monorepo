@@ -1,4 +1,4 @@
-﻿// app/cms/blocks/editors/TextBlockEditor.tsx
+// app/cms/blocks/editors/TextBlockEditor.tsx
 'use client';
 
 import React, { useId, useState, useRef, useCallback } from 'react';
@@ -7,6 +7,7 @@ import MediaPickerDialog from '../../media/components/MediaPickerDialog';
 import { Label } from '@nextblock-cms/ui';
 import { BlockEditorProps } from '../components/BlockEditorModal';
 import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
+import { useCortexAiActive } from '../../components/CortexAiActiveContext';
 
 // Props expected by NotionEditor
 type NotionEditorProps = {
@@ -14,6 +15,7 @@ type NotionEditorProps = {
   onChange: (html: string) => void;
   openImagePicker?: () => Promise<{ src: string; alt?: string; width?: number | null; height?: number | null; blurDataURL?: string | null } | null>;
   className?: string;
+  showAiPrompt?: boolean;
 };
 
 // Use the alias that resolves in your repo; if you mapped @nextblock-cms/editor, swap it here.
@@ -33,6 +35,7 @@ export default function TextBlockEditor({
 }: BlockEditorProps<Partial<TextBlockContent>>) {
   const labelId = useId();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const isCortexAiActive = useCortexAiActive();
   const resolverRef = useRef<null | ((v: any) => void)>(null);
   const openImagePicker = useCallback(() => {
     setPickerOpen(true);
@@ -53,6 +56,7 @@ export default function TextBlockEditor({
           onChange={(html) => onChange({ html_content: html })}
           openImagePicker={openImagePicker}
           className={className}
+          showAiPrompt={isCortexAiActive}
         />
 
         {/* Hidden controlled MediaPickerDialog for image selection */}
