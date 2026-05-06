@@ -1,6 +1,5 @@
- // components/BlockRenderer.tsx
+// components/BlockRenderer.tsx
 import React from "react";
-import dynamic from "next/dynamic";
 import type { Database } from "@nextblock-cms/db";
 import type { SectionBlockContent } from "../lib/blocks/blockRegistry";
 import { getPublicBlockRendererLoader } from "./blocks/publicRendererLoaders";
@@ -30,37 +29,26 @@ interface BlockRendererProps {
   excludeTranslationGroupId?: string | null;
 }
 
-interface DynamicBlockRendererProps {
+interface BlockRenderContext {
   block: Block;
   languageId: number;
   excludeProductId?: string;
   excludeTranslationGroupId?: string | null;
 }
 
-// Dynamic renderer component that handles the dynamic import logic for non-LCP blocks
-const DynamicBlockRenderer: React.FC<DynamicBlockRendererProps> = ({
+async function renderLoadedBlock({
   block,
   languageId,
   excludeProductId,
   excludeTranslationGroupId,
-}) => {
+}: BlockRenderContext) {
   const rendererLoader = getPublicBlockRendererLoader(block.block_type);
-  
+
   if (!rendererLoader) {
     if (ECOMMERCE_BLOCK_TYPES.has(block.block_type)) {
-      const EcommerceRendererComponent = dynamic(
-        () => loadEcommerceBlockRenderer(block.block_type),
-        {
-          loading: () => (
-            <div className="my-4 p-4 border rounded-lg">
-              <div className="h-8 w-1/2 mb-4 bg-muted/40 animate-pulse rounded" />
-              <div className="h-4 w-full mb-2 bg-muted/40 animate-pulse rounded" />
-              <div className="h-4 w-3/4 bg-muted/40 animate-pulse rounded" />
-            </div>
-          ),
-          ssr: true,
-        }
-      ) as React.ComponentType<any>;
+      const { default: EcommerceRendererComponent } = await loadEcommerceBlockRenderer(
+        block.block_type
+      );
 
       return (
         <EcommerceRendererComponent
@@ -87,26 +75,12 @@ const DynamicBlockRenderer: React.FC<DynamicBlockRendererProps> = ({
     );
   }
 
-  // Handle the text block type by rendering the client component wrapper
+  // Keep common LCP-adjacent text blocks out of the dynamic renderer manifest.
   if (block.block_type === 'text') {
     return <ClientTextBlockRenderer content={block.content as any} languageId={languageId} />;
   }
 
-  // Create dynamic component with proper SSR handling for other blocks
-  const RendererComponent = dynamic(
-    rendererLoader,
-    {
-      loading: () => (
-        <div className="my-4 p-4 border rounded-lg">
-          <div className="h-8 w-1/2 mb-4 bg-muted/40 animate-pulse rounded" />
-          <div className="h-4 w-full mb-2 bg-muted/40 animate-pulse rounded" />
-          <div className="h-4 w-full mb-2 bg-muted/40 animate-pulse rounded" />
-          <div className="h-4 w-3/4 bg-muted/40 animate-pulse rounded" />
-        </div>
-      ),
-      ssr: true,
-    }
-  ) as React.ComponentType<any>;
+  const { default: RendererComponent } = await rendererLoader();
 
   // Handle different prop requirements for different renderers
   // PostsGridBlockRenderer needs the full block object
@@ -128,44 +102,50 @@ const DynamicBlockRenderer: React.FC<DynamicBlockRendererProps> = ({
       excludeTranslationGroupId={excludeTranslationGroupId}
     />
   );
-};
+}
 
-const BlockRenderer: React.FC<BlockRendererProps> = ({
+async function renderBlock(context: BlockRenderContext) {
+  const { block, languageId } = context;
+
+  if (block.block_type === 'hero') {
+    return (
+      <HeroBlockRenderer
+        content={block.content as unknown as SectionBlockContent}
+        languageId={languageId}
+      />
+    );
+  }
+
+  return renderLoadedBlock(context);
+}
+
+export default async function BlockRenderer({
   blocks,
   languageId,
   excludeProductId,
   excludeTranslationGroupId,
-}) => {
+}: BlockRendererProps) {
   if (!blocks || blocks.length === 0) {
     return null;
   }
 
+  const renderedBlocks = await Promise.all(
+    blocks.map(async (block) => ({
+      id: block.id,
+      node: await renderBlock({
+        block,
+        languageId,
+        excludeProductId,
+        excludeTranslationGroupId,
+      }),
+    }))
+  );
+
   return (
     <>
-      {blocks.map((block) => {
-        // Statically render the Hero block for LCP optimization
-        if (block.block_type === 'hero') {
-          return (
-            <HeroBlockRenderer
-              key={block.id}
-              content={block.content as unknown as SectionBlockContent}
-              languageId={languageId}
-            />
-          );
-        }
-        // Dynamically render all other blocks
-        return (
-          <DynamicBlockRenderer
-            key={block.id}
-            block={block}
-            languageId={languageId}
-            excludeProductId={excludeProductId}
-            excludeTranslationGroupId={excludeTranslationGroupId}
-          />
-        );
-      })}
+      {renderedBlocks.map(({ id, node }) => (
+        <React.Fragment key={id}>{node}</React.Fragment>
+      ))}
     </>
   );
-};
-
-export default BlockRenderer;
+}

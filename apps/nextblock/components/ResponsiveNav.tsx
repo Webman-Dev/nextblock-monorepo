@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import type { Database } from '@nextblock-cms/db' // Relative path from components/
 import { useCurrentContent } from '../context/CurrentContentContext';
 import { useTranslations } from '@nextblock-cms/utils';
-import GlobalSearch from './GlobalSearch';
+import { DeferredGlobalSearch } from './DeferredGlobalSearch';
 
 type Logo = Database['public']['Tables']['logos']['Row'] & { media: (Database['public']['Tables']['media']['Row'] & { alt_text: string | null }) | null };
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
@@ -332,7 +332,7 @@ export default function ResponsiveNav({
             </Link>
           )}
           <ClientOnly>
-            <GlobalSearch isEcommerceActive={isEcommerceActive} variant="desktop" />
+            <DeferredGlobalSearch isEcommerceActive={isEcommerceActive} variant="desktop" />
             {renderHeaderAuth()}
             {renderLanguageSwitcher()}
             {renderCurrencySwitcher?.()}
@@ -342,7 +342,7 @@ export default function ResponsiveNav({
 
         <div className="md:hidden flex items-center gap-2 z-[60]">
           <ClientOnly>
-            <GlobalSearch isEcommerceActive={isEcommerceActive} variant="mobile" />
+            <DeferredGlobalSearch isEcommerceActive={isEcommerceActive} variant="mobile" />
           </ClientOnly>
           <button
             ref={menuButtonRef}

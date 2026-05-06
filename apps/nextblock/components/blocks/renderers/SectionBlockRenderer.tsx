@@ -1,7 +1,6 @@
 // components/blocks/renderers/SectionBlockRenderer.tsx
 import React from "react";
 import type { SectionBlockContent } from "../../../lib/blocks/blockRegistry";
-import dynamic from "next/dynamic";
 import { getPublicBlockRendererLoader } from "../publicRendererLoaders";
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
@@ -125,24 +124,19 @@ function generateBackgroundStyles(background: SectionBlockContent['background'])
   return { styles, className };
 }
 
-// Dynamic block renderer component
-const DynamicNestedBlockRenderer: React.FC<{
+interface NestedBlockRendererProps {
   block: SectionBlockContent['column_blocks'][0][0];
   languageId: number;
-}> = ({ block, languageId }) => {
+}
+
+async function renderNestedBlock({ block, languageId }: NestedBlockRendererProps) {
   const rendererLoader = getPublicBlockRendererLoader(block.block_type);
-  
+
   if (!rendererLoader) {
     if (ECOMMERCE_BLOCK_TYPES.has(block.block_type)) {
-      const EcommerceRendererComponent = dynamic(
-        () => loadEcommerceBlockRenderer(block.block_type),
-        {
-          loading: () => (
-            <div className="animate-pulse bg-muted rounded h-8"></div>
-          ),
-          ssr: true,
-        }
-      ) as React.ComponentType<any>;
+      const { default: EcommerceRendererComponent } = await loadEcommerceBlockRenderer(
+        block.block_type
+      );
 
       return (
         <EcommerceRendererComponent
@@ -159,16 +153,7 @@ const DynamicNestedBlockRenderer: React.FC<{
     );
   }
 
-  // Create dynamic component with proper SSR handling
-  const RendererComponent = dynamic(
-    rendererLoader,
-    {
-      loading: () => (
-        <div className="animate-pulse bg-muted rounded h-8"></div>
-      ),
-      ssr: true,
-    }
-  ) as React.ComponentType<any>;
+  const { default: RendererComponent } = await rendererLoader();
 
   // Handle different prop requirements for different renderers
   if (block.block_type === 'posts_grid') {
@@ -187,14 +172,14 @@ const DynamicNestedBlockRenderer: React.FC<{
       languageId={languageId}
     />
   );
-};
+}
 
-const SectionBlockRenderer: React.FC<SectionBlockRendererProps> = ({
+export default async function SectionBlockRenderer({
   content,
   languageId,
-}) => {
+}: SectionBlockRendererProps) {
   const { styles, className: backgroundClassName } = generateBackgroundStyles(content.background);
-  
+
   // Build CSS classes
   const containerClass = containerClasses[content.container_type] || containerClasses.container;
   const gridClass = columnClasses[content.responsive_columns.desktop] || columnClasses[3];
@@ -203,6 +188,20 @@ const SectionBlockRenderer: React.FC<SectionBlockRendererProps> = ({
   const paddingBottomClass = paddingClasses[content.padding.bottom] || paddingClasses.md;
   const alignmentClass = content.vertical_alignment ? verticalAlignmentClasses[content.vertical_alignment] : 'items-start';
 
+  const renderedColumns = await Promise.all(
+    content.column_blocks.map(async (columnBlocks, columnIndex) => {
+      const blocks = Array.isArray(columnBlocks) ? columnBlocks : [];
+      const renderedBlocks = await Promise.all(
+        blocks.map(async (block, blockIndex) => ({
+          key: `${block.block_type}-${columnIndex}-${blockIndex}`,
+          node: await renderNestedBlock({ block, languageId }),
+        }))
+      );
+
+      return { columnIndex, renderedBlocks };
+    })
+  );
+
   return (
     <section
       className={`w-full ${paddingTopClass} ${paddingBottomClass} ${backgroundClassName}`.trim()}
@@ -210,14 +209,10 @@ const SectionBlockRenderer: React.FC<SectionBlockRendererProps> = ({
     >
       <div className={containerClass}>
         <div className={`grid ${gridClass} ${gapClass} ${alignmentClass}`}>
-          {content.column_blocks.map((columnBlocks, columnIndex) => (
+          {renderedColumns.map(({ columnIndex, renderedBlocks }) => (
             <div key={`column-${columnIndex}`} className="min-h-0 space-y-4">
-              {(Array.isArray(columnBlocks) ? columnBlocks : []).map((block, blockIndex) => (
-                <DynamicNestedBlockRenderer
-                  key={`${block.block_type}-${columnIndex}-${blockIndex}`}
-                  block={block}
-                  languageId={languageId}
-                />
+              {renderedBlocks.map(({ key, node }) => (
+                <React.Fragment key={key}>{node}</React.Fragment>
               ))}
             </div>
           ))}
@@ -225,6 +220,4 @@ const SectionBlockRenderer: React.FC<SectionBlockRendererProps> = ({
       </div>
     </section>
   );
-};
-
-export default SectionBlockRenderer;
+}

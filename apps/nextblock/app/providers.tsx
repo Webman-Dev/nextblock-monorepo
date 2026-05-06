@@ -4,7 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider } from '../context/AuthContext';
 import { LanguageProvider, useLanguage } from '../context/LanguageContext';
 import { CurrentContentProvider } from '../context/CurrentContentContext';
-import { CartTranslator } from '../components/CartTranslator';
+import { DeferredCartTranslator } from '../components/DeferredCartTranslator';
 import { CurrencyProvider } from '@nextblock-cms/ecommerce/CurrencyProvider';
 import { TranslationsProvider } from '@nextblock-cms/utils';
 
@@ -50,7 +50,7 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
           locale={serverLocale}
         >
           <CurrentContentProvider>
-            <CartTranslator />
+            <DeferredCartTranslator />
             <TranslationBridge translations={translations}>
               <ThemeProvider
                 attribute="class"

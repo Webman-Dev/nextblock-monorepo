@@ -317,13 +317,15 @@ function LoadingRows() {
 export default function GlobalSearch({
   isEcommerceActive,
   variant,
+  openOnMount = false,
 }: {
   isEcommerceActive: boolean;
   variant: TriggerVariant;
+  openOnMount?: boolean;
 }) {
   const router = useRouter();
   const { t, lang } = useTranslations();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(openOnMount);
   const [activeIndex, setActiveIndex] = useState(0);
   const [recentResults, setRecentResults] = useState<GlobalSearchResult[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -353,6 +355,12 @@ export default function GlobalSearch({
 
     return fallbackTranslations[lang]?.[key] ?? fallbackTranslations.en[key] ?? key;
   };
+
+  useEffect(() => {
+    if (openOnMount) {
+      setOpen(true);
+    }
+  }, [openOnMount]);
 
   useEffect(() => {
     setRecentResults(loadRecentResults());

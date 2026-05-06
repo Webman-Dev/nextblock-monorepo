@@ -1,7 +1,7 @@
-import { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { deleteMediaFiles } from '@nextblock-cms/utils/server';
-import { Database } from '@nextblock-cms/db';
-import { ProductFormValues } from './product-schema';
+import type { Database } from '@nextblock-cms/db';
+import type { ProductFormValues } from './product-schema';
 import { syncSharedInventoryForSavedProduct } from './shared-inventory';
 import { normalizeCurrencyCode } from '@nextblock-cms/utils';
 

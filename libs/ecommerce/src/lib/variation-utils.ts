@@ -1,11 +1,11 @@
 import {
-  PriceMap,
-  ProductAttribute,
-  ProductAttributeTerm,
-  ProductVariant,
-  ProductVariantOption,
-  SalePriceMap,
-  TranslationMap,
+  type PriceMap,
+  type ProductAttribute,
+  type ProductAttributeTerm,
+  type ProductVariant,
+  type ProductVariantOption,
+  type SalePriceMap,
+  type TranslationMap,
 } from './types';
 import { normalizePriceMap, normalizeSalePriceMap } from './currency';
 

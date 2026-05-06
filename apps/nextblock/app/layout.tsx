@@ -6,7 +6,7 @@ import '@nextblock-cms/editor/styles/editor.css';
 import type { Metadata } from 'next';
 import { Providers } from './providers';
 import { DeferredCartDrawer } from '../components/DeferredCartDrawer';
-import { CURRENCY_COOKIE_NAME } from '@nextblock-cms/ecommerce/server';
+import { CURRENCY_COOKIE_NAME } from '@nextblock-cms/ecommerce/currency-constants';
 import { ToasterProvider } from './ToasterProvider';
 import { AppShell } from '../components/AppShell';
 import { DeferredGoogleTagManager } from '../components/DeferredGoogleTagManager';
@@ -27,6 +27,20 @@ const defaultUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
 
 const DEFAULT_LOCALE_FOR_LAYOUT = 'en';
 const PUBLIC_LAYOUT_REVALIDATE_SECONDS = 60;
+const TRUSTED_TYPES_BOOTSTRAP = `
+(function () {
+  if (!window.trustedTypes || window.__nextblockTrustedTypesPolicy) return;
+  try {
+    window.__nextblockTrustedTypesPolicy = window.trustedTypes.createPolicy('default', {
+      createHTML: function (value) { return value; },
+      createScript: function (value) { return value; },
+      createScriptURL: function (value) { return value; }
+    });
+  } catch (error) {
+    window.__nextblockTrustedTypesPolicy = true;
+  }
+})();
+`;
 
 type Language = Database['public']['Tables']['languages']['Row'];
 type StoreCurrency = Database['public']['Tables']['currencies']['Row'];
@@ -427,6 +441,10 @@ export default async function RootLayout({
       <head>
         <meta name="description" content={DEFAULT_SITE_DESCRIPTION} />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script
+          nonce={nonce}
+          dangerouslySetInnerHTML={{ __html: TRUSTED_TYPES_BOOTSTRAP }}
+        />
       </head>
       <body className="min-h-screen">
         <Providers
