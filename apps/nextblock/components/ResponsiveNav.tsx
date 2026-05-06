@@ -303,7 +303,7 @@ export default function ResponsiveNav({
                 alt={logo.media.alt_text || siteTitle || 'Nextblock'}
                 width={logo.media.width || 100}
                 height={logo.media.height || 32}
-                className="h-14 w-auto object-contain"
+                className="h-14 w-auto object-contain" style={{ width: 'auto', height: '56px' }}
                 priority
               />
             ) : (
@@ -312,7 +312,7 @@ export default function ResponsiveNav({
                 alt={siteTitle || 'Nextblock'}
                 width={120}
                 height={40}
-                className="h-14 w-auto object-contain"
+                className="h-14 w-auto object-contain" style={{ width: 'auto', height: '56px' }}
                 priority
               />
             )}
