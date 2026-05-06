@@ -230,13 +230,6 @@ export async function proxy(request: NextRequest) {
          }
       }
 
-      const canRequireTrustedTypes =
-        !pathname.startsWith('/cms') &&
-        !pathname.startsWith('/article/') &&
-        !pathname.startsWith('/product/') &&
-        !pathname.startsWith('/checkout') &&
-        !pathname.startsWith('/cart');
-
       const cspDirectives = [
         "default-src 'self'",
         `script-src 'self' 'nonce-${nonceValue}' 'strict-dynamic'`,
@@ -252,13 +245,6 @@ export async function proxy(request: NextRequest) {
         "frame-ancestors 'self'",
         "upgrade-insecure-requests",
       ];
-
-      if (canRequireTrustedTypes) {
-        cspDirectives.push(
-          "require-trusted-types-for 'script'",
-          "trusted-types nextblock nextjs default"
-        );
-      }
 
       const csp = cspDirectives.join('; ');
 
