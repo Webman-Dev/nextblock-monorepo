@@ -4,6 +4,37 @@
  * @typedef {{ protocol?: 'http' | 'https'; hostname: string; port?: string; pathname?: string }} RemotePattern
  */
 
+const securityHeaders = [
+  {
+    key: 'X-DNS-Prefetch-Control',
+    value: 'on',
+  },
+  {
+    key: 'Strict-Transport-Security',
+    value: 'max-age=63072000; includeSubDomains; preload',
+  },
+  {
+    key: 'X-Frame-Options',
+    value: 'SAMEORIGIN',
+  },
+  {
+    key: 'X-Content-Type-Options',
+    value: 'nosniff',
+  },
+  {
+    key: 'Referrer-Policy',
+    value: 'strict-origin-when-cross-origin',
+  },
+  {
+    key: 'Permissions-Policy',
+    value: 'camera=(), microphone=(), geolocation=()',
+  },
+  {
+    key: 'Cross-Origin-Opener-Policy',
+    value: 'same-origin',
+  },
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   env: {
@@ -35,19 +66,19 @@ const nextConfig = {
     '@nextblock-cms/editor',
   ],
   async headers() {
-    const headers = [];
+    const headers = [...securityHeaders];
     if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
       headers.push({
-        source: '/:path*',
-        headers: [
-          {
-            key: 'X-Robots-Tag',
-            value: 'noindex',
-          },
-        ],
+        key: 'X-Robots-Tag',
+        value: 'noindex',
       });
     }
-    return headers;
+    return [
+      {
+        source: '/:path*',
+        headers,
+      },
+    ];
   },
 };
 
