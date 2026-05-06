@@ -230,9 +230,17 @@ export async function proxy(request: NextRequest) {
          }
       }
 
-      const csp = [
+      const canRequireTrustedTypes =
+        !pathname.startsWith('/cms') &&
+        !pathname.startsWith('/article/') &&
+        !pathname.startsWith('/product/') &&
+        !pathname.startsWith('/checkout') &&
+        !pathname.startsWith('/cart');
+
+      const cspDirectives = [
         "default-src 'self'",
-        `script-src 'self' blob: data: 'nonce-${nonceValue}' 'unsafe-inline' https://checkout.freemius.com https://vercel.live https://vercel.com https://www.googletagmanager.com https://www.google-analytics.com https://analytics.google.com https://*.googletagmanager.com`,
+        `script-src 'self' 'nonce-${nonceValue}' 'strict-dynamic'`,
+        "script-src-attr 'none'",
         "style-src 'self' 'unsafe-inline' https://vercel.live https://vercel.com",
         `img-src 'self' data: blob:${r2Hostnames} https://checkout.freemius.com https://vercel.live https://vercel.com https://www.googletagmanager.com https://www.google-analytics.com https://analytics.google.com https://*.googletagmanager.com`,
         "font-src 'self' https://vercel.live https://assets.vercel.com",
@@ -241,7 +249,18 @@ export async function proxy(request: NextRequest) {
         "frame-src 'self' blob: data: https://checkout.freemius.com https://www.youtube.com https://vercel.live https://vercel.com",
         "form-action 'self'",
         "base-uri 'self'",
-      ].join('; ');
+        "frame-ancestors 'self'",
+        "upgrade-insecure-requests",
+      ];
+
+      if (canRequireTrustedTypes) {
+        cspDirectives.push(
+          "require-trusted-types-for 'script'",
+          "trusted-types nextblock nextjs default"
+        );
+      }
+
+      const csp = cspDirectives.join('; ');
 
       finalResponse.headers.set('Content-Security-Policy', csp);
     }

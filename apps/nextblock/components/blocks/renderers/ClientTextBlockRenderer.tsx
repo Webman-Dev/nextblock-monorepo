@@ -1,5 +1,3 @@
-"use client";
-
 import React from "react";
 import Image from "next/image";
 import parse, {
@@ -60,6 +58,8 @@ type HtmlImageProps = {
 
 const inlineImageSizes =
   '(max-width: 768px) calc(100vw - 2rem), (max-width: 1280px) 42vw, 512px';
+const nbCoverImageSizes =
+  '(max-width: 768px) calc(100vw - 2rem), (max-width: 1280px) 38vw, 438px';
 const contentImageSizes =
   '(max-width: 768px) calc(100vw - 2rem), (max-width: 1280px) 75vw, 768px';
 
@@ -68,7 +68,7 @@ const knownCmsImages: Record<string, CmsImageMetadata> = {
     src: '/images/NBcover.webp',
     width: 1024,
     height: 572,
-    sizes: inlineImageSizes,
+    sizes: nbCoverImageSizes,
     priority: true,
   },
   'images/cap.webp': {

@@ -7,6 +7,7 @@ import PageClientContent from "./PageClientContent";
 import { getPageDataBySlug } from "./page.utils";
 import BlockRenderer from "../../components/BlockRenderer";
 import { cookies, headers } from "next/headers";
+import { resolveMetaDescription } from "../lib/seo";
 
 export const dynamicParams = true;
 export const revalidate = 360;
@@ -96,7 +97,7 @@ export async function generateMetadata(
 
   return {
     title: pageData.meta_title || pageData.title,
-    description: pageData.meta_description || "",
+    description: resolveMetaDescription(pageData.meta_description),
     alternates: {
       canonical: `${siteUrl}/${params.slug}`,
       languages: Object.keys(alternates).length > 0 ? alternates : undefined,

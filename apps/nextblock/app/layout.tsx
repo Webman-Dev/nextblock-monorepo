@@ -21,6 +21,7 @@ import { headers, cookies } from 'next/headers';
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { unstable_cache } from 'next/cache';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
+import { DEFAULT_SITE_DESCRIPTION } from './lib/seo';
 
 const defaultUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
 
@@ -151,7 +152,7 @@ const getCachedSiteSettings = unstable_cache(
       console.error('Error fetching cached site settings:', error);
       return {
         site_title: 'Nextblock CMS',
-        site_description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.'
+        site_description: DEFAULT_SITE_DESCRIPTION
       };
     }
 
@@ -164,7 +165,7 @@ const getCachedSiteSettings = unstable_cache(
 
     return {
       site_title: settings.site_title || 'Nextblock CMS',
-      site_description: settings.site_description || 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.'
+      site_description: settings.site_description || DEFAULT_SITE_DESCRIPTION
     };
   },
   ['public-site-settings'],

@@ -12,6 +12,7 @@ import BlockRenderer from "../../../components/BlockRenderer";
 import { getSsgSupabaseClient } from "@nextblock-cms/db/server"; // Correct import
 import type { HeroBlockContent } from '../../../lib/blocks/blockRegistry';
 import { resolveMediaUrl } from '../../../lib/media/resolveMediaUrl';
+import { resolveMetaDescription } from '../../lib/seo';
 
 export const dynamicParams = true;
 export const revalidate = 3600;
@@ -101,12 +102,18 @@ export async function generateMetadata(
     });
   }
 
+  const description = resolveMetaDescription(
+    postData.meta_description,
+    postData.excerpt,
+    postData.subtitle
+  );
+
   return {
     title: postData.meta_title || postData.title,
-    description: postData.meta_description || postData.excerpt || postData.subtitle || "",
+    description,
     openGraph: {
       title: postData.meta_title || postData.title,
-      description: postData.meta_description || postData.excerpt || postData.subtitle || "",
+      description,
       type: 'article',
       publishedTime: postData.published_at || postData.created_at,
       url: `${siteUrl}/article/${params.slug}`,
