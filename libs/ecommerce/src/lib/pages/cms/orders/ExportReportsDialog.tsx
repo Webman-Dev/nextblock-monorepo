@@ -49,7 +49,7 @@ export function ExportReportsDialog() {
     setLoading(true);
     try {
       toast.info('Generating report...');
-      const data = await fetchOrderReportData(startDate, endDate, reportType);
+      const data = await fetchOrderReportData(startDate, endDate);
 
       if (!data || data.length === 0) {
         toast.error('No orders found for the selected date range');

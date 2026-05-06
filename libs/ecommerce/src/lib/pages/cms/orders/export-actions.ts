@@ -6,8 +6,7 @@ export type ReportType = 'general_ledger' | 'tax_liability' | 'currency_summary'
 
 export async function fetchOrderReportData(
   startDate: string,
-  endDate: string,
-  _reportType: ReportType
+  endDate: string
 ) {
   const supabase = createClient();
 
