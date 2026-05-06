@@ -31,23 +31,72 @@ function getRequiredRolesForPath(pathname: string): UserRole[] | null {
   return null;
 }
 
+function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string): string {
+  const supabaseHostname = new URL(supabaseUrl).hostname;
+
+  const r2BaseUrl = process.env.NEXT_PUBLIC_R2_BASE_URL;
+  const r2PublicUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_URL;
+  const r2BucketName = process.env.R2_BUCKET_NAME;
+
+  let r2Hostnames = '';
+  if (r2BaseUrl) {
+    try {
+      r2Hostnames += ` https://${new URL(r2BaseUrl).hostname}`;
+    } catch (e) {
+      console.error('Invalid NEXT_PUBLIC_R2_BASE_URL', e);
+    }
+  }
+  if (r2PublicUrl && r2BucketName) {
+    try {
+      const publicHostname = new URL(r2PublicUrl).hostname;
+      r2Hostnames += ` https://${r2BucketName}.${publicHostname}`;
+    } catch (e) {
+      console.error('Invalid NEXT_PUBLIC_R2_PUBLIC_URL', e);
+    }
+  }
+
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'unsafe-inline' http: https: 'nonce-${nonceValue}' 'strict-dynamic'`,
+    "script-src-attr 'none'",
+    "style-src 'self' 'unsafe-inline' https://vercel.live https://vercel.com",
+    `img-src 'self' data: blob:${r2Hostnames} https://checkout.freemius.com https://vercel.live https://vercel.com https://www.googletagmanager.com https://www.google-analytics.com https://analytics.google.com https://*.googletagmanager.com`,
+    "font-src 'self' https://vercel.live https://assets.vercel.com",
+    "object-src 'none'",
+    `connect-src 'self' https://${supabaseHostname} wss://${supabaseHostname}${r2Hostnames} https://vercel.live https://vercel.com https://www.googletagmanager.com https://www.google-analytics.com https://analytics.google.com https://*.googletagmanager.com`,
+    "frame-src 'self' blob: data: https://checkout.freemius.com https://www.youtube.com https://vercel.live https://vercel.com",
+    "form-action 'self'",
+    "base-uri 'self'",
+    "frame-ancestors 'self'",
+    "upgrade-insecure-requests",
+  ].join('; ');
+}
+
 export async function proxy(request: NextRequest) {
-  const requestHeaders = new Headers(request.headers);
-  const nonce = crypto.randomUUID();
-  requestHeaders.set('x-nonce', nonce);
-
-  let response = NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  });
-
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error('Missing required Supabase environment variables');
   }
+
+  const requestHeaders = new Headers(request.headers);
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const contentSecurityPolicy =
+    process.env.NODE_ENV === 'production'
+      ? createContentSecurityPolicy(nonce, supabaseUrl)
+      : null;
+
+  requestHeaders.set('x-nonce', nonce);
+  if (contentSecurityPolicy) {
+    requestHeaders.set('Content-Security-Policy', contentSecurityPolicy);
+  }
+
+  let response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
@@ -204,52 +253,8 @@ export async function proxy(request: NextRequest) {
   finalResponse.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   finalResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
 
-  if (process.env.NODE_ENV === 'production') {
-    const nonceValue = requestHeaders.get('x-nonce');
-    if (nonceValue) {
-      const supabaseHostname = new URL(supabaseUrl).hostname;
-      
-      const r2BaseUrl = process.env.NEXT_PUBLIC_R2_BASE_URL;
-      const r2PublicUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_URL;
-      const r2BucketName = process.env.R2_BUCKET_NAME;
-
-      let r2Hostnames = '';
-      if (r2BaseUrl) {
-         try {
-           r2Hostnames += ` https://${new URL(r2BaseUrl).hostname}`;
-         } catch (e) {
-           console.error('Invalid NEXT_PUBLIC_R2_BASE_URL', e);
-         }
-      }
-      if (r2PublicUrl && r2BucketName) {
-         try {
-           const publicHostname = new URL(r2PublicUrl).hostname;
-           r2Hostnames += ` https://${r2BucketName}.${publicHostname}`;
-         } catch (e) {
-            console.error('Invalid NEXT_PUBLIC_R2_PUBLIC_URL', e);
-         }
-      }
-
-      const cspDirectives = [
-        "default-src 'self'",
-        `script-src 'self' 'nonce-${nonceValue}' 'strict-dynamic'`,
-        "script-src-attr 'none'",
-        "style-src 'self' 'unsafe-inline' https://vercel.live https://vercel.com",
-        `img-src 'self' data: blob:${r2Hostnames} https://checkout.freemius.com https://vercel.live https://vercel.com https://www.googletagmanager.com https://www.google-analytics.com https://analytics.google.com https://*.googletagmanager.com`,
-        "font-src 'self' https://vercel.live https://assets.vercel.com",
-        "object-src 'none'",
-        `connect-src 'self' https://${supabaseHostname} wss://${supabaseHostname}${r2Hostnames} https://vercel.live https://vercel.com https://www.googletagmanager.com https://www.google-analytics.com https://analytics.google.com https://*.googletagmanager.com`,
-        "frame-src 'self' blob: data: https://checkout.freemius.com https://www.youtube.com https://vercel.live https://vercel.com",
-        "form-action 'self'",
-        "base-uri 'self'",
-        "frame-ancestors 'self'",
-        "upgrade-insecure-requests",
-      ];
-
-      const csp = cspDirectives.join('; ');
-
-      finalResponse.headers.set('Content-Security-Policy', csp);
-    }
+  if (contentSecurityPolicy) {
+    finalResponse.headers.set('Content-Security-Policy', contentSecurityPolicy);
   }
 
   const responseForLogging = finalResponse.clone();
