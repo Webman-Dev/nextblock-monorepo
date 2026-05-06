@@ -68,6 +68,8 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string): s
     "form-action 'self'",
     "base-uri 'self'",
     "frame-ancestors 'self'",
+    "trusted-types *",
+    "require-trusted-types-for 'script'",
     "upgrade-insecure-requests",
   ].join('; ');
 }
