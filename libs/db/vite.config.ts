@@ -72,6 +72,8 @@ export default defineConfig({
         '@supabase/supabase-js',
         'next/headers',
         'next/server',
+        '@nextblock-cms/utils',
+        '@nextblock-cms/utils/server'
       ],
     },
   },

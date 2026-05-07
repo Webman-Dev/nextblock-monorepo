@@ -40,7 +40,7 @@
     "db:link": "dotenv -e .env.local -- node tools/scripts/supabase-link.js",
     "db:repair": "dotenv -e .env.local -- npx supabase migration repair --status reverted 20260115163000 --workdir libs/db/src",
     "db:reset": "dotenv -e .env.local -- npx supabase db reset --workdir libs/db/src",
-    "db:push": "dotenv -e .env.local -- npx supabase db push --workdir libs/db/src --include-all && dotenv -e .env.local -- npx supabase config push --workdir libs/db/src && dotenv -e .env.local -- npx tsx tools/scripts/seed-sandbox-images.ts",
+    "db:push": "dotenv -e .env.local -- npx supabase db push --workdir libs/db/src --include-all && dotenv -e .env.local -- npx supabase config push --workdir libs/db/src && dotenv -e .env.local -- npx tsx tools/scripts/seed-sandbox-images.ts && dotenv -e .env.local -- npx supabase functions deploy nextblock-migration-ingest --use-api --workdir libs/db/src",
     "configure:supabase-auth": "dotenv -e .env.local -- node apps/nextblock/tools/configure-supabase-auth.js",
     "sync:create-nextblock": "npm --prefix apps/create-nextblock run sync-template",
     "test-create": "node apps/create-nextblock/bin/create-nextblock.js",
@@ -264,6 +264,7 @@
     "y-protocols": "^1.0.7",
     "yjs": "^13.6.30",
     "zod": "^4.3.6",
+    "zod-to-json-schema": "^3.25.2",
     "zustand": "^5.0.12"
   },
   "nx": {

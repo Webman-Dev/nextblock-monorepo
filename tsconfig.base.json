@@ -9,6 +9,7 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
+    "baseUrl": ".",
     "rootDir": ".",
     "sourceMap": true,
     "composite": true,

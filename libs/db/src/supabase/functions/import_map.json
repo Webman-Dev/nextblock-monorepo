@@ -1,0 +1,6 @@
+{
+  "imports": {
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2",
+    "@aws-sdk/client-s3": "npm:@aws-sdk/client-s3@3.370.0"
+  }
+}

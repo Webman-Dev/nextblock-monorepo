@@ -13,5 +13,10 @@
     "tags": [
       "scope:premium"
     ]
+  },
+  "dependencies": {
+    "@nextblock-cms/db": "workspace:*",
+    "@nextblock-cms/utils": "workspace:*",
+    "@nextblock-cms/ui": "workspace:*"
   }
 }

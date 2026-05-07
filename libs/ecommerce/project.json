@@ -6,12 +6,11 @@
   "tags": ["scope:premium"],
   "targets": {
     "build": {
-      "executor": "@nx/js:tsc",
+      "executor": "@nx/vite:build",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/ecommerce",
-        "main": "libs/ecommerce/src/index.ts",
-        "tsConfig": "libs/ecommerce/tsconfig.lib.json",
+        "configFile": "libs/ecommerce/vite.config.ts",
         "assets": ["libs/ecommerce/*.md", "libs/ecommerce/package.json"]
       }
     }

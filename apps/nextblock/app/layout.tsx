@@ -132,6 +132,30 @@ const getCachedCopyrightSettings = unstable_cache(
   { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
 );
 
+const getCachedGlobalCss = unstable_cache(
+  async (): Promise<string> => {
+    const supabase = createStaticSupabaseClient();
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'global_css')
+      .single();
+
+    if (error || !data || !data.value) {
+      return '';
+    }
+    if (typeof data.value === 'string') {
+        if (data.value.startsWith('"') && data.value.endsWith('"')) {
+            try { return JSON.parse(data.value); } catch { return data.value; }
+        }
+        return data.value;
+    }
+    return String(data.value);
+  },
+  ['public-layout-global-css'],
+  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
+);
+
 const getCachedTranslations = unstable_cache(
   async () => {
     const supabase = createStaticSupabaseClient();
@@ -297,6 +321,7 @@ async function loadLayoutData() {
     availableLanguagesResult,
     currenciesResult,
     copyrightSettingsResult,
+    globalCssResult,
     translationsResult,
     isEcommerceActive,
   ] = await Promise.all([
@@ -306,6 +331,7 @@ async function loadLayoutData() {
     getCachedCopyrightSettings().catch(() => ({
       en: '(c) {year} Nextblock CMS. All rights reserved.',
     })),
+    getCachedGlobalCss().catch(() => ''),
     getCachedTranslations().catch(() => []),
     verifyPackageOnline('ecommerce').catch(() => false),
   ]);
@@ -327,6 +353,7 @@ async function loadLayoutData() {
   const templateForLocale = copyrightSettings[serverDeterminedLocale] ?? fallbackTemplate;
   const copyrightText = templateForLocale.replace('{year}', new Date().getFullYear().toString());
 
+  const globalCss = typeof globalCssResult === 'string' ? globalCssResult : '';
   const translations = Array.isArray(translationsResult) ? translationsResult : [];
 
   const hasSupabaseEnv = Boolean(
@@ -362,6 +389,7 @@ async function loadLayoutData() {
     canAccessCms,
     siteTitle,
     isEcommerceActive,
+    globalCss,
   };
 }
 
@@ -434,6 +462,7 @@ export default async function RootLayout({
     canAccessCms,
     siteTitle,
     isEcommerceActive,
+    globalCss,
   } = await loadLayoutData();
 
   return (
@@ -446,6 +475,7 @@ export default async function RootLayout({
           suppressHydrationWarning
           dangerouslySetInnerHTML={{ __html: TRUSTED_TYPES_BOOTSTRAP }}
         />
+        {globalCss && <style dangerouslySetInnerHTML={{ __html: globalCss }} />}
       </head>
       <body className="min-h-screen">
         <Providers
