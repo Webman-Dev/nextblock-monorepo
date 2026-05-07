@@ -25,6 +25,8 @@ export interface OrderCustomerDetails {
 
 export interface CheckoutSessionInput {
   items: CartItem[];
+  couponCode?: string | null;
+  couponContextItems?: CartItem[];
   customerEmail?: string | null;
   customerPhone?: string | null;
   billingAddress: CustomerAddressInput;

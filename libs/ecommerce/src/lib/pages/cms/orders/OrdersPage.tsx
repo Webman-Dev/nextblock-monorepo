@@ -95,7 +95,14 @@ export async function OrdersPage({
                         {order.provider === 'freemius' ? 'Freemius' : 'Stripe'}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {formatPrice(order.total, 'usd')}
+                      <div className="flex flex-col items-end">
+                        <span>{formatPrice(order.total, order.currency || 'usd')}</span>
+                        {order.discount_total ? (
+                          <span className="text-[10px] text-emerald-600">
+                            {order.coupon_code} -{formatPrice(order.discount_total, order.currency || 'usd')}
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">
                        {new Date(order.created_at || '').toLocaleDateString()}

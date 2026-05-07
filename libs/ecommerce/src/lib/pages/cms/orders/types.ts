@@ -5,6 +5,9 @@ export type Order = {
   currency: string | null;
   created_at: string | null;
   customer_details: OrderCustomerDetails | null;
+  coupon_code: string | null;
+  discount_total: number | null;
+  discount_details: Record<string, unknown> | null;
   freemius_product_id: string | null;
   freemius_plan_id: string | null;
   freemius_license_id: string | null;

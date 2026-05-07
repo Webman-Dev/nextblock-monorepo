@@ -1,4 +1,10 @@
 {
     "nxConsole.generateAiAgentRules": true,
-    "chatgpt.openOnStartup": true
+    "chatgpt.openOnStartup": true,
+    "cSpell.words": [
+        "btrim",
+        "freemius",
+        "Freemius",
+        "plpgsql"
+    ]
 }

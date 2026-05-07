@@ -46,7 +46,19 @@ NextBlock™ uses Cloudflare R2 because it's cheaper and faster than AWS S3.
 6.  **Location**: Automatic.
 7.  Click **"Create Bucket"**.
 8.  **IMPORTANT:** Once created, go to the **Settings** tab of your new bucket.
-    - Find **Public Access**.
+    - Find **CORS Policy** and click **Edit CORS policy**. Paste the following JSON:
+      ```json
+      [
+        {
+          "AllowedOrigins": ["http://localhost:3000"],
+          "AllowedMethods": ["PUT", "GET", "HEAD"],
+          "AllowedHeaders": ["*"],
+          "ExposeHeaders": ["ETag"],
+          "MaxAgeSeconds": 3000
+        }
+      ]
+      ```
+    - Find **Public Access**, enable it.
     - Click **"Connect Domain"** or **"Allow Access"** to get a `Public R2.dev URL` (e.g., `https://pub-xxxx.r2.dev`). **Copy this URL.**
 
 ### 1.3 Get Your API Keys
@@ -59,7 +71,7 @@ Keep these tabs open. You will need to copy-paste these values into the terminal
 | **Connection String**     | Dashboard > Connect (Top Right) > Transaction Pooler > **URI Mode**                        |
 | **Anon Key**              | Dashboard > Settings > API > **Project API Keys**                                          |
 | **Service Role Key**      | Dashboard > Settings > API > **Project API Keys**                                          |
-| **Supabase Access Token** | Profile (Top Right) > Access Tokens > **Generate New Token** (Name it "NextBlock™ CLI")     |
+| **Supabase Access Token** | Profile (Top Right) > Access Tokens > **Generate New Token** (Name it "NextBlock™ CLI")    |
 | **R2 Account ID**         | R2 Dashboard > **Account ID** (Right Sidebar)                                              |
 | **R2 Access/Secret Key**  | R2 Dashboard > Manage R2 API Tokens > **Create Token** > **Admin Read/Write** permissions. |
 

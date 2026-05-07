@@ -33,6 +33,7 @@ export function buildInvoiceDocumentLabels(
     price: translateOrFallback(t, 'price', 'Price'),
     amount: translateOrFallback(t, 'amount', 'Amount'),
     subtotal: translateOrFallback(t, 'ecommerce.subtotal', 'Subtotal'),
+    discount: translateOrFallback(t, 'ecommerce.discount', 'Discount'),
     shipping: translateOrFallback(t, 'ecommerce.shipping', 'Shipping'),
     tax: translateOrFallback(t, 'ecommerce.tax', 'Tax'),
     total: translateOrFallback(t, 'ecommerce.total', 'Total'),

@@ -14,6 +14,7 @@ declare namespace NodeJS {
     SMTP_FROM_EMAIL: string;
     SMTP_FROM_NAME: string;
     FREEMIUS_STORE_ID: string;
+    FREEMIUS_DEVELOPER_ID?: string;
     FREEMIUS_PRODUCT_ID?: string;
     FREEMIUS_PUBLIC_KEY: string;
     FREEMIUS_SECRET_KEY: string;

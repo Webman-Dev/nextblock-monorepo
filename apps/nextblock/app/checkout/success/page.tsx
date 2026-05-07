@@ -103,6 +103,9 @@ export default function CheckoutSuccessPage() {
           );
 
           useCartStore.getState().setItems(remainingItems);
+          if (remainingItems.length === 0) {
+            useCartStore.getState().removeCoupon();
+          }
           setHasRemainingCheckoutItems(remainingItems.length > 0);
 
           if (typeof window !== 'undefined' && remainingItems.length === 0) {

@@ -28,6 +28,7 @@ export interface InvoiceDocumentLabels {
   price: string;
   amount: string;
   subtotal: string;
+  discount: string;
   shipping: string;
   tax: string;
   total: string;
@@ -205,6 +206,20 @@ export function InvoiceDocument({
                 label={labels.subtotal}
                 value={formatInvoiceCurrency(data.order.subtotal, data.order.currency, locale)}
               />
+              {data.order.discount_total > 0 ? (
+                <SummaryRow
+                  label={
+                    data.order.coupon_code
+                      ? `${labels.discount} (${data.order.coupon_code})`
+                      : labels.discount
+                  }
+                  value={`-${formatInvoiceCurrency(
+                    data.order.discount_total,
+                    data.order.currency,
+                    locale
+                  )}`}
+                />
+              ) : null}
               <SummaryRow
                 label={labels.shipping}
                 value={formatInvoiceCurrency(

@@ -1,0 +1,197 @@
+'use client';
+
+import {
+  type ChangeEvent,
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import { Badge } from '@nextblock-cms/ui/badge';
+import { Button } from '@nextblock-cms/ui/button';
+import { Input } from '@nextblock-cms/ui/input';
+import { Label } from '@nextblock-cms/ui/label';
+import { Tag, X } from 'lucide-react';
+import { formatPrice, useTranslations } from '@nextblock-cms/utils';
+
+import type { CouponQuote } from '../coupons';
+import { normalizeCouponCode } from '../coupons';
+import type { CartItem } from '../types';
+import { useCart } from '../use-cart';
+import { getCouponQuoteAction } from '../server-actions/coupon-actions';
+
+export function CouponForm({
+  items,
+  currencyCode,
+  onQuoteChange,
+  compact = false,
+}: {
+  items: CartItem[];
+  currencyCode: string;
+  onQuoteChange?: (quote: CouponQuote | null) => void;
+  compact?: boolean;
+}) {
+  const appliedCoupon = useCart((state) => state.appliedCoupon);
+  const setAppliedCoupon = useCart((state) => state.setAppliedCoupon);
+  const clearAppliedCoupon = useCart((state) => state.removeCoupon);
+  const { t } = useTranslations();
+  const [codeInput, setCodeInput] = useState('');
+  const [quote, setQuote] = useState<CouponQuote | null>(null);
+  const [error, setError] = useState('');
+  const [isApplying, setIsApplying] = useState(false);
+  const cartSignature = useMemo(
+    () =>
+      items
+        .map((item) => `${item.product_id}:${item.variant_id || 'base'}:${item.quantity}`)
+        .sort()
+        .join('|'),
+    [items]
+  );
+  const translateOrFallback = useCallback((key: string, fallback: string) => {
+    const translated = t(key);
+    return translated === key ? fallback : translated;
+  }, [t]);
+
+  const applyCode = useCallback(async (nextCode: string, options?: { silent?: boolean }) => {
+    const normalizedCode = normalizeCouponCode(nextCode);
+
+    if (!normalizedCode) {
+      setError(translateOrFallback('ecommerce.coupon_code_required', 'Enter a coupon code.'));
+      return;
+    }
+
+    setIsApplying(true);
+    setError('');
+
+    const result = await getCouponQuoteAction({
+      code: normalizedCode,
+      items,
+      currencyCode,
+    });
+
+    setIsApplying(false);
+
+    if (!result.success) {
+      setQuote(null);
+      onQuoteChange?.(null);
+      clearAppliedCoupon?.();
+      setError(result.errorKey ? translateOrFallback(result.errorKey, result.error) : result.error);
+      return;
+    }
+
+    setQuote(result.quote);
+    onQuoteChange?.(result.quote);
+    setAppliedCoupon?.({
+      code: result.quote.code,
+      couponId: result.quote.couponId,
+    });
+    setCodeInput('');
+
+    if (!options?.silent) {
+      setError('');
+    }
+  }, [
+    clearAppliedCoupon,
+    currencyCode,
+    items,
+    onQuoteChange,
+    setAppliedCoupon,
+    translateOrFallback,
+  ]);
+
+  useEffect(() => {
+    if (!setAppliedCoupon || !clearAppliedCoupon) {
+      return;
+    }
+
+    if (!appliedCoupon || items.length === 0) {
+      setQuote(null);
+      onQuoteChange?.(null);
+      return;
+    }
+
+    void applyCode(appliedCoupon.code, { silent: true });
+  }, [
+    appliedCoupon,
+    applyCode,
+    cartSignature,
+    clearAppliedCoupon,
+    items.length,
+    onQuoteChange,
+    setAppliedCoupon,
+  ]);
+
+  if (!setAppliedCoupon || !clearAppliedCoupon) {
+    return null;
+  }
+
+  const removeCoupon = () => {
+    clearAppliedCoupon();
+    setQuote(null);
+    onQuoteChange?.(null);
+    setError('');
+  };
+
+  return (
+    <div className={compact ? 'space-y-2' : 'rounded-lg border bg-muted/10 p-4 space-y-3'}>
+      <div className="flex items-center justify-between gap-3">
+        <Label htmlFor={compact ? 'coupon-code-compact' : 'coupon-code'} className="flex items-center gap-2 text-sm font-medium">
+          <Tag className="h-4 w-4" />
+          {translateOrFallback('ecommerce.coupon', 'Coupon')}
+        </Label>
+        {quote ? (
+          <Badge variant="secondary" className="gap-1">
+            {quote.code}
+            <button type="button" onClick={removeCoupon} aria-label={`Remove coupon ${quote.code}`}>
+              <X className="h-3 w-3" />
+            </button>
+          </Badge>
+        ) : null}
+      </div>
+
+      {!quote ? (
+        <div className="flex gap-2">
+          <Input
+            id={compact ? 'coupon-code-compact' : 'coupon-code'}
+            value={codeInput}
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              setCodeInput(event.target.value.toUpperCase())
+            }
+            placeholder={translateOrFallback('ecommerce.coupon_placeholder', 'Code')}
+            className="uppercase"
+            onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                void applyCode(codeInput);
+              }
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isApplying || items.length === 0}
+            onClick={() => void applyCode(codeInput)}
+          >
+            {isApplying
+              ? translateOrFallback('ecommerce.applying', 'Applying...')
+              : translateOrFallback('ecommerce.apply', 'Apply')}
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">
+            {quote.name}
+          </span>
+          <span className="font-medium text-emerald-600">
+            -{formatPrice(quote.discountTotal, currencyCode)}
+          </span>
+        </div>
+      )}
+
+      {error ? (
+        <p className="text-xs text-destructive">{error}</p>
+      ) : null}
+    </div>
+  );
+}

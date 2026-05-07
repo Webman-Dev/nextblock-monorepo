@@ -4,6 +4,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { type CartItem, isDigitalItem } from './types';
 import { useCurrency } from './CurrencyProvider';
 import { resolvePriceForCurrency } from './currency';
+import type { AppliedCouponState } from './coupons';
 
 export interface AddItemResult {
   success: boolean;
@@ -12,10 +13,13 @@ export interface AddItemResult {
 
 interface CartState {
   items: CartItem[];
+  appliedCoupon: AppliedCouponState | null;
   isOpen: boolean;
   addItem: (item: Omit<CartItem, 'quantity'>) => AddItemResult;
   removeItem: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
+  setAppliedCoupon: (coupon: AppliedCouponState | null) => void;
+  removeCoupon: () => void;
   clearCart: () => void;
   toggleCart: () => void;
   setIsOpen: (isOpen: boolean) => void;
@@ -44,6 +48,7 @@ export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
       items: [],
+      appliedCoupon: null,
       isOpen: false,
       addItem: (newItem) => {
         const { items } = get();
@@ -150,7 +155,9 @@ export const useCartStore = create<CartState>()(
           });
         }
       },
-      clearCart: () => set({ items: [] }),
+      setAppliedCoupon: (coupon) => set({ appliedCoupon: coupon }),
+      removeCoupon: () => set({ appliedCoupon: null }),
+      clearCart: () => set({ items: [], appliedCoupon: null }),
       toggleCart: () => set((state) => ({ isOpen: !state.isOpen })),
       setIsOpen: (isOpen) => set({ isOpen }),
       setItems: (items) => set({ items }),

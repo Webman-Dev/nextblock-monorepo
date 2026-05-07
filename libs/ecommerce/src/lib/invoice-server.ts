@@ -127,6 +127,8 @@ export async function getInvoiceOrder(orderId: string, client?: SupabaseLikeClie
       provider,
       subtotal,
       shipping_total,
+      discount_total,
+      coupon_code,
       tax_total,
       total,
       customer_details,
@@ -213,6 +215,9 @@ export async function getInvoiceOrder(orderId: string, client?: SupabaseLikeClie
         : items.reduce((sum, item) => sum + item.total_amount, 0),
     shipping_total:
       typeof orderRow.shipping_total === 'number' ? orderRow.shipping_total : 0,
+    discount_total:
+      typeof orderRow.discount_total === 'number' ? orderRow.discount_total : 0,
+    coupon_code: orderRow.coupon_code ?? null,
     tax_total: typeof orderRow.tax_total === 'number' ? orderRow.tax_total : 0,
     total: orderRow.total,
     customer_details: normalizeOrderCustomerDetails(orderRow.customer_details ?? {}),

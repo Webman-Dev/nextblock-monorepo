@@ -17,6 +17,7 @@ import { formatPrice, useTranslations } from '@nextblock-cms/utils';
 import { isDigitalItem } from '../types';
 import { useCurrency } from '../CurrencyProvider';
 import { getTrialSummary } from '../trials';
+import { CouponForm } from './CouponForm';
 
 
 
@@ -181,6 +182,9 @@ export const CartDrawer = () => {
              <p className="mb-4 mt-1 text-xs text-muted-foreground">
                 {t('ecommerce.shipping_taxes_calculated')}
              </p>
+             <div className="mb-4">
+                <CouponForm items={items} currencyCode={activeCurrencyCode} compact />
+             </div>
              <Button variant="outline" className="w-full mb-3" onClick={handleViewCart}>
                 {t('ecommerce.view_full_cart')}
              </Button>

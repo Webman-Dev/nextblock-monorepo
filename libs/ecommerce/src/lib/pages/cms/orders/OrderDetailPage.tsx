@@ -114,6 +114,14 @@ export async function OrderDetailPage({ params }: { params: Promise<{ id: string
                   : '--'
               }
             />
+            {order.discount_total ? (
+              <MetaRow
+                label="Discount"
+                value={`${
+                  order.coupon_code ? `${order.coupon_code} ` : ''
+                }-${formatMinorUnitPrice(order.discount_total, order.currency || 'usd')}`}
+              />
+            ) : null}
             {order.stripe_session_id ? (
               <div className="mt-3 border-t pt-3 dark:border-slate-800">
                 <p className="mb-1 text-xs text-gray-500">Session ID</p>

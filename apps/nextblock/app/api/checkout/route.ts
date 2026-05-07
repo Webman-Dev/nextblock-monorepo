@@ -51,6 +51,8 @@ export async function POST(req: Request) {
       shippingMethodId,
       currencyCode,
       locale,
+      couponCode,
+      couponContextItems,
     } = await req.json();
     
     if (!items || !Array.isArray(items)) {
@@ -120,6 +122,8 @@ export async function POST(req: Request) {
       shippingMethodId: providerName === 'stripe' ? shippingMethodId : null,
       currencyCode: typeof currencyCode === 'string' ? currencyCode : null,
       locale: typeof locale === 'string' ? locale : null,
+      couponCode: typeof couponCode === 'string' ? couponCode : null,
+      couponContextItems: Array.isArray(couponContextItems) ? couponContextItems : items,
     });
 
     if (error) {

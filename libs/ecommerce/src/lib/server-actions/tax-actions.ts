@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@nextblock-cms/db/server';
+import { createClient, getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
 
 import type { CartItem, TaxCalculationResult } from '../types';
 import {
@@ -8,14 +8,18 @@ import {
   calculateCheckoutTaxes,
   type TaxDestinationInput,
 } from '../tax-calculation';
+import { getCouponQuote, getQuoteLineDiscountMap } from '../coupon-server';
 
 export async function getTaxEstimate(
   cartItems: CartItem[],
   destination?: TaxDestinationInput | null,
-  currencyCode = 'USD'
+  currencyCode = 'USD',
+  couponCode?: string | null,
+  couponContextItems?: CartItem[]
 ): Promise<{ success: boolean; tax?: TaxCalculationResult; error?: string }> {
   try {
     const supabase = createClient();
+    const serviceSupabase = getServiceRoleSupabaseClient();
     const { data: currenciesResult } = await supabase
       .from('currencies')
       .select(
@@ -24,11 +28,27 @@ export async function getTaxEstimate(
       .eq('is_active', true)
       .order('code', { ascending: true });
     const currencies = currenciesResult ?? [];
+    let lineDiscounts: Map<string, number> | undefined;
+
+    if (couponCode) {
+      const quoteResult = await getCouponQuote({
+        client: serviceSupabase as any,
+        code: couponCode,
+        items: couponContextItems && couponContextItems.length > 0 ? couponContextItems : cartItems,
+        currencyCode,
+      });
+
+      if (quoteResult.success) {
+        lineDiscounts = getQuoteLineDiscountMap(quoteResult.quote);
+      }
+    }
+
     const items = await buildCheckoutTaxableItemsFromCart(
       supabase as any,
       cartItems,
       currencyCode,
-      currencies
+      currencies,
+      lineDiscounts
     );
     const tax = await calculateCheckoutTaxes(supabase as any, {
       items,

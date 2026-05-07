@@ -7,7 +7,7 @@ import { useRouter, usePathname } from "next/navigation" // Import usePathname
 import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
-  Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package,
+  Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, TicketPercent,
 } from "lucide-react"
 import { Button } from "@nextblock-cms/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar"
@@ -203,6 +203,8 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
 
   else if (pathname.startsWith("/cms/settings/packages")) pageTitle = "Packages";
   else if (pathname.startsWith("/cms/settings")) pageTitle = "Settings";
+  else if (pathname.startsWith("/cms/coupons/") && pathname.endsWith("/edit")) pageTitle = "Edit Coupon";
+  else if (pathname.startsWith("/cms/coupons")) pageTitle = "Coupons";
   else if (pathname.startsWith("/cms/products/new")) pageTitle = "New Product";
   else if (pathname.startsWith("/cms/products/") && pathname.endsWith("/edit")) pageTitle = "Edit Product";
   else if (pathname.startsWith("/cms/products")) pageTitle = "Products";
@@ -275,6 +277,9 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                   </NavItem>
                   <NavItem href="/cms/orders" icon={ListOrdered} isActive={pathname.startsWith("/cms/orders")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                     Orders
+                  </NavItem>
+                  <NavItem href="/cms/coupons" icon={TicketPercent} isActive={pathname.startsWith("/cms/coupons")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                    Coupons
                   </NavItem>
                   <NavItem href="/cms/payments" icon={CreditCard} isActive={pathname.startsWith("/cms/payments")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Payments

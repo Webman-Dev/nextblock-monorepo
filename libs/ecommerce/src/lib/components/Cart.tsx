@@ -20,6 +20,7 @@ import { formatPrice, useTranslations } from '@nextblock-cms/utils';
 import { ShippingEstimator } from './ShippingEstimator';
 import { useCurrency } from '../CurrencyProvider';
 import { getTrialSummary } from '../trials';
+import { CouponForm } from './CouponForm';
 
 export const Cart = () => {
   const router = useRouter();
@@ -221,6 +222,12 @@ export const Cart = () => {
                     {items.some(item => !isDigitalItem(item)) && (
                         <ShippingEstimator physicalSubtotal={physicalSubtotal} />
                     )}
+
+                    <CouponForm
+                      items={items}
+                      currencyCode={activeCurrencyCode}
+                      compact
+                    />
 
                     <Button className="w-full mt-4" size="lg" onClick={handleCheckout}>
                         {t('ecommerce.proceed_to_checkout')}

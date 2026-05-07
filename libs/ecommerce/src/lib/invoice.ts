@@ -55,6 +55,8 @@ export interface InvoiceOrder {
   provider: string | null;
   subtotal: number;
   shipping_total: number;
+  discount_total: number;
+  coupon_code?: string | null;
   tax_total: number;
   total: number;
   customer_details: OrderCustomerDetails | null;

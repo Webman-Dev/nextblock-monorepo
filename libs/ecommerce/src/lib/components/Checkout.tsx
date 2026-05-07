@@ -44,6 +44,8 @@ import {
 } from '../customer';
 import { useCurrency } from '../CurrencyProvider';
 import { getTrialSummary } from '../trials';
+import { CouponForm } from './CouponForm';
+import type { CouponQuote } from '../coupons';
 
 const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
 const CHECKOUT_DRAFT_STORAGE_KEY = 'nextblock-checkout-draft-v1';
@@ -285,6 +287,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
   const [taxEstimate, setTaxEstimate] = useState<Awaited<
     ReturnType<typeof getTaxEstimate>
   >['tax'] | null>(null);
+  const [couponQuote, setCouponQuote] = useState<CouponQuote | null>(null);
   const [billingAddress, setBillingAddress] = useState(() =>
     buildAddressState(initialCustomer?.billingAddress, initialCustomer?.fullName)
   );
@@ -352,6 +355,10 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
     () => calculateCartSubtotal(freemiusItems, activeCurrencyCode, currencies),
     [activeCurrencyCode, currencies, freemiusItems]
   );
+  const stripeDiscountTotal = couponQuote?.providerDiscounts.stripe ?? 0;
+  const freemiusDiscountTotal = couponQuote?.providerDiscounts.freemius ?? 0;
+  const discountedStripeSubtotal = Math.max(0, stripeSubtotal - stripeDiscountTotal);
+  const discountedFreemiusSubtotal = Math.max(0, freemiusSubtotal - freemiusDiscountTotal);
 
   const shippingAddressForRates = useMemo(
     () => (useBillingForShipping ? billingAddress : shippingAddress),
@@ -371,12 +378,12 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
 
   const stripeTotal = useMemo(
     () =>
-      stripeSubtotal +
+      discountedStripeSubtotal +
       (selectedMethod?.amount ?? 0) +
       (taxEstimate && !taxEstimate.isPendingExternalCalculation ? taxEstimate.amount : 0),
-    [selectedMethod, stripeSubtotal, taxEstimate]
+    [discountedStripeSubtotal, selectedMethod, taxEstimate]
   );
-  const overallEstimatedTotal = stripeTotal + freemiusSubtotal;
+  const overallEstimatedTotal = stripeTotal + discountedFreemiusSubtotal;
 
   useEffect(() => {
     if (isAuthenticated || typeof window === 'undefined') {
@@ -476,7 +483,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
 
       setIsLoadingRates(true);
       const result = await getShippingEstimates(
-        stripeSubtotal,
+        discountedStripeSubtotal,
         {
           country: shippingAddressForRates.country_code,
           state: shippingAddressForRates.state,
@@ -520,7 +527,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
     shippingAddressForRates.country_code,
     shippingAddressForRates.postal_code,
     shippingAddressForRates.state,
-    stripeSubtotal,
+    discountedStripeSubtotal,
   ]);
 
   useEffect(() => {
@@ -544,7 +551,9 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
           country_code: taxAddress.country_code,
           state: taxAddress.state,
         },
-        activeCurrencyCode
+        activeCurrencyCode,
+        couponQuote?.code ?? null,
+        items
       );
 
       if (result.success && result.tax) {
@@ -564,6 +573,8 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
     stripeItems,
     taxAddress.country_code,
     taxAddress.state,
+    couponQuote?.code,
+    items,
   ]);
 
   if (!store) {
@@ -682,6 +693,9 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
       const remainingItems = items.filter((item) => !checkoutItemIds.has(item.id));
 
       store.setItems(remainingItems);
+      if (remainingItems.length === 0) {
+        store.removeCoupon();
+      }
       setSandboxProvider(provider);
       setShowSandboxModal(true);
 
@@ -708,6 +722,8 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
           shippingMethodId: provider === 'stripe' ? selectedMethodId : null,
           locale: lang,
           currencyCode: activeCurrencyCode,
+          couponCode: couponQuote?.code ?? store.appliedCoupon?.code ?? null,
+          couponContextItems: items,
         }),
       });
 
@@ -716,7 +732,11 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
       if (!res.ok) {
         const translatedError =
           data?.errorKey && typeof data.errorKey === 'string'
-            ? t(data.errorKey, data.errorParams)
+            ? translateOrFallback(
+                data.errorKey,
+                data?.error || translateOrFallback('ecommerce.generic_error', 'Something went wrong.'),
+                data.errorParams
+              )
             : data?.error || t('ecommerce.generic_error');
 
         setCheckoutErrors((current) => ({
@@ -762,6 +782,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
           plan_id: cp.plan_id,
           ...(cp.billing_cycle ? { billing_cycle: cp.billing_cycle } : {}),
           ...(cp.trial ? { trial: cp.trial } : {}),
+          ...(cp.coupon ? { coupon: cp.coupon } : {}),
           user_email: cp.user_email,
           user_firstname: cp.user_firstname,
           user_lastname: cp.user_lastname,
@@ -1107,6 +1128,12 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
 
                 <Separator />
 
+                <CouponForm
+                  items={items}
+                  currencyCode={activeCurrencyCode}
+                  onQuoteChange={setCouponQuote}
+                />
+
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>{t('ecommerce.subtotal')}</span>
@@ -1132,6 +1159,14 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                         )}
                       </span>
                       <span>{formatPrice(freemiusSubtotal, activeCurrencyCode)}</span>
+                    </div>
+                  ) : null}
+                  {couponQuote ? (
+                    <div className="flex justify-between text-emerald-600">
+                      <span>
+                        {translateOrFallback('ecommerce.discount', 'Discount')} ({couponQuote.code})
+                      </span>
+                      <span>-{formatPrice(couponQuote.discountTotal, activeCurrencyCode)}</span>
                     </div>
                   ) : null}
                   {(stripeItems.length > 0 || freemiusItems.length > 0) && (
@@ -1173,6 +1208,14 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                     </span>
                     <span>{formatPrice(stripeSubtotal, activeCurrencyCode)}</span>
                   </div>
+                  {stripeDiscountTotal > 0 ? (
+                    <div className="flex justify-between text-emerald-600">
+                      <span>
+                        {translateOrFallback('ecommerce.discount', 'Discount')}
+                      </span>
+                      <span>-{formatPrice(stripeDiscountTotal, activeCurrencyCode)}</span>
+                    </div>
+                  ) : null}
                   <div className="flex justify-between">
                     <span>{t('ecommerce.shipping')}</span>
                     <span>{selectedMethod ? formatPrice(selectedMethod.amount, activeCurrencyCode) : '-'}</span>
@@ -1405,6 +1448,12 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                   </span>
                   <span>{formatPrice(freemiusSubtotal, activeCurrencyCode)}</span>
                 </div>
+                {freemiusDiscountTotal > 0 ? (
+                  <div className="flex justify-between text-sm font-semibold text-emerald-600">
+                    <span>{translateOrFallback('ecommerce.discount', 'Discount')}</span>
+                    <span>-{formatPrice(freemiusDiscountTotal, activeCurrencyCode)}</span>
+                  </div>
+                ) : null}
 
                 {checkoutErrors.freemius ? (
                   <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">

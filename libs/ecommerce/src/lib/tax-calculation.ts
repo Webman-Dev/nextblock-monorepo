@@ -6,11 +6,13 @@ import { resolvePriceForCurrency } from './currency';
 import { getEcommerceInventorySettings } from './inventory-settings';
 import { normalizeSubdivisionCode } from './states';
 import type { CartItem, TaxCalculationResult, TaxRate } from './types';
+import { getCartLineCouponKey } from './coupons';
 
 export interface CheckoutTaxableItem {
   product_id: string;
   quantity: number;
   unit_amount: number;
+  discount_amount?: number;
   is_taxable: boolean;
 }
 
@@ -31,7 +33,8 @@ export async function buildCheckoutTaxableItemsFromCart(
   supabase: SupabaseClient<any>,
   cartItems: CartItem[],
   currencyCode: string,
-  currencies: CurrencyRecord[]
+  currencies: CurrencyRecord[],
+  lineDiscounts?: Map<string, number>
 ): Promise<CheckoutTaxableItem[]> {
   if (!cartItems.length) {
     return [];
@@ -71,6 +74,7 @@ export async function buildCheckoutTaxableItemsFromCart(
       product_id: product.id,
       quantity: cartItem.quantity,
       unit_amount: resolvedPrice.sale_price ?? resolvedPrice.price,
+      discount_amount: lineDiscounts?.get(getCartLineCouponKey(cartItem)) ?? 0,
       is_taxable: product.is_taxable ?? true,
     });
 
@@ -91,7 +95,7 @@ export async function calculateCheckoutTaxes(
       return sum;
     }
 
-    return sum + item.unit_amount * item.quantity;
+    return sum + Math.max(0, item.unit_amount * item.quantity - (item.discount_amount ?? 0));
   }, 0);
 
   if (!settings.enableTaxes || taxableSubtotal <= 0) {

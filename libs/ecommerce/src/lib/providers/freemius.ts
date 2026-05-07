@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { Freemius } from '@freemius/sdk';
 import { CheckoutSessionInput, normalizeOrderCustomerDetails } from '../customer';
+import { getCouponQuote, recordCouponRedemption } from '../coupon-server';
+import type { CouponQuote } from '../coupons';
 import {
   fillMissingUserProfileCheckoutDetails,
   upsertDefaultUserAddresses,
@@ -244,6 +246,8 @@ export class FreemiusProvider implements PaymentProvider {
       billingAddress,
       shippingAddress,
       currencyCode,
+      couponCode,
+      couponContextItems,
     }: CheckoutSessionInput): Promise<{
       url: string | null;
       error?: string;
@@ -315,6 +319,37 @@ export class FreemiusProvider implements PaymentProvider {
       });
       const unitAmount = resolvedPrice.sale_price ?? resolvedPrice.price;
       const totalAmount = unitAmount * item.quantity;
+      let couponQuote: CouponQuote | null = null;
+      let discountTotal = 0;
+
+      if (couponCode) {
+          const quoteResult = await getCouponQuote({
+              client: supabase as any,
+              code: couponCode,
+              items:
+                  couponContextItems && couponContextItems.length > 0
+                      ? couponContextItems
+                      : cartItems,
+              currencyCode: selectedCurrency.code,
+          });
+
+          if (!quoteResult.success) {
+              return {
+                  error: quoteResult.error,
+                  errorKey: quoteResult.errorKey,
+                  errorStatus: 400,
+                  url: null,
+              };
+          }
+
+          couponQuote = quoteResult.quote;
+          discountTotal = Math.min(
+              totalAmount,
+              couponQuote.lineDiscounts
+                  .filter((line) => line.product_id === product.id)
+                  .reduce((sum, line) => sum + line.discount, 0)
+          );
+      }
       const trialPeriodDays = normalizeFreemiusTrialPeriod(product.trial_period_days);
       const trialMode =
           trialPeriodDays > 0
@@ -334,9 +369,24 @@ export class FreemiusProvider implements PaymentProvider {
         .from('orders')
         .insert({
           status: initialOrderStatus,
-          total: totalAmount,
+          total: Math.max(0, totalAmount - discountTotal),
           currency: selectedCurrency.code,
           exchange_rate_at_purchase: selectedCurrency.exchange_rate,
+          subtotal: totalAmount,
+          discount_total: discountTotal,
+          coupon_id: couponQuote?.couponId ?? null,
+          coupon_code: couponQuote?.code ?? null,
+          discount_details: couponQuote
+            ? {
+                code: couponQuote.code,
+                discount_type: couponQuote.discountType,
+                discount_amount: couponQuote.discountAmount,
+                provider: 'freemius',
+                provider_discounts: couponQuote.providerDiscounts,
+                line_discounts: couponQuote.lineDiscounts,
+                final_amount_owned_by: 'freemius',
+              }
+            : null,
           provider: 'freemius',
           freemius_product_id: String(freemiusProductId),
           freemius_plan_id: String(freemiusPlanId),
@@ -392,6 +442,23 @@ export class FreemiusProvider implements PaymentProvider {
                   profileSyncError
               );
           }
+      }
+
+      if (couponQuote) {
+          await recordCouponRedemption({
+              client: supabase as any,
+              quote: couponQuote,
+              orderId: order.id,
+              provider: 'freemius',
+              discountTotal,
+              userId,
+              customerEmail,
+              metadata: {
+                  currency: selectedCurrency.code,
+                  subtotal: totalAmount,
+                  final_amount_owned_by: 'freemius',
+              },
+          });
       }
             
       // Freemius checkout sandbox is independent from the app-wide demo sandbox.
@@ -485,6 +552,9 @@ export class FreemiusProvider implements PaymentProvider {
       if (trialMode) {
           url.searchParams.append('trial', trialMode);
       }
+      if (couponQuote) {
+          url.searchParams.append('coupon', couponQuote.code);
+      }
       
       return { 
           url: url.toString(),
@@ -503,6 +573,7 @@ export class FreemiusProvider implements PaymentProvider {
               trial_period_days: trialPeriodDays,
               trial_requires_payment_method: product.trial_requires_payment_method,
               initial_order_status: initialOrderStatus,
+              coupon: couponQuote?.code ?? null,
               order_id: order.id
           }
       };

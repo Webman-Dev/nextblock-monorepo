@@ -8,6 +8,12 @@ import {
   normalizeOrderCustomerDetails,
 } from '../customer';
 import {
+  getCouponQuote,
+  getQuoteLineDiscountMap,
+  recordCouponRedemption,
+} from '../coupon-server';
+import { type CouponQuote, getCartLineCouponKey } from '../coupons';
+import {
   fillMissingUserProfileCheckoutDetails,
   upsertDefaultUserAddresses,
 } from '../customer-addresses';
@@ -193,6 +199,8 @@ export class StripeProvider implements PaymentProvider {
     shippingMethodId,
     currencyCode,
     locale,
+    couponCode,
+    couponContextItems,
   }: CheckoutSessionInput): Promise<{
     url: string | null;
     error?: string;
@@ -315,6 +323,7 @@ export class StripeProvider implements PaymentProvider {
       product_id: string;
       quantity: number;
       unit_amount: number;
+      discount_amount?: number;
       is_taxable: boolean;
     }> = [];
     const verifiedItems: Array<{
@@ -324,6 +333,76 @@ export class StripeProvider implements PaymentProvider {
       variant_id?: string | null;
     }> = [];
     let totalAmount = 0;
+    let discountTotal = 0;
+    let couponQuote: CouponQuote | null = null;
+
+    if (couponCode) {
+      const quoteResult = await getCouponQuote({
+        client: supabase as any,
+        code: couponCode,
+        items: couponContextItems && couponContextItems.length > 0 ? couponContextItems : cartItems,
+        currencyCode: selectedCurrency.code,
+      });
+
+      if (!quoteResult.success) {
+        return {
+          error: quoteResult.error,
+          errorKey: quoteResult.errorKey,
+          errorStatus: 400,
+          url: null,
+        };
+      }
+
+      couponQuote = quoteResult.quote;
+    }
+
+    const lineDiscounts = getQuoteLineDiscountMap(couponQuote);
+
+    const pushDiscountedLineItems = (input: {
+      name: string;
+      currency: string;
+      productId: string;
+      variantId?: string | null;
+      isTaxable: boolean;
+      unitAmount: number;
+      quantity: number;
+      lineDiscount: number;
+    }) => {
+      const originalLineTotal = input.unitAmount * input.quantity;
+      const discountedLineTotal = Math.max(0, originalLineTotal - input.lineDiscount);
+
+      if (discountedLineTotal <= 0) {
+        return;
+      }
+
+      const baseUnitAmount = Math.floor(discountedLineTotal / input.quantity);
+      const remainderQuantity = discountedLineTotal - baseUnitAmount * input.quantity;
+      const pushLine = (unitAmount: number, quantity: number) => {
+        if (quantity <= 0 || unitAmount <= 0) {
+          return;
+        }
+
+        lineItems.push({
+          price_data: {
+            currency: input.currency,
+            product_data: {
+              name: input.name,
+              tax_code: getStripeTaxCodeForProduct(input.isTaxable),
+              metadata: {
+                productId: input.productId,
+                variantId: input.variantId || '',
+              },
+            },
+            tax_behavior: 'exclusive',
+            unit_amount: unitAmount,
+          },
+          quantity,
+        });
+      };
+
+      pushLine(baseUnitAmount, input.quantity - remainderQuantity);
+      pushLine(baseUnitAmount + 1, remainderQuantity);
+    };
 
     for (const cartItem of cartItems) {
       const product = productMap.get(cartItem.product_id);
@@ -403,24 +482,24 @@ export class StripeProvider implements PaymentProvider {
         return { error: 'A product variation produced an invalid price.', url: null };
       }
 
-      lineItems.push({
-        price_data: {
-          currency: checkoutCurrencyCode,
-          product_data: {
-            name: lineItemName,
-            tax_code: getStripeTaxCodeForProduct(isTaxable),
-            metadata: {
-              productId: product.id,
-              variantId: resolvedVariantId || '',
-            },
-          },
-          tax_behavior: 'exclusive',
-          unit_amount: unitAmount,
-        },
+      const lineDiscount = Math.min(
+        unitAmount * cartItem.quantity,
+        lineDiscounts.get(getCartLineCouponKey(cartItem)) ?? 0
+      );
+
+      pushDiscountedLineItems({
+        name: lineItemName,
+        currency: checkoutCurrencyCode,
+        productId: product.id,
+        variantId: resolvedVariantId,
+        isTaxable,
+        unitAmount,
         quantity: cartItem.quantity,
+        lineDiscount,
       });
 
       totalAmount += unitAmount * cartItem.quantity;
+      discountTotal += lineDiscount;
       verifiedItems.push({
         product_id: product.id,
         quantity: cartItem.quantity,
@@ -431,8 +510,18 @@ export class StripeProvider implements PaymentProvider {
         product_id: product.id,
         quantity: cartItem.quantity,
         unit_amount: unitAmount,
+        discount_amount: lineDiscount,
         is_taxable: isTaxable,
       });
+    }
+
+    if (lineItems.length === 0 && discountTotal >= totalAmount) {
+      return {
+        error: 'This coupon would reduce the Stripe order to zero. Use a smaller discount for Stripe checkout.',
+        errorKey: 'ecommerce.coupon_zero_total_not_supported',
+        errorStatus: 400,
+        url: null,
+      };
     }
 
     if (lineItems.length === 0) {
@@ -530,21 +619,35 @@ export class StripeProvider implements PaymentProvider {
       calculation: taxCalculation,
       subtotal: totalAmount,
       shippingTotal: shippingAmount,
-      total: totalAmount + shippingAmount + manualTaxAmount,
+      total: Math.max(0, totalAmount - discountTotal) + shippingAmount + manualTaxAmount,
       currency,
     });
+    const orderTotal = Math.max(0, totalAmount - discountTotal) + shippingAmount + manualTaxAmount;
 
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert({
         status: 'pending',
-        total: totalAmount + shippingAmount + manualTaxAmount,
+        total: orderTotal,
         currency,
         exchange_rate_at_purchase: selectedCurrency.exchange_rate,
         subtotal: totalAmount,
         shipping_total: shippingAmount,
         tax_total: manualTaxAmount,
         tax_details: orderTaxDetails as any,
+        coupon_id: couponQuote?.couponId ?? null,
+        coupon_code: couponQuote?.code ?? null,
+        discount_total: discountTotal,
+        discount_details: couponQuote
+          ? {
+              code: couponQuote.code,
+              discount_type: couponQuote.discountType,
+              discount_amount: couponQuote.discountAmount,
+              provider: 'stripe',
+              provider_discounts: couponQuote.providerDiscounts,
+              line_discounts: couponQuote.lineDiscounts,
+            }
+          : null,
         provider: 'stripe',
         user_id: userId,
         customer_details: initialCustomerDetails,
@@ -598,6 +701,24 @@ export class StripeProvider implements PaymentProvider {
       }
     }
 
+    if (couponQuote) {
+      await recordCouponRedemption({
+        client: supabase as any,
+        quote: couponQuote,
+        orderId,
+        provider: 'stripe',
+        discountTotal,
+        userId,
+        customerEmail,
+        metadata: {
+          currency: selectedCurrency.code,
+          subtotal: totalAmount,
+          shipping_total: shippingAmount,
+          tax_total: manualTaxAmount,
+        },
+      });
+    }
+
     const stripeCustomerId = await upsertStripeCheckoutCustomer({
       email: customerEmail,
       phone: customerPhone,
@@ -637,6 +758,7 @@ export class StripeProvider implements PaymentProvider {
           orderId,
           taxMode: taxCalculation.mode,
           currencyCode: selectedCurrency.code,
+          couponCode: couponQuote?.code || '',
         },
       });
 
