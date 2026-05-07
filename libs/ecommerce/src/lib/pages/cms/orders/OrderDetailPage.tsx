@@ -9,6 +9,12 @@ import { OrderPrintButton } from './OrderPrintButton';
 import { OrderStatusForm } from './OrderStatusForm';
 import type { OrderCustomerDetails } from './types';
 
+const formatMinorUnitPrice = (amount: number, currency = 'usd') =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+  }).format(amount / 100);
+
 export async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [order, invoice] = await Promise.all([
@@ -104,10 +110,7 @@ export async function OrderDetailPage({ params }: { params: Promise<{ id: string
               label="Total"
               value={
                 typeof order.total === 'number'
-                  ? new Intl.NumberFormat('en-US', {
-                      style: 'currency',
-                      currency: (order.currency || 'usd').toUpperCase(),
-                    }).format(order.total)
+                  ? formatMinorUnitPrice(order.total, order.currency || 'usd')
                   : '--'
               }
             />
