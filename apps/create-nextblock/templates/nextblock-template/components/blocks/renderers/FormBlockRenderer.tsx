@@ -3,13 +3,13 @@
 import React, { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { handleFormSubmission } from '../../../app/actions/formActions';
-import { FormBlockContent, FormField } from '../../../lib/blocks/blockRegistry';
-import { Input } from '@nextblock-cms/ui';
-import { Textarea } from '@nextblock-cms/ui';
-import { Label } from '@nextblock-cms/ui';
-import { Button } from '@nextblock-cms/ui';
-import { Checkbox } from '@nextblock-cms/ui';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui';
+import type { FormBlockContent, FormField } from '../../../lib/blocks/blockRegistry';
+import { Button } from '@nextblock-cms/ui/button';
+import { Checkbox } from '@nextblock-cms/ui/checkbox';
+import { Input } from '@nextblock-cms/ui/input';
+import { Label } from '@nextblock-cms/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui/select';
+import { Textarea } from '@nextblock-cms/ui/textarea';
 
 interface FormBlockRendererProps {
   content: FormBlockContent;

@@ -14,7 +14,7 @@ import Link from 'next/link';
 import { getEcommerceInventorySettings } from '../../../inventory-settings';
 import { resolveSubdivisionName } from '../../../states';
 import type { TaxRate } from '../../../types';
-import { getPaymentSettings } from '../payments/queries';
+import { getEnabledPaymentProviders } from '../payments/queries';
 import { deleteTaxRateAction, updateTaxSettingsAction } from './actions';
 import { TaxRateForm } from './components/TaxRateForm';
 
@@ -37,9 +37,9 @@ export async function TaxesPage({
 }) {
   const supabase = createClient();
   const adminSupabase = getServiceRoleSupabaseClient();
-  const [settings, paymentProvider, taxRatesResponse] = await Promise.all([
+  const [settings, enabledProviders, taxRatesResponse] = await Promise.all([
     getEcommerceInventorySettings(supabase),
-    getPaymentSettings(),
+    getEnabledPaymentProviders(),
     adminSupabase
       .from('tax_rates')
       .select('id, country_code, state_code, tax_name, tax_rate, created_at, updated_at')
@@ -50,7 +50,7 @@ export async function TaxesPage({
 
   const taxRates = (taxRatesResponse.data || []) as TaxRate[];
   const taxRatesError = taxRatesResponse.error;
-  const isStripeMode = paymentProvider === 'stripe';
+  const isStripeEnabled = enabledProviders.stripe;
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 px-6 py-8">
@@ -76,8 +76,8 @@ export async function TaxesPage({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="uppercase">
-            Provider: {paymentProvider}
+          <Badge variant={isStripeEnabled ? 'default' : 'outline'} className="uppercase">
+            Stripe {isStripeEnabled ? 'Enabled' : 'Disabled'}
           </Badge>
           <div className="rounded-full border bg-muted/30 p-3 text-muted-foreground">
             <Settings2 className="h-5 w-5" />
@@ -85,13 +85,13 @@ export async function TaxesPage({
         </div>
       </div>
 
-      {!isStripeMode ? (
+      {!isStripeEnabled ? (
         <Card className="border-dashed">
           <CardHeader>
-            <CardTitle>Taxes are managed by Freemius</CardTitle>
+            <CardTitle>Enable Stripe to configure physical-product taxes</CardTitle>
             <CardDescription>
-              Stripe tax settings only apply when Stripe is the active payment provider. Freemius
-              handles tax collection on its own checkout flow.
+              Stripe tax settings apply whenever Stripe is enabled for physical products. Freemius
+              still handles taxes on its own digital checkout flow.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -1,8 +1,9 @@
 // libs/editor/src/lib/NotionEditor.tsx
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent, JSONContent } from '@tiptap/react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { editorExtensions } from './kit';
 import { EditorBubbleMenu } from './components/menus/BubbleMenu';
 import { EditorFloatingMenu } from './components/menus/FloatingMenu';
@@ -23,6 +24,7 @@ interface NotionEditorProps {
   placeholder?: string;
   editable?: boolean;
   showToolbar?: boolean;
+  showAiPrompt?: boolean;
   showCharacterCount?: boolean;
   className?: string;
   onFocus?: () => void;
@@ -38,6 +40,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   placeholder,
   editable = true,
   showToolbar = true,
+  showAiPrompt = true,
   showCharacterCount = true,
   className,
   onFocus,
@@ -45,6 +48,9 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   openImagePicker,
 }) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [isGeneratingAiContent, setIsGeneratingAiContent] = useState(false);
   const editor = useEditor({
     extensions: editorExtensions,
     content: (content || initialContent),
@@ -224,6 +230,145 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   const characters = characterCount?.characters?.() ?? 0;
   const words = characterCount?.words?.() ?? 0;
 
+  const scrollEditorToBottom = () => {
+    window.requestAnimationFrame(() => {
+      const scrollContainer = wrapperRef.current?.querySelector(
+        '[data-editor-scroll-area="true"]'
+      ) as HTMLElement | null;
+
+      scrollContainer?.scrollTo({
+        behavior: 'smooth',
+        top: scrollContainer.scrollHeight,
+      });
+    });
+  };
+
+  const buildAiEditorContext = (params: {
+    insertionMode: 'append-to-end' | 'replace-empty-document' | 'replace-selection';
+    selectedText: string;
+  }) => {
+    if (params.insertionMode === 'replace-empty-document') {
+      return 'Insertion target: empty editor. Create the initial content for this document.';
+    }
+
+    const currentText = editor.getText().trim();
+    const contextParts = [
+      `Insertion target: ${params.insertionMode}.`,
+      params.insertionMode === 'append-to-end'
+        ? 'Continue after the existing content. Do not repeat existing headings, paragraphs, or lists unless the user explicitly asks for a rewrite.'
+        : 'Replace only the selected content. Keep surrounding editor content in mind for continuity.',
+      params.selectedText
+        ? `Selected text:\n${params.selectedText.slice(0, 600)}`
+        : null,
+      currentText
+        ? `Existing editor text:\n${currentText.slice(-1400)}`
+        : null,
+    ];
+
+    return contextParts.filter(Boolean).join('\n\n').slice(0, 2000);
+  };
+
+  const handleAiGenerate = async () => {
+    const prompt = aiPrompt.trim();
+
+    if (!prompt || isGeneratingAiContent) {
+      return;
+    }
+
+    setAiError(null);
+    setIsGeneratingAiContent(true);
+
+    const abortController = new AbortController();
+    const timeoutId = window.setTimeout(() => abortController.abort(), 150_000);
+    const wasEditorEmpty = editor.isEmpty;
+    const selectionBeforeGeneration = editor.state.selection;
+    const hasSelection = !selectionBeforeGeneration.empty;
+    const selectedText = hasSelection
+      ? editor.state.doc.textBetween(
+          selectionBeforeGeneration.from,
+          selectionBeforeGeneration.to,
+          ' '
+        ).trim()
+      : '';
+    const insertionMode = wasEditorEmpty
+      ? 'replace-empty-document'
+      : hasSelection
+        ? 'replace-selection'
+        : 'append-to-end';
+
+    try {
+      const headers: Record<string, string> = {
+        'content-type': 'application/json',
+      };
+
+      if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+        const sandboxKey = window.localStorage.getItem('cortex_ai_sandbox_openrouter_api_key');
+        const sandboxModel = window.localStorage.getItem('cortex_ai_sandbox_openrouter_model_selection');
+        if (sandboxKey) {
+          headers['x-sandbox-openrouter-key'] = sandboxKey;
+        }
+        if (sandboxModel) {
+          headers['x-sandbox-openrouter-model'] = sandboxModel;
+        }
+      }
+
+      const context = buildAiEditorContext({
+        insertionMode,
+        selectedText,
+      });
+      const response = await fetch('/api/ai/generate-blocks', {
+        body: JSON.stringify({ context, prompt }),
+        headers,
+        method: 'POST',
+        signal: abortController.signal,
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Cortex AI could not generate content.');
+      }
+
+      if (!payload || typeof payload.html !== 'string' || !payload.html.trim()) {
+        throw new Error('Cortex AI returned an invalid HTML fragment.');
+      }
+
+      if (wasEditorEmpty || editor.isEmpty) {
+        editor.commands.setContent(payload.html);
+      } else if (hasSelection) {
+        const docEnd = editor.state.doc.content.size;
+        const from = Math.min(selectionBeforeGeneration.from, docEnd);
+        const to = Math.min(selectionBeforeGeneration.to, docEnd);
+
+        editor.chain().focus().insertContentAt({ from, to }, payload.html).run();
+      } else {
+        editor.chain().focus().insertContentAt(editor.state.doc.content.size, payload.html).run();
+        scrollEditorToBottom();
+      }
+
+      setAiPrompt('');
+    } catch (error) {
+      setAiError(
+        error instanceof DOMException && error.name === 'AbortError'
+          ? 'Cortex AI took too long to generate content. Please try again with a shorter prompt.'
+          : error instanceof Error
+            ? error.message
+            : 'Cortex AI could not generate content.'
+      );
+    } finally {
+      window.clearTimeout(timeoutId);
+      setIsGeneratingAiContent(false);
+    }
+  };
+
+  const handleAiPromptKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    event.preventDefault();
+    void handleAiGenerate();
+  };
+
   return (
     <div
       ref={wrapperRef}
@@ -237,12 +382,52 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
     >
       {showToolbar && <EditorToolbar editor={editor} />}
 
+      {showAiPrompt && editable && (
+        <div
+          role="group"
+          aria-label="Cortex AI content generation"
+          className="flex items-center gap-2 border-b bg-muted/30 px-3 py-2"
+        >
+          <label htmlFor="cortex-ai-editor-prompt" className="sr-only">
+            Cortex AI prompt
+          </label>
+          <input
+            id="cortex-ai-editor-prompt"
+            value={aiPrompt}
+            onChange={(event) => setAiPrompt(event.target.value)}
+            onKeyDown={handleAiPromptKeyDown}
+            disabled={isGeneratingAiContent}
+            placeholder="Ask Cortex AI"
+            className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          />
+          <button
+            type="button"
+            onClick={() => void handleAiGenerate()}
+            disabled={!aiPrompt.trim() || isGeneratingAiContent}
+            title="Generate rich text"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-background text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isGeneratingAiContent ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+      )}
+
+      {aiError && (
+        <div className="border-b bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {aiError}
+        </div>
+      )}
+
       <EditorBubbleMenu editor={editor} />
       <EditorFloatingMenu editor={editor} />
       <ImageToolbar editor={editor} />
       <TableToolbar editor={editor} />
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto" data-editor-scroll-area="true">
         <EditorContent editor={editor} />
       </div>
 

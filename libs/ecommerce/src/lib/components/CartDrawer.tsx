@@ -5,8 +5,10 @@ import {
   SheetContent, 
   SheetHeader, 
   SheetTitle,
-  Button
-} from '@nextblock-cms/ui';
+  SheetDescription,
+} from '@nextblock-cms/ui/sheet';
+import { Badge } from '@nextblock-cms/ui/badge';
+import { Button } from '@nextblock-cms/ui/button';
 import { useRouter } from 'next/navigation';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { getCartItemActivePrice, useCartSubtotal } from '../cart-store';
@@ -14,6 +16,7 @@ import { useCart } from '../use-cart';
 import { formatPrice, useTranslations } from '@nextblock-cms/utils';
 import { isDigitalItem } from '../types';
 import { useCurrency } from '../CurrencyProvider';
+import { getTrialSummary } from '../trials';
 
 
 
@@ -51,6 +54,9 @@ export const CartDrawer = () => {
       <SheetContent className="flex w-full flex-col pr-0 sm:max-w-lg">
         <SheetHeader className="px-1 text-left">
           <SheetTitle>{t('ecommerce.shopping_cart')} ({items.length})</SheetTitle>
+          <SheetDescription className="sr-only">
+            {t('ecommerce.shopping_cart')}
+          </SheetDescription>
         </SheetHeader>
         
         {items.length > 0 ? (
@@ -65,6 +71,7 @@ export const CartDrawer = () => {
                       currencyCode: activeCurrencyCode,
                       currencies,
                     });
+                    const trialSummary = getTrialSummary(item);
 
                     return (
                       <>
@@ -93,6 +100,11 @@ export const CartDrawer = () => {
                             {item.variant_label}
                           </div>
                         )}
+                        {trialSummary && (
+                          <div className="mt-1 text-xs font-medium text-emerald-700">
+                            {trialSummary.label} - {trialSummary.paymentRequirementLabel}
+                          </div>
+                        )}
                       </div>
                       <span className="text-sm font-semibold">
                         {activePrice.sale_price && (
@@ -105,31 +117,35 @@ export const CartDrawer = () => {
                     </div>
 
                     <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center rounded-md border text-xs">
-                        <button
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          className="flex h-7 w-7 items-center justify-center border-r"
-                          type="button"
-                          disabled={isDigitalItem(item)}
-                        >
-                          <Minus className="h-3 w-3" />
-                        </button>
-                        <span className="flex h-7 w-8 items-center justify-center">
-                          {item.quantity}
-                        </span>
-                        <button
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          className="flex h-7 w-7 items-center justify-center border-l"
-                          type="button"
-                          disabled={
-                            isDigitalItem(item) ||
-                            (typeof item.stock === 'number' &&
-                              allocatedSkuQuantity >= item.stock)
-                          }
-                        >
-                          <Plus className="h-3 w-3" />
-                        </button>
-                      </div>
+                      {isDigitalItem(item) ? (
+                        <Badge variant="secondary" className="font-normal text-xs">
+                          1 (License)
+                        </Badge>
+                      ) : (
+                        <div className="flex items-center rounded-md border text-xs">
+                          <button
+                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            className="flex h-7 w-7 items-center justify-center border-r"
+                            type="button"
+                          >
+                            <Minus className="h-3 w-3" />
+                          </button>
+                          <span className="flex h-7 w-8 items-center justify-center">
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            className="flex h-7 w-7 items-center justify-center border-l"
+                            type="button"
+                            disabled={
+                              typeof item.stock === 'number' &&
+                              allocatedSkuQuantity >= item.stock
+                            }
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </div>
+                      )}
 
                       <button
                         onClick={() => removeItem(item.id)}

@@ -188,6 +188,8 @@ export async function getInvoiceOrder(orderId: string, client?: SupabaseLikeClie
 
     return {
       id: item.id,
+      product_id: item.product_id ?? null,
+      variant_id: item.variant_id ?? null,
       title,
       description,
       quantity: item.quantity,

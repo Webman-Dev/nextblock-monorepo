@@ -30,7 +30,7 @@ npm create nextblock@latest
 
 This command will:
 
-1.  Scaffold a new NextBlock project.
+1.  Scaffold a new NextBlock™ project.
 2.  Guide you through Supabase and Cloudflare R2 configuration.
 3.  Set up your local environment variables automatically.
 

@@ -1,4 +1,4 @@
-﻿// app/cms/blocks/editors/TextBlockEditor.tsx
+// app/cms/blocks/editors/TextBlockEditor.tsx
 'use client';
 
 import React, { useId, useState, useRef, useCallback } from 'react';
@@ -6,6 +6,8 @@ import dynamic from 'next/dynamic';
 import MediaPickerDialog from '../../media/components/MediaPickerDialog';
 import { Label } from '@nextblock-cms/ui';
 import { BlockEditorProps } from '../components/BlockEditorModal';
+import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
+import { useCortexAiActive } from '../../components/CortexAiActiveContext';
 
 // Props expected by NotionEditor
 type NotionEditorProps = {
@@ -13,6 +15,7 @@ type NotionEditorProps = {
   onChange: (html: string) => void;
   openImagePicker?: () => Promise<{ src: string; alt?: string; width?: number | null; height?: number | null; blurDataURL?: string | null } | null>;
   className?: string;
+  showAiPrompt?: boolean;
 };
 
 // Use the alias that resolves in your repo; if you mapped @nextblock-cms/editor, swap it here.
@@ -32,8 +35,8 @@ export default function TextBlockEditor({
 }: BlockEditorProps<Partial<TextBlockContent>>) {
   const labelId = useId();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const isCortexAiActive = useCortexAiActive();
   const resolverRef = useRef<null | ((v: any) => void)>(null);
-  const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
   const openImagePicker = useCallback(() => {
     setPickerOpen(true);
     return new Promise<{ src: string; alt?: string; width?: number | null; height?: number | null; blurDataURL?: string | null } | null>((resolve) => {
@@ -53,6 +56,7 @@ export default function TextBlockEditor({
           onChange={(html) => onChange({ html_content: html })}
           openImagePicker={openImagePicker}
           className={className}
+          showAiPrompt={isCortexAiActive}
         />
 
         {/* Hidden controlled MediaPickerDialog for image selection */}
@@ -64,7 +68,13 @@ export default function TextBlockEditor({
             title="Select or Upload Image"
             accept={(m) => !!m.file_type?.startsWith('image/')}
             onSelect={(media) => {
-              const src = `${R2_BASE_URL}/${media.object_key}`;
+              const src = resolveMediaUrl(media.file_path || media.object_key);
+              if (!src) {
+                resolverRef.current?.(null);
+                resolverRef.current = null;
+                setPickerOpen(false);
+                return;
+              }
               resolverRef.current?.({
                 src,
                 alt: media.description || media.file_name || undefined,

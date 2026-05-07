@@ -84,6 +84,9 @@ export default function PageForm({
   // const [languagesLoading, setLanguagesLoading] = useState(true); // Remove or set to false initially
 
   const [formMessage, setFormMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
 
   useEffect(() => {
     const successMessage = searchParams.get('success');
@@ -95,7 +98,27 @@ export default function PageForm({
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    if (!page) {
+      return;
+    }
 
+    setTitle(page.title || "");
+    setSlug(page.slug || "");
+    setLanguageId(page.language_id?.toString() || "");
+    setStatus(page.status || "draft");
+    setMetaTitle(page.meta_title || "");
+    setMetaDescription(page.meta_description || "");
+  }, [
+    page?.id,
+    page?.language_id,
+    page?.meta_description,
+    page?.meta_title,
+    page?.slug,
+    page?.status,
+    page?.title,
+    page?.updated_at,
+  ]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTitle = e.target.value;
@@ -126,9 +149,6 @@ export default function PageForm({
   if (!user) {
     return <div>Please log in to manage pages.</div>;
   }
-
-  const formRef = useRef<HTMLFormElement>(null);
-  useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6 w-full mx-auto px-6">

@@ -11,6 +11,7 @@ import {
   resolvePriceForCurrency,
   resolvePriceRangeForCurrency,
 } from '../currency';
+import { getTrialSummary } from '../trials';
 
 interface FeaturedProductProps {
   product: Product;
@@ -49,6 +50,7 @@ export const FeaturedProduct = ({ product, className, imagePosition = 'left' }: 
             activeCurrencyCode
           )}`
       : formatPrice(resolvedPrice.sale_price ?? resolvedPrice.price, activeCurrencyCode);
+  const trialSummary = getTrialSummary(product);
   
   return (
     <div className={cn("overflow-hidden rounded-xl border bg-card shadow-sm", className)}>
@@ -87,6 +89,15 @@ export const FeaturedProduct = ({ product, className, imagePosition = 'left' }: 
                     </span>
                 )}
             </div>
+
+            {trialSummary && (
+                <div className="mb-6 inline-flex w-fit flex-col rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                    <span className="font-semibold">{trialSummary.label}</span>
+                    <span className="text-emerald-700">
+                        {trialSummary.paymentRequirementLabel}
+                    </span>
+                </div>
+            )}
 
             {product.short_description && (
                 <p className="mb-8 text-lg text-muted-foreground">

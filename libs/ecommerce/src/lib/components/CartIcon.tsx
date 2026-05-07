@@ -1,6 +1,7 @@
 'use client';
 
-import { Button, Badge } from '@nextblock-cms/ui';
+import { Badge } from '@nextblock-cms/ui/badge';
+import { Button } from '@nextblock-cms/ui/button';
 import { ShoppingBag } from 'lucide-react';
 import { useCartStore, useCartTotalItems } from '../cart-store';
 import { useCart } from '../use-cart';

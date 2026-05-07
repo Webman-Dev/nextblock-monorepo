@@ -2,15 +2,15 @@ import '@nextblock-cms/ui/styles/globals.css';
 // eslint-disable-next-line @nx/enforce-module-boundaries
 import '@nextblock-cms/editor/styles/editor.css';
 // app/layout.tsx
-import { SpeedInsights } from '@vercel/speed-insights/next';
 
-import { GoogleTagManager } from '@next/third-parties/google';
 import type { Metadata } from 'next';
 import { Providers } from './providers';
-import { CartDrawer } from '@nextblock-cms/ecommerce';
-import { CURRENCY_COOKIE_NAME } from '@nextblock-cms/ecommerce/server';
+import { DeferredCartDrawer } from '../components/DeferredCartDrawer';
+import { CURRENCY_COOKIE_NAME } from '@nextblock-cms/ecommerce/currency-constants';
 import { ToasterProvider } from './ToasterProvider';
 import { AppShell } from '../components/AppShell';
+import { DeferredGoogleTagManager } from '../components/DeferredGoogleTagManager';
+import { DeferredSpeedInsights } from '../components/DeferredSpeedInsights';
 import {
   createClient as createSupabaseServerClient,
   getProfileWithRoleServerSide,
@@ -21,11 +21,26 @@ import { headers, cookies } from 'next/headers';
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { unstable_cache } from 'next/cache';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
+import { DEFAULT_SITE_DESCRIPTION } from './lib/seo';
 
 const defaultUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
 
 const DEFAULT_LOCALE_FOR_LAYOUT = 'en';
 const PUBLIC_LAYOUT_REVALIDATE_SECONDS = 60;
+const TRUSTED_TYPES_BOOTSTRAP = `
+(function () {
+  if (!window.trustedTypes || window.__nextblockTrustedTypesPolicy) return;
+  try {
+    window.__nextblockTrustedTypesPolicy = window.trustedTypes.createPolicy('default', {
+      createHTML: function (value) { return value; },
+      createScript: function (value) { return value; },
+      createScriptURL: function (value) { return value; }
+    });
+  } catch (error) {
+    window.__nextblockTrustedTypesPolicy = true;
+  }
+})();
+`;
 
 type Language = Database['public']['Tables']['languages']['Row'];
 type StoreCurrency = Database['public']['Tables']['currencies']['Row'];
@@ -35,6 +50,23 @@ type HeaderLogo = Database['public']['Tables']['logos']['Row'] & {
   site_title?: string | null;
   media: (Database['public']['Tables']['media']['Row'] & { alt_text: string | null }) | null;
 };
+
+function normalizePotentialMojibake(value: string): string {
+  if (!/[ÃÂ]/.test(value)) {
+    return value;
+  }
+
+  return value
+    .replaceAll('Ãƒâ€šÃ‚Â©', '©')
+    .replaceAll('Ã‚Â©', '©')
+    .replaceAll('Â©', '©')
+    .replaceAll('Tous droits rÃƒÆ’Ã‚Â©servÃƒÆ’Ã‚Â©s.', 'Tous droits réservés.')
+    .replaceAll('Tous droits rÃƒÂ©servÃƒÂ©s.', 'Tous droits réservés.')
+    .replaceAll('Tous droits rÃ©servÃ©s.', 'Tous droits réservés.')
+    .replaceAll('rÃƒÆ’Ã‚Â©servÃƒÆ’Ã‚Â©s', 'réservés')
+    .replaceAll('rÃƒÂ©servÃƒÂ©s', 'réservés')
+    .replaceAll('rÃ©servÃ©s', 'réservés');
+}
 
 function createStaticSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -87,7 +119,14 @@ const getCachedCopyrightSettings = unstable_cache(
       return { en: '(c) {year} Nextblock CMS. All rights reserved.' };
     }
 
-    return data.value as Record<string, string>;
+    const rawValue = data.value as Record<string, string>;
+
+    return Object.fromEntries(
+      Object.entries(rawValue).map(([locale, text]) => [
+        locale,
+        typeof text === 'string' ? normalizePotentialMojibake(text) : text,
+      ])
+    ) as Record<string, string>;
   },
   ['public-layout-copyright'],
   { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
@@ -133,6 +172,41 @@ const getCachedTranslations = unstable_cache(
     return data || [];
   },
   ['public-layout-translations'],
+  {
+    revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS,
+    tags: ['public-layout-translations'],
+  }
+);
+
+const getCachedSiteSettings = unstable_cache(
+  async (): Promise<Record<string, string>> => {
+    const supabase = createStaticSupabaseClient();
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('key, value')
+      .in('key', ['site_title', 'site_description']);
+
+    if (error || !data) {
+      console.error('Error fetching cached site settings:', error);
+      return {
+        site_title: 'Nextblock CMS',
+        site_description: DEFAULT_SITE_DESCRIPTION
+      };
+    }
+
+    const settings: Record<string, string> = {};
+    data.forEach(item => {
+      if (typeof item.value === 'string') {
+        settings[item.key] = item.value;
+      }
+    });
+
+    return {
+      site_title: settings.site_title || 'Nextblock CMS',
+      site_description: settings.site_description || DEFAULT_SITE_DESCRIPTION
+    };
+  },
+  ['public-site-settings'],
   { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
 );
 
@@ -319,42 +393,51 @@ async function loadLayoutData() {
   };
 }
 
-export const metadata: Metadata = {
-  metadataBase: new URL(defaultUrl),
-  title: 'Nextblock CMS',
-  description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
-  openGraph: {
-    title: 'Nextblock CMS',
-    description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
-    url: defaultUrl,
-    siteName: 'Nextblock CMS',
-    images: [
-      {
-        url: '/images/metadata_image.webp',
-        width: 1200,
-        height: 630,
-        alt: 'Nextblock CMS',
-      },
-    ],
-    locale: 'en_US',
-    type: 'website',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Nextblock CMS',
-    description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
-    images: ['/images/metadata_image.webp'],
-  },
-  icons: {
-    icon: [
-      { url: '/favicon/favicon.ico' },
-      { url: '/favicon/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
-      { url: '/favicon/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
-    ],
-    apple: [{ url: '/favicon/apple-touch-icon.png' }],
-  },
-  manifest: '/favicon/site.webmanifest',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const siteSettings = await getCachedSiteSettings();
+  const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
+
+  return {
+    metadataBase: new URL(defaultUrl),
+    title: {
+      default: siteSettings.site_title,
+      template: `%s | ${siteSettings.site_title}`,
+    },
+    description: siteSettings.site_description,
+    openGraph: {
+      title: siteSettings.site_title,
+      description: siteSettings.site_description,
+      url: defaultUrl,
+      siteName: siteSettings.site_title,
+      images: [
+        {
+          url: '/images/metadata_image.webp',
+          width: 1200,
+          height: 630,
+          alt: siteSettings.site_title,
+        },
+      ],
+      locale: 'en_US',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: siteSettings.site_title,
+      description: siteSettings.site_description,
+      images: ['/images/metadata_image.webp'],
+    },
+    icons: {
+      icon: [
+        { url: '/favicon/favicon.ico' },
+        { url: '/favicon/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+        { url: '/favicon/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      ],
+      apple: [{ url: '/favicon/apple-touch-icon.png' }],
+    },
+    manifest: '/favicon/site.webmanifest',
+    robots: isSandbox ? { index: false, follow: false } : { index: true, follow: true },
+  };
+}
 
 export default async function RootLayout({
   children,
@@ -385,16 +468,13 @@ export default async function RootLayout({
   return (
     <html lang={serverDeterminedLocale} suppressHydrationWarning>
       <head>
-        <title>{metadata.title as string}</title>
-        <meta name="description" content={metadata.description as string} />
-        <link rel="preconnect" href="https://ppcppwsfnrptznvbxnsz.supabase.co" />
-        <link rel="dns-prefetch" href="https://ppcppwsfnrptznvbxnsz.supabase.co" />
-        <link rel="dns-prefetch" href="https://aws-0-us-east-1.pooler.supabase.com" />
-        <link rel="dns-prefetch" href="https://db.ppcppwsfnrptznvbxnsz.supabase.co" />
-        <link rel="dns-prefetch" href="https://realtime.supabase.com" />
+        <meta name="description" content={DEFAULT_SITE_DESCRIPTION} />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        {/* @ts-expect-error - SpeedInsights version might have missing nonce in types but supports it in runtime */}
-        <SpeedInsights nonce={nonce} />
+        <script
+          nonce={nonce}
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: TRUSTED_TYPES_BOOTSTRAP }}
+        />
         {globalCss && <style dangerouslySetInnerHTML={{ __html: globalCss }} />}
       </head>
       <body className="min-h-screen">
@@ -423,9 +503,10 @@ export default async function RootLayout({
             {children}
           </AppShell>
 
-          {isEcommerceActive && <CartDrawer />}
+          {isEcommerceActive && <DeferredCartDrawer />}
         </Providers>
-        <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID || ''} nonce={nonce} />
+        <DeferredSpeedInsights />
+        <DeferredGoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID} nonce={nonce} />
       </body>
     </html>
   );

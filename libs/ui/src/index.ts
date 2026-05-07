@@ -23,3 +23,4 @@ export * from './lib/spinner';
 export * from './lib/alert';
 export * from './lib/sheet';
 export * from './lib/radio-group';
+export * from './lib/SearchableSelect';

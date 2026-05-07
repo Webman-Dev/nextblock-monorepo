@@ -2,7 +2,10 @@ import { ProductForm } from '../components/ProductForm';
 import { getGlobalProductAttributes } from '../actions';
 import { mapRawVariantRelations } from '../../../../variation-utils';
 import { createProductAction } from '../server-actions';
-import { getPaymentSettings } from '../../payments/queries';
+import {
+  getEnabledPaymentProviders,
+  getStoreConfigStatus,
+} from '../../payments/queries';
 import { getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
 import { minorUnitAmountToMajor } from '@nextblock-cms/utils';
 import { normalizeCurrencyRecord } from '../../../../currency';
@@ -24,18 +27,20 @@ export async function NewProductPage({
   targetLanguageId,
   initialData
 }: NewProductPageProps) {
-  const paymentProvider = await getPaymentSettings();
-  const [globalAttributesRaw, currenciesResult] = await Promise.all([
-    getGlobalProductAttributes(),
-    getServiceRoleSupabaseClient()
-      .from('currencies')
-      .select(
-        'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
-      )
-      .eq('is_active', true)
-      .order('code', { ascending: true })
-      .then((result) => result.data || []),
-  ]);
+  const [enabledProviders, configStatus, globalAttributesRaw, currenciesResult] =
+    await Promise.all([
+      getEnabledPaymentProviders(),
+      getStoreConfigStatus(),
+      getGlobalProductAttributes(),
+      getServiceRoleSupabaseClient()
+        .from('currencies')
+        .select(
+          'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
+        )
+        .eq('is_active', true)
+        .order('code', { ascending: true })
+        .then((result) => result.data || []),
+    ]);
   const currencies = (currenciesResult || []).map((currency) =>
     normalizeCurrencyRecord(currency)
   );
@@ -107,7 +112,8 @@ export async function NewProductPage({
          translationGroupId={translationGroupId}
          targetLanguageId={targetLanguageId}
          initialData={normalizedInitialData}
-         paymentProvider={paymentProvider}
+         enabledProviders={enabledProviders}
+         configStatus={configStatus}
          createAction={createProductAction}
       />
     </div>

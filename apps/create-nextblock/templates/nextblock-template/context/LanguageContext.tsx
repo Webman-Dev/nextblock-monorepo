@@ -1,9 +1,9 @@
 // context/LanguageContext.tsx
 'use client'; // This directive applies to the rest of the file.
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { Database } from '@nextblock-cms/db';
-import { getActiveLanguagesClientSide } from '@nextblock-cms/db';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
+import type { Database } from '@nextblock-cms/db';
 
 type Language = Database['public']['Tables']['languages']['Row'];
 import Cookies from 'js-cookie';
@@ -64,15 +64,15 @@ export const LanguageProvider = ({
     let isMounted = true; // Track mount status
 
     const initializeLanguages = async () => {
-      setIsLoadingLanguages(true); // Set loading true at the start of initialization
-
       let languagesToUse = initialAvailableLanguages;
       let defaultLangToUse = initialDefaultLanguage;
 
       // If server didn't provide languages, or they were empty, fetch client-side as a fallback.
       if (!languagesToUse || languagesToUse.length === 0) {
+        setIsLoadingLanguages(true); // Set loading true only when we need the client fallback.
         try {
-          const fetchedLangs = await getActiveLanguagesClientSide();
+          const { fetchActiveLanguagesFromRest } = await import('./language-rest-client');
+          const fetchedLangs = await fetchActiveLanguagesFromRest();
           if (isMounted) { // Check mount status before setting state
             languagesToUse = fetchedLangs;
             setAvailableLanguages(fetchedLangs);

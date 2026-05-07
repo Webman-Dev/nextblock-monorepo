@@ -1,7 +1,7 @@
 <div align="center">
- <img src="https://cms.nextblock.ca/_next/image?url=%2Fimages%2Fnextblock-logo-small.webp&w=128&q=75" alt="NextBlock CMS Logo" width="200"/>
+ <img src="https://cms.nextblock.ca/_next/image?url=%2Fimages%2Fnextblock-logo-small.webp&w=128&q=75" alt="NextBlock™ CMS Logo" width="200"/>
 
-# NextBlock CMS
+# NextBlock™ CMS
 
 **The AI-Native, Open-Core CMS for Next.js 16**
 
@@ -30,9 +30,9 @@
 
 ---
 
-## 🚀 Why NextBlock?
+## 🚀 Why NextBlock™?
 
-Tired of slow WordPress sites? Finding other headless CMSs too complex? **NextBlock** is the sweet spot.
+Tired of slow WordPress sites? Finding headless CMSs too complex? **NextBlock™** is the sweet spot.
 
 We combined the **flexibility of a Block Editor** with the **raw power of Next.js 16 Server Components**. The result is a CMS that feels like a static site but manages like a dynamic platform.
 
@@ -40,41 +40,48 @@ We combined the **flexibility of a Block Editor** with the **raw power of Next.j
 
 - **⚡ 100% Lighthouse Performance**: Built-in edge caching, image optimization, and zero layout shift. Speed is not a plugin; it's the default.
 - **🤖 Built for AI Agents**: Our codebase is documented and structured specifically to be easily read and extended by AI coding assistants.
-- **🛍️ E-Commerce Ready**: Seamless integration with Stripe & Lemon Squeezy for premium digital products.
-- **🧱 Visual Block Editor**: A Tiptap-powered Notion-style editor that your clients will actually enjoy using.
-- **🔓 Open-Core Model**: The core is 100% Free & Open Source (AGPL). Premium features (like E-Commerce) are activated via License Keys.
+- **🛍️ E-Commerce Ready**: Premium commerce package for digital products, checkout providers, currency, tax, and shipping management.
+- **🧱 Visual Block Editor**: A reusable Tiptap-powered Notion-style editor that your clients will actually enjoy using.
+- **🔓 Open-Core Model**: The core is 100% Free & Open Source (AGPL). Premium features are activated via License Keys.
 
-## 🆚 The NextBlock Advantage
+## 🆚 The NextBlock™ Advantage
 
-| Feature         | NextBlock CMS                  | WordPress                 | Payload / Strapi        |
-| :-------------- | :----------------------------- | :------------------------ | :---------------------- |
-| **Tech Stack**  | Next.js 16 + Supabase          | PHP + MySQL               | React / Node.js         |
-| **Performance** | 🟢 **100/100 (Default)**       | 🔴 Bloated (Plugins)      | 🟡 Spec-dependent       |
-| **Security**    | 🔒 Static/Edge First           | 🔓 Plugin vulnerabilities | 🔒 Secure               |
-| **DX**          | 💎 **React Server Components** | 📜 Legacy PHP Hooks       | 🧩 Config Heavy         |
-| **AI Ready**    | ✅ **Native**                  | ❌ No                     | 🟡 Integration required |
+| Feature          | NextBlock™ CMS                 | WordPress                 | Payload / Strapi        |
+| :--------------- | :----------------------------- | :------------------------ | :---------------------- |
+| **Tech Stack**   | Next.js 16 + Supabase          | PHP + MySQL               | React / Node.js         |
+| **Architecture** | Nx Monorepo                    | Monolith                  | Monolith / Workspaces   |
+| **Performance**  | 🟢 **100/100 (Default)**       | 🔴 Bloated (Plugins)      | 🟡 Spec-dependent       |
+| **Security**     | 🔒 Static/Edge First           | 🔓 Plugin vulnerabilities | 🔒 Secure               |
+| **DX**           | 💎 **React Server Components** | 📜 Legacy PHP Hooks       | 🧩 Config Heavy         |
+| **AI Ready**     | ✅ **Native**                  | ❌ No                     | 🟡 Integration required |
 
 ## 🏁 Get Started in 30 Seconds
 
 Stop cloning heavy repos. Start with our CLI and get a production-ready app instantly.
 
 ```bash
-npm create nextblock
+npm create nextblock@latest
 ```
 
-This will:
-
-1.  Set up a fresh **Next.js 16** application.
-2.  Install the **NextBlock Core** libraries.
-3.  Connect to your **Supabase** backend.
+This will run the `create-nextblock` CLI which acts as a scaffolding CLI and template sync pipeline, setting you up with the canonical application.
 
 ---
 
 ## 🏗️ For Contributors: The Factory
 
-> **Note:** You are currently looking at the **Monorepo** (The Factory), not the product template.
+> **Note:** You are currently looking at the **Nx Monorepo** (The Factory), not the generated product template.
+>
+> NextBlock™ is an Nx monorepo for a Next.js 16 CMS backed by Supabase. The repo contains the canonical application, the `create-nextblock` CLI, shared editor and UI packages, the database and migration layer, and the premium ecommerce module.
 
-If you want to contribute to the core platform, develop premium extensions, or audit the code, you are in the right place!
+### 🧩 Main Surfaces
+
+- `apps/nextblock`: canonical public site and CMS application
+- `apps/create-nextblock`: scaffolding CLI and template sync pipeline
+- `libs/db`: Supabase clients, package activation checks, migrations, and db types
+- `libs/editor`: reusable Tiptap editor package
+- `libs/ecommerce`: premium commerce package and CMS commerce screens
+- `libs/sdk`: typed block extensibility contract
+- `libs/ui`, `libs/utils`: shared primitives and helpers
 
 ### ⚡ Developer Quickstart
 
@@ -85,26 +92,38 @@ git clone https://github.com/nextblock-cms/nextblock.git
 cd nextblock
 npm install
 npm run setup
-npm run dev
+npx nx serve nextblock
 ```
 
 The interactive `setup` wizard will help you automatically configure your `.env.local` and seamlessly link your Supabase project instance.
 
-### 📚 Documentation
+### 🛠️ Useful Commands
 
-Everything you need to know about the architecture is in the `docs/` folder.
+- `npx nx serve nextblock` - Start the local development server for the CMS
+- `npm run lint` - Lint the monorepo
+- `npm run db:types` - Generate Supabase types
+- `npm run db:push` - Push database changes to Supabase
+- `npm run generate:sandbox` - Generate sandbox data
+- `npm run sandbox:reset` - Reset the sandbox environment
 
-👉 **[Read the Documentation Index](./docs/README.md)**
+### 📚 Documentation Index
 
-### 📖 Guides & Tutorials
+The root `docs/` folder is the maintained reference set for both contributors and AI agents.
 
-Choose your path based on what you want to achieve.
+_The template docs are copied from the root docs through the sync pipeline, so this root docs set is the place to maintain first._
 
-| **I want to...**    | **Read This**                                        | **Description**                                                                                                                   |
-| :------------------ | :--------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------- |
-| **Build a Website** | [👉 **User Quickstart Guide**](./docs/QUICKSTART.md) | **Recommended.** Use the CLI (`npm create nextblock`) to launch a production-ready site with Supabase & Cloudflare R2 in minutes. |
-| **Get Premium**     | [💎 **Premium Access Guide**](./docs/PREMIUM.md)     | Learn how to buy and activate the E-Commerce package and other premium extensions using our License Key system.                   |
-| **Modify the Core** | [🛠️ **Contributor Guide**](./docs/CONTRIBUTING.md)   | For advanced developers who want to clone the Monorepo, contribute to the open-source core, or understand the Nx architecture.    |
+| Document                                                                           | Purpose                                                                                  |
+| :--------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
+| [docs/01-PROJECT-OVERVIEW.md](./docs/01-PROJECT-OVERVIEW.md)                       | Monorepo structure, runtime model, and where each subsystem lives                        |
+| [docs/02-ECOMMERCE-CAPABILITIES.md](./docs/02-ECOMMERCE-CAPABILITIES.md)           | Verified commerce features, checkout providers, currency, tax, shipping, and fulfillment |
+| [docs/03-CMS-AND-EDITOR.md](./docs/03-CMS-AND-EDITOR.md)                           | Tiptap editor, page builder, widgets, and built-in block system                          |
+| [docs/04-DATABASE-AND-AUTH.md](./docs/04-DATABASE-AND-AUTH.md)                     | Supabase clients, auth flow, schema overview, RLS, and migration map                     |
+| [docs/05-DEVELOPER-GUIDE.md](./docs/05-DEVELOPER-GUIDE.md)                         | Local setup, scripts, db workflow, sandbox reset, and contributor operations             |
+| [docs/06-CLI-AND-SCAFFOLDING.md](./docs/06-CLI-AND-SCAFFOLDING.md)                 | `create-nextblock`, template sync, and generated-project behavior                        |
+| [docs/07-BLOCK-SDK-AND-EXTENSIBILITY.md](./docs/07-BLOCK-SDK-AND-EXTENSIBILITY.md) | SDK contract and extensibility model                                                     |
+| [docs/README.md](./docs/README.md)                                                 | Audience-based docs index                                                                |
+
+> **Under the hood note:** The migration folder under `libs/db/src/supabase/migrations` is the best source of truth for current platform capabilities.
 
 ---
 
@@ -113,7 +132,7 @@ Choose your path based on what you want to achieve.
 Join the community and stay updated on the latest features.
 
 - **X (Twitter):** [@NextBlockCMS](https://x.com/NextBlockCMS)
-- **LinkedIn:** [NextBlock](https://www.linkedin.com/in/nextblock/)
+- **LinkedIn:** [NextBlock™](https://www.linkedin.com/in/nextblock/)
 - **GitHub:** [nextblock-cms/nextblock](https://github.com/nextblock-cms/nextblock)
 - **Medium:** [@nextblockcms](https://medium.com/@nextblockcms)
 - **Dev.to:** [nextblockcms](https://dev.to/nextblockcms)
@@ -121,5 +140,5 @@ Join the community and stay updated on the latest features.
 ---
 
 <p align="center">
-  <sub>Built with ❤️ by the NextBlock Team. Licensed under AGPLv3.</sub>
+  <sub>Built with ❤️ by the NextBlock™ Team. Licensed under AGPLv3.</sub>
 </p>

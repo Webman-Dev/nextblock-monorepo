@@ -1,13 +1,13 @@
-# NextBlock CMS: Architectural Vision & Master Context
+# NextBlock™ CMS: Architectural Vision & Master Context
 
 > **NOTICE TO AI ASSISTANTS (Copilot/Cursor/Claude):**
-> This document is the **Primary Source of Truth** for the architectural goals, constraints, and business logic of the NextBlock CMS monorepo. All code generation and refactoring suggestions MUST align with the Open-Core model and Distribution Strategy outlined below.
+> This document is the **Primary Source of Truth** for the architectural goals, constraints, and business logic of the NextBlock™ CMS monorepo. All code generation and refactoring suggestions MUST align with the Open-Core model and Distribution Strategy outlined below.
 
 ---
 
 ## 1. The Grand Vision: Open-Core & Scalability
 
-NextBlock CMS is **not** just a simple website template. It is a scalable, extensible platform designed under an **Open-Core Business Model**.
+NextBlock™ CMS is **not** just a simple website template. It is a scalable, extensible platform designed under an **Open-Core Business Model**.
 
 ### The Business Mandate
 
@@ -49,7 +49,7 @@ The project uses an Nx monorepo to enforce separation of concerns.
 We use a **"Defense in Depth"** strategy for premium features.
 
 1.  **Source Available:** The code is in the user's `node_modules`. We do not obfuscate it.
-2.  **License Key Gate:** The user buys a key from Lemon Squeezy (MoR) and activates it in the CMS Admin.
+2.  **License Key Gate:** The user buys a key from Freemius (MoR) and activates it in the CMS Admin.
 3.  **The "Gatekeeper":** Critical functions (like `createCheckoutSession`) call `verifyPackageOnline('ecommerce')` and throw if the license is invalid.
 4.  **UI Hiding:** The Admin Sidebar checks `isPackageActive` to show/hide premium menus.
 

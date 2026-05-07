@@ -19,6 +19,8 @@ import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server"; // Corr
 import CopyContentFromLanguage from "../../../components/CopyContentFromLanguage";
 import { UploadFolderProvider } from '../../../media/UploadFolderContext';
 import RevisionHistoryButton from "../../../revisions/RevisionHistoryButton";
+import { resolveMediaUrl } from "../../../../../lib/media/resolveMediaUrl";
+import { CortexAiPageContextRegistrar } from "../../../components/CortexAiPageContext";
 
 interface PostWithBlocks extends PostType {
   blocks: BlockType[];
@@ -94,7 +96,7 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
   if (featureImageIdFromDb) {
     const { data: mediaItem, error: mediaError } = await supabase
       .from("media")
-      .select("id, object_key")
+      .select("id, object_key, file_path")
       .eq("id", String(featureImageIdFromDb)) // Query using the ID as string
       .single();
 
@@ -103,12 +105,7 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
       // Not critical enough to notFound(), form will just not have initial image.
     } else if (mediaItem) {
       initialFeatureImageIdProp = mediaItem.id; // string UUID from media table
-      const r2BaseUrl = process.env.NEXT_PUBLIC_R2_BASE_URL;
-      if (r2BaseUrl && mediaItem.object_key) {
-        initialFeatureImageUrl = `${r2BaseUrl}/${mediaItem.object_key}`;
-      } else if (!r2BaseUrl) {
-        console.warn("NEXT_PUBLIC_R2_PUBLIC_URL is not set. Cannot construct feature image URL for edit page.");
-      }
+      initialFeatureImageUrl = resolveMediaUrl(mediaItem.file_path || mediaItem.object_key);
     }
   }
 
@@ -117,6 +114,16 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
   
   return (
     <UploadFolderProvider defaultFolder={`posts/${postWithBlocks.slug}/`}>
+    <CortexAiPageContextRegistrar
+      context={{
+        contentType: "post",
+        entityId: postWithBlocks.id,
+        languageId: postWithBlocks.language_id,
+        slug: postWithBlocks.slug,
+        title: postWithBlocks.title,
+        translationGroupId: postWithBlocks.translation_group_id,
+      }}
+    />
     <div className="space-y-8 w-full mx-auto px-6">
       <div className="flex justify-between items-center flex-wrap gap-4 w-full">
         <div className="flex items-center gap-3">

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, Input, Label } from '@nextblock-cms/ui';
+import { Button } from '@nextblock-cms/ui/button';
+import { Input } from '@nextblock-cms/ui/input';
+import { Label } from '@nextblock-cms/ui/label';
 import { Truck, Calculator, Loader2 } from 'lucide-react';
 import { countries } from '../countries';
 import { getShippingEstimates } from '../server-actions/shipping-actions';
@@ -11,10 +13,10 @@ import { countryUsesStructuredStates, getStatesForCountry } from '../states';
 import { useCurrency } from '../CurrencyProvider';
 
 interface ShippingEstimatorProps {
-  cartTotal: number;
+  physicalSubtotal: number;
 }
 
-export const ShippingEstimator = ({ cartTotal }: ShippingEstimatorProps) => {
+export const ShippingEstimator = ({ physicalSubtotal }: ShippingEstimatorProps) => {
   const [country, setCountry] = useState('CA');
   const [state, setState] = useState('');
   const [postalCode, setPostalCode] = useState('');
@@ -23,16 +25,14 @@ export const ShippingEstimator = ({ cartTotal }: ShippingEstimatorProps) => {
   const [error, setError] = useState<string | null>(null);
   const { t, lang } = useTranslations();
   const { activeCurrencyCode } = useCurrency();
+  const translateOrFallback = (key: string, fallback: string) => {
+    const translated = t(key);
+    return translated === key ? fallback : translated;
+  };
   const availableStates = getStatesForCountry(country);
   const usesStructuredStates = countryUsesStructuredStates(country);
-  const selectOptionLabel =
-    t('select_an_option') === 'select_an_option'
-      ? 'Select an option'
-      : t('select_an_option');
-  const statePlaceholder =
-    t('state_province') === 'state_province'
-      ? 'State / Province'
-      : t('state_province');
+  const selectOptionLabel = translateOrFallback('select_an_option', 'Select an option');
+  const statePlaceholder = translateOrFallback('state_province', 'State / Province');
 
   const handleCalculate = async () => {
     setIsCalculating(true);
@@ -40,7 +40,7 @@ export const ShippingEstimator = ({ cartTotal }: ShippingEstimatorProps) => {
     setRates(null);
 
     const result = await getShippingEstimates(
-      cartTotal,
+      physicalSubtotal,
       {
         country,
         state: state || undefined,
@@ -53,7 +53,14 @@ export const ShippingEstimator = ({ cartTotal }: ShippingEstimatorProps) => {
     if (result.success && result.methods) {
       setRates(result.methods);
     } else {
-      setError(result.error || t('ecommerce.no_rates_found'));
+      setError(
+        result.errorKey
+          ? translateOrFallback(
+              result.errorKey,
+              result.error || t('ecommerce.no_rates_found')
+            )
+          : result.error || t('ecommerce.no_rates_found')
+      );
     }
     setIsCalculating(false);
   };

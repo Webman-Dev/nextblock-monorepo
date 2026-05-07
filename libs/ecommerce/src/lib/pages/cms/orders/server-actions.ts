@@ -7,6 +7,7 @@ import { assignInvoiceMetadata } from '../../../invoice-server';
 
 const MANAGEABLE_ORDER_STATUSES = [
     'pending',
+    'trial',
     'paid',
     'shipped',
     'cancelled',

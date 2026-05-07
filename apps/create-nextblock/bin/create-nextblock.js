@@ -53,18 +53,18 @@ const PACKAGE_VERSION_SOURCES = {
   '@nextblock-cms/sdk': resolve(REPO_ROOT, 'libs/sdk/package.json'),
 };
 
-program.name('create-nextblock').description('NextBlock CMS CLI');
+program.name('create-nextblock').description('NextBlock™ CMS CLI');
 
 program
   .command('create [project-directory]', { isDefault: true })
-  .description('Bootstrap a NextBlock CMS project')
+  .description('Bootstrap a NextBlock™ CMS project')
   .option('--skip-install', 'Skip installing dependencies')
   .option('-y, --yes', 'Skip all interactive prompts and use defaults')
   .action(handleCommand);
 
 program
   .command('activate [module]')
-  .description('Activate a premium NextBlock CMS module')
+  .description('Activate a premium NextBlock™ CMS module')
   .action(handleActivateCommand);
 
 await program.parseAsync(process.argv).catch((error) => {
@@ -184,7 +184,7 @@ async function handleCommand(projectDirectory, options) {
 
     console.log(
       chalk.green(
-        `\nSuccess! Your NextBlock CMS project "${projectName}" is ready.\n`,
+        `\nSuccess! Your NextBlock™ CMS project "${projectName}" is ready.\n`,
       ),
     );
     console.log(chalk.cyan('Next step:'));
@@ -207,7 +207,7 @@ async function handleActivateCommand(moduleName) {
     process.exit(1);
   }
 
-  clack.intro(`🚀 Activating NextBlock module: ${moduleName}`);
+  clack.intro(`🚀 Activating NextBlock™ module: ${moduleName}`);
 
   const projectPath = process.cwd();
 
@@ -317,6 +317,31 @@ export default async function CheckoutSuccessPage() {
     'app/api/checkout/route.ts': `import { NextResponse } from 'next/server';
 import { getPaymentProvider } from '@nextblock-cms/ecommerce/server';
 import { createClient, verifyPackageOnline } from '@nextblock-cms/db/server';
+import { normalizeCustomerAddress } from '@nextblock-cms/ecommerce';
+
+function resolveProviderFromItem(item) {
+  if (item?.provider === 'stripe' || item?.provider === 'freemius') {
+    return item.provider;
+  }
+
+  if (item?.payment_provider === 'stripe' || item?.payment_provider === 'freemius') {
+    return item.payment_provider;
+  }
+
+  if (item?.product_type === 'digital') {
+    return 'freemius';
+  }
+
+  if (item?.product_type === 'physical') {
+    return 'stripe';
+  }
+
+  if (item?.freemius_product_id) {
+    return 'freemius';
+  }
+
+  return null;
+}
 
 export async function POST(req: Request) {
   try {
@@ -325,46 +350,84 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Ecommerce module license is inactive' }, { status: 403 });
     }
 
-    const { items, customerEmail } = await req.json();
+    const {
+      items,
+      customerEmail,
+      customerPhone,
+      billingAddress,
+      shippingAddress,
+      shippingMethodId,
+      currencyCode,
+      locale,
+    } = await req.json();
 
     if (!items || !Array.isArray(items)) {
       return NextResponse.json({ error: 'Invalid items data' }, { status: 400 });
     }
-    
-    // 1. Get Selected Provider from Settings
-    const supabase = createClient();
-    const { data: settings } = await supabase
-        .from('site_settings')
-        .select('value')
-        .eq('key', 'payment_provider')
-        .single();
-        
-    // Parse provider, default to stripe
-    let providerName: 'stripe' | 'lemon_squeezy' = 'stripe';
-    if (settings?.value) {
-        let val = settings.value;
-        if (typeof val === 'string' && val.startsWith('"')) {
-            try { val = JSON.parse(val); } catch { /* ignore */ }
-        }
-        if (val === 'lemon_squeezy') providerName = 'lemon_squeezy';
+
+    const providerNames = Array.from(
+      new Set(items.map((item) => resolveProviderFromItem(item)).filter(Boolean))
+    );
+
+    if (providerNames.length === 0) {
+      return NextResponse.json(
+        { error: 'Each checkout request must include provider-aware cart items.' },
+        { status: 400 }
+      );
     }
 
-    // 2. Get Provider Instance
+    if (providerNames.length > 1) {
+      return NextResponse.json(
+        { error: 'Mixed-provider carts must be checked out in separate steps.' },
+        { status: 400 }
+      );
+    }
+
+    const providerName = providerNames[0];
+
+    if (providerName === 'freemius' && items.length !== 1) {
+      return NextResponse.json(
+        { error: 'Freemius items must be checked out one at a time.' },
+        { status: 400 }
+      );
+    }
+
+    if (!billingAddress) {
+      return NextResponse.json({ error: 'Billing address is required' }, { status: 400 });
+    }
+
+    const supabase = createClient();
     const provider = getPaymentProvider(providerName);
 
-    // Get User ID from session for security
     const { data: { user } } = await supabase.auth.getUser();
     const userId = user?.id;
+    const resolvedCustomerEmail = user?.email || customerEmail || null;
 
-    // 3. Create Session
-    const { url, error } = await provider.createCheckoutSession(items, customerEmail, userId);
+    const { url, error, errorKey, errorParams, errorStatus, customProps } =
+      await provider.createCheckoutSession({
+        items,
+        customerEmail: resolvedCustomerEmail,
+        customerPhone,
+        userId,
+        billingAddress: normalizeCustomerAddress(billingAddress) ?? billingAddress,
+        shippingAddress:
+          providerName === 'stripe'
+            ? normalizeCustomerAddress(shippingAddress)
+            : null,
+        shippingMethodId: providerName === 'stripe' ? shippingMethodId : null,
+        currencyCode: typeof currencyCode === 'string' ? currencyCode : null,
+        locale: typeof locale === 'string' ? locale : null,
+      });
 
     if (error) {
       console.error('Checkout Error:', error);
-      return NextResponse.json({ error }, { status: 500 });
+      return NextResponse.json(
+        { error, errorKey, errorParams },
+        { status: errorStatus ?? 500 }
+      );
     }
 
-    return NextResponse.json({ url });
+    return NextResponse.json({ url, customProps });
   } catch (err: any) {
     console.error('Checkout API Error:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -387,7 +450,7 @@ async function runSetupWizard(projectDir, projectName) {
   const projectPath = resolve(projectDir);
   process.chdir(projectPath);
 
-  clack.intro('🚀 Welcome to the NextBlock setup wizard!');
+  clack.intro('🚀 Welcome to the NextBlock™ setup wizard!');
 
   const supabaseDir = resolve(projectPath, 'supabase');
   await fs.ensureDir(supabaseDir);
@@ -404,7 +467,7 @@ async function runSetupWizard(projectDir, projectName) {
   clack.note('I will now open your browser to log into Supabase.');
   await runSupabaseCli(['login'], { cwd: projectPath });
 
-  clack.note('Now, please select your NextBlock project when prompted.');
+  clack.note('Now, please select your NextBlock™ project when prompted.');
   await runSupabaseCli(['link'], { cwd: projectPath });
   if (process.stdin.isTTY) {
     try {
@@ -771,7 +834,7 @@ async function runSetupWizard(projectDir, projectName) {
           }),
         fromName: () =>
           clack.text({
-            message: 'SMTP: From Name (e.g., NextBlock):',
+            message: 'SMTP: From Name (e.g., NextBlock™):',
             validate: (val) => (!val ? 'From name is required' : undefined),
           }),
       },
@@ -841,7 +904,7 @@ async function runSetupWizard(projectDir, projectName) {
   }
 
   clack.outro(
-    `🎉 Your NextBlock project ${projectName ? `"${projectName}" ` : ''}is ready!`,
+    `🎉 Your NextBlock™ project ${projectName ? `"${projectName}" ` : ''}is ready!`,
   );
 }
 
@@ -1133,7 +1196,7 @@ async function ensureEnvExample(projectDir) {
     }
   }
 
-  const placeholder = `# Environment variables for NextBlock CMS
+  const placeholder = `# Environment variables for NextBlock™ CMS
 NEXT_PUBLIC_URL=
 # Vercel / Supabase
 SUPABASE_PROJECT_ID=

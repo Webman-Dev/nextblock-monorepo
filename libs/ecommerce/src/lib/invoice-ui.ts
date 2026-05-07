@@ -64,6 +64,8 @@ export function translateOrderStatus(
       return translateOrFallback(t, 'order_status_paid', 'Paid');
     case 'pending':
       return translateOrFallback(t, 'order_status_pending', 'Pending');
+    case 'trial':
+      return translateOrFallback(t, 'order_status_trial', 'Trial');
     case 'shipped':
       return translateOrFallback(t, 'order_status_shipped', 'Shipped');
     case 'cancelled':

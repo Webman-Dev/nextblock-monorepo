@@ -15,9 +15,10 @@ import {
 import ProductFormClientShell from '../../ProductFormClientShell';
 import {
   getCmsProduct,
+  getEnabledPaymentProviders,
   getGlobalProductAttributes,
   getProductTranslations,
-  getPaymentSettings,
+  getStoreConfigStatus,
   normalizeCurrencyRecord,
   updateProductAction,
 } from '@nextblock-cms/ecommerce/server';
@@ -26,6 +27,7 @@ import {
   buildGlobalAttributesForForm,
   buildProductFormInitialData,
 } from '../../productFormData';
+import { CortexAiPageContextRegistrar } from '../../../components/CortexAiPageContext';
 
 export default async function EditProductPage({
   params,
@@ -34,13 +36,21 @@ export default async function EditProductPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ missing_lang_id?: string }>;
 }) {
-  const [{ id }, { missing_lang_id }, isOnline, languages, paymentProvider] =
+  const [
+    { id },
+    { missing_lang_id },
+    isOnline,
+    languages,
+    enabledProviders,
+    configStatus,
+  ] =
     await Promise.all([
       params,
       searchParams,
       verifyPackageOnline('ecommerce'),
       getActiveLanguagesServerSide(),
-      getPaymentSettings(),
+      getEnabledPaymentProviders(),
+      getStoreConfigStatus(),
     ]);
 
   if (!isOnline) {
@@ -99,6 +109,16 @@ export default async function EditProductPage({
 
   return (
     <div className="space-y-8 w-full max-w-[1400px] mx-auto px-6 py-8">
+      <CortexAiPageContextRegistrar
+        context={{
+          contentType: 'product',
+          entityId: product.id,
+          languageId: product.language_id,
+          slug: product.slug,
+          title: product.title,
+          translationGroupId: product.translation_group_id,
+        }}
+      />
       <div className="flex justify-between items-center flex-wrap gap-4 w-full">
         <div className="flex items-center gap-3">
           <Button variant="outline" size="icon" aria-label="Back to products" asChild>
@@ -181,7 +201,8 @@ export default async function EditProductPage({
         availableLanguagesProp={languages}
         globalAttributesProp={globalAttributes}
         currenciesProp={currencies}
-        paymentProvider={paymentProvider}
+        enabledProviders={enabledProviders}
+        configStatus={configStatus}
         updateAction={updateProductAction.bind(null, product.id)}
       />
     </div>

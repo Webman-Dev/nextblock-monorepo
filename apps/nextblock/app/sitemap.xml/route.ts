@@ -12,6 +12,10 @@ interface SitemapEntry {
 }
 
 export async function GET() {
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+    return new Response('Sitemap is disabled in sandbox mode.', { status: 404 });
+  }
+
   try {
     let pages: SitemapEntry[] = [];
     try {

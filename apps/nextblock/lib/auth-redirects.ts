@@ -5,7 +5,7 @@ type AuthProfile = Pick<Database['public']['Tables']['profiles']['Row'], 'role' 
 const DASHBOARD_PATH = '/cms/dashboard';
 const HOME_PATH = '/';
 const PROFILE_PATH = '/profile';
-const PASSWORD_RESET_PATH = '/reset-password';
+const PASSWORD_RESET_PATH = '/profile/password';
 
 function isSafeInternalPath(path?: string | null) {
   return Boolean(path && path.startsWith('/') && !path.startsWith('//'));

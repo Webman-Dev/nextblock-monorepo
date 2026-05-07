@@ -24,7 +24,7 @@
 
 ## 2. Logo Assets
 
-- **NextBlock Logo**: (Link to asset if available)
+- **NextBlock™ Logo**: (Link to asset if available)
 - **Tech Stack Logos**: Next.js, React, Supabase, Tailwind CSS, Nx.
 
-> **Note:** This document serves as a reference for the visual identity of NextBlock CMS.
+> **Note:** This document serves as a reference for the visual identity of NextBlock™ CMS.

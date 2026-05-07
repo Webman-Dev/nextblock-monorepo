@@ -8,14 +8,17 @@ import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
-  ExternalLink, Paintbrush,
+  ExternalLink, Paintbrush, Brain,
 } from "lucide-react"
-import { Button } from "@nextblock-cms/ui"
-import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
+import { Button } from "@nextblock-cms/ui/button"
+import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar"
 import { cn } from "@nextblock-cms/utils"
-// removed signOutAction import
+import { signOutAction } from "../actions"
 import Image from "next/image";
 import { FeedbackModal } from "./components/FeedbackModal";
+import { CortexGlobalAgentChat } from "./components/CortexGlobalAgentChat";
+import { CortexAiPageContextProvider } from "./components/CortexAiPageContext";
+import { CortexAiActiveProvider } from "./components/CortexAiActiveContext";
 
 const LoadingSpinner = () => (
   <div className="flex justify-center items-center h-full w-full py-20">
@@ -103,8 +106,16 @@ const CollapsibleNavItem = ({ icon: Icon, title, children, isActive, adminOnly, 
 };
 
 
-export default function CmsClientLayout({ children, isEcommerceActive = false }: { children: ReactNode, isEcommerceActive?: boolean }) {
-  const { user, profile, role, isLoading, isAdmin, isWriter, supabase } = useAuth();
+export default function CmsClientLayout({
+  children,
+  isCortexAiActive = false,
+  isEcommerceActive = false,
+}: {
+  children: ReactNode,
+  isCortexAiActive?: boolean,
+  isEcommerceActive?: boolean,
+}) {
+  const { user, profile, role, isLoading, isAdmin, isWriter } = useAuth();
   const router = useRouter();
   const pathname = usePathname(); // Use the usePathname hook
   const [cmsSidebarOpen, setCmsSidebarOpen] = React.useState(false);
@@ -149,9 +160,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
   };
 
   const handleSignOut = async () => {
-    if (supabase) {
-      await supabase.auth.signOut();
-    }
+    await signOutAction();
   };
 
 
@@ -205,6 +214,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
   else if (pathname.startsWith("/cms/settings/extra-translations")) pageTitle = "Extra Translations";
   else if (pathname.startsWith("/cms/settings/currencies")) pageTitle = "Currency Settings";
   else if (pathname.startsWith("/cms/settings/taxes")) pageTitle = "Tax Settings";
+  else if (pathname.startsWith("/cms/settings/cortex-ai")) pageTitle = "Cortex AI";
   else if (pathname.startsWith("/cms/payments")) pageTitle = "Payment Settings";
 
   else if (pathname.startsWith("/cms/settings/packages")) pageTitle = "Packages";
@@ -218,6 +228,8 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
 
 
   return (
+    <CortexAiPageContextProvider>
+      <CortexAiActiveProvider isActive={isCortexAiActive}>
     <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-slate-50 dark:bg-slate-950 md:flex-row">
       <div className="fixed bottom-4 right-4 z-[60] md:hidden">
         <Button
@@ -260,6 +272,11 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
               <NavItem href="/cms/dashboard" icon={LayoutDashboard} isActive={pathname === "/cms/dashboard"} isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Dashboard
               </NavItem>
+              {isCortexAiActive && (
+                <NavItem href="/cms/settings/cortex-ai" icon={Brain} isActive={pathname.startsWith("/cms/settings/cortex-ai")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                        Cortex AI
+                </NavItem>
+              )}
               <NavItem href="/cms/pages" icon={FileText} isActive={pathname.startsWith("/cms/pages")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Pages
               </NavItem>
@@ -268,6 +285,9 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
               </NavItem>
               <NavItem href="/cms/media" icon={ImageIconLucide} isActive={pathname.startsWith("/cms/media")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Media
+              </NavItem>
+              <NavItem href="/cms/navigation" icon={ListTree} isActive={pathname.startsWith("/cms/navigation")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                    Navigation
               </NavItem>
 
               {isEcommerceActive && (
@@ -317,9 +337,6 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                       Administration
                     </p>
                   </div>
-                  <NavItem href="/cms/navigation" icon={ListTree} isActive={pathname.startsWith("/cms/navigation")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                    Navigation
-                  </NavItem>
                   <NavItem href="/cms/users" icon={Users} isActive={pathname.startsWith("/cms/users")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Manage Users
                   </NavItem>
@@ -405,6 +422,9 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
             onClick={() => setCmsSidebarOpen(false)}
         />
       )}
+      {isAdmin && isCortexAiActive && <CortexGlobalAgentChat />}
     </div>
+      </CortexAiActiveProvider>
+    </CortexAiPageContextProvider>
   )
 }

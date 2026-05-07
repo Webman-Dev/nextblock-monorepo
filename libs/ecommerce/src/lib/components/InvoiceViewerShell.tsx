@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { Printer } from 'lucide-react';
 
-import { Button } from '@nextblock-cms/ui';
+import { Button } from '@nextblock-cms/ui/button';
 
 import {
   InvoiceDocument,

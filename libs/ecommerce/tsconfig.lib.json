@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "outDir": "../../dist/out-tsc",
     "module": "esnext",
     "moduleResolution": "bundler",
     "types": ["vite/client"]

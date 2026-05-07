@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -475,6 +475,15 @@ export type Database = {
           currency: string
           customer_details: Json | null
           exchange_rate_at_purchase: number
+          freemius_last_event_type: string | null
+          freemius_last_synced_at: string | null
+          freemius_license_id: string | null
+          freemius_plan_id: string | null
+          freemius_product_id: string | null
+          freemius_subscription_id: string | null
+          freemius_trial_ends_at: string | null
+          freemius_trial_id: string | null
+          freemius_user_id: string | null
           id: string
           inventory_deducted_at: string | null
           invoice_number: string | null
@@ -495,6 +504,15 @@ export type Database = {
           currency?: string
           customer_details?: Json | null
           exchange_rate_at_purchase?: number
+          freemius_last_event_type?: string | null
+          freemius_last_synced_at?: string | null
+          freemius_license_id?: string | null
+          freemius_plan_id?: string | null
+          freemius_product_id?: string | null
+          freemius_subscription_id?: string | null
+          freemius_trial_ends_at?: string | null
+          freemius_trial_id?: string | null
+          freemius_user_id?: string | null
           id?: string
           inventory_deducted_at?: string | null
           invoice_number?: string | null
@@ -515,6 +533,15 @@ export type Database = {
           currency?: string
           customer_details?: Json | null
           exchange_rate_at_purchase?: number
+          freemius_last_event_type?: string | null
+          freemius_last_synced_at?: string | null
+          freemius_license_id?: string | null
+          freemius_plan_id?: string | null
+          freemius_product_id?: string | null
+          freemius_subscription_id?: string | null
+          freemius_trial_ends_at?: string | null
+          freemius_trial_id?: string | null
+          freemius_user_id?: string | null
           id?: string
           inventory_deducted_at?: string | null
           invoice_number?: string | null
@@ -722,12 +749,14 @@ export type Database = {
           excerpt: string | null
           feature_image_id: string | null
           id: number
+          label: string | null
           language_id: number
           meta_description: string | null
           meta_title: string | null
           published_at: string | null
           slug: string
           status: Database["public"]["Enums"]["page_status"]
+          subtitle: string | null
           title: string
           translation_group_id: string
           updated_at: string
@@ -739,12 +768,14 @@ export type Database = {
           excerpt?: string | null
           feature_image_id?: string | null
           id?: number
+          label?: string | null
           language_id: number
           meta_description?: string | null
           meta_title?: string | null
           published_at?: string | null
           slug: string
           status?: Database["public"]["Enums"]["page_status"]
+          subtitle?: string | null
           title: string
           translation_group_id?: string
           updated_at?: string
@@ -756,12 +787,14 @@ export type Database = {
           excerpt?: string | null
           feature_image_id?: string | null
           id?: number
+          label?: string | null
           language_id?: number
           meta_description?: string | null
           meta_title?: string | null
           published_at?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["page_status"]
+          subtitle?: string | null
           title?: string
           translation_group_id?: string
           updated_at?: string
@@ -964,9 +997,13 @@ export type Database = {
           id: string
           is_taxable: boolean
           language_id: number
+          meta_description: string | null
+          meta_title: string | null
           metadata: Json | null
+          payment_provider: string
           price: number
           prices: Json
+          product_type: string
           sale_price: number | null
           sale_prices: Json | null
           short_description: string | null
@@ -976,6 +1013,8 @@ export type Database = {
           stock: number | null
           title: string
           translation_group_id: string
+          trial_period_days: number
+          trial_requires_payment_method: boolean
           upc: string | null
           updated_at: string | null
         }
@@ -987,9 +1026,13 @@ export type Database = {
           id?: string
           is_taxable?: boolean
           language_id: number
+          meta_description?: string | null
+          meta_title?: string | null
           metadata?: Json | null
+          payment_provider: string
           price: number
           prices?: Json
+          product_type: string
           sale_price?: number | null
           sale_prices?: Json | null
           short_description?: string | null
@@ -999,6 +1042,8 @@ export type Database = {
           stock?: number | null
           title: string
           translation_group_id?: string
+          trial_period_days?: number
+          trial_requires_payment_method?: boolean
           upc?: string | null
           updated_at?: string | null
         }
@@ -1010,9 +1055,13 @@ export type Database = {
           id?: string
           is_taxable?: boolean
           language_id?: number
+          meta_description?: string | null
+          meta_title?: string | null
           metadata?: Json | null
+          payment_provider?: string
           price?: number
           prices?: Json
+          product_type?: string
           sale_price?: number | null
           sale_prices?: Json | null
           short_description?: string | null
@@ -1022,6 +1071,8 @@ export type Database = {
           stock?: number | null
           title?: string
           translation_group_id?: string
+          trial_period_days?: number
+          trial_requires_payment_method?: boolean
           upc?: string | null
           updated_at?: string | null
         }
@@ -1367,11 +1418,25 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      get_default_currency_code: { Args: never; Returns: string }
       get_ecommerce_track_quantities: { Args: never; Returns: boolean }
       get_my_claim: { Args: { claim: string }; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
+      is_valid_currency_amount_map: {
+        Args: { amounts: Json }
+        Returns: boolean
+      }
+      is_valid_sale_price_map: {
+        Args: { prices: Json; sale_prices: Json }
+        Returns: boolean
+      }
+      normalize_currency_amount_map: { Args: { amounts: Json }; Returns: Json }
       sync_inventory_cache_for_sku: {
         Args: { p_sku: string }
+        Returns: undefined
+      }
+      sync_legacy_price_columns_for_currency: {
+        Args: { target_currency: string }
         Returns: undefined
       }
       upsert_product_with_variants: {

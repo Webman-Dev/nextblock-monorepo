@@ -393,39 +393,31 @@ export function VariationsEditor({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg border bg-card p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold">Assign Global Attributes</h2>
-            <p className="text-sm text-muted-foreground">
-              Select the terms that apply to this product. The variation matrix is generated from every possible combination.
-            </p>
+    <div className="space-y-3">
+      {/* Attributes selector */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Attributes</span>
+            <Badge variant="outline" className="text-[10px] px-1.5 h-4">{variantDrafts.length} variants</Badge>
+            <Badge variant="secondary" className="text-[10px] px-1.5 h-4">Stock: {totalVariantStock}</Badge>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{variantDrafts.length} variants</Badge>
-            <Badge variant="secondary">Total stock: {totalVariantStock}</Badge>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/cms/products/attributes">Manage Attributes</Link>
-            </Button>
-          </div>
+          <Button asChild variant="outline" size="sm" className="h-7 text-xs px-3">
+            <Link href="/cms/products/attributes">Manage</Link>
+          </Button>
         </div>
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-2 lg:grid-cols-2">
           {globalAttributes.map((attribute) => {
             const selectedTerms = selectedTermsByAttribute[attribute.id] || [];
 
             return (
-              <div key={attribute.id} className="rounded-lg border p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h3 className="font-medium">{resolveAttributeName(attribute, currentLanguageCode)}</h3>
-                    <p className="text-xs text-muted-foreground">{attribute.slug}</p>
-                  </div>
-                  <Badge variant="outline">{selectedTerms.length} selected</Badge>
+              <div key={attribute.id} className="flex items-center gap-3 rounded border p-2.5">
+                <div className="shrink-0 w-[100px]">
+                  <span className="text-sm font-bold block leading-tight">{resolveAttributeName(attribute, currentLanguageCode)}</span>
+                  <span className="text-[10px] text-muted-foreground leading-none">{selectedTerms.length} selected</span>
                 </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5 flex-1">
                   {attribute.terms.map((term) => {
                     const isSelected = selectedTerms.includes(term.id);
 
@@ -434,7 +426,7 @@ export function VariationsEditor({
                         key={term.id}
                         type="button"
                         onClick={() => handleToggleTerm(attribute.id, term.id)}
-                        className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                        className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
                           isSelected
                             ? 'border-primary bg-primary/10 text-primary'
                             : 'border-border bg-background text-foreground hover:border-primary/40'
@@ -451,197 +443,172 @@ export function VariationsEditor({
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card p-6 shadow-sm">
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold">Generated Variation Matrix</h2>
-          <p className="text-sm text-muted-foreground">
-            Each combination gets its own SKU, regular price, sale price, and stock quantity.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Variant inventory is shared by matching variant SKU, even when that SKU appears on
-            translated products.
-          </p>
+      {/* Variant cards */}
+      {variantDrafts.length === 0 ? (
+        <div className="rounded border border-dashed p-3 text-xs text-muted-foreground text-center">
+          Select terms above to generate variations.
         </div>
+      ) : (
+        <div className="space-y-2">
+          {variantDrafts.map((variant) => {
+            const resolvedVariantPriceMaps = resolveEditorCurrencyPriceMaps({
+              currencies,
+              prices: variant.prices || {},
+              salePrices: variant.sale_prices || {},
+              fallbackPrice: variant.price,
+              fallbackSalePrice: variant.sale_price,
+            });
 
-        {variantDrafts.length === 0 ? (
-          <div className="mt-6 rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-            Select at least one term from one or more attributes to generate variations.
-          </div>
-        ) : (
-          <div className="mt-6 space-y-4">
-            {variantDrafts.map((variant) => {
-              const resolvedVariantPriceMaps = resolveEditorCurrencyPriceMaps({
-                currencies,
-                prices: variant.prices || {},
-                salePrices: variant.sale_prices || {},
-                fallbackPrice: variant.price,
-                fallbackSalePrice: variant.sale_price,
-              });
-
-              return (
-                <div key={variant.combination_key} className="rounded-lg border p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h3 className="font-medium">{variant.label}</h3>
-                      <p className="text-xs text-muted-foreground">
-                        {variant.selected_options
-                          .map((option) => `${option.attribute_name}: ${option.term_value}`)
-                          .join(' / ')}
-                      </p>
-                    </div>
-                    <div className="text-right text-xs text-muted-foreground">
-                      <div>
-                        Regular:{' '}
-                        {formatCurrency(variant.price, defaultCurrency?.code || 'USD')}
-                      </div>
-                      <div>
-                        Sale:{' '}
-                        {variant.sale_price !== null && variant.sale_price !== undefined
-                          ? formatCurrency(variant.sale_price, defaultCurrency?.code || 'USD')
-                          : 'No sale price'}
-                      </div>
-                    </div>
+            return (
+              <div key={variant.combination_key} className="rounded border p-3 space-y-2">
+                {/* Header row: label + price summary */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold">{variant.label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {variant.selected_options
+                        .map((option) => `${option.attribute_name}: ${option.term_value}`)
+                        .join(' · ')}
+                    </span>
                   </div>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-3">
-                    <div className="space-y-2">
-                      <Label htmlFor={`variant-sku-${variant.combination_key}`}>SKU</Label>
-                      <Input
-                        id={`variant-sku-${variant.combination_key}`}
-                        value={variant.sku}
-                        onChange={(event) =>
-                          handleVariantChange(variant.combination_key, 'sku', event.target.value)
-                        }
-                        placeholder="SKU"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor={`variant-upc-${variant.combination_key}`}>UPC</Label>
-                      <Input
-                        id={`variant-upc-${variant.combination_key}`}
-                        value={variant.upc ?? ''}
-                        onChange={(event) =>
-                          handleVariantChange(variant.combination_key, 'upc', event.target.value)
-                        }
-                        placeholder="Optional UPC"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor={`variant-stock-${variant.combination_key}`}>Stock Quantity</Label>
-                      <Input
-                        id={`variant-stock-${variant.combination_key}`}
-                        type="number"
-                        min="0"
-                        value={variant.stock_quantity}
-                        onChange={(event) =>
-                          handleVariantChange(
-                            variant.combination_key,
-                            'stock_quantity',
-                            event.target.value
-                          )
-                        }
-                        />
-                    </div>
-                  </div>
-
-                  <div className="mt-4">
-                    <CurrencyPriceFields
-                      idPrefix={`variant-${variant.combination_key}`}
-                      currencies={currencies}
-                      prices={resolvedVariantPriceMaps.prices}
-                      salePrices={resolvedVariantPriceMaps.salePrices}
-                      managedCurrencyCodes={storeManagedPriceCurrencyCodes}
-                      onPriceChange={(currencyCode, value) =>
-                        handleVariantCurrencyChange(
-                          variant.combination_key,
-                          currencyCode,
-                          'prices',
-                          value
-                        )
-                      }
-                      onSalePriceChange={(currencyCode, value) =>
-                        handleVariantCurrencyChange(
-                          variant.combination_key,
-                          currencyCode,
-                          'sale_prices',
-                          value
-                        )
-                      }
-                      onAutoFill={() => autoFillVariantCurrencies(variant.combination_key)}
-                      helperText={
-                        storeManagedPriceCurrencyCodes.length > 0
-                          ? `Store-managed currencies derive from ${defaultCurrency?.code || 'the base currency'}. Manual FX fill only affects editable currencies.`
-                          : undefined
-                      }
-                    />
-                  </div>
-
-                  <div className="mt-4 rounded-lg border bg-muted/20 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div>
-                        <p className="font-medium">Variant Main Image</p>
-                        <p className="text-sm text-muted-foreground">
-                          Choose from the product gallery. This image replaces the parent product image when shoppers select this variation.
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {availableVariantImages.length > 0 ? (
-                          <select
-                            className="flex h-10 min-w-[220px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            value={variant.main_media_id ?? ''}
-                            onChange={(event) => {
-                              if (!event.target.value) {
-                                clearVariantImage(variant.combination_key);
-                                return;
-                              }
-
-                              handleVariantImageSelect(variant.combination_key, event.target.value);
-                            }}
-                          >
-                            <option value="">Use parent image</option>
-                            {availableVariantImages.map((image, index) => (
-                              <option key={image.media_id} value={image.media_id}>
-                                {image.alt?.trim() || `Gallery image ${index + 1}`}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">
-                            Add images to the product gallery first.
-                          </span>
-                        )}
-                        {variant.main_media_id && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => clearVariantImage(variant.combination_key)}
-                          >
-                            Remove Image
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {variant.main_image_url ? (
-                      <div className="mt-4 h-28 w-28 overflow-hidden rounded-lg border bg-background">
-                        <img
-                          src={variant.main_image_url}
-                          alt={`${variant.label} image`}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <p className="mt-4 text-sm text-muted-foreground">No variant image selected yet.</p>
-                    )}
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span>Reg: {formatCurrency(variant.price, defaultCurrency?.code || 'USD')}</span>
+                    <span>
+                      Sale:{' '}
+                      {variant.sale_price !== null && variant.sale_price !== undefined
+                        ? formatCurrency(variant.sale_price, defaultCurrency?.code || 'USD')
+                        : '—'}
+                    </span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+
+                {/* SKU / UPC / Stock — single row */}
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor={`variant-sku-${variant.combination_key}`} className="text-xs uppercase font-bold text-muted-foreground tracking-wider shrink-0">SKU</Label>
+                    <Input
+                      id={`variant-sku-${variant.combination_key}`}
+                      value={variant.sku}
+                      onChange={(event) =>
+                        handleVariantChange(variant.combination_key, 'sku', event.target.value)
+                      }
+                      placeholder="SKU"
+                      className="h-8 text-sm font-mono"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor={`variant-upc-${variant.combination_key}`} className="text-xs uppercase font-bold text-muted-foreground tracking-wider shrink-0">UPC</Label>
+                    <Input
+                      id={`variant-upc-${variant.combination_key}`}
+                      value={variant.upc ?? ''}
+                      onChange={(event) =>
+                        handleVariantChange(variant.combination_key, 'upc', event.target.value)
+                      }
+                      placeholder="—"
+                      className="h-8 text-sm font-mono"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor={`variant-stock-${variant.combination_key}`} className="text-xs uppercase font-bold text-muted-foreground tracking-wider shrink-0">Qty</Label>
+                    <Input
+                      id={`variant-stock-${variant.combination_key}`}
+                      type="number"
+                      min="0"
+                      value={variant.stock_quantity}
+                      onChange={(event) =>
+                        handleVariantChange(
+                          variant.combination_key,
+                          'stock_quantity',
+                          event.target.value
+                        )
+                      }
+                      className="h-8 text-sm font-mono w-20"
+                    />
+                  </div>
+                </div>
+
+                {/* Currency prices */}
+                <CurrencyPriceFields
+                  idPrefix={`variant-${variant.combination_key}`}
+                  currencies={currencies}
+                  prices={resolvedVariantPriceMaps.prices}
+                  salePrices={resolvedVariantPriceMaps.salePrices}
+                  managedCurrencyCodes={storeManagedPriceCurrencyCodes}
+                  onPriceChange={(currencyCode, value) =>
+                    handleVariantCurrencyChange(
+                      variant.combination_key,
+                      currencyCode,
+                      'prices',
+                      value
+                    )
+                  }
+                  onSalePriceChange={(currencyCode, value) =>
+                    handleVariantCurrencyChange(
+                      variant.combination_key,
+                      currencyCode,
+                      'sale_prices',
+                      value
+                    )
+                  }
+                  onAutoFill={() => autoFillVariantCurrencies(variant.combination_key)}
+                  helperText={
+                    storeManagedPriceCurrencyCodes.length > 0
+                      ? `Store-managed currencies derive from ${defaultCurrency?.code || 'the base currency'}.`
+                      : undefined
+                  }
+                />
+
+                {/* Image selector — single inline row */}
+                <div className="flex items-center gap-3 pt-1.5 border-t border-muted/30">
+                  {variant.main_image_url && (
+                    <div className="h-9 w-9 overflow-hidden rounded border bg-background shrink-0">
+                      <img
+                        src={variant.main_image_url}
+                        alt={`${variant.label} image`}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider shrink-0">Image</span>
+                  {availableVariantImages.length > 0 ? (
+                    <select
+                      className="flex h-8 rounded-md border border-input bg-background px-2 py-1 text-sm min-w-[180px]"
+                      value={variant.main_media_id ?? ''}
+                      onChange={(event) => {
+                        if (!event.target.value) {
+                          clearVariantImage(variant.combination_key);
+                          return;
+                        }
+                        handleVariantImageSelect(variant.combination_key, event.target.value);
+                      }}
+                    >
+                      <option value="">Use parent image</option>
+                      {availableVariantImages.map((image, index) => (
+                        <option key={image.media_id} value={image.media_id}>
+                          {image.alt?.trim() || `Gallery image ${index + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Add gallery images first.</span>
+                  )}
+                  {variant.main_media_id && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs px-2 text-muted-foreground hover:text-destructive"
+                      onClick={() => clearVariantImage(variant.combination_key)}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

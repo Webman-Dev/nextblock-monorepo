@@ -9,7 +9,6 @@ import {
   type ReactNode,
 } from 'react';
 
-import { createClient } from '@nextblock-cms/db';
 import { normalizeCurrencyCode } from '@nextblock-cms/utils';
 
 import {
@@ -109,18 +108,15 @@ export function CurrencyProvider({
   }, [initialCurrencies]);
 
   useEffect(() => {
-    const supabase = createClient();
+    if (initialCurrencies.length > 0) {
+      return;
+    }
 
     async function refreshCurrencies() {
-      const { data, error } = await supabase
-        .from('currencies')
-        .select(
-          'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
-        )
-        .eq('is_active', true)
-        .order('code', { ascending: true });
+      const { fetchActiveCurrenciesFromRest } = await import('./currency-rest-client');
+      const data = await fetchActiveCurrenciesFromRest();
 
-      if (!error && data && data.length > 0) {
+      if (data.length > 0) {
         setCurrencies(
           getActiveCurrencies(data.map((currency) => normalizeCurrencyRecord(currency)))
         );
@@ -128,7 +124,7 @@ export function CurrencyProvider({
     }
 
     void refreshCurrencies();
-  }, []);
+  }, [initialCurrencies.length]);
 
   const preferredCurrencyCode = useMemo(
     () =>

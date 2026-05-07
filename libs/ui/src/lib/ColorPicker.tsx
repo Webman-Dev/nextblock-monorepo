@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { SketchPicker, ColorResult } from "react-color";
+import type { ColorResult, SketchPickerProps } from "react-color";
 import {
   Popover,
   PopoverContent,
@@ -16,6 +16,13 @@ interface ColorPickerProps {
   onChange: (newColor: string) => void;
   className?: string;
 }
+
+const SketchPicker = React.lazy(async () => {
+  const module = await import("react-color");
+  return {
+    default: module.SketchPicker as React.ComponentType<SketchPickerProps>,
+  };
+});
 
 const ColorPicker = React.forwardRef<HTMLDivElement, ColorPickerProps>(
   ({ label, color, onChange, className }, ref) => {
@@ -35,7 +42,9 @@ const ColorPicker = React.forwardRef<HTMLDivElement, ColorPickerProps>(
             />
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0">
-            <SketchPicker color={color} onChangeComplete={handleColorChange} />
+            <React.Suspense fallback={<div className="h-[276px] w-[220px]" />}>
+              <SketchPicker color={color} onChangeComplete={handleColorChange} />
+            </React.Suspense>
           </PopoverContent>
         </Popover>
       </div>

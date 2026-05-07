@@ -7,7 +7,11 @@ export async function GET() {
     );
   }
 
-  const robotsTxtContent = `User-agent: *
+  const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
+  const robotsTxtContent = isSandbox
+    ? `User-agent: *
+Disallow: /`
+    : `User-agent: *
 Allow: /
 Sitemap: ${siteUrl}/sitemap.xml`;
 

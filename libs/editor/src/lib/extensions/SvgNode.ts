@@ -140,7 +140,7 @@ export const SvgNode = Node.create<SvgNodeOptions>({
         svg.classList.add('parsed-svg-node');
 
         return {
-            dom: svg,
+            dom: svg as unknown as HTMLElement,
             // ignoreMutation to prevent re-rendering on internal changes if possible, 
             // but for atoms it's usually fine.
         };

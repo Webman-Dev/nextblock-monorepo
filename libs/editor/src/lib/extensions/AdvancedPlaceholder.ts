@@ -90,6 +90,7 @@ export const AdvancedPlaceholder = Placeholder.extend<AdvancedPlaceholderOptions
       includeChildren: true,
       showOnlyCurrent: true,
       showOnlyWhenEditable: true,
+      dataAttribute: 'data-placeholder',
       placeholder: (props) => getPlaceholderText(props as PlaceholderContext),
     };
   },

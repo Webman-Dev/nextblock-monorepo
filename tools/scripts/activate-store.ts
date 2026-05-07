@@ -426,8 +426,8 @@ async function activateStore() {
   }
 
 
-  // 8. Seed Product: NextBlock CMS E-commerce Premium
-  console.log('Seeding Product: NextBlock CMS E-commerce Premium...');
+  // 8. Seed Product: NextBlock™ CMS E-commerce Premium
+  console.log('Seeding Product: NextBlock™ CMS E-commerce Premium...');
   const productSlug = 'nextblock-cms-ecommerce-premium';
   
   // A. Find an uploader (Admin)
@@ -482,7 +482,7 @@ async function activateStore() {
               file_path: mediaKeyClean, // Critical for frontend URL resolution
               file_type: 'image/webp',
               size_bytes: 150000, 
-              description: 'NextBlock Cover Image',
+              description: 'NextBlock™ Cover Image',
               folder: 'images'
           });
           
@@ -542,17 +542,17 @@ async function activateStore() {
               
           if (!existingProduct) {
               console.log('Creating product...');
-              const descriptionText = "NextBlock CMS E-commerce Premium. E-commerce is just the beginning and more projects are coming. This 1-year license (invitation through GitHub) grants you access to the premium repository features for $150/year. Support the development of the ultimate Next.js CMS.";
+              const descriptionText = "NextBlock™ CMS E-commerce Premium. E-commerce is just the beginning and more projects are coming. This 1-year license (invitation through GitHub) grants you access to the premium repository features for $150/year. Support the development of the ultimate Next.js CMS.";
               
               const { data: newProduct, error: productError } = await supabase
                   .from('products')
                   .insert({
                       sku: 'NB-PREMIUM-001',
-                      title: 'NextBlock CMS E-commerce Premium',
+                      title: 'NextBlock™ CMS E-commerce Premium',
                       slug: productSlug,
                       price: 15000, // $150.00
                       status: 'active',
-                      short_description: '1-Year License for NextBlock Premium features (GitHub Invitation).',
+                      short_description: '1-Year License for NextBlock™ Premium features (GitHub Invitation).',
                       description_json: {
                           type: 'doc',
                           content: [
@@ -594,7 +594,7 @@ async function activateStore() {
                         file_path: mediaKeyClean, 
                         file_type: 'image/webp',
                         size_bytes: 150000, 
-                        description: 'NextBlock Cover Image Alt',
+                        description: 'NextBlock™ Cover Image Alt',
                         folder: 'images'
                    });
 

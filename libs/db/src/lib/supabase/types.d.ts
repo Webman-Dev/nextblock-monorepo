@@ -293,6 +293,15 @@ export type Database = {
                 Row: {
                     created_at: string;
                     customer_details: Json | null;
+                    freemius_last_event_type: string | null;
+                    freemius_last_synced_at: string | null;
+                    freemius_license_id: string | null;
+                    freemius_plan_id: string | null;
+                    freemius_product_id: string | null;
+                    freemius_subscription_id: string | null;
+                    freemius_trial_ends_at: string | null;
+                    freemius_trial_id: string | null;
+                    freemius_user_id: string | null;
                     id: string;
                     invoice_number: string | null;
                     paid_at: string | null;
@@ -304,6 +313,15 @@ export type Database = {
                 Insert: {
                     created_at?: string;
                     customer_details?: Json | null;
+                    freemius_last_event_type?: string | null;
+                    freemius_last_synced_at?: string | null;
+                    freemius_license_id?: string | null;
+                    freemius_plan_id?: string | null;
+                    freemius_product_id?: string | null;
+                    freemius_subscription_id?: string | null;
+                    freemius_trial_ends_at?: string | null;
+                    freemius_trial_id?: string | null;
+                    freemius_user_id?: string | null;
                     id?: string;
                     invoice_number?: string | null;
                     paid_at?: string | null;
@@ -315,6 +333,15 @@ export type Database = {
                 Update: {
                     created_at?: string;
                     customer_details?: Json | null;
+                    freemius_last_event_type?: string | null;
+                    freemius_last_synced_at?: string | null;
+                    freemius_license_id?: string | null;
+                    freemius_plan_id?: string | null;
+                    freemius_product_id?: string | null;
+                    freemius_subscription_id?: string | null;
+                    freemius_trial_ends_at?: string | null;
+                    freemius_trial_id?: string | null;
+                    freemius_user_id?: string | null;
                     id?: string;
                     invoice_number?: string | null;
                     paid_at?: string | null;
@@ -482,12 +509,14 @@ export type Database = {
                     excerpt: string | null;
                     feature_image_id: string | null;
                     id: number;
+                    label: string | null;
                     language_id: number;
                     meta_description: string | null;
                     meta_title: string | null;
                     published_at: string | null;
                     slug: string;
                     status: Database["public"]["Enums"]["page_status"];
+                    subtitle: string | null;
                     title: string;
                     translation_group_id: string;
                     updated_at: string;
@@ -499,12 +528,14 @@ export type Database = {
                     excerpt?: string | null;
                     feature_image_id?: string | null;
                     id?: number;
+                    label?: string | null;
                     language_id: number;
                     meta_description?: string | null;
                     meta_title?: string | null;
                     published_at?: string | null;
                     slug: string;
                     status?: Database["public"]["Enums"]["page_status"];
+                    subtitle?: string | null;
                     title: string;
                     translation_group_id?: string;
                     updated_at?: string;
@@ -516,12 +547,14 @@ export type Database = {
                     excerpt?: string | null;
                     feature_image_id?: string | null;
                     id?: number;
+                    label?: string | null;
                     language_id?: number;
                     meta_description?: string | null;
                     meta_title?: string | null;
                     published_at?: string | null;
                     slug?: string;
                     status?: Database["public"]["Enums"]["page_status"];
+                    subtitle?: string | null;
                     title?: string;
                     translation_group_id?: string;
                     updated_at?: string;

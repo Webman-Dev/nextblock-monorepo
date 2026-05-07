@@ -1,5 +1,5 @@
 import React from "react";
-import { validateBlockContent, VideoEmbedBlockContent } from '../../../lib/blocks/blockRegistry';
+import type { VideoEmbedBlockContent } from '../../../lib/blocks/blockRegistry';
 
 interface VideoEmbedBlockRendererProps {
   content: VideoEmbedBlockContent;
@@ -11,12 +11,6 @@ const VideoEmbedBlockRenderer: React.FC<VideoEmbedBlockRendererProps> = ({
   languageId,
 }) => {
   void languageId;
-  // Optional: Validate content against registry schema
-  const validation = validateBlockContent("video_embed", content);
-  if (!validation.isValid) {
-    console.warn("Invalid video embed content:", validation.errors);
-  }
-
   if (!content.url) {
     return null;
   }

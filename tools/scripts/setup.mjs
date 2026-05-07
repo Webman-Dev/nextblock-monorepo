@@ -10,7 +10,7 @@ const __dirname = dirname(__filename);
 const REPO_ROOT = resolve(__dirname, '../..');
 
 async function main() {
-  console.log(chalk.bold.green('🚀 NextBlock CMS Developer Setup Wizard'));
+  console.log(chalk.bold.green('🚀 NextBlock™ CMS Developer Setup Wizard'));
   console.log(chalk.gray('This script will help you configure your local environment and link Supabase.'));
   console.log('');
 

@@ -67,6 +67,58 @@ export async function deleteProductAction(id: string) {
   revalidatePath('/cms/products');
 }
 
+function normalizeProductIds(productIds: string[]) {
+  return Array.from(
+    new Set(
+      productIds
+        .map((id) => id.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+export async function bulkDeleteProductsAction(productIds: string[]) {
+  const ids = normalizeProductIds(productIds);
+
+  if (ids.length === 0) {
+    return { success: false, error: 'Select at least one product.' };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase.from('products').delete().in('id', ids);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath('/cms/products');
+  return { success: true, count: ids.length };
+}
+
+export async function bulkDraftProductsAction(productIds: string[]) {
+  const ids = normalizeProductIds(productIds);
+
+  if (ids.length === 0) {
+    return { success: false, error: 'Select at least one product.' };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('products')
+    .update({
+      status: 'draft',
+      updated_at: new Date().toISOString(),
+    })
+    .in('id', ids);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath('/cms/products');
+  return { success: true, count: ids.length };
+}
+
 export async function createProductAttributeAction(input: { name: string; slug?: string }) {
   const supabase = getServiceRoleSupabaseClient();
   const name = input.name.trim();

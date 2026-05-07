@@ -1,6 +1,6 @@
-# NextBlock CMS Monorepo Architecture Guide
+# NextBlock™ CMS Monorepo Architecture Guide
 
-This guide summarizes how the NextBlock CMS workspace is organized, how shared code is packaged, and which conventions keep the monorepo maintainable.
+This guide summarizes how the NextBlock™ CMS workspace is organized, how shared code is packaged, and which conventions keep the monorepo maintainable.
 
 ## 1. High-Level Layout
 

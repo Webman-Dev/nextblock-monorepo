@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import {
   Button,
   Card,
@@ -8,9 +8,8 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Checkbox,
   Label,
-  RadioGroup,
-  RadioGroupItem,
 } from '@nextblock-cms/ui';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useFormStatus } from 'react-dom';
@@ -27,103 +26,108 @@ interface ConfigStatus {
 }
 
 export function PaymentsClient({
-  initialProvider,
+  initialEnabledProviders,
   configStatus,
   saveAction,
 }: {
-  initialProvider: 'stripe' | 'freemius';
+  initialEnabledProviders: {
+    stripe: boolean;
+    freemius: boolean;
+  };
   configStatus: ConfigStatus;
   saveAction: (formData: FormData) => Promise<void>;
 }) {
-  const [provider, setProvider] = useState<'stripe' | 'freemius'>(initialProvider);
+  const [enabledProviders, setEnabledProviders] = useState(initialEnabledProviders);
 
   const isStripeReady = configStatus?.stripe?.hasKeys;
   const isFreemiusReady = configStatus?.freemius?.hasKeys;
 
   return (
     <form action={saveAction} className="space-y-6 max-w-3xl p-8">
-      <input type="hidden" name="provider" value={provider} />
+      <input
+        type="hidden"
+        name="stripe_enabled"
+        value={enabledProviders.stripe ? 'true' : 'false'}
+      />
+      <input
+        type="hidden"
+        name="freemius_enabled"
+        value={enabledProviders.freemius ? 'true' : 'false'}
+      />
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Payment Settings</h1>
         <p className="text-sm text-muted-foreground">
-          Configure how you accept payments on your store.
+          Enable the payment providers your store needs. Physical products use Stripe and digital
+          products use Freemius.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Payment Provider</CardTitle>
+          <CardTitle>Payment Providers</CardTitle>
           <CardDescription>
-            Select the payment gateway to use for checkout.
+            You can run both providers at the same time. Each product picks its provider from its
+            product type.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <RadioGroup value={provider} onValueChange={(v: string) => setProvider(v as 'stripe' | 'freemius')}>
-            <div
-              className={`flex items-start space-x-3 space-y-0 rounded-md border p-4 ${
-                provider === 'stripe' ? 'border-primary bg-accent/10' : ''
-              }`}
-            >
-              <RadioGroupItem value="stripe" id="stripe" className="mt-1" />
-              <div className="grid gap-1.5 leading-none w-full">
-                <Label htmlFor="stripe" className="font-semibold text-base cursor-pointer">
-                  Physical Goods & Services (Powered by Stripe Connect)
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Select this provider to process payments for physical merchandise, in-person
-                  consulting, and standard e-commerce. (Note: You are responsible for your own tax
-                  liability).
-                </p>
-
-                {!isStripeReady && (
-                  <MissingKeysGuide
-                    provider="Stripe"
-                    missingKeys={configStatus.stripe.missing}
-                    docsUrl="https://dashboard.stripe.com/apikeys"
-                    docsLabel="Stripe Dashboard -> Developers -> API Keys"
-                  />
-                )}
-                {isStripeReady && (
-                  <div className="mt-2 text-sm text-green-600 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Ready to process payments</span>
-                  </div>
-                )}
+          <ProviderToggleCard
+            id="stripe-enabled"
+            label="Stripe for Physical Products"
+            description="Use Stripe Checkout for physical merchandise and other shippable goods."
+            checked={enabledProviders.stripe}
+            disabled={!isStripeReady}
+            onCheckedChange={(checked) =>
+              setEnabledProviders((current) => ({
+                ...current,
+                stripe: checked,
+              }))
+            }
+            ready={isStripeReady}
+          >
+            {!isStripeReady ? (
+              <MissingKeysGuide
+                provider="Stripe"
+                missingKeys={configStatus.stripe.missing}
+                docsUrl="https://dashboard.stripe.com/apikeys"
+                docsLabel="Stripe Dashboard -> Developers -> API Keys"
+              />
+            ) : (
+              <div className="mt-2 text-sm text-green-600 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Ready to process physical product checkout</span>
               </div>
-            </div>
+            )}
+          </ProviderToggleCard>
 
-            <div
-              className={`flex items-start space-x-3 space-y-0 rounded-md border p-4 ${
-                provider === 'freemius' ? 'border-primary bg-accent/10' : ''
-              }`}
-            >
-              <RadioGroupItem value="freemius" id="freemius" className="mt-1" />
-              <div className="grid gap-1.5 leading-none w-full">
-                <Label htmlFor="freemius" className="font-semibold text-base cursor-pointer">
-                  Digital Goods & Software (Powered by Freemius)
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Select this MoR to automatically handle global tax compliance, VAT, and software
-                  licensing for digital downloads and SaaS subscriptions.
-                </p>
-
-                {!isFreemiusReady && (
-                  <MissingKeysGuide
-                    provider="Freemius"
-                    missingKeys={configStatus.freemius.missing}
-                    docsUrl="https://dashboard.freemius.com/"
-                    docsLabel="Freemius Dashboard -> Developers -> Credentials"
-                  />
-                )}
-                {isFreemiusReady && (
-                  <div className="mt-2 text-sm text-green-600 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Ready to process payments</span>
-                  </div>
-                )}
+          <ProviderToggleCard
+            id="freemius-enabled"
+            label="Freemius for Digital Products"
+            description="Use Freemius for software licenses, SaaS plans, and other digital products."
+            checked={enabledProviders.freemius}
+            disabled={!isFreemiusReady}
+            onCheckedChange={(checked) =>
+              setEnabledProviders((current) => ({
+                ...current,
+                freemius: checked,
+              }))
+            }
+            ready={isFreemiusReady}
+          >
+            {!isFreemiusReady ? (
+              <MissingKeysGuide
+                provider="Freemius"
+                missingKeys={configStatus.freemius.missing}
+                docsUrl="https://dashboard.freemius.com/"
+                docsLabel="Freemius Dashboard -> Developers -> Credentials"
+              />
+            ) : (
+              <div className="mt-2 text-sm text-green-600 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Ready to process digital product checkout</span>
               </div>
-            </div>
-          </RadioGroup>
+            )}
+          </ProviderToggleCard>
 
           <div className="flex justify-end pt-4">
             <SaveButton />
@@ -138,6 +142,61 @@ function SaveButton() {
   const { pending } = useFormStatus();
 
   return <Button type="submit" disabled={pending}>{pending ? 'Saving...' : 'Save Changes'}</Button>;
+}
+
+function ProviderToggleCard({
+  id,
+  label,
+  description,
+  checked,
+  disabled,
+  ready,
+  onCheckedChange,
+  children,
+}: {
+  id: string;
+  label: string;
+  description: string;
+  checked: boolean;
+  disabled: boolean;
+  ready: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-md border p-4">
+      <div className="flex items-start gap-3">
+        <Checkbox
+          id={id}
+          checked={checked}
+          disabled={disabled}
+          onCheckedChange={(value) => onCheckedChange(Boolean(value))}
+          className="mt-1"
+        />
+        <div className="grid gap-1.5 leading-none w-full">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <Label htmlFor={id} className="font-semibold text-base cursor-pointer">
+              {label}
+            </Label>
+            <span
+              className={`text-xs font-medium ${
+                checked ? 'text-foreground' : 'text-muted-foreground'
+              }`}
+            >
+              {checked ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+          <p className="text-sm text-muted-foreground">{description}</p>
+          {!ready && (
+            <p className="text-xs text-amber-700">
+              This provider cannot be enabled until all required environment variables are present.
+            </p>
+          )}
+          {children}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function MissingKeysGuide({

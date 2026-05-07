@@ -9,6 +9,12 @@ import { OrderPrintButton } from './OrderPrintButton';
 import { OrderStatusForm } from './OrderStatusForm';
 import type { OrderCustomerDetails } from './types';
 
+const formatMinorUnitPrice = (amount: number, currency = 'usd') =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+  }).format(amount / 100);
+
 export async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [order, invoice] = await Promise.all([
@@ -104,10 +110,7 @@ export async function OrderDetailPage({ params }: { params: Promise<{ id: string
               label="Total"
               value={
                 typeof order.total === 'number'
-                  ? new Intl.NumberFormat('en-US', {
-                      style: 'currency',
-                      currency: (order.currency || 'usd').toUpperCase(),
-                    }).format(order.total)
+                  ? formatMinorUnitPrice(order.total, order.currency || 'usd')
                   : '--'
               }
             />
@@ -167,6 +170,7 @@ function MetaRow({
 function StatusBadge({ status, size = 'md' }: { status: string; size?: 'md' | 'lg' }) {
   let colorClass = 'bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-gray-300';
   if (status === 'paid') colorClass = 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
+  if (status === 'trial') colorClass = 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300';
   if (status === 'pending') colorClass = 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
   if (status === 'shipped') colorClass = 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
   if (status === 'cancelled') colorClass = 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300';

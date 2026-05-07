@@ -407,7 +407,7 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
           parentBlockId: parentBlockIdStr,
           columnIndex,
           blockIndexInColumn,
-          blockData: nestedBlockData,
+          blockData: nestedBlockData as unknown as NestedBlockData,
         });
       } else {
         console.error("Nested block not found at specified indices:", { parentBlockIdStr, columnIndex, blockIndexInColumn });

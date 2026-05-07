@@ -1,6 +1,6 @@
 import React from 'react';
 import { FeaturedProductBlock } from '../../../lib/blocks/FeaturedProductBlock';
-import { FeaturedProductBlockContent } from '../../../lib/blocks/ecommerce-block-schemas';
+import type { FeaturedProductBlockContent } from '../../../lib/blocks/ecommerce-block-schemas';
 
 interface FeaturedProductBlockRendererProps {
   content: FeaturedProductBlockContent;

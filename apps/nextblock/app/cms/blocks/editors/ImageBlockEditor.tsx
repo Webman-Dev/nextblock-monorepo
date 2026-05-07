@@ -21,8 +21,7 @@ export type ImageBlockContent = {
 import { ImageIcon, X as XIcon } from 'lucide-react';
 import MediaPickerDialog from "../../media/components/MediaPickerDialog"; // Import the upload form
 import { BlockEditorProps } from '../components/BlockEditorModal';
-
-const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
+import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
 
 export default function ImageBlockEditor({ content, onChange }: BlockEditorProps<Partial<ImageBlockContent>>) {
   const [selectedMediaObjectKey, setSelectedMediaObjectKey] = useState<string | null | undefined>(content.object_key);
@@ -86,16 +85,17 @@ export default function ImageBlockEditor({ content, onChange }: BlockEditorProps
   };
 
   const displayObjectKey = content.object_key || selectedMediaObjectKey;
+  const displayImageUrl = resolveMediaUrl(displayObjectKey);
 
   return (
     <div className="space-y-3 p-3 border-t mt-2">
       <Label>Image</Label>
       <div className="mt-1 p-3 border rounded-md bg-muted/30 min-h-[120px] flex flex-col items-center justify-center">
         {isLoadingMediaDetails && <p>Loading image details...</p>}
-        {!isLoadingMediaDetails && displayObjectKey && typeof content.width === 'number' && typeof content.height === 'number' && content.width > 0 && content.height > 0 ? (
+        {!isLoadingMediaDetails && displayImageUrl && typeof content.width === 'number' && typeof content.height === 'number' && content.width > 0 && content.height > 0 ? (
           <div className="relative group inline-block" style={{ maxWidth: content.width, maxHeight: 200 }}> {/* Max height for editor preview consistency */}
             <Image
-              src={`${R2_BASE_URL}/${displayObjectKey}`}
+              src={displayImageUrl}
               alt={content.alt_text || "Selected image"}
               width={content.width}
               height={content.height}
@@ -110,10 +110,10 @@ export default function ImageBlockEditor({ content, onChange }: BlockEditorProps
               onClick={handleRemoveImage} title="Remove Image"
             > <XIcon className="h-3 w-3" /> </Button>
           </div>
-        ) : !isLoadingMediaDetails && displayObjectKey ? ( // Fallback if width/height are missing but key exists
+        ) : !isLoadingMediaDetails && displayImageUrl ? ( // Fallback if width/height are missing but key exists
           <div className="relative group inline-block">
             <Image
-              src={`${R2_BASE_URL}/${displayObjectKey}`}
+              src={displayImageUrl}
               alt={content.alt_text || "Selected image"}
               width={300}
               height={200}

@@ -5,6 +5,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import type { Database } from '@nextblock-cms/db' // Relative path from components/
 import { useCurrentContent } from '../context/CurrentContentContext';
 import { useTranslations } from '@nextblock-cms/utils';
+import { DeferredGlobalSearch } from './DeferredGlobalSearch';
 
 type Logo = Database['public']['Tables']['logos']['Row'] & { media: (Database['public']['Tables']['media']['Row'] & { alt_text: string | null }) | null };
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
@@ -67,11 +68,21 @@ interface ResponsiveNavProps {
   navItems: NavigationItem[]
   canAccessCms: boolean;
   cmsDashboardLinkHref: string;
-  headerAuthComponent: React.ReactNode;
-  languageSwitcherComponent: React.ReactNode;
-  currencySwitcherComponent?: React.ReactNode;
-  cartIconComponent?: React.ReactNode;
+  renderHeaderAuth: () => React.ReactNode;
+  renderLanguageSwitcher: () => React.ReactNode;
+  renderCurrencySwitcher?: () => React.ReactNode;
+  renderCartIcon?: () => React.ReactNode;
   isEcommerceActive?: boolean;
+}
+
+function ClientOnly({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return mounted ? <>{children}</> : null;
 }
 
 export default function ResponsiveNav({
@@ -79,12 +90,12 @@ export default function ResponsiveNav({
   navItems,
   canAccessCms,
   cmsDashboardLinkHref,
-  headerAuthComponent,
-  languageSwitcherComponent,
-  currencySwitcherComponent,
+  renderHeaderAuth,
+  renderLanguageSwitcher,
+  renderCurrencySwitcher,
   logo,
   siteTitle,
-  cartIconComponent,
+  renderCartIcon,
   isEcommerceActive = false,
 }: ResponsiveNavProps) {
   const { t } = useTranslations();
@@ -124,7 +135,7 @@ export default function ResponsiveNav({
     } else if (currentContent.type === 'product') {
       editPathDetails = {
         href: `/cms/products/${currentContent.id}/edit`,
-        label: 'Edit Product', // Using hardcoded string as t('edit_product') might not exist yet
+        label: t('edit_product'),
       };
     }
   }
@@ -292,7 +303,7 @@ export default function ResponsiveNav({
                 alt={logo.media.alt_text || siteTitle || 'Nextblock'}
                 width={logo.media.width || 100}
                 height={logo.media.height || 32}
-                className="h-14 w-auto object-contain"
+                className="h-14 w-auto object-contain" style={{ width: 'auto', height: '56px' }}
                 priority
               />
             ) : (
@@ -301,7 +312,7 @@ export default function ResponsiveNav({
                 alt={siteTitle || 'Nextblock'}
                 width={120}
                 height={40}
-                className="h-14 w-auto object-contain"
+                className="h-14 w-auto object-contain" style={{ width: 'auto', height: '56px' }}
                 priority
               />
             )}
@@ -313,20 +324,26 @@ export default function ResponsiveNav({
         </div>
 
         {/* Right side: Auth, LangSwitcher (desktop), Hamburger (mobile) */}
-        <div className="hidden md:flex items-center space-x-4">
+        <div className="hidden min-h-10 items-center gap-4 md:flex">
           {canAccessCms && editPathDetails && (
             <Link href={editPathDetails.href} className="hover:underline font-semibold text-sm text-foreground mr-3 flex items-center">
               <Pencil className="w-4 h-4 mr-2" />
               {editPathDetails.label}
             </Link>
           )}
-          {headerAuthComponent}
-          {languageSwitcherComponent}
-          {currencySwitcherComponent}
-          {cartIconComponent}
+          <ClientOnly>
+            <DeferredGlobalSearch isEcommerceActive={isEcommerceActive} variant="desktop" />
+            {renderHeaderAuth()}
+            {renderLanguageSwitcher()}
+            {renderCurrencySwitcher?.()}
+            {renderCartIcon?.()}
+          </ClientOnly>
         </div>
 
-        <div className="md:hidden flex items-center z-[60]">
+        <div className="md:hidden flex items-center gap-2 z-[60]">
+          <ClientOnly>
+            <DeferredGlobalSearch isEcommerceActive={isEcommerceActive} variant="mobile" />
+          </ClientOnly>
           <button
             ref={menuButtonRef}
             onClick={toggleMobileMenu}
@@ -392,10 +409,12 @@ export default function ResponsiveNav({
           </nav>
 
           <div className="mt-auto pt-6 border-t border-foreground/20 space-y-4">
-            <div >{headerAuthComponent}</div>
-            <div >{cartIconComponent}</div>
-            <div >{currencySwitcherComponent}</div>
-            <div >{languageSwitcherComponent}</div>
+            <ClientOnly>
+              <div>{renderHeaderAuth()}</div>
+              <div>{renderCartIcon?.()}</div>
+              <div>{renderCurrencySwitcher?.()}</div>
+              <div>{renderLanguageSwitcher()}</div>
+            </ClientOnly>
           </div>
         </div>
       </div>

@@ -8,6 +8,40 @@ import type {
 export type TranslationMap = Record<string, string>;
 export type { CurrencyRecord, PriceMap, SalePriceMap };
 
+export type ProductType = 'physical' | 'digital';
+export type EcommercePaymentProvider = 'stripe' | 'freemius';
+
+export interface EnabledPaymentProviders {
+  stripe: boolean;
+  freemius: boolean;
+}
+
+export const DEFAULT_ENABLED_PAYMENT_PROVIDERS: EnabledPaymentProviders = {
+  stripe: false,
+  freemius: false,
+};
+
+export function normalizeEnabledPaymentProviders(
+  value: unknown
+): EnabledPaymentProviders {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { ...DEFAULT_ENABLED_PAYMENT_PROVIDERS };
+  }
+
+  const candidate = value as Partial<Record<keyof EnabledPaymentProviders, unknown>>;
+
+  return {
+    stripe: candidate.stripe === true,
+    freemius: candidate.freemius === true,
+  };
+}
+
+export function derivePaymentProviderFromProductType(
+  productType: ProductType
+): EcommercePaymentProvider {
+  return productType === 'digital' ? 'freemius' : 'stripe';
+}
+
 // Basic Product interface for UI components
 // In a real app, this might come from database types, but we define the UI requirement here.
 export interface ProductAttributeTerm {
@@ -63,6 +97,8 @@ export interface Product {
   sale_price?: number | null;
   sale_prices?: SalePriceMap | null;
   is_taxable?: boolean;
+  product_type?: ProductType;
+  payment_provider?: EcommercePaymentProvider;
   price_range_min?: number | null;
   price_range_max?: number | null;
   image_url?: string; // Resolved URL of the primary image
@@ -72,6 +108,8 @@ export interface Product {
   stock?: number | null;
   freemius_product_id?: string;
   freemius_plan_id?: string;
+  trial_period_days?: number | null;
+  trial_requires_payment_method?: boolean | null;
   custom_props?: any;
   language_id: number;
   translation_group_id: string;
@@ -88,6 +126,22 @@ export interface Product {
     prices?: PriceMap | null;
     sale_price?: number | null;
     sale_prices?: SalePriceMap | null;
+  }>;
+  freemius_plans?: Array<{
+    id: string;
+    name: string;
+    title: string | null;
+    freemius_pricing: Array<{
+      id: string;
+      license_quota: number | null;
+      api_monthly_price: number | null;
+      api_annual_price: number | null;
+      api_lifetime_price: number | null;
+      override_monthly_price: number | null;
+      override_annual_price: number | null;
+      override_lifetime_price: number | null;
+      is_active: boolean;
+    }>;
   }>;
 }
 
@@ -137,7 +191,7 @@ export interface TaxCalculationResult {
 
 export type BillingCycle = 'monthly' | 'annual' | 'lifetime';
 
-export type CartItemProvider = 'stripe' | 'freemius';
+export type CartItemProvider = EcommercePaymentProvider;
 
 export type CartItem = Product & {
   quantity: number;
@@ -147,9 +201,51 @@ export type CartItem = Product & {
   provider?: CartItemProvider;
   /** For Freemius items: the selected billing cycle */
   billing_cycle?: BillingCycle;
+  /** For Freemius items: explicitly requested trial mode (free vs paid) */
+  trial_preference?: 'free' | 'paid';
   /** The MSRP/Original price before any sale_price logic */
   original_price?: number;
 };
+
+export function getProductPaymentProvider(
+  value:
+    | Pick<Product, 'payment_provider' | 'product_type' | 'freemius_product_id'>
+    | Pick<CartItem, 'provider' | 'payment_provider' | 'product_type' | 'freemius_product_id'>
+    | null
+    | undefined
+): EcommercePaymentProvider | null {
+  if (!value) {
+    return null;
+  }
+
+  if ('provider' in value && value.provider) {
+    return value.provider;
+  }
+
+  if (value.payment_provider) {
+    return value.payment_provider;
+  }
+
+  if (value.product_type) {
+    return derivePaymentProviderFromProductType(value.product_type);
+  }
+
+  if ('freemius_product_id' in value && value.freemius_product_id) {
+    return 'freemius';
+  }
+
+  return null;
+}
+
+export function isDigitalProduct(
+  value:
+    | Pick<Product, 'payment_provider' | 'product_type' | 'freemius_product_id'>
+    | Pick<CartItem, 'provider' | 'payment_provider' | 'product_type' | 'freemius_product_id'>
+    | null
+    | undefined
+): boolean {
+  return getProductPaymentProvider(value) === 'freemius';
+}
 
 export interface CheckoutProviderError {
   error: string;
@@ -159,8 +255,10 @@ export interface CheckoutProviderError {
 }
 
 /** Helper to check if a cart item is a Freemius digital product */
-export function isDigitalItem(item: Pick<CartItem, 'provider'>): boolean {
-  return item.provider === 'freemius';
+export function isDigitalItem(
+  item: Pick<CartItem, 'provider' | 'payment_provider' | 'product_type' | 'freemius_product_id'>
+): boolean {
+  return isDigitalProduct(item);
 }
 
 export interface PaymentProvider {
@@ -180,6 +278,8 @@ export interface FreemiusPlanAPI {
   name: string;
   title: string;
   description: string;
+  trial_period?: number | string | null;
+  is_require_subscription?: boolean | number | string | null;
   created: string;
   updated: string;
 }

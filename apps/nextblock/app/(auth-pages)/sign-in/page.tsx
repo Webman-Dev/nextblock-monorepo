@@ -63,12 +63,12 @@ export default function Login() {
           <Input name="email" placeholder={t('you_at_example_com')} required />
           <div className="flex justify-between items-center">
             <Label htmlFor="password">{t('password')}</Label>
-            <Link
+            {process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true' && <Link
               className="text-xs text-foreground underline"
               href="/forgot-password"
             >
               {t('forgot_password')}
-            </Link>
+            </Link>}
           </div>
           <Input
             type="password"

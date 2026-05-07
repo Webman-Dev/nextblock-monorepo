@@ -1,55 +1,26 @@
-<div align="center">
-  # 📚 NextBlock CMS Documentation
-  
-  **Your comprehensive guide to building, extending, and mastering NextBlock.**
+# NextBlock CMS Documentation
 
-  <p align="center">
-    <a href="../README.md"><strong>◀️ Back to Home</strong></a>
-  </p>
-</div>
+This folder is the source-of-truth reference set for the NextBlock monorepo.
+The numbered files are written from live code, routes, migrations, and shipped
+library surfaces rather than historical planning notes.
 
----
+## Start Here
 
-## 🚀 Start Here: Tutorials
+- Product and architecture overview: [01-PROJECT-OVERVIEW.md](./01-PROJECT-OVERVIEW.md)
+- Commerce capabilities: [02-ECOMMERCE-CAPABILITIES.md](./02-ECOMMERCE-CAPABILITIES.md)
+- CMS editor and block system: [03-CMS-AND-EDITOR.md](./03-CMS-AND-EDITOR.md)
+- Database, auth, and migrations: [04-DATABASE-AND-AUTH.md](./04-DATABASE-AND-AUTH.md)
+- Contributor workflow and local operations: [05-DEVELOPER-GUIDE.md](./05-DEVELOPER-GUIDE.md)
+- CLI and scaffolded project flow: [06-CLI-AND-SCAFFOLDING.md](./06-CLI-AND-SCAFFOLDING.md)
+- Block SDK and extensibility surface: [07-BLOCK-SDK-AND-EXTENSIBILITY.md](./07-BLOCK-SDK-AND-EXTENSIBILITY.md)
 
-Choose your path based on what you want to achieve.
+## Audience Guide
 
-| **I want to...**    | **Read This**                                 | **Description**                                                                          |
-| :------------------ | :-------------------------------------------- | :--------------------------------------------------------------------------------------- |
-| **Build a Website** | [👉 **User Quickstart**](./QUICKSTART.md)     | **Recommended.** Use the CLI (`npm create nextblock`) to launch a production-ready site. |
-| **Modify the Core** | [🛠️ **Contributor Guide**](./CONTRIBUTING.md) | For developers contributing to the monorepo.                                             |
-| **Get Premium**     | [💎 **Premium Access**](./PREMIUM.md)         | How to buy and activate License Keys.                                                    |
-
----
-
-## 🤖 AI / Agent Notes
-
-- Check `.agent/skills` first for task-specific instructions, project guardrails, and subsystem workflows.
-- Start with this file, then read [**Architecture & Internals**](./ARCHITECTURE.md) and the most relevant linked docs before making broad changes.
-- Use the `context7` MCP tool whenever you need the latest framework or library documentation instead of guessing.
-
----
-
-## 📖 Architecture & Reference
-
-Deep dives into the internal workings.
-
-### 🧠 Core Concepts
-
-- [**Architecture & Internals**](./ARCHITECTURE.md): The "Constitution" and core app structure.
-- [**Licensing Model**](./LICENSING.md): How the License Key system works internally.
-- [**Monorepo Structure**](./MONOREPO.md): Nx workspace organization.
-- [**CLI Tooling**](./CLI.md): How `create-nextblock` works.
-- [**Sandbox Automations**](./SANDBOX_RESET.md): Public demo environment architecture.
-
-### 🧱 Editor & Blocks
-
-- [**Editor System**](./EDITOR.md): Layout system, Tiptap implementation, and CSP.
-- [**Widget Specs**](./EDITOR_WIDGETS.md): Specs for CTA and Alert widgets.
-- [**Branding**](./BRANDING.md): Design language and assets.
-
----
-
-<p align="center">
-  <sub>Need help? Check the <a href="https://github.com/nextblock-cms/nextblock/issues">GitHub Issues</a> or join the community.</sub>
-</p>
+- New contributors: read `01`, then `04`, then `05`.
+- Commerce work: read `02`, then `04`.
+- Editor or page-builder work: read `03`, then `07`.
+- CLI or template work: read `06`.
+- AI agents: start with this index, then move directly to the subsystem file that
+  matches the task. Treat `apps/nextblock`, `libs/*`, and
+  `libs/db/src/supabase/migrations` as the final authority if a doc and code ever
+  disagree.

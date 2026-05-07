@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Button, Skeleton } from '@nextblock-cms/ui';
+import { Button } from '@nextblock-cms/ui/button';
+import { Skeleton } from '@nextblock-cms/ui/Skeleton';
 import { useCart } from '../use-cart';
 import { ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
@@ -14,6 +15,7 @@ import {
 } from '@nextblock-cms/utils';
 import { useCurrency } from '../CurrencyProvider';
 import { convertMinorUnitAmount } from '../currency';
+import { getTrialSummary } from '../trials';
 
 interface SubscriptionSelectorProps {
   product: Product;
@@ -98,10 +100,15 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
       sku: product.sku,
       language_id: product.language_id,
       translation_group_id: product.translation_group_id,
+      product_type: 'digital',
+      payment_provider: 'freemius',
       provider: 'freemius',
       billing_cycle: selectedCycle,
       freemius_product_id: product.freemius_product_id,
       freemius_plan_id: planId, // Overwrite if we got a real plan id
+      trial_period_days: product.trial_period_days ?? 0,
+      trial_requires_payment_method: product.trial_requires_payment_method ?? false,
+      is_taxable: product.is_taxable,
       currency_code: activeCurrencyCode,
     });
 
@@ -134,6 +141,8 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
       if (hasMonthly) setSelectedCycle('monthly');
       else if (hasLifetime) setSelectedCycle('lifetime');
   }
+
+  const trialSummary = getTrialSummary(product);
 
   let displayPriceMinor = product.price;
   if (selectedCycle === 'monthly' && pricing.monthly_price != null) {
@@ -213,11 +222,20 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
           {selectedCycle !== 'lifetime' && (
               <span className="text-muted-foreground ml-2">/ {selectedCycle === 'annual' ? t('ecommerce.year') : t('ecommerce.month')}</span>
           )}
+          {trialSummary && (
+            <div className="mt-3 text-sm font-medium text-emerald-700">
+              {trialSummary.label}
+              <span className="mx-2 text-muted-foreground">|</span>
+              <span className="text-muted-foreground">
+                {trialSummary.paymentRequirementLabel}
+              </span>
+            </div>
+          )}
       </div>
 
       <Button onClick={handleAddToCart} className="w-full h-14 text-lg font-bold shadow-md transition-all hover:shadow-lg active:scale-[0.98]">
         <ShoppingCart className="mr-2 h-5 w-5" />
-        {t('ecommerce.get_license')}
+        {trialSummary?.label ? `Start ${trialSummary.label}` : t('ecommerce.get_license')}
       </Button>
     </div>
   );

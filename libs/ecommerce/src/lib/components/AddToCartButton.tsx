@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@nextblock-cms/ui';
+import { Button } from '@nextblock-cms/ui/button';
 import { ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useCart } from '../use-cart';
 import { useTranslations } from '@nextblock-cms/utils';
 
-import { Product } from '../types';
+import { getProductPaymentProvider, isDigitalProduct, Product } from '../types';
 import { useCurrency } from '../CurrencyProvider';
 
 interface AddToCartButtonProps {
@@ -23,7 +23,7 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
   const { t } = useTranslations();
   const { activeCurrencyCode } = useCurrency();
   const requiresVariantSelection =
-    Boolean(product.has_variants) && !product.variant_id && !(product as any).freemius_product_id;
+    Boolean(product.has_variants) && !product.variant_id && !isDigitalProduct(product);
 
   if (requiresVariantSelection) {
     return (
@@ -45,6 +45,7 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
   const { addItem } = store;
 
   const handleAddToCart = () => {
+    const provider = getProductPaymentProvider(product) ?? 'stripe';
 
     const { success, error } = addItem({
       id: product.variant_id || product.id,
@@ -61,7 +62,13 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
       stock: product.stock,
       language_id: product.language_id,
       translation_group_id: product.translation_group_id,
+      product_type: product.product_type,
+      payment_provider: product.payment_provider ?? provider,
+      provider,
       freemius_product_id: product.freemius_product_id, // include just in case it wasn't intercepted
+      freemius_plan_id: product.freemius_plan_id,
+      trial_period_days: product.trial_period_days ?? 0,
+      trial_requires_payment_method: product.trial_requires_payment_method ?? false,
       has_variants: product.has_variants,
       variant_id: product.variant_id,
       variant_label: product.variant_label,

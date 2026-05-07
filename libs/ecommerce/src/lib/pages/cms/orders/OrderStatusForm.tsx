@@ -14,6 +14,7 @@ const ORDER_STATUS_OPTIONS: Array<{
   label: string;
 }> = [
   { value: 'pending', label: 'Pending' },
+  { value: 'trial', label: 'Trial' },
   { value: 'paid', label: 'Paid' },
   { value: 'shipped', label: 'Shipped' },
   { value: 'cancelled', label: 'Cancelled' },

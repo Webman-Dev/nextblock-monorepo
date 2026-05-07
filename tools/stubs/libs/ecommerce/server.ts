@@ -1,5 +1,5 @@
 // Stub implementation for Open Source version - SERVER
-console.warn('⚠️  NextBlock E-commerce Server: Stub version.');
+console.warn('⚠️  NextBlock™ E-commerce Server: Stub version.');
 
 export const createCheckoutSession = async () => ({ error: 'Not implemented', url: null });
 export const handleStripeWebhook = async () => ({ received: true });

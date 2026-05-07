@@ -2,11 +2,26 @@
 import React from "react";
 import dynamic from "next/dynamic";
 import type { Database } from "@nextblock-cms/db";
-import { getBlockDefinition, type SectionBlockContent, type BlockType } from "../lib/blocks/blockRegistry";
+import type { SectionBlockContent } from "../lib/blocks/blockRegistry";
+import { getPublicBlockRendererLoader } from "./blocks/publicRendererLoaders";
 
 type Block = Database['public']['Tables']['blocks']['Row'];
 import HeroBlockRenderer from "./blocks/renderers/HeroBlockRenderer"; // Static import for LCP
 import ClientTextBlockRenderer from "./blocks/renderers/ClientTextBlockRenderer"; // Static import for client component
+
+const ECOMMERCE_BLOCK_TYPES = new Set([
+  "product_grid",
+  "featured_product",
+  "cart",
+  "checkout",
+  "product_details",
+]);
+
+function loadEcommerceBlockRenderer(blockType: string) {
+  return import("./blocks/ecommerceRendererLoaders").then((module) =>
+    module.loadEcommerceBlockRenderer(blockType)
+  );
+}
 
 interface BlockRendererProps {
   blocks: Block[];
@@ -23,9 +38,34 @@ const DynamicBlockRenderer: React.FC<DynamicBlockRendererProps> = ({
   block,
   languageId,
 }) => {
-  const blockDefinition = getBlockDefinition(block.block_type as BlockType);
+  const rendererLoader = getPublicBlockRendererLoader(block.block_type);
   
-  if (!blockDefinition) {
+  if (!rendererLoader) {
+    if (ECOMMERCE_BLOCK_TYPES.has(block.block_type)) {
+      const EcommerceRendererComponent = dynamic(
+        () => loadEcommerceBlockRenderer(block.block_type),
+        {
+          loading: () => (
+            <div className="my-4 p-4 border rounded-lg">
+              <div className="h-8 w-1/2 mb-4 bg-muted/40 animate-pulse rounded" />
+              <div className="h-4 w-full mb-2 bg-muted/40 animate-pulse rounded" />
+              <div className="h-4 w-3/4 bg-muted/40 animate-pulse rounded" />
+            </div>
+          ),
+          ssr: true,
+        }
+      ) as React.ComponentType<any>;
+
+      return (
+        <EcommerceRendererComponent
+          content={block.content}
+          languageId={languageId}
+          excludeProductId={excludeProductId}
+          excludeTranslationGroupId={excludeTranslationGroupId}
+        />
+      );
+    }
+
     return (
       <div
         key={block.id}
@@ -46,22 +86,9 @@ const DynamicBlockRenderer: React.FC<DynamicBlockRendererProps> = ({
     return <ClientTextBlockRenderer content={block.content as any} languageId={languageId} />;
   }
 
-  // Check if the block definition provides a direct component (e.g., from SDK plugins)
-  if (blockDefinition.RendererComponent) {
-    const RendererComponent = blockDefinition.RendererComponent;
-    return (
-      <RendererComponent
-        content={block.content}
-        languageId={languageId}
-        isInEditor={false} // Assuming public view
-        className="my-4"
-      />
-    );
-  }
-
   // Create dynamic component with proper SSR handling for other blocks
   const RendererComponent = dynamic(
-    () => import(`./blocks/renderers/${blockDefinition.rendererComponentFilename}`),
+    rendererLoader,
     {
       loading: () => (
         <div className="my-4 p-4 border rounded-lg">

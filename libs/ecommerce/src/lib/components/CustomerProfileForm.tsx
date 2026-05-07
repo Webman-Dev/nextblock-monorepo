@@ -10,23 +10,27 @@ import {
   Avatar,
   AvatarFallback,
   AvatarImage,
-  Badge,
-  Button,
+} from '@nextblock-cms/ui/avatar';
+import { Badge } from '@nextblock-cms/ui/badge';
+import { Button } from '@nextblock-cms/ui/button';
+import {
   Card,
   CardContent,
   CardFooter,
   CardHeader,
   CardTitle,
-  Checkbox,
-  Input,
-  Label,
+} from '@nextblock-cms/ui/card';
+import { Checkbox } from '@nextblock-cms/ui/checkbox';
+import { Input } from '@nextblock-cms/ui/input';
+import { Label } from '@nextblock-cms/ui/label';
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Separator,
-} from '@nextblock-cms/ui';
+} from '@nextblock-cms/ui/select';
+import { Separator } from '@nextblock-cms/ui/separator';
 import { updateProfile, type ProfileUpdateData } from '../server-actions/customer-actions';
 import { addressesMatch, emptyCustomerAddress, normalizeCustomerAddress } from '../customer';
 import { createClient, type Database } from '@nextblock-cms/db';

@@ -11,6 +11,7 @@ import ContentLanguageSwitcher from "../../../components/ContentLanguageSwitcher
 import CopyContentFromLanguage from "../../../components/CopyContentFromLanguage";
 import RevisionHistoryButton from "../../../revisions/RevisionHistoryButton";
 import { UploadFolderProvider } from '../../../media/UploadFolderContext';
+import { CortexAiPageContextRegistrar } from "../../../components/CortexAiPageContext";
 import type { Database } from "@nextblock-cms/db";
 
 type Page = Database["public"]["Tables"]["pages"]["Row"];
@@ -40,6 +41,16 @@ export default function EditPageClient({
 }: EditPageClientProps) {
   return (
     <UploadFolderProvider defaultFolder={`pages/${page.slug}/`}>
+      <CortexAiPageContextRegistrar
+        context={{
+          contentType: "page",
+          entityId: page.id,
+          languageId: page.language_id,
+          slug: page.slug,
+          title: page.title,
+          translationGroupId: page.translation_group_id,
+        }}
+      />
       <div className="space-y-8 w-full mx-auto px-6">
         <div className="flex justify-between items-center flex-wrap gap-4 w-full">
           <div className="flex items-center gap-3">

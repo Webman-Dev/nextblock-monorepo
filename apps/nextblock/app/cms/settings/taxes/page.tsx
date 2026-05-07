@@ -3,7 +3,7 @@ import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { TaxesPage as TaxesPageUI } from '@nextblock-cms/ecommerce/server';
 
 export const metadata = {
-  title: 'Tax Settings | NextBlock CMS',
+  title: 'Tax Settings | NextBlock™ CMS',
 };
 
 export default async function TaxesPageWrapper({

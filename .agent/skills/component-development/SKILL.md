@@ -13,16 +13,16 @@ description: When you are creating or modifying UI components. Use this skill to
 
 ## 2. Directory Structure (`libs/ui`)
 
-- `src/components/ui`: Base Shadcn/UI components (Button, Input, etc.).
-- `src/components`: Custom complex components.
+- `src/lib/`: All UI components — both base Shadcn/UI components (Button, Input, etc.) and custom complex components live here as flat files.
 - `src/styles/globals.css`: Tailwind configuration and global styles.
+- `src/styles/`: Additional CSS files (theme, typography, animations, base, components).
 
 ## 3. Workflow
 
 ### Creating a new component
 
 1.  **Shared Component:**
-    - Create in `libs/ui/src/components/<Name>/<Name>.tsx`.
+    - Create in `libs/ui/src/lib/<Name>.tsx`.
     - Export from `libs/ui/src/index.ts`.
     - Use `nx lint ui` to verify.
 2.  **App-Specific Component:**

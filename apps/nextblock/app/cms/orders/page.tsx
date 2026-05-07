@@ -3,7 +3,7 @@ import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { redirect } from 'next/navigation';
 
 export const metadata = {
-  title: 'Orders | NextBlock CMS',
+  title: 'Orders | NextBlock™ CMS',
 };
 
 export default async function OrdersPageWrapper({

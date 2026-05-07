@@ -6,6 +6,7 @@ import ColumnEditor from "../components/ColumnEditor";
 import { SectionBlockContent } from '../../../../lib/blocks/blockRegistry';
 import { getBlockDefinition } from '../../../../lib/blocks/blockRegistry';
 import SectionConfigPanel from "../components/SectionConfigPanel";
+import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
 
 
 
@@ -40,7 +41,6 @@ interface SectionBlockEditorProps {
 function generateBackgroundStyles(background: SectionBlockContent['background']) {
   const styles: React.CSSProperties = {};
   let className = '';
-  const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 
   switch (background?.type) {
     case 'theme': {
@@ -72,7 +72,10 @@ function generateBackgroundStyles(background: SectionBlockContent['background'])
     
     case 'image':
       if (background.image) {
-        const imageUrl = `${R2_BASE_URL}/${background.image.object_key}`;
+        const imageUrl = resolveMediaUrl(background.image.object_key);
+        if (!imageUrl) {
+          break;
+        }
         styles.backgroundSize = background.image.size || 'cover';
         styles.backgroundPosition = background.image.position || 'center';
 

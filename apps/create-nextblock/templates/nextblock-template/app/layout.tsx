@@ -4,15 +4,15 @@ import '@nextblock-cms/editor/styles/editor.css';
 // app/layout.tsx
 import { EnvVarWarning } from "../components/env-var-warning";
 import { SandboxBanner } from "../components/SandboxBanner";
-import { SpeedInsights } from "@vercel/speed-insights/next"
  
-import { GoogleTagManager } from '@next/third-parties/google'
 import { ThemeSwitcher } from '../components/theme-switcher';
 import type { Metadata } from 'next';
 import Header from "../components/Header";
 import FooterNavigation from "../components/FooterNavigation";
+import { DeferredGoogleTagManager } from '../components/DeferredGoogleTagManager';
+import { DeferredSpeedInsights } from '../components/DeferredSpeedInsights';
 import { Providers } from './providers';
-import { CartDrawer } from '@nextblock-cms/ecommerce';
+import { DeferredCartDrawer } from '../components/DeferredCartDrawer';
 import { ToasterProvider } from './ToasterProvider';
 import { createClient as createSupabaseServerClient, getProfileWithRoleServerSide } from '@nextblock-cms/db/server';
 import { getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
@@ -112,19 +112,19 @@ async function loadLayoutData() {
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: 'Nextblock CMS',
-  description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
+  title: 'Nextblock™ CMS',
+  description: 'Nextblock™ CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
   openGraph: {
-    title: 'Nextblock CMS',
-    description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
+    title: 'Nextblock™ CMS',
+    description: 'Nextblock™ CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
     url: defaultUrl,
-    siteName: 'Nextblock CMS',
+    siteName: 'Nextblock™ CMS',
     images: [
       {
         url: '/images/metadata_image.webp',
         width: 1200,
         height: 630,
-        alt: 'Nextblock CMS',
+        alt: 'Nextblock™ CMS',
       },
     ],
     locale: 'en_US',
@@ -132,8 +132,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Nextblock CMS',
-    description: 'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
+    title: 'Nextblock™ CMS',
+    description: 'Nextblock™ CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.',
     images: ['/images/metadata_image.webp'],
   },
   icons: {
@@ -177,13 +177,7 @@ export default async function RootLayout({
       <head>
         <title>{metadata.title as string}</title>
         <meta name="description" content={metadata.description as string} />
-        <link rel="preconnect" href="https://ppcppwsfnrptznvbxnsz.supabase.co" />
-        <link rel="dns-prefetch" href="https://ppcppwsfnrptznvbxnsz.supabase.co" />
-        <link rel="dns-prefetch" href="https://aws-0-us-east-1.pooler.supabase.com" />
-        <link rel="dns-prefetch" href="https://db.ppcppwsfnrptznvbxnsz.supabase.co" />
-        <link rel="dns-prefetch" href="https://realtime.supabase.com" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <SpeedInsights/>
       </head>
       <body className="bg-background text-foreground min-h-screen flex flex-col">
         <Providers
@@ -227,9 +221,10 @@ export default async function RootLayout({
             </footer>
           </div>
 
-          {isEcommerceActive && <CartDrawer />}
+          {isEcommerceActive && <DeferredCartDrawer />}
         </Providers>
-        <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID || ""} />
+        <DeferredSpeedInsights />
+        <DeferredGoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID} nonce={nonce} />
       </body>
     </html>
   );

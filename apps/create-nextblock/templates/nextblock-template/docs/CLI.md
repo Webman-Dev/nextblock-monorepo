@@ -1,6 +1,6 @@
 # create-nextblock CLI Overview
 
-The `create-nextblock` package is the primary onboarding surface for developers. It scaffolds a runnable NextBlock CMS project in minutes and showcases the platform’s developer experience.
+The `create-nextblock` package is the primary onboarding surface for developers. It scaffolds a runnable NextBlock™ CMS project in minutes and showcases the platform’s developer experience.
 
 ## Goals and Positioning
 

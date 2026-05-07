@@ -21,19 +21,10 @@ import { getLogos } from './actions'
 import BrandingSettingsForm from './components/BrandingSettingsForm'
 import MediaImage from '../../media/components/MediaImage'
 import DeleteLogoButton from './components/DeleteLogoButton'
-
-const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || ''
+import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl'
 
 function resolveLogoSrc(objectKey?: string | null) {
-  if (!objectKey) {
-    return null
-  }
-
-  if (objectKey.startsWith('/') || objectKey.startsWith('http')) {
-    return objectKey
-  }
-
-  return `${R2_BASE_URL}/${objectKey}`
+  return resolveMediaUrl(objectKey)
 }
 
 export default async function CmsLogosListPage() {

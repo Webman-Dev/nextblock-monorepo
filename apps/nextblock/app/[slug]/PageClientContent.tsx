@@ -7,7 +7,7 @@ import type { Database } from "@nextblock-cms/db";
 import { useLanguage } from '../../context/LanguageContext';
 import { useCurrentContent } from '../../context/CurrentContentContext';
 import Link from 'next/link';
-import { createClient } from '@nextblock-cms/db';
+import { getPublishedPageForLocale } from './pageClientActions';
 
 type PageType = Database['public']['Tables']['pages']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
@@ -51,8 +51,6 @@ export default function PageClientContent({ initialPageData, currentSlug, childr
   // It's initially set by the server for the slug it resolved.
   const [currentPageData, setCurrentPageData] = useState(initialPageData);
   const [isLoadingTargetLang, setIsLoadingTargetLang] = useState(false);
-  const supabase = useMemo(() => createClient(), []);
-
   // Memoize pageId and pageSlug
   const pageId = useMemo(() => currentPageData?.id, [currentPageData?.id]);
   const pageSlug = useMemo(() => currentPageData?.slug, [currentPageData?.id, currentLocale]); // include locale so updates propagate
@@ -68,24 +66,10 @@ export default function PageClientContent({ initialPageData, currentSlug, childr
       } else if (targetSlug && targetSlug === currentSlug) {
         // Same slug across languages - refetch the page in the target language and update content
         (async () => {
-          const { data, error } = await supabase
-            .from("pages")
-            .select("*, languages!inner(code), blocks(*)")
-            .eq("slug", targetSlug)
-            .eq("languages.code", currentLocale)
-            .eq("status", "published")
-            .order('order', { foreignTable: 'blocks', ascending: true })
-            .maybeSingle();
+          const data = await getPublishedPageForLocale(targetSlug, currentLocale);
 
-          if (!error && data) {
-            const langInfo = Array.isArray(data.languages) ? data.languages[0] : (data.languages as unknown as { code?: string });
-            setCurrentPageData({
-              ...(data as PageType),
-              blocks: (data as any).blocks || [],
-              language_code: langInfo?.code || currentLocale,
-              language_id: data.language_id,
-              translation_group_id: data.translation_group_id || currentPageData.translation_group_id,
-            } as typeof currentPageData);
+          if (data) {
+            setCurrentPageData(data as typeof currentPageData);
           } else {
             // fallback to refresh if fetch fails
             router.refresh();
@@ -98,7 +82,7 @@ export default function PageClientContent({ initialPageData, currentSlug, childr
         setIsLoadingTargetLang(false);
       }
     }
-  }, [currentLocale, currentPageData, currentSlug, router, initialPageData, translatedSlugs]); // Rerun if initialPageData changes (e.g. after revalidation)
+  }, [currentLocale, currentPageData, currentSlug, router, translatedSlugs]); // Rerun if route data or locale changes
 
   // Update HTML lang attribute based on the *actually displayed* content's language
   useEffect(() => {

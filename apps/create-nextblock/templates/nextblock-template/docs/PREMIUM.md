@@ -1,8 +1,8 @@
-# 💎 NextBlock Premium Access Guide
+# 💎 NextBlock™ Premium Access Guide
 
 ## Overview
 
-NextBlock uses a **Self-Hosted License Key** system. The core CMS is open-source, but specific premium features (like E-Commerce) are gated behind a license check.
+NextBlock™ uses a **Self-Hosted License Key** system. The core CMS is open-source, but specific premium features (like E-Commerce) are gated behind a license check.
 
 This guide explains how to purchase, install, and activate these premium "Packages".
 
@@ -10,9 +10,9 @@ This guide explains how to purchase, install, and activate these premium "Packag
 
 ## 1. Buying a Package
 
-We use **Lemon Squeezy** as our Merchant of Record.
+We use **Freemius** as our Merchant of Record.
 
-1.  Visit the [NextBlock Pricing Page](https://nextblock.ca/pricing).
+1.  Visit the [NextBlock™ Pricing Page](https://nextblock.ca/pricing).
 2.  Choose the package you want (e.g., **E-Commerce Pro**).
 3.  Complete the checkout.
 4.  You will receive a **License Key** via email (e.g., `5D4F-2X3C-...`).
@@ -23,7 +23,7 @@ We use **Lemon Squeezy** as our Merchant of Record.
 
 Once you have your key, you need to bind it to your CMS instance.
 
-1.  Log into your **NextBlock CMS Admin Dashboard**.
+1.  Log into your **NextBlock™ CMS Admin Dashboard**.
 2.  Navigate to **Settings** -> **Packages** (`/cms/settings/packages`).
 3.  Find the package you purchased in the list (e.g., "E-Commerce Pro").
 4.  Enter your **License Key** in the input field.

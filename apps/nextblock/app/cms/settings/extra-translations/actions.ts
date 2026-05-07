@@ -1,25 +1,86 @@
 'use server';
 
 import { createClient } from '@nextblock-cms/db/server';
-import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
+import { revalidatePath, updateTag } from 'next/cache';
+import { z } from '../../../../lib/zod-config';
+
+import {
+  getOrderedTranslationLanguageCodes,
+  prepareTranslationCsvImport,
+  type TranslationWorkspaceItem,
+} from '@nextblock-cms/utils';
 
 const translationSchema = z.object({
   key: z.string().min(1, 'Key is required.'),
   en: z.string().min(1, 'English translation is required.'),
 });
 
-export async function createTranslation(prevState: unknown, formData: FormData) {
+const EXTRA_TRANSLATIONS_PATH = '/cms/settings/extra-translations';
+const PUBLIC_TRANSLATIONS_CACHE_TAG = 'public-layout-translations';
+
+type TranslationMutationState = {
+  success?: boolean;
+  translation?: TranslationWorkspaceItem;
+  error?: string;
+  errors?: Record<string, string[] | undefined>;
+};
+
+async function verifyAdmin(supabase: ReturnType<typeof createClient>) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return false;
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  return profile?.role === 'ADMIN';
+}
+
+async function getConfiguredLanguageCodes() {
   const supabase = createClient();
+  const { data, error } = await supabase
+    .from('languages')
+    .select('code, name')
+    .order('is_default', { ascending: false })
+    .order('name', { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to fetch languages: ${error.message}`);
+  }
+
+  return getOrderedTranslationLanguageCodes(data ?? []);
+}
+
+function revalidateTranslationViews() {
+  revalidatePath(EXTRA_TRANSLATIONS_PATH);
+  updateTag(PUBLIC_TRANSLATIONS_CACHE_TAG);
+}
+
+export async function createTranslation(
+  prevState: TranslationMutationState | null,
+  formData: FormData
+): Promise<TranslationMutationState> {
+  void prevState;
+
+  const supabase = createClient();
+
+  if (!(await verifyAdmin(supabase))) {
+    return { error: 'Unauthorized: Admin role required.' };
+  }
+
   const data = {
     key: formData.get('key') as string,
     en: formData.get('en') as string,
   };
 
-  const validatedFields = translationSchema.safeParse({
-    key: data.key,
-    en: data.en,
-  });
+  const validatedFields = translationSchema.safeParse(data);
 
   if (!validatedFields.success) {
     return {
@@ -27,91 +88,189 @@ export async function createTranslation(prevState: unknown, formData: FormData) 
     };
   }
 
-  const { error } = await supabase.from('translations').insert({
-    key: validatedFields.data.key,
-    translations: { en: validatedFields.data.en },
-  });
+  const { data: insertedTranslation, error } = await supabase
+    .from('translations')
+    .insert({
+      key: validatedFields.data.key,
+      translations: { en: validatedFields.data.en },
+    })
+    .select('key, translations, created_at, updated_at')
+    .single();
 
-  if (error) {
+  if (error || !insertedTranslation) {
     return {
-      error: error.message,
+      error: error?.message ?? 'Failed to create translation.',
     };
   }
 
-  revalidatePath('/cms/settings/extra-translations');
+  revalidateTranslationViews();
 
   return {
     success: true,
+    translation: insertedTranslation as TranslationWorkspaceItem,
   };
 }
 
 export async function getTranslations() {
   const supabase = createClient();
-  const { data, error } = await supabase.from('translations').select('key, translations, created_at, updated_at').order('key');
+  const { data, error } = await supabase
+    .from('translations')
+    .select('key, translations, created_at, updated_at')
+    .order('key');
 
   if (error) {
     console.error('Error fetching translations:', error);
     return [];
   }
 
-  return data;
+  return (data ?? []) as TranslationWorkspaceItem[];
 }
 
-export async function updateTranslation(prevState: unknown, formData: FormData) {
+export async function updateTranslation(
+  prevState: TranslationMutationState | null,
+  formData: FormData
+): Promise<TranslationMutationState> {
+  void prevState;
+
   const supabase = createClient();
-  const data = Object.fromEntries(formData as any);
+
+  if (!(await verifyAdmin(supabase))) {
+    return { error: 'Unauthorized: Admin role required.' };
+  }
+
+  const data = Object.fromEntries(formData.entries());
   const key = data.key as string;
 
   if (!key) {
     return {
-      error: 'Translation key is required',
+      error: 'Translation key is required.',
     };
   }
 
-  // First, fetch the existing translation to get current translations
+  const languageEntries = Object.entries(data).filter(
+    ([fieldKey]) => fieldKey !== 'key'
+  );
+
+  if (languageEntries.length === 0) {
+    return {
+      error: 'No translation values were provided.',
+    };
+  }
+
   const { data: existingData, error: fetchError } = await supabase
     .from('translations')
-    .select('translations')
+    .select('key, translations, created_at, updated_at')
     .eq('key', key)
     .single();
 
-  if (fetchError) {
+  if (fetchError || !existingData) {
     return {
-      error: `Failed to fetch existing translation: ${fetchError.message}`,
+      error: fetchError
+        ? `Failed to fetch existing translation: ${fetchError.message}`
+        : `Translation with key "${key}" was not found.`,
     };
   }
 
-  // Merge new translations with existing ones
-  const existingTranslations = (existingData?.translations as Record<string, string>) || {};
-  const newTranslations: { [key: string]: string } = { ...existingTranslations };
-  
-  for (const [formKey, value] of Object.entries(data)) {
-    if (formKey !== 'key') {
-      newTranslations[formKey] = value as string;
-    }
+  const nextTranslations = {
+    ...((existingData.translations as Record<string, string>) ?? {}),
+  };
+
+  for (const [languageCode, value] of languageEntries) {
+    nextTranslations[languageCode] = value as string;
   }
 
-  const { data: updateResult, error } = await supabase
+  const { data: updatedTranslation, error } = await supabase
     .from('translations')
-    .update({ translations: newTranslations })
+    .update({ translations: nextTranslations })
     .eq('key', key)
-    .select();
+    .select('key, translations, created_at, updated_at')
+    .single();
 
-  if (error) {
+  if (error || !updatedTranslation) {
     return {
-      error: error.message,
+      error:
+        error?.message ??
+        `Translation with key "${key}" could not be updated.`,
     };
   }
 
-  if (!updateResult || updateResult.length === 0) {
-    return {
-      error: `Translation with key "${key}" not found or could not be updated`,
-    };
-  }
-
-  revalidatePath('/cms/settings/extra-translations');
+  revalidateTranslationViews();
 
   return {
     success: true,
+    translation: updatedTranslation as TranslationWorkspaceItem,
   };
+}
+
+export async function importTranslationsCsvAction(csvText: string) {
+  try {
+    const supabase = createClient();
+
+    if (!(await verifyAdmin(supabase))) {
+      return {
+        success: false as const,
+        createdCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
+        error: 'Unauthorized: Admin role required.',
+      };
+    }
+
+    const [existingTranslations, languageCodes] = await Promise.all([
+      getTranslations(),
+      getConfiguredLanguageCodes(),
+    ]);
+    const importResult = prepareTranslationCsvImport({
+      csvText,
+      existingItems: existingTranslations,
+      languageCodes,
+    });
+
+    if (!importResult.success) {
+      return importResult;
+    }
+
+    const rowsToUpsert = [
+      ...importResult.createdRows,
+      ...importResult.updatedRows,
+    ].map((row) => ({
+      key: row.key,
+      translations: row.translations,
+    }));
+
+    if (rowsToUpsert.length > 0) {
+      const { error } = await supabase
+        .from('translations')
+        .upsert(rowsToUpsert, { onConflict: 'key' });
+
+      if (error) {
+        return {
+          success: false as const,
+          createdCount: 0,
+          updatedCount: 0,
+          skippedCount: importResult.skippedCount,
+          error: error.message,
+        };
+      }
+    }
+
+    revalidateTranslationViews();
+
+    return {
+      success: true as const,
+      createdCount: importResult.createdCount,
+      updatedCount: importResult.updatedCount,
+      skippedCount: importResult.skippedCount,
+      translations: await getTranslations(),
+    };
+  } catch (error) {
+    return {
+      success: false as const,
+      createdCount: 0,
+      updatedCount: 0,
+      skippedCount: 0,
+      error:
+        error instanceof Error ? error.message : 'Failed to import translation CSV.',
+    };
+  }
 }

@@ -31,8 +31,10 @@ export async function createPost(formData: FormData) {
     title: formData.get("title") as string,
     slug: formData.get("slug") as string,
     language_id: parseInt(formData.get("language_id") as string, 10),
+    label: formData.get("label") as string || null,
     status: formData.get("status") as PageStatus,
     excerpt: formData.get("excerpt") as string || null,
+    subtitle: formData.get("subtitle") as string || null,
     published_at: formData.get("published_at") as string || null,
     meta_title: formData.get("meta_title") as string || null,
     meta_description: formData.get("meta_description") as string || null,
@@ -63,7 +65,7 @@ export async function createPost(formData: FormData) {
   const { data: newPost, error: createError } = await supabase
     .from("posts")
     .insert(postData)
-    .select("id, title, slug, language_id, translation_group_id, excerpt, feature_image_id") // Added excerpt, feature_image_id
+    .select("id, title, slug, language_id, translation_group_id, label, excerpt, subtitle, feature_image_id")
     .single();
 
   if (createError) {
@@ -92,9 +94,11 @@ export async function createPost(formData: FormData) {
           language_id: lang.id,
           title: `[${lang.code.toUpperCase()}] ${newPost.title}`,
           slug: placeholderSlug,
+          label: newPost.label || null,
           status: 'draft',
           published_at: null,
           excerpt: `Placeholder for ${lang.code.toUpperCase()} translation. Original excerpt: ${newPost.excerpt || ''}`.substring(0, 250),
+          subtitle: `Placeholder for ${lang.code.toUpperCase()} translation. Original subtitle: ${newPost.subtitle || ''}`.substring(0, 500),
           meta_title: null,
           meta_description: null,
           translation_group_id: newPost.translation_group_id,
@@ -151,8 +155,10 @@ export async function updatePost(postId: number, formData: FormData) {
     title: formData.get("title") as string,
     slug: formData.get("slug") as string,
     language_id: existingPost.language_id, // Use existing post's language_id
+    label: formData.get("label") as string || null,
     status: formData.get("status") as PageStatus,
     excerpt: formData.get("excerpt") as string || null,
+    subtitle: formData.get("subtitle") as string || null,
     published_at: formData.get("published_at") as string || null,
     meta_title: formData.get("meta_title") as string || null,
     meta_description: formData.get("meta_description") as string || null,
@@ -177,7 +183,9 @@ export async function updatePost(postId: number, formData: FormData) {
     title: rawFormData.title,
     slug: rawFormData.slug,
     language_id: rawFormData.language_id,
+    label: rawFormData.label,
     excerpt: rawFormData.excerpt,
+    subtitle: rawFormData.subtitle,
     status: rawFormData.status,
     published_at: publishedAtISO,
     meta_title: rawFormData.meta_title,
@@ -302,7 +310,9 @@ type UpsertPostPayload = {
   author_id: string | null;
   title: string;
   slug: string;
+  label?: string | null;
   excerpt?: string | null;
+  subtitle?: string | null;
   status: PageStatus;
   published_at?: string | null;
   meta_title?: string | null;

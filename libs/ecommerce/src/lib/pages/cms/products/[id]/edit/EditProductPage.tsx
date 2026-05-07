@@ -10,7 +10,10 @@ import Link from 'next/link';
 import { Button } from '@nextblock-cms/ui';
 import { mapRawVariantRelations } from '../../../../../variation-utils';
 import { deleteProductAction, updateProductAction } from '../../server-actions';
-import { getPaymentSettings } from '../../../payments/queries';
+import {
+  getEnabledPaymentProviders,
+  getStoreConfigStatus,
+} from '../../../payments/queries';
 import { getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
 import { minorUnitAmountToMajor } from '@nextblock-cms/utils';
 import { normalizeCurrencyRecord } from '../../../../../currency';
@@ -43,21 +46,25 @@ export async function EditProductPage({
     notFound();
   }
 
-  const paymentProvider = await getPaymentSettings();
-  const [pricingPlans, globalAttributesRaw, currenciesResult] = await Promise.all([
-    paymentProvider === 'freemius' && product.freemius_product_id
-      ? getFreemiusPricingByProductId(product.id)
-      : Promise.resolve(null),
-    getGlobalProductAttributes(),
-    getServiceRoleSupabaseClient()
-      .from('currencies')
-      .select(
-        'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
-      )
-      .eq('is_active', true)
-      .order('code', { ascending: true })
-      .then((result) => result.data || []),
-  ]);
+  const isDigitalProduct =
+    product.product_type === 'digital' || product.payment_provider === 'freemius';
+  const [enabledProviders, configStatus, pricingPlans, globalAttributesRaw, currenciesResult] =
+    await Promise.all([
+      getEnabledPaymentProviders(),
+      getStoreConfigStatus(),
+      isDigitalProduct && product.freemius_product_id
+        ? getFreemiusPricingByProductId(product.id)
+        : Promise.resolve(null),
+      getGlobalProductAttributes(),
+      getServiceRoleSupabaseClient()
+        .from('currencies')
+        .select(
+          'code, symbol, exchange_rate, is_default, is_active, auto_sync_product_prices, auto_update_exchange_rate, exchange_rate_source, exchange_rate_updated_at, rounding_mode, rounding_increment, rounding_charm_amount'
+        )
+        .eq('is_active', true)
+        .order('code', { ascending: true })
+        .then((result) => result.data || []),
+    ]);
 
   const currencies = (currenciesResult || []).map((currency) =>
     normalizeCurrencyRecord(currency)
@@ -143,6 +150,8 @@ export async function EditProductPage({
             ),
             is_taxable:
               typeof product.is_taxable === 'boolean' ? product.is_taxable : true,
+            product_type: product.product_type,
+            payment_provider: product.payment_provider,
             status: product.status as 'draft' | 'active' | 'archived',
             short_description: product.short_description ?? undefined,
             description_json: product.description_json,
@@ -158,6 +167,8 @@ export async function EditProductPage({
             }, {}),
             freemius_plan_id: product.freemius_plan_id ?? undefined,
             freemius_product_id: product.freemius_product_id ?? undefined,
+            trial_period_days: product.trial_period_days ?? 0,
+            trial_requires_payment_method: product.trial_requires_payment_method ?? false,
             language_id: product.language_id,
             translation_group_id: product.translation_group_id,
             product_media: product.product_media,
@@ -197,10 +208,11 @@ export async function EditProductPage({
         availableLanguagesProp={availableLanguagesProp}
         globalAttributesProp={globalAttributes}
         currenciesProp={currencies}
-        paymentProvider={paymentProvider}
+        enabledProviders={enabledProviders}
+        configStatus={configStatus}
         updateAction={updateProductAction.bind(null, product.id)}
         freemiusDashboardNode={
-          paymentProvider === 'freemius' &&
+          isDigitalProduct &&
           product.freemius_product_id &&
           pricingPlans &&
           FreemiusPricingDashboardComponent ? (

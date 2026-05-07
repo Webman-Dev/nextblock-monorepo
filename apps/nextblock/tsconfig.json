@@ -10,6 +10,7 @@
     "noEmit": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "composite": false,
     "incremental": true,
     "plugins": [
       {
@@ -21,7 +22,7 @@
       "react",
       "react-dom"
     ],
-    "target": "ES2017",
+    "target": "ES2022",
     "lib": [
       "dom",
       "dom.iterable",
@@ -39,7 +40,8 @@
     ".next/types/**/*.ts",
     "../../libs/ui/tailwind.config.js",
     "../../libs/**/*.ts",
-    "../../libs/**/*.tsx"
+    "../../libs/**/*.tsx",
+    "../../schemas/**/*.ts"
   ],
   "exclude": [
     "node_modules",

@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import Link from "next/link";
-import { buttonVariants } from "@nextblock-cms/ui";
+import { buttonVariants } from "@nextblock-cms/ui/button";
 import { cn } from "@nextblock-cms/utils";
 
 export type ButtonBlockContent = {

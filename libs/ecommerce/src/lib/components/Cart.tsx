@@ -1,15 +1,16 @@
 'use client';
 
+import { useMemo } from 'react';
+import { Badge } from '@nextblock-cms/ui/badge';
+import { Button } from '@nextblock-cms/ui/button';
 import {
-  Button,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Badge,
-} from '@nextblock-cms/ui';
+} from '@nextblock-cms/ui/table';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { getCartItemActivePrice, useCartSubtotal } from '../cart-store';
 import { useCart } from '../use-cart';
@@ -18,6 +19,7 @@ import { useRouter } from 'next/navigation';
 import { formatPrice, useTranslations } from '@nextblock-cms/utils';
 import { ShippingEstimator } from './ShippingEstimator';
 import { useCurrency } from '../CurrencyProvider';
+import { getTrialSummary } from '../trials';
 
 export const Cart = () => {
   const router = useRouter();
@@ -25,10 +27,28 @@ export const Cart = () => {
   const subtotal = useCartSubtotal();
   const { t } = useTranslations();
   const { activeCurrencyCode, currencies } = useCurrency();
+  const items = store?.items ?? [];
+
+  const physicalSubtotal = useMemo(
+    () =>
+      items.reduce((sum, item) => {
+        if (isDigitalItem(item)) {
+          return sum;
+        }
+
+        const activePrice = getCartItemActivePrice(item, {
+          currencyCode: activeCurrencyCode,
+          currencies,
+        });
+
+        return sum + (activePrice.sale_price ?? activePrice.price) * item.quantity;
+      }, 0),
+    [activeCurrencyCode, currencies, items]
+  );
 
   if (!store) return null;
 
-  const { items, updateQuantity, removeItem } = store;
+  const { updateQuantity, removeItem } = store;
   const getAllocatedSkuQuantity = (sku: string) =>
     items.reduce((accumulator, cartItem) => {
       if (isDigitalItem(cartItem) || cartItem.sku !== sku) {
@@ -78,6 +98,7 @@ export const Cart = () => {
                     currencyCode: activeCurrencyCode,
                     currencies,
                   });
+                  const trialSummary = getTrialSummary(item);
 
                   return (
                     <TableRow key={item.id}>
@@ -108,6 +129,11 @@ export const Cart = () => {
                             {isDigitalItem(item) && item.billing_cycle && (
                               <div className="mt-1 text-xs capitalize text-muted-foreground">
                                 {item.billing_cycle} Subscription
+                              </div>
+                            )}
+                            {trialSummary && (
+                              <div className="mt-1 text-xs font-medium text-emerald-700">
+                                {trialSummary.label} - {trialSummary.paymentRequirementLabel}
                               </div>
                             )}
                           </div>
@@ -193,7 +219,7 @@ export const Cart = () => {
                     </p>
                     
                     {items.some(item => !isDigitalItem(item)) && (
-                        <ShippingEstimator cartTotal={subtotal} />
+                        <ShippingEstimator physicalSubtotal={physicalSubtotal} />
                     )}
 
                     <Button className="w-full mt-4" size="lg" onClick={handleCheckout}>

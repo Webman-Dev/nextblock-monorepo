@@ -2,13 +2,14 @@
 
 import { Product } from '../types';
 import { AddToCartButton } from './AddToCartButton';
-import { cn, formatPrice } from '@nextblock-cms/utils';
+import { cn, formatPrice, majorUnitAmountToMinor, useTranslations } from '@nextblock-cms/utils';
 import Link from 'next/link';
 import { useCurrency } from '../CurrencyProvider';
 import {
   resolvePriceForCurrency,
   resolvePriceRangeForCurrency,
 } from '../currency';
+import { getTrialSummary } from '../trials';
 
 interface ProductCardProps {
   product: Product;
@@ -46,9 +47,51 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
           )}`
       : formatPrice(resolvedPrice.sale_price ?? resolvedPrice.price, activeCurrencyCode);
 
+  const { t } = useTranslations();
+  const trialSummary = getTrialSummary(product);
+
+  // Freemius pricing resolution
+  const firstPlan = product.freemius_plans?.[0];
+  const firstPricing = firstPlan?.freemius_pricing?.[0];
+  const defaultCurrencyCode =
+    currencies.find((c) => c.is_default)?.code || 'USD';
+
+  const monthlyPriceMajor =
+    firstPricing?.override_monthly_price ?? firstPricing?.api_monthly_price;
+  const annualPriceMajor =
+    firstPricing?.override_annual_price ?? firstPricing?.api_annual_price;
+
+  const monthlyPriceResolved =
+    typeof monthlyPriceMajor === 'number'
+      ? resolvePriceForCurrency({
+          prices: {
+            [defaultCurrencyCode]: majorUnitAmountToMinor(
+              monthlyPriceMajor,
+              defaultCurrencyCode
+            ),
+          },
+          currencyCode: activeCurrencyCode,
+          currencies,
+        })
+      : null;
+
+  const annualPriceResolved =
+    typeof annualPriceMajor === 'number'
+      ? resolvePriceForCurrency({
+          prices: {
+            [defaultCurrencyCode]: majorUnitAmountToMinor(
+              annualPriceMajor,
+              defaultCurrencyCode
+            ),
+          },
+          currencyCode: activeCurrencyCode,
+          currencies,
+        })
+      : null;
+
   return (
-    <div className={cn("group relative flex flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition-all hover:shadow-md", className)}>
-      <Link href={`/product/${product.slug}`} className="relative aspect-square overflow-hidden bg-neutral-100">
+    <div className={cn("group relative flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm transition-all hover:shadow-md", className)}>
+      <Link href={`/product/${product.slug}`} className="relative aspect-square overflow-hidden bg-muted">
         {product.image_url ? (
           <img
             src={product.image_url}
@@ -69,16 +112,52 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
            </h3>
         </Link>
         
-        <div className="mb-4 flex items-baseline gap-2">
-          <span className="text-xl font-bold text-primary">
-            {priceLabel}
-          </span>
-          {!hasVariantPriceRange && resolvedPrice.sale_price && (
-            <span className="text-sm text-muted-foreground line-through">
-              {formatPrice(resolvedPrice.price, activeCurrencyCode)}
-            </span>
+        <div className="mb-4">
+          {product.product_type === 'digital' && (monthlyPriceResolved || annualPriceResolved) ? (
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              {monthlyPriceResolved && (
+                <div className="flex items-baseline gap-0.5">
+                  <span className="text-xl font-bold text-primary">
+                    {formatPrice(monthlyPriceResolved.price, activeCurrencyCode)}
+                  </span>
+                  <span className="text-xs font-medium text-muted-foreground lowercase">
+                    / {t('ecommerce.month')}
+                  </span>
+                </div>
+              )}
+              {annualPriceResolved && (
+                <div className="flex items-baseline gap-0.5">
+                  <span className={cn("font-bold text-primary", monthlyPriceResolved ? "text-lg" : "text-xl")}>
+                    {formatPrice(annualPriceResolved.price, activeCurrencyCode)}
+                  </span>
+                  <span className="text-xs font-medium text-muted-foreground lowercase">
+                    / {t('ecommerce.year')}
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-baseline gap-2">
+              <span className="text-xl font-bold text-primary">
+                {priceLabel}
+              </span>
+              {!hasVariantPriceRange && resolvedPrice.sale_price && (
+                <span className="text-sm text-muted-foreground line-through">
+                  {formatPrice(resolvedPrice.price, activeCurrencyCode)}
+                </span>
+              )}
+            </div>
           )}
         </div>
+
+        {trialSummary && (
+          <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+            <div className="font-semibold">{trialSummary.label}</div>
+            <div className="text-emerald-700">
+              {trialSummary.paymentRequirementLabel}
+            </div>
+          </div>
+        )}
 
         <div className="mt-auto">
           <AddToCartButton 

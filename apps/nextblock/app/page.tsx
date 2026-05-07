@@ -6,13 +6,12 @@ import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
 import PageClientContent from './[slug]/PageClientContent';
 import { getPageDataBySlug } from './[slug]/page.utils';
 import BlockRenderer from '../components/BlockRenderer';
+import { resolveMetaDescription } from './lib/seo';
 
 const DEFAULT_LOCALE = 'en';
 const LANGUAGE_COOKIE_KEY = 'NEXT_USER_LOCALE';
 
 export const revalidate = 360;
-export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
 
 interface PageTranslation {
   slug: string;
@@ -91,7 +90,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: pageData.meta_title || pageData.title,
-    description: pageData.meta_description || '',
+    description: resolveMetaDescription(pageData.meta_description),
     alternates: {
       canonical: `${siteUrl}/`,
       languages: Object.keys(alternates).length > 0 ? alternates : undefined,

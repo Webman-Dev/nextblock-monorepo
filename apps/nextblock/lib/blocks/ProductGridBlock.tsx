@@ -1,10 +1,10 @@
-import { ProductGrid } from '@nextblock-cms/ecommerce';
+import { ProductGrid } from '@nextblock-cms/ecommerce/components/ProductGrid';
 import { getProducts } from '@nextblock-cms/ecommerce/server';
-import { getVariantEffectivePriceRange } from '@nextblock-cms/ecommerce';
-import { normalizePriceMap, normalizeSalePriceMap } from '@nextblock-cms/ecommerce';
+import { normalizePriceMap, normalizeSalePriceMap } from '@nextblock-cms/ecommerce/currency';
+import { getVariantEffectivePriceRange } from '@nextblock-cms/ecommerce/variation-utils';
 
 
-import { ProductGridBlockContent } from './ecommerce-block-schemas';
+import type { ProductGridBlockContent } from './ecommerce-block-schemas';
 
 import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
 
@@ -30,12 +30,14 @@ export const ProductGridBlock = async ({
     limit: content.limit + 2, 
   }); 
   
-  if (!products) {
+  const productRows = (products || []) as any[];
+
+  if (productRows.length === 0) {
       return null; // Silent fail if no products
   }
 
   // 1. Filter out current product and its translations
-  const filteredProducts = products.filter(p => {
+  const filteredProducts = productRows.filter((p) => {
     if (excludeProductId && p.id === excludeProductId) return false;
     if (excludeTranslationGroupId && p.translation_group_id === excludeTranslationGroupId) return false;
     return true;
@@ -48,6 +50,7 @@ export const ProductGridBlock = async ({
 
   // 3. Transform DB products to UI products
   const uiProducts = filteredProducts.slice(0, content.limit).map(p => {
+      const productRecord = p as any;
       let imageUrl = undefined;
       // Accessing the nested media object correctly (array of objects with media property)
       // The type from getProducts select is: product_media: { media: { file_path: string | null } | null }[]
@@ -74,12 +77,20 @@ export const ProductGridBlock = async ({
         sale_price: typeof p.sale_price === 'number' ? p.sale_price : undefined,
         sale_prices: normalizeSalePriceMap(p.sale_prices),
         is_taxable: p.is_taxable ?? true,
+        product_type: productRecord.product_type ?? undefined,
+        payment_provider: productRecord.payment_provider ?? undefined,
         price_range_min: variantPriceRange?.min ?? null,
         price_range_max: variantPriceRange?.max ?? null,
         image_url: imageUrl,
         short_description: p.short_description || undefined,
         language_id: p.language_id as number,
         translation_group_id: p.translation_group_id || "",
+        freemius_product_id: productRecord.freemius_product_id || undefined,
+        freemius_plan_id: productRecord.freemius_plan_id || undefined,
+        trial_period_days: productRecord.trial_period_days ?? 0,
+        trial_requires_payment_method:
+          productRecord.trial_requires_payment_method ?? false,
+        freemius_plans: productRecord.freemius_plans,
         has_variants: (p.product_variants?.length || 0) > 0,
         product_variants: (p.product_variants || []).map((variant: any) => ({
           id: variant.id,

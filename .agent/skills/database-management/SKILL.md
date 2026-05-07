@@ -25,8 +25,10 @@ description: When you need to modify the database schema, run migrations, or dep
 
 ## 3. Schema Management
 
-- **Migrations:** SQL migrations are located in `libs/db/src` (or `supabase/migrations` depending on the exact setup - check `supabase/config.toml` workdir).
-- **Validation:** Always verify schema changes locally before pushing to production.
+- **Migrations:** SQL migrations are located in `libs/db/src/supabase/migrations`.
+- **Edit, Don't Create:** Always **edit and fix existing migration files** instead of creating new migration files — unless the change is for a totally new feature or something that genuinely can't be added to an existing file.
+- **No Local Docker:** There is no local Supabase Docker instance. The user will always reset and push the DB migrations manually via `npm run db:push`. Do not attempt to run `db:push` or `supabase db reset` yourself.
+- **Validation:** Always verify schema changes are syntactically correct SQL before leaving them for the user to push.
 
 ## 4. Troubleshooting
 

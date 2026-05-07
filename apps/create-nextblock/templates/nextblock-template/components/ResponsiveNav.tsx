@@ -311,7 +311,7 @@ export default function ResponsiveNav({
         </div>
 
         {/* Right side: Auth, LangSwitcher (desktop), Hamburger (mobile) */}
-        <div className="hidden md:flex items-center space-x-4">
+        <div className="hidden min-h-10 items-center gap-4 md:flex">
           {canAccessCms && editPathDetails && (
             <Link href={editPathDetails.href} className="hover:underline font-semibold text-sm text-foreground mr-3 flex items-center">
               <Pencil className="w-4 h-4 mr-2" />

@@ -16,6 +16,16 @@ const cmsRoutePermissions: Record<string, UserRole[]> = {
   '/cms/settings': ['ADMIN'],
 };
 
+const securityHeaders = [
+  ['X-DNS-Prefetch-Control', 'on'],
+  ['Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload'],
+  ['X-Frame-Options', 'SAMEORIGIN'],
+  ['X-Content-Type-Options', 'nosniff'],
+  ['Referrer-Policy', 'strict-origin-when-cross-origin'],
+  ['Permissions-Policy', 'camera=(), microphone=(), geolocation=()'],
+  ['Cross-Origin-Opener-Policy', 'same-origin'],
+] as const;
+
 function getRequiredRolesForPath(pathname: string): UserRole[] | null {
   const sortedPaths = Object.keys(cmsRoutePermissions).sort(
     (a, b) => b.length - a.length,
@@ -31,23 +41,209 @@ function getRequiredRolesForPath(pathname: string): UserRole[] | null {
   return null;
 }
 
-export default async function proxy(request: NextRequest) {
-  const requestHeaders = new Headers(request.headers);
-  const nonce = crypto.randomUUID();
-  requestHeaders.set('x-nonce', nonce);
+function getHttpOrigin(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
 
-  let response = NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  });
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.origin;
+    }
+  } catch (error) {
+    console.error('Invalid URL used while building CSP sources', error);
+  }
 
+  return null;
+}
+
+function uniqueSources(sources: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(sources.filter(Boolean) as string[]));
+}
+
+function createDirective(name: string, sources: Array<string | null | undefined>): string {
+  return `${name} ${uniqueSources(sources).join(' ')}`;
+}
+
+function getAssetSources(): string[] {
+  const sources: string[] = [];
+  const r2BaseOrigin = getHttpOrigin(process.env.NEXT_PUBLIC_R2_BASE_URL);
+  const r2PublicOrigin = getHttpOrigin(process.env.NEXT_PUBLIC_R2_PUBLIC_URL);
+
+  if (r2BaseOrigin) {
+    sources.push(r2BaseOrigin);
+  }
+
+  if (r2PublicOrigin) {
+    sources.push(r2PublicOrigin);
+  }
+
+  if (r2PublicOrigin && process.env.R2_BUCKET_NAME) {
+    const parsed = new URL(r2PublicOrigin);
+    sources.push(`${parsed.protocol}//${process.env.R2_BUCKET_NAME}.${parsed.hostname}`);
+  }
+
+  return uniqueSources(sources);
+}
+
+function applySecurityHeaders(
+  response: NextResponse,
+  contentSecurityPolicy?: string | null,
+): NextResponse {
+  for (const [key, value] of securityHeaders) {
+    response.headers.set(key, value);
+  }
+
+  if (contentSecurityPolicy) {
+    response.headers.set('Content-Security-Policy', contentSecurityPolicy);
+  }
+
+  return response;
+}
+
+function createRedirectResponse(
+  url: URL,
+  contentSecurityPolicy?: string | null,
+): NextResponse {
+  return applySecurityHeaders(NextResponse.redirect(url), contentSecurityPolicy);
+}
+
+function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string): string {
+  const isDev = process.env.NODE_ENV !== 'production';
+  const parsedSupabaseUrl = new URL(supabaseUrl);
+  const supabaseOrigin = parsedSupabaseUrl.origin;
+  const supabaseRealtimeOrigin = `${parsedSupabaseUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${parsedSupabaseUrl.host}`;
+  const assetSources = getAssetSources();
+
+  const googleSources = [
+    'https://www.googletagmanager.com',
+    'https://*.googletagmanager.com',
+    'https://www.google-analytics.com',
+    'https://*.google-analytics.com',
+    'https://analytics.google.com',
+    'https://stats.g.doubleclick.net',
+  ];
+
+  const vercelSources = [
+    'https://vercel.live',
+    'https://vercel.com',
+    'https://assets.vercel.com',
+    'https://vitals.vercel-insights.com',
+    'https://*.vercel-insights.com',
+  ];
+
+  const developmentHttpSources = isDev
+    ? [
+        'http://localhost:*',
+        'https://localhost:*',
+        'http://127.0.0.1:*',
+      ]
+    : [];
+  const developmentConnectSources = isDev
+    ? [
+        ...developmentHttpSources,
+        'ws://localhost:*',
+        'wss://localhost:*',
+        'ws://127.0.0.1:*',
+      ]
+    : [];
+
+  const directives = [
+    createDirective('default-src', ["'self'"]),
+    createDirective(
+      'script-src',
+      isDev
+        ? [
+            "'self'",
+            `'nonce-${nonceValue}'`,
+            "'unsafe-inline'",
+            "'unsafe-eval'",
+            'blob:',
+            'data:',
+            ...developmentHttpSources,
+          ]
+        : ["'self'", `'nonce-${nonceValue}'`, "'strict-dynamic'"],
+    ),
+    createDirective('script-src-attr', ["'none'"]),
+    createDirective('style-src', [
+      "'self'",
+      "'unsafe-inline'",
+      'https://vercel.live',
+      'https://vercel.com',
+    ]),
+    createDirective('img-src', [
+      "'self'",
+      'data:',
+      'blob:',
+      supabaseOrigin,
+      ...assetSources,
+      'https://checkout.freemius.com',
+      ...googleSources,
+      ...vercelSources,
+      ...developmentHttpSources,
+    ]),
+    createDirective('font-src', [
+      "'self'",
+      'data:',
+      'https://vercel.live',
+      'https://assets.vercel.com',
+    ]),
+    createDirective('connect-src', [
+      "'self'",
+      supabaseOrigin,
+      supabaseRealtimeOrigin,
+      ...assetSources,
+      ...googleSources,
+      ...vercelSources,
+      ...developmentConnectSources,
+    ]),
+    createDirective('frame-src', [
+      "'self'",
+      'blob:',
+      'data:',
+      'https://checkout.freemius.com',
+      'https://www.youtube.com',
+      'https://www.youtube-nocookie.com',
+      'https://player.vimeo.com',
+      'https://vercel.live',
+      'https://vercel.com',
+    ]),
+    createDirective('media-src', ["'self'", 'data:', 'blob:', supabaseOrigin, ...assetSources]),
+    createDirective('worker-src', ["'self'", 'blob:']),
+    createDirective('manifest-src', ["'self'"]),
+    createDirective('object-src', ["'none'"]),
+    createDirective('base-uri', ["'self'"]),
+    createDirective('form-action', ["'self'"]),
+    createDirective('frame-ancestors', ["'self'"]),
+    isDev ? null : 'upgrade-insecure-requests',
+  ];
+
+  return directives.filter(Boolean).join('; ');
+}
+
+export async function proxy(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error('Missing required Supabase environment variables');
   }
+
+  const requestHeaders = new Headers(request.headers);
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const contentSecurityPolicy = createContentSecurityPolicy(nonce, supabaseUrl);
+
+  requestHeaders.set('x-nonce', nonce);
+  if (contentSecurityPolicy) {
+    requestHeaders.set('Content-Security-Policy', contentSecurityPolicy);
+  }
+
+  let response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
@@ -86,8 +282,9 @@ export default async function proxy(request: NextRequest) {
 
   if (pathname.startsWith('/cms')) {
     if (userError || !user) {
-      return NextResponse.redirect(
+      return createRedirectResponse(
         new URL(`/sign-in?redirect=${pathname}`, request.url),
+        contentSecurityPolicy,
       );
     }
 
@@ -107,8 +304,9 @@ export default async function proxy(request: NextRequest) {
         console.error(
           `Proxy: Profile error for user ${user.id} accessing ${pathname}. Error: ${profileError?.message}. Redirecting to unauthorized.`,
         );
-        return NextResponse.redirect(
+        return createRedirectResponse(
           new URL('/unauthorized?error=profile_issue', request.url),
+          contentSecurityPolicy,
         );
       }
 
@@ -117,11 +315,12 @@ export default async function proxy(request: NextRequest) {
         console.warn(
           `Proxy: User ${user.id} (Role: ${userRole}) denied access to ${pathname}. Required: ${requiredRoles.join(' OR ')}. Redirecting to unauthorized.`,
         );
-        return NextResponse.redirect(
+        return createRedirectResponse(
           new URL(
             `/unauthorized?path=${pathname}&required=${requiredRoles.join(',')}`,
             request.url,
           ),
+          contentSecurityPolicy,
         );
       }
     }
@@ -131,7 +330,7 @@ export default async function proxy(request: NextRequest) {
     user &&
     !pathname.startsWith('/cms') &&
     pathname !== '/profile' &&
-    pathname !== '/reset-password' &&
+    pathname !== '/profile/password' &&
     pathname !== '/checkout/success'
   ) {
     const { data: profile } = await supabase
@@ -141,12 +340,12 @@ export default async function proxy(request: NextRequest) {
       .single<Pick<Profile, 'role' | 'full_name'>>();
 
     if (profile?.role === 'USER' && !profile.full_name?.trim()) {
-      return NextResponse.redirect(new URL('/profile', request.url));
+      return createRedirectResponse(new URL('/profile', request.url), contentSecurityPolicy);
     }
   }
 
   if (response.headers.get('location')) {
-    return response;
+    return applySecurityHeaders(response, contentSecurityPolicy);
   }
 
   const finalResponse = NextResponse.next({
@@ -197,55 +396,7 @@ export default async function proxy(request: NextRequest) {
     finalResponse.headers.set('X-BFCache-Applied', 'true');
   }
 
-  finalResponse.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
-  finalResponse.headers.set('X-Frame-Options', 'SAMEORIGIN');
-  finalResponse.headers.set('X-Content-Type-Options', 'nosniff');
-  finalResponse.headers.set('Referrer-Policy', 'origin-when-cross-origin');
-  finalResponse.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  finalResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-
-  if (process.env.NODE_ENV === 'production') {
-    const nonceValue = requestHeaders.get('x-nonce');
-    if (nonceValue) {
-      const supabaseHostname = new URL(supabaseUrl).hostname;
-      
-      const r2BaseUrl = process.env.NEXT_PUBLIC_R2_BASE_URL;
-      const r2PublicUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_URL;
-      const r2BucketName = process.env.R2_BUCKET_NAME;
-
-      let r2Hostnames = '';
-      if (r2BaseUrl) {
-         try {
-           r2Hostnames += ` https://${new URL(r2BaseUrl).hostname}`;
-         } catch (e) {
-           console.error('Invalid NEXT_PUBLIC_R2_BASE_URL', e);
-         }
-      }
-      if (r2PublicUrl && r2BucketName) {
-         try {
-           const publicHostname = new URL(r2PublicUrl).hostname;
-           r2Hostnames += ` https://${r2BucketName}.${publicHostname}`;
-         } catch (e) {
-            console.error('Invalid NEXT_PUBLIC_R2_PUBLIC_URL', e);
-         }
-      }
-
-      const csp = [
-        "default-src 'self'",
-        `script-src 'self' blob: data: 'nonce-${nonceValue}' 'unsafe-inline' https://checkout.freemius.com https://vercel.live https://vercel.com https://www.googletagmanager.com https://www.google-analytics.com https://analytics.google.com https://*.googletagmanager.com`,
-        "style-src 'self' 'unsafe-inline' https://vercel.live https://vercel.com",
-        `img-src 'self' data: blob:${r2Hostnames} https://checkout.freemius.com https://vercel.live https://vercel.com https://www.googletagmanager.com https://www.google-analytics.com https://analytics.google.com https://*.googletagmanager.com`,
-        "font-src 'self' https://vercel.live https://assets.vercel.com",
-        "object-src 'none'",
-        `connect-src 'self' https://${supabaseHostname} wss://${supabaseHostname}${r2Hostnames} https://vercel.live https://vercel.com https://www.googletagmanager.com https://www.google-analytics.com https://analytics.google.com https://*.googletagmanager.com`,
-        "frame-src 'self' blob: data: https://checkout.freemius.com https://www.youtube.com https://vercel.live https://vercel.com",
-        "form-action 'self'",
-        "base-uri 'self'",
-      ].join('; ');
-
-      finalResponse.headers.set('Content-Security-Policy', csp);
-    }
-  }
+  applySecurityHeaders(finalResponse, contentSecurityPolicy);
 
   const responseForLogging = finalResponse.clone();
   const cacheStatus = responseForLogging.headers.get('x-vercel-cache') || 'none';
@@ -265,7 +416,7 @@ export default async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|auth/.*|sign-in|sign-up|forgot-password|unauthorized|api/auth/.*|api/revalidate|api/revalidate-log).*)',
+    '/((?!_next/static|_next/image|favicon.ico|auth/.*|api/auth/.*|api/revalidate|api/revalidate-log).*)',
     '/cms/:path*',
   ],
 };

@@ -2,17 +2,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import type { Database } from '@nextblock-cms/db';
 import Link from 'next/link';
-
-type PostWithMediaDimensions = Database['public']['Tables']['posts']['Row'] & {
-    feature_image_url: string | null;
-    feature_image_width: number | null;
-    feature_image_height: number | null;
-    blur_data_url: string | null;
-};
+import { useLanguage } from '../../context/LanguageContext';
+import type { PostWithMediaDimensions } from './types';
 import Image from 'next/image';
-import { Button } from '@nextblock-cms/ui'; // Adjusted path
+import { Button } from '@nextblock-cms/ui/button';
 import PostCardSkeleton from './PostCardSkeleton'; // Added import
 
 interface PostsGridClientProps {
@@ -39,6 +33,7 @@ const PostsGridClient: React.FC<PostsGridClientProps> = ({
   showPagination,
   fetchAction,
 }) => {
+  const { currentLocale } = useLanguage();
   const [currentPage, setCurrentPage] = useState(initialPage);
   const [posts, setPosts] = useState<PostWithMediaDimensions[]>(initialPosts);
   const [isLoading, setIsLoading] = useState(false);
@@ -117,9 +112,9 @@ const PostsGridClient: React.FC<PostsGridClientProps> = ({
             <PostCardSkeleton key={`skeleton-${index}`} />
           ))
         ) : posts.length > 0 ? (
-          posts.map((post, index) => (
-            <Link href={`/article/${post.slug}`} key={post.id} className="block group">
-              <div className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card text-card-foreground">
+          posts.map((post) => (
+            <Link href={`/article/${post.slug}`} key={post.id} className="block group h-full">
+              <div className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card text-card-foreground h-full flex flex-col">
                 {/* Basic Post Card Structure - Enhanced with Feature Image */}
                 {post.feature_image_url ? (
                   <div className="aspect-video overflow-hidden">
@@ -129,7 +124,7 @@ const PostsGridClient: React.FC<PostsGridClientProps> = ({
                       width={post.feature_image_width && post.feature_image_width > 0 ? post.feature_image_width : DEFAULT_FEATURE_IMAGE_WIDTH}
                       height={post.feature_image_height && post.feature_image_height > 0 ? post.feature_image_height : DEFAULT_FEATURE_IMAGE_HEIGHT}
                       sizes={imageSizes}
-                      priority={index === 0}
+                      loading="lazy"
                       placeholder={post.blur_data_url ? 'blur' : 'empty'}
                       blurDataURL={post.blur_data_url ?? undefined}
                       quality={60}
@@ -137,10 +132,20 @@ const PostsGridClient: React.FC<PostsGridClientProps> = ({
                     />
                   </div>
                 ) : null}
-                <div className="p-4">
+                <div className="p-4 flex flex-1 flex-col">
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-700">
+                      {post.label?.trim() || 'Article'}
+                    </span>
+                    <span>
+                      {post.estimated_read_time_minutes} {currentLocale === 'fr' ? 'min de lecture' : 'min read'}
+                    </span>
+                  </div>
                   <h3 className="text-lg font-semibold mb-2 group-hover:text-primary">{post.title}</h3>
                   {post.excerpt && <p className="text-sm text-muted-foreground mb-3 line-clamp-3">{post.excerpt}</p>}
-                  <span className="text-xs text-primary group-hover:underline">Read more</span>
+                  <div className="mt-auto pt-2">
+                    <span className="text-xs text-primary group-hover:underline">Read more</span>
+                  </div>
                 </div>
               </div>
             </Link>

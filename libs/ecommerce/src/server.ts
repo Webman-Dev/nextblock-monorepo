@@ -12,11 +12,13 @@ export * from './lib/customer-addresses';
 export * from './lib/currency';
 export * from './lib/currency-constants';
 export * from './lib/currency-sync';
+export { productSchema } from './lib/product-schema';
 
 export * from './lib/product-actions'; // Assuming product actions are also server-side
 export * from './lib/factory';
 export * from './lib/providers/stripe';
 export * from './lib/providers/freemius';
+export * from './lib/freemius-order-sync';
 export {
   getProduct as getCmsProduct,
   getProducts as getCmsProducts,
@@ -28,7 +30,11 @@ export {
   updateProductAction,
   deleteProductAction,
 } from './lib/pages/cms/products/server-actions';
-export { getPaymentSettings } from './lib/pages/cms/payments/queries';
+export {
+  getEnabledPaymentProviders,
+  getPaymentSettings,
+  getStoreConfigStatus,
+} from './lib/pages/cms/payments/queries';
 
 // CMS Pages
 export * from './lib/pages/cms/orders';

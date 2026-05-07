@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import type { z } from 'zod';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -26,7 +27,11 @@ import {
   resolveEditorCurrencyPriceMaps,
   sanitizeProductFormValuesForStoreManagedCurrencies,
 } from '../product-price-sync';
-import { ProductAttribute } from '../../../../types';
+import {
+  type EnabledPaymentProviders,
+  ProductAttribute,
+  derivePaymentProviderFromProductType,
+} from '../../../../types';
 import { convertMinorUnitAmount, type CurrencyRecord } from '../../../../currency';
 import {
   majorUnitAmountToMinor,
@@ -59,11 +64,22 @@ type ProductMediaManagerItem = {
   sort_order: number;
 };
 
-type ProductFormInitialData = Omit<ProductFormValues, 'product_media'> & {
+type ProductFormInitialData = Omit<z.infer<typeof productSchema>, 'product_media'> & {
   id?: string;
   product_media?: ProductMediaRelation[];
   language_id?: number;
   translation_group_id?: string;
+};
+
+type PaymentConfigStatus = {
+  stripe: {
+    hasKeys: boolean;
+    missing: string[];
+  };
+  freemius: {
+    hasKeys: boolean;
+    missing: string[];
+  };
 };
 
 interface ProductFormProps {
@@ -77,7 +93,8 @@ interface ProductFormProps {
   translationGroupId?: string;
   targetLanguageId?: string;
   freemiusDashboardNode?: React.ReactNode;
-  paymentProvider: 'stripe' | 'freemius';
+  enabledProviders: EnabledPaymentProviders;
+  configStatus: PaymentConfigStatus;
   createAction?: (data: ProductFormValues) => Promise<void>;
   updateAction?: (data: ProductFormValues) => Promise<void>;
 }
@@ -87,21 +104,26 @@ interface FormSectionProps {
   description?: string;
   action?: React.ReactNode;
   children: React.ReactNode;
+  hideHeader?: boolean;
 }
 
-function FormSection({ title, description, action, children }: FormSectionProps) {
+function FormSection({ title, description, action, children, hideHeader }: FormSectionProps) {
   return (
-    <section className="rounded-lg border bg-card p-6 shadow-sm space-y-5">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          {description ? (
-            <p className="text-sm text-muted-foreground max-w-3xl">{description}</p>
-          ) : null}
+    <section className="rounded-lg border bg-card p-3 shadow-sm space-y-3">
+      {!hideHeader && (
+        <div className="flex items-start justify-between gap-4 flex-wrap border-b border-muted/50 pb-2 mb-1">
+          <div className="space-y-0.5">
+            <h2 className="text-sm font-bold tracking-tight">{title}</h2>
+            {description ? (
+              <p className="text-[11px] text-muted-foreground leading-none">{description}</p>
+            ) : null}
+          </div>
+          {action}
         </div>
-        {action}
+      )}
+      <div className={hideHeader ? "" : "pt-1"}>
+        {children}
       </div>
-      {children}
     </section>
   );
 }
@@ -130,7 +152,7 @@ function buildProductFormDefaults(
   availableLanguages: ProductLanguageOption[],
   currencies: CurrencyRecord[],
   translationGroupId?: string
-): ProductFormValues {
+): z.input<typeof productSchema> {
   const defaultCurrency =
     currencies.find((currency) => currency.is_default) ?? currencies[0];
   const defaultCurrencyCode = defaultCurrency?.code || 'USD';
@@ -149,8 +171,16 @@ function buildProductFormDefaults(
             [defaultCurrencyCode]: initialData.sale_price / 100,
           }
         : {};
+  const productType = initialData?.product_type || '';
+  const paymentProvider =
+    initialData?.payment_provider ||
+    (initialData?.product_type
+      ? derivePaymentProviderFromProductType(initialData.product_type)
+      : 'stripe');
 
-  return sanitizeProductFormValuesForStoreManagedCurrencies({
+  const sanitizedDefaults = sanitizeProductFormValuesForStoreManagedCurrencies({
+    product_type: (productType || 'physical') as ProductFormValues['product_type'],
+    payment_provider: paymentProvider as ProductFormValues['payment_provider'],
     title: initialData?.title || '',
     slug: initialData?.slug || '',
     sku: initialData?.sku || '',
@@ -162,6 +192,8 @@ function buildProductFormDefaults(
       typeof initialData?.sale_price === 'number' ? initialData.sale_price / 100 : null,
     sale_prices: initialSalePrices,
     stock: initialData?.stock || 0,
+    meta_title: initialData?.meta_title || '',
+    meta_description: initialData?.meta_description || '',
     short_description: initialData?.short_description || '',
     description_json:
       initialData?.description_json || {
@@ -170,6 +202,8 @@ function buildProductFormDefaults(
       },
     freemius_product_id: initialData?.freemius_product_id || '',
     freemius_plan_id: initialData?.freemius_plan_id || '',
+    trial_period_days: initialData?.trial_period_days ?? 0,
+    trial_requires_payment_method: initialData?.trial_requires_payment_method ?? false,
     status: initialData?.status || 'draft',
     language_id: resolveDefaultLanguageId(
       initialData,
@@ -183,8 +217,19 @@ function buildProductFormDefaults(
         media_id: productMedia.media_id,
       })) || [],
     variation_attributes: initialData?.variation_attributes || [],
-    variants: initialData?.variants || [],
+    variants:
+      initialData?.variants?.map((variant) => ({
+        ...variant,
+        prices: variant.prices || {},
+        sale_prices: variant.sale_prices || {},
+      })) || [],
   }, currencies);
+
+  return {
+    ...sanitizedDefaults,
+    product_type: productType,
+    payment_provider: paymentProvider,
+  };
 }
 
 function buildMediaManagerItems(
@@ -241,7 +286,8 @@ export function ProductForm({
   translationGroupId,
   targetLanguageId,
   freemiusDashboardNode,
-  paymentProvider,
+  enabledProviders,
+  configStatus,
   createAction,
   updateAction
 }: ProductFormProps) {
@@ -291,15 +337,30 @@ export function ProductForm({
 
   // Auto-generate slug from title if title is modified
   const title = watch('title');
-  const isStripeMode = paymentProvider === 'stripe';
-  const isFreemiusMode = paymentProvider === 'freemius';
+  const productType = watch('product_type');
+  const derivedPaymentProvider =
+    productType === 'digital'
+      ? 'freemius'
+      : productType === 'physical'
+        ? 'stripe'
+        : undefined;
+  const isStripeMode = productType === 'physical';
+  const isFreemiusMode = productType === 'digital';
+  const isProviderEnabled = derivedPaymentProvider
+    ? enabledProviders[derivedPaymentProvider]
+    : false;
+  const isProviderReady = derivedPaymentProvider
+    ? configStatus[derivedPaymentProvider].hasKeys
+    : false;
   const hasFreemiusProductId = !!watch('freemius_product_id');
-  const variants = watch('variants') || [];
-  const baseProductPrice = watch('price');
-  const baseProductSalePrice = watch('sale_price');
-  const productPrices = watch('prices') || {};
-  const productSalePrices = watch('sale_prices') || {};
-  const hasVariants = variants.length > 0;
+  const trialPeriodDays = Number(watch('trial_period_days') || 0);
+  const trialRequiresPaymentMethod = Boolean(watch('trial_requires_payment_method'));
+  const variants = (watch('variants') || []) as NonNullable<ProductFormValues['variants']>;
+  const baseProductPrice = watch('price') as number;
+  const baseProductSalePrice = watch('sale_price') as number | null;
+  const productPrices = (watch('prices') || {}) as Record<string, number>;
+  const productSalePrices = (watch('sale_prices') || {}) as Record<string, number | null>;
+  const hasVariants = (variants?.length || 0) > 0;
   const selectedLanguageId = watch('language_id');
   const currentLanguageCode =
     availableLanguagesProp.find((lang) => lang.id === selectedLanguageId)?.code ||
@@ -315,6 +376,15 @@ export function ProductForm({
         fallbackSalePrice: baseProductSalePrice,
       }),
     [baseProductPrice, baseProductSalePrice, currencies, productPrices, productSalePrices]
+  );
+  const initialVariantsForEditor = React.useMemo(
+    () =>
+      initialData?.variants?.map((variant) => ({
+        ...variant,
+        prices: variant.prices || {},
+        sale_prices: variant.sale_prices || {},
+      })),
+    [initialData?.variants]
   );
 
   // Use explicit useEffect to handle slug updates
@@ -388,7 +458,38 @@ export function ProductForm({
     register('is_taxable');
     register('price');
     register('sale_price');
+    register('payment_provider');
+    register('trial_requires_payment_method');
   }, [register]);
+
+  useEffect(() => {
+    if (!isFreemiusMode) {
+      setValue('trial_period_days', 0, { shouldDirty: false, shouldValidate: true });
+      setValue('trial_requires_payment_method', false, {
+        shouldDirty: false,
+        shouldValidate: true,
+      });
+      return;
+    }
+
+    if (trialPeriodDays <= 0) {
+      setValue('trial_requires_payment_method', false, {
+        shouldDirty: false,
+        shouldValidate: true,
+      });
+    }
+  }, [isFreemiusMode, setValue, trialPeriodDays]);
+
+  useEffect(() => {
+    if (!derivedPaymentProvider) {
+      return;
+    }
+
+    setValue('payment_provider', derivedPaymentProvider, {
+      shouldDirty: false,
+      shouldValidate: true,
+    });
+  }, [derivedPaymentProvider, setValue]);
 
   useEffect(() => {
     if (!defaultCurrency) {
@@ -542,12 +643,43 @@ export function ProductForm({
     setIsSubmitting(true);
     
     try {
+      if (!derivedPaymentProvider) {
+        setError('product_type', {
+          type: 'manual',
+          message: 'Select whether this product is physical or digital before saving.',
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (
+        data.status === 'active' &&
+        (!isProviderEnabled || !isProviderReady)
+      ) {
+        setError('product_type', {
+          type: 'manual',
+          message: `${derivedPaymentProvider === 'stripe' ? 'Stripe' : 'Freemius'} must be enabled and fully configured before this product can be published.`,
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      const normalizedTrialPeriodDays = isStripeMode
+        ? 0
+        : Math.max(0, Number(data.trial_period_days || 0));
       const normalizedData: ProductFormValues = {
         ...data,
+        product_type: data.product_type,
+        payment_provider: derivedPaymentProvider,
         freemius_product_id: isStripeMode ? '' : data.freemius_product_id,
         freemius_plan_id: isStripeMode ? '' : data.freemius_plan_id,
+        trial_period_days: normalizedTrialPeriodDays,
+        trial_requires_payment_method:
+          !isStripeMode && normalizedTrialPeriodDays > 0
+            ? data.trial_requires_payment_method
+            : false,
         upc: isStripeMode ? data.upc : null,
-        is_taxable: isStripeMode ? data.is_taxable : true,
+        is_taxable: isStripeMode ? data.is_taxable : false,
         variation_attributes: isStripeMode ? data.variation_attributes : [],
         variants: isStripeMode ? data.variants : [],
       };
@@ -596,104 +728,147 @@ export function ProductForm({
   const variantImageOptions = buildVariantImageOptions(mediaForManager);
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 pb-8">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-2.5 pb-4">
 
       <input type="hidden" {...register('translation_group_id')} />
+      <input type="hidden" {...register('payment_provider')} />
 
-      <div className="space-y-8 w-full">
-        <FormSection
-          title="Product Information"
-          description="Set the core catalog details shoppers and integrations rely on."
-          action={
-            isEdit && initialData?.id ? (
-              <div
-                className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-1 rounded select-all"
-                title="Internal System ID"
+      <div className="space-y-2.5 w-full">
+        <div className="rounded-lg border bg-card p-2.5 px-4 shadow-sm flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-6">
+            <div className="flex h-9 items-center gap-2">
+              <span className="text-sm font-bold whitespace-nowrap leading-none pt-0.5">Product Type</span>
+              {errors.product_type && (
+                <AlertCircle className="h-4 w-4 text-destructive" />
+              )}
+            </div>
+            
+            <div className="flex h-9 items-center">
+              <Select
+                onValueChange={(value) =>
+                  setValue('product_type', value as ProductFormValues['product_type'], {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+                value={productType || undefined}
               >
-                ID: {initialData.id}
+                <SelectTrigger className="w-[160px] h-9 text-xs">
+                  <SelectValue placeholder="Select Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="physical">Physical Product</SelectItem>
+                  <SelectItem value="digital">Digital Product</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <div className="flex h-9 items-center gap-3">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider leading-none">Payment Provider</span>
+              <Badge variant="outline" className="text-xs py-1 font-bold bg-muted/30 leading-none">
+                {derivedPaymentProvider
+                  ? derivedPaymentProvider === 'stripe'
+                    ? 'Stripe'
+                    : 'Freemius'
+                  : '—'}
+              </Badge>
+            </div>
+
+            {derivedPaymentProvider && (
+              <div className="flex h-9 items-center gap-2">
+                {isProviderEnabled && isProviderReady ? (
+                  <span className="flex items-center gap-1.5 text-emerald-600 text-[10px] font-bold bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100 uppercase leading-none">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Ready
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-amber-600 text-[10px] font-bold bg-amber-50 px-2 py-1 rounded-full border border-amber-100 uppercase leading-none">
+                    <AlertCircle className="h-3 w-3" />
+                    {isProviderEnabled ? 'Keys Missing' : 'Disabled'}
+                  </span>
+                )}
               </div>
-            ) : null
-          }
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="title">Title</Label>
-              <Input id="title" {...register('title')} placeholder="Product Title" />
-              {errors.title && <p className="text-destructive text-sm">{errors.title.message as string}</p>}
-            </div>
-            <div>
-              <Label htmlFor="slug">Slug</Label>
-              <Input id="slug" {...register('slug')} placeholder="product-slug" className="font-mono text-sm" />
-              {errors.slug && <p className="text-destructive text-sm">{errors.slug.message as string}</p>}
-            </div>
-            <div>
-              <Label htmlFor="sku">SKU</Label>
-              <Input id="sku" {...register('sku')} placeholder="SKU-123" />
-              {errors.sku && <p className="text-destructive text-sm">{errors.sku.message as string}</p>}
-            </div>
-            {isStripeMode && (
-              <div>
-                <Label htmlFor="upc">UPC</Label>
-                <Input
-                  id="upc"
-                  {...register('upc')}
-                  placeholder="012345678905"
-                  readOnly={hasVariants}
-                  className={disabledBaseFieldClass}
-                />
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  {hasVariants
-                    ? 'Parent UPC is ignored once at least one variation exists.'
-                    : 'Use the parent UPC when this product has no variations.'}
-                </p>
+            )}
+            
+            {!isProviderReady && derivedPaymentProvider && configStatus[derivedPaymentProvider].missing.length > 0 && (
+              <div className="hidden xl:flex h-9 items-center gap-1 text-[10px] text-muted-foreground bg-muted/50 px-2 py-1 rounded border border-dashed leading-none">
+                <Info className="h-3 w-3" />
+                Missing: {configStatus[derivedPaymentProvider].missing.join(', ')}
               </div>
             )}
           </div>
-
-          {isStripeMode && (
-            <div className="rounded-lg border bg-muted/20 p-4">
-              <label htmlFor="is-taxable" className="flex cursor-pointer items-start gap-3">
-                <input
-                  id="is-taxable"
-                  type="checkbox"
-                  checked={watch('is_taxable')}
-                  onChange={(event) =>
-                    setValue('is_taxable', event.target.checked, { shouldDirty: true })
-                  }
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                />
-                <span className="space-y-1">
-                  <span className="block font-medium">Charge tax on this product</span>
-                  <span className="block text-sm text-muted-foreground">
-                    Disable this for tax-exempt physical items when Stripe taxes are enabled.
-                  </span>
-                </span>
-              </label>
-            </div>
-          )}
-        </FormSection>
+        </div>
 
         <FormSection
-          title={isStripeMode ? 'Pricing & Inventory' : 'Freemius Configuration'}
-          description={
-            isStripeMode
-              ? 'Keep the parent product simple, or switch to variant-driven pricing and stock when needed.'
-              : 'Connect the product to its Freemius catalog IDs and let synced plan pricing drive the storefront.'
-          }
-          action={
-            <div className="flex items-center gap-2 flex-wrap">
-              {isStripeMode && hasVariants ? (
-                <Badge variant="secondary">Variant-driven pricing active</Badge>
-              ) : null}
-              {isFreemiusMode && hasFreemiusProductId ? (
-                <SyncFreemiusPricingButton productId={watch('freemius_product_id') as string} />
-              ) : null}
-            </div>
-          }
+          title="Product Information"
+          hideHeader
         >
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            <div className="col-span-2 space-y-1">
+              <Label htmlFor="title" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Title</Label>
+              <Input id="title" placeholder="Product title" {...register('title')} className="h-8 text-sm" />
+              {errors.title && <p className="text-destructive text-[11px] leading-none">{errors.title.message as string}</p>}
+            </div>
+            <div className="col-span-2 space-y-1">
+              <Label htmlFor="slug" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Slug</Label>
+              <Input id="slug" placeholder="product-slug" {...register('slug')} className="h-8 text-sm" />
+              {errors.slug && <p className="text-destructive text-[11px] leading-none">{errors.slug.message as string}</p>}
+            </div>
+            <div className="col-span-1 space-y-1">
+              <Label htmlFor="sku" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">SKU</Label>
+              <Input id="sku" placeholder="SKU" {...register('sku')} className="h-8 text-sm font-mono" />
+              {errors.sku && <p className="text-destructive text-[11px] leading-none">{errors.sku.message as string}</p>}
+            </div>
+            <div className="col-span-1 space-y-1">
+              <Label htmlFor="upc_ean" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">UPC / EAN</Label>
+              <Input id="upc_ean" placeholder="000000000" {...register('upc')} className="h-8 text-sm font-mono" readOnly={hasVariants} />
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-2.5 mt-2">
+            <div className="col-span-1 space-y-1">
+              <Label htmlFor="meta_title" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Meta Title</Label>
+              <Input id="meta_title" {...register('meta_title')} placeholder="SEO page title (50-60 chars)" className="h-8 text-sm" />
+            </div>
+            <div className="col-span-3 space-y-1">
+              <Label htmlFor="meta_description" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Meta Description</Label>
+              <Input id="meta_description" {...register('meta_description')} placeholder="SEO description (150-160 chars)" className="h-8 text-sm" />
+            </div>
+          </div>
+        </FormSection>
+
+        <section className="rounded-lg border bg-card p-3 shadow-sm space-y-3">
+          {isStripeMode && (
+            <div className="flex items-center justify-between gap-4 flex-wrap border-b border-muted/50 pb-2">
+              <div className="flex items-center gap-4">
+                <div className="space-y-0.5">
+                  <h2 className="text-sm font-bold tracking-tight">Pricing & Inventory</h2>
+                  <p className="text-[11px] text-muted-foreground leading-none">Manage simple or variant pricing.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 bg-muted/40 rounded-md px-2.5 py-1.5">
+                    <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Stock</span>
+                    <Input
+                      id="stock"
+                      type="number"
+                      min="0"
+                      {...register('stock', { valueAsNumber: true })}
+                      placeholder="0"
+                      readOnly={hasVariants}
+                      className={`${disabledBaseFieldClass} h-8 w-20 text-sm text-center font-mono bg-background`}
+                    />
+                  </div>
+                {hasVariants ? (
+                  <Badge variant="secondary" className="text-[11px] py-0 px-2 h-5">Variant pricing</Badge>
+                ) : null}
+              </div>
+            </div>
+          )}
           {isStripeMode ? (
-            <>
-              <div className="grid grid-cols-1 gap-4">
+            <div className="space-y-3">
+              <div className="w-full">
                 <CurrencyPriceFields
                   idPrefix="product"
                   currencies={currencies}
@@ -707,56 +882,35 @@ export function ProductForm({
                   helperText={
                     hasVariants
                       ? 'Parent prices stay as a fallback, but active variants define the live shopper price.'
-                      : storeManagedPriceCurrencyCodes.length > 0
-                        ? `Store-managed currencies update automatically from ${defaultCurrency?.code || 'the base currency'}. Manual FX fills remain available for the rest.`
-                        : undefined
+                      : undefined
                   }
                 />
                 {errors.price && (
-                  <p className="text-destructive text-sm">{errors.price.message as string}</p>
+                  <p className="text-destructive text-sm mt-1">{errors.price.message as string}</p>
                 )}
                 {errors.sale_price && (
-                  <p className="text-destructive text-sm">{errors.sale_price.message as string}</p>
+                  <p className="text-destructive text-sm mt-1">{errors.sale_price.message as string}</p>
                 )}
-                <div>
-                  <Label htmlFor="stock">Qty</Label>
-                  <Input
-                    id="stock"
-                    type="number"
-                    min="0"
-                    {...register('stock', { valueAsNumber: true })}
-                    placeholder="0"
-                    readOnly={hasVariants}
-                    className={disabledBaseFieldClass}
-                  />
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Products using this same SKU share inventory. Use Inventory for bulk updates and
-                    CSV imports.
-                  </p>
-                  {errors.stock && <p className="text-destructive text-sm">{errors.stock.message as string}</p>}
-                </div>
+                {errors.stock && (
+                  <p className="text-destructive text-[10px] font-medium leading-none mt-1">{errors.stock.message as string}</p>
+                )}
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-dashed p-4">
-                <div>
-                  <p className="font-medium">Variations</p>
-                  <p className="text-sm text-muted-foreground">
-                    {hasVariants
-                      ? 'Variant prices, UPCs, images, and stock override the parent values.'
-                      : 'Create size, color, or packaging options directly under pricing and inventory.'}
-                  </p>
-                </div>
+              <div className="flex items-center justify-between gap-3 rounded border border-dashed p-2.5 bg-muted/5">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{hasVariants ? 'Variations Active' : 'Variations'}</span>
                 <Button
                   type="button"
                   variant={showVariations ? 'outline' : 'default'}
                   onClick={() => setShowVariations((current) => !current)}
+                  size="sm"
+                  className="h-7 text-xs px-3"
                 >
-                  {showVariations ? 'Hide Variations' : 'Create Variations'}
+                  {showVariations ? 'Hide' : 'Manage'}
                 </Button>
               </div>
 
               {showVariations && (
-                <div className="border-t pt-6">
+                <div className="border-t pt-3">
                   <VariationsEditor
                     globalAttributes={globalAttributesProp}
                     currentLanguageCode={currentLanguageCode}
@@ -770,27 +924,63 @@ export function ProductForm({
                     currencies={currencies}
                     availableVariantImages={variantImageOptions}
                     initialVariationAttributes={initialData?.variation_attributes}
-                    initialVariants={initialData?.variants}
+                    initialVariants={initialVariantsForEditor}
                     onChange={handleVariationChange}
                   />
                 </div>
               )}
-            </>
+            </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="freemius_product_id">Freemius Product ID</Label>
-                  <Input id="freemius_product_id" {...register('freemius_product_id')} />
+              <div className="space-y-4">
+              <div className="flex items-end gap-4 w-full">
+                <div className="flex-1">
+                  <Label htmlFor="freemius_product_id" className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold mb-1.5 block">Freemius Product ID</Label>
+                  <Input id="freemius_product_id" {...register('freemius_product_id')} className="h-9" />
                 </div>
-                <div>
-                  <Label htmlFor="freemius_plan_id">Freemius Plan ID</Label>
-                  <Input id="freemius_plan_id" {...register('freemius_plan_id')} />
+                <div className="flex-1">
+                  <Label htmlFor="freemius_plan_id" className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold mb-1.5 block">Freemius Plan ID</Label>
+                  <Input id="freemius_plan_id" {...register('freemius_plan_id')} className="h-9" />
+                </div>
+                {hasFreemiusProductId ? (
+                  <SyncFreemiusPricingButton productId={watch('freemius_product_id') as string} />
+                ) : null}
+              </div>
+
+              <div className="bg-muted/10 border rounded-md overflow-hidden">
+                <div className="flex flex-wrap items-center gap-6 bg-muted/20 border-b p-2.5 px-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Free Trial</span>
+                    <Badge variant="outline" className="font-mono text-xs shadow-sm bg-background">{String(watch('trial_period_days') || 0)} Days</Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Card Required</span>
+                    <Badge variant={trialRequiresPaymentMethod ? "default" : "secondary"} className="text-xs shadow-sm">
+                       {trialRequiresPaymentMethod ? 'Yes' : 'No'}
+                    </Badge>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground ml-auto">
+                     Managed in Freemius dashboard
+                  </span>
+                  {/* Hidden inputs to preserve form state if needed */}
+                  <input type="hidden" {...register('trial_period_days', { valueAsNumber: true })} />
+                </div>
+
+                <div className="w-full p-4 pt-3">
+                  <CurrencyPriceFields
+                    idPrefix="product"
+                    currencies={currencies}
+                    prices={resolvedProductPriceMaps.prices}
+                    salePrices={resolvedProductPriceMaps.salePrices}
+                    managedCurrencyCodes={storeManagedPriceCurrencyCodes}
+                    onPriceChange={handleProductPriceChange}
+                    onSalePriceChange={handleProductSalePriceChange}
+                    onAutoFill={handleAutoFillProductPrices}
+                    readOnly={true}
+                  />
                 </div>
               </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                <strong>Note:</strong> Freemius products use synchronized plan pricing. Physical inventory and variations are only available in Stripe mode.
-              </p>
+            </div>
               {freemiusDashboardNode && (
                 <div className="pt-2 border-t">
                   {freemiusDashboardNode}
@@ -798,37 +988,30 @@ export function ProductForm({
               )}
             </>
           )}
-        </FormSection>
+        </section>
 
-        <FormSection
-          title="Description"
-          description="Write a short SEO summary and a rich product story for the detail page."
-        >
-          <div className="flex flex-col space-y-4 mb-4">
-            <div>
-              <Label htmlFor="short_description" className="font-semibold text-lg block mb-2">Short Description (SEO)</Label>
-              <Input {...register('short_description')} placeholder="Brief summary (SEO)..." />
+        <FormSection title="Product Description" hideHeader>
+          <div className="space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="short_description" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Short Description</Label>
+                <Input id="short_description" {...register('short_description')} placeholder="Brief summary for product cards..." className="h-8 text-sm" />
+              </div>
+            </div>
+            <div className="min-h-[250px] border rounded overflow-hidden text-block-editor bg-muted/5">
+              {editorNode ? (
+                React.cloneElement(editorNode as React.ReactElement<any>, {
+                  initialContent: watch('description_json') || {},
+                  onUpdate: (content: any) => setValue('description_json', content)
+                })
+              ) : (
+                <div className="p-3 text-[10px] text-muted-foreground italic text-center mt-8">Editor disabled.</div>
+              )}
             </div>
           </div>
-          <Label className="mb-2 block font-semibold text-lg border-t pt-4">Detailed Description</Label>
-          <div className="min-h-[400px] border rounded-lg overflow-hidden text-block-editor">
-            {editorNode ? (
-              React.cloneElement(editorNode as React.ReactElement<any>, {
-                initialContent: watch('description_json') || {},
-                onUpdate: (content: any) => setValue('description_json', content)
-              })
-            ) : (
-              <div className="p-4 text-sm text-muted-foreground italic text-center mt-10">
-                Editor not injected. Adding descriptions is disabled.
-              </div>
-            )}
-          </div>
         </FormSection>
 
-        <FormSection
-          title="Media Gallery"
-          description="Reorder the gallery to control the parent product image and the variant image options."
-        >
+        <FormSection title="Media Gallery" description="Drag to reorder. First image is the hero.">
           <ProductMediaManager
             initialMedia={mediaForManager}
             onUpdate={onMediaUpdate}
@@ -837,57 +1020,24 @@ export function ProductForm({
           <input type="hidden" {...register('product_media')} />
         </FormSection>
 
-        <FormSection
-          title="Publishing"
-          description="Choose the language and publication status for this catalog entry."
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label className="mb-2 block">Status</Label>
-              <Select
-                onValueChange={(val) => setValue('status', val as any)}
-                value={watch('status')}
-                defaultValue={watch('status')}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="mb-2 block">Language</Label>
-              <Select
-                onValueChange={(val) => setValue('language_id', parseInt(val, 10), { shouldValidate: true })}
-                value={watch('language_id')?.toString()}
-                defaultValue={watch('language_id')?.toString()}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select language" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableLanguagesProp.map((lang) => (
-                    <SelectItem key={lang.id} value={lang.id.toString()}>
-                      {lang.name} ({lang.code.toUpperCase()})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.language_id && <p className="text-destructive text-sm">{errors.language_id.message as string}</p>}
-            </div>
+        <div className="rounded-lg border bg-card p-3 px-4 shadow-sm flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Status</span>
+            <Select onValueChange={(val) => setValue('status', val as any)} value={watch('status')}>
+              <SelectTrigger className="h-8 w-[110px] text-sm">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        </FormSection>
-      </div>
-
-      {/* Bottom Actions */}
-      <div className="flex justify-end pt-4 border-t">
-        <Button disabled={isSubmitting} type="submit" size="lg">
-          {isSubmitting ? 'Saving...' : 'Save Changes'}
-        </Button>
+          <Button disabled={isSubmitting} type="submit" size="sm" className="h-8 text-sm px-5">
+            {isSubmitting ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
       </div>
     </form>
   );

@@ -11,19 +11,11 @@ import type { Database } from '@nextblock-cms/db'
 import { ImageIcon, X as XIcon } from 'lucide-react'
 import MediaPickerDialog from '../../../media/components/MediaPickerDialog'
 import { useHotkeys } from '../../../../../hooks/use-hotkeys';
+import { resolveMediaUrl } from '../../../../../lib/media/resolveMediaUrl';
 type Media = Database['public']['Tables']['media']['Row'];
-const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || ''
 
 function resolveLogoSrc(objectKey?: string | null) {
-  if (!objectKey) {
-    return null
-  }
-
-  if (objectKey.startsWith('/') || objectKey.startsWith('http')) {
-    return objectKey
-  }
-
-  return `${R2_BASE_URL}/${objectKey}`
+  return resolveMediaUrl(objectKey)
 }
 
 interface LogoDetails {

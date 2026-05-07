@@ -1,10 +1,23 @@
 // components/blocks/renderers/SectionBlockRenderer.tsx
 import React from "react";
 import type { SectionBlockContent } from "../../../lib/blocks/blockRegistry";
-import { getBlockDefinition } from "../../../lib/blocks/blockRegistry";
 import dynamic from "next/dynamic";
+import { getPublicBlockRendererLoader } from "../publicRendererLoaders";
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
+const ECOMMERCE_BLOCK_TYPES = new Set([
+  "product_grid",
+  "featured_product",
+  "cart",
+  "checkout",
+  "product_details",
+]);
+
+function loadEcommerceBlockRenderer(blockType: string) {
+  return import("../ecommerceRendererLoaders").then((module) =>
+    module.loadEcommerceBlockRenderer(blockType)
+  );
+}
 
 interface SectionBlockRendererProps {
   content: SectionBlockContent;
@@ -117,9 +130,28 @@ const DynamicNestedBlockRenderer: React.FC<{
   block: SectionBlockContent['column_blocks'][0][0];
   languageId: number;
 }> = ({ block, languageId }) => {
-  const blockDefinition = getBlockDefinition(block.block_type);
+  const rendererLoader = getPublicBlockRendererLoader(block.block_type);
   
-  if (!blockDefinition) {
+  if (!rendererLoader) {
+    if (ECOMMERCE_BLOCK_TYPES.has(block.block_type)) {
+      const EcommerceRendererComponent = dynamic(
+        () => loadEcommerceBlockRenderer(block.block_type),
+        {
+          loading: () => (
+            <div className="animate-pulse bg-muted rounded h-8"></div>
+          ),
+          ssr: true,
+        }
+      ) as React.ComponentType<any>;
+
+      return (
+        <EcommerceRendererComponent
+          content={block.content}
+          languageId={languageId}
+        />
+      );
+    }
+
     return (
       <div className="p-2 border rounded bg-destructive/10 text-destructive text-sm">
         <strong>Unsupported block type:</strong> {block.block_type}
@@ -129,7 +161,7 @@ const DynamicNestedBlockRenderer: React.FC<{
 
   // Create dynamic component with proper SSR handling
   const RendererComponent = dynamic(
-    () => import(`./${blockDefinition.rendererComponentFilename}`),
+    rendererLoader,
     {
       loading: () => (
         <div className="animate-pulse bg-muted rounded h-8"></div>

@@ -2,14 +2,11 @@
 
 import { useEffect, useRef } from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import {
-  CartItem,
-  isDigitalItem,
-  mapRawVariantRelations,
-  useCartStore,
-  useIsCartHydrated,
-} from '@nextblock-cms/ecommerce';
-import { getTranslatedProductsForCart } from '@nextblock-cms/ecommerce/actions';
+import { useCartStore } from '@nextblock-cms/ecommerce/cart-store';
+import { isDigitalItem, type CartItem } from '@nextblock-cms/ecommerce/types';
+import { useIsCartHydrated } from '@nextblock-cms/ecommerce/use-cart';
+import { mapRawVariantRelations } from '@nextblock-cms/ecommerce/variation-utils';
+import { getTranslatedProductsForCart } from '@nextblock-cms/ecommerce/server-actions/product-actions';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 
@@ -30,6 +27,20 @@ function resolveProductImageUrl(product: any, fallback?: string | null) {
   return resolveMediaUrl(firstMedia?.file_path || firstMedia?.object_key) || fallback || null;
 }
 
+function buildCartTranslationSignature(items: CartItem[]) {
+  return JSON.stringify(
+    items.map((item) => ({
+      id: item.id,
+      product_id: item.product_id,
+      variant_id: item.variant_id ?? null,
+      sku: item.sku,
+      quantity: item.quantity,
+      language_id: item.language_id ?? null,
+      translation_group_id: item.translation_group_id ?? null,
+    }))
+  );
+}
+
 function syncCartItem(item: CartItem, translatedProduct: any, currentLocale: string): CartItem {
   const productImageUrl = resolveProductImageUrl(translatedProduct, item.image_url);
   const nextBase: CartItem = {
@@ -44,6 +55,16 @@ function syncCartItem(item: CartItem, translatedProduct: any, currentLocale: str
     translation_group_id: translatedProduct.translation_group_id,
     image_url: productImageUrl || item.image_url,
     is_taxable: translatedProduct.is_taxable ?? item.is_taxable,
+    product_type: translatedProduct.product_type ?? item.product_type,
+    payment_provider: translatedProduct.payment_provider ?? item.payment_provider,
+    provider: translatedProduct.payment_provider ?? item.provider,
+    freemius_product_id: translatedProduct.freemius_product_id ?? item.freemius_product_id,
+    freemius_plan_id: translatedProduct.freemius_plan_id ?? item.freemius_plan_id,
+    trial_period_days: translatedProduct.trial_period_days ?? item.trial_period_days ?? 0,
+    trial_requires_payment_method:
+      translatedProduct.trial_requires_payment_method ??
+      item.trial_requires_payment_method ??
+      false,
     prices: translatedProduct.prices || item.prices,
     sale_prices: translatedProduct.sale_prices || item.sale_prices,
     has_variants: Boolean(translatedProduct.product_variants?.length),
@@ -99,6 +120,8 @@ export function CartTranslator() {
         return;
       }
 
+      const requestSignature = buildCartTranslationSignature(items);
+
       const translationGroupIds = items
         .map((item) => item.translation_group_id)
         .filter(Boolean) as string[];
@@ -125,7 +148,13 @@ export function CartTranslator() {
           return;
         }
 
-        const newItems = items.map((item) => {
+        const latestItems = useCartStore.getState().items;
+
+        if (buildCartTranslationSignature(latestItems) !== requestSignature) {
+          return;
+        }
+
+        const newItems = latestItems.map((item) => {
           const translated = translatedProducts.find((product) =>
             (item.translation_group_id && product.translation_group_id === item.translation_group_id) ||
             product.id === item.product_id ||
@@ -153,7 +182,7 @@ export function CartTranslator() {
           return accumulator;
         }, []);
 
-        if (JSON.stringify(mergedItems) !== JSON.stringify(items)) {
+        if (JSON.stringify(mergedItems) !== JSON.stringify(latestItems)) {
           setItems(mergedItems);
         }
       } catch (error) {

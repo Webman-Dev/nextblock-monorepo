@@ -1,4 +1,4 @@
-# 🛠️ NextBlock CMS: Contributor Guide (The Factory)
+# 🛠️ NextBlock™ CMS: Contributor Guide (The Factory)
 
 **Welcome, Engineer.** You have chosen the red pill.
 

@@ -1,4 +1,12 @@
-import { z } from 'zod';
+import { z } from './zod-config';
+
+const productTypeSchema = z
+  .enum(['physical', 'digital'])
+  .or(z.literal(''))
+  .refine((value) => value !== '', {
+    message: 'Product type is required',
+  })
+  .transform((value) => value as 'physical' | 'digital');
 
 const currencyPriceMapSchema = z.record(
   z.string().regex(/^[A-Z]{3}$/, 'Currency code must be ISO 4217'),
@@ -61,6 +69,8 @@ const variationAttributeSchema = z.object({
 });
 
 export const productSchema = z.object({
+  product_type: productTypeSchema,
+  payment_provider: z.enum(['stripe', 'freemius']),
   title: z.string().min(1, 'Title is required'),
   slug: z
     .string()
@@ -73,10 +83,14 @@ export const productSchema = z.object({
   sale_price: z.coerce.number().min(0, 'Sale price must be non-negative').optional().nullable(),
   sale_prices: currencySalePriceMapSchema.default({}),
   stock: z.coerce.number().int().min(0, 'Stock must be a non-negative integer'),
+  meta_title: z.string().optional().nullable(),
+  meta_description: z.string().optional().nullable(),
   short_description: z.string().optional(),
   description_json: z.any().optional(), // Using any for Tiptap JSON structure
   freemius_plan_id: z.string().optional(), // ID from Freemius Dashboard
   freemius_product_id: z.string().optional(), // Product or App ID from Freemius Dashboard
+  trial_period_days: z.coerce.number().int().min(0, 'Trial period must be zero or greater').default(0),
+  trial_requires_payment_method: z.boolean().default(false),
   media_id: z.string().optional(), // For the main product image (backward compat or single select)
   product_media: z.array(z.object({
       media_id: z.string(),

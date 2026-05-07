@@ -49,10 +49,10 @@ description: When you need to understand the directory structure, open-core mode
 
 For questions about the _intent_ behind the architecture, monetization strategy, or future roadmap that aren't clear from the directory structure itself:
 
-**Use the specialized notebook:**
+**Use the NotebookLM MCP tool:**
 
-```bash
-python scripts/run.py ask_question.py --notebook-id nextblock-cms-roadmap-and-mone --question "Why did we choose this architecture?"
+```
+mcp_notebooklm_ask_question({ question: "Why did we choose this architecture?" })
 ```
 
-This notebook ("NextBlock CMS: Roadmap and Monetization Strategy") contains the high-level vision documents.
+This queries the "NextBlock CMS: Roadmap and Monetization Strategy" notebook for high-level vision context.
