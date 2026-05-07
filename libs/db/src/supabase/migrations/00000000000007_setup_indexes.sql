@@ -98,6 +98,18 @@ CREATE INDEX idx_order_items_product_id
 CREATE INDEX idx_orders_user_id
   ON public.orders (user_id);
 
+CREATE INDEX idx_orders_freemius_license_id
+  ON public.orders (freemius_license_id)
+  WHERE freemius_license_id IS NOT NULL;
+
+CREATE INDEX idx_orders_freemius_subscription_id
+  ON public.orders (freemius_subscription_id)
+  WHERE freemius_subscription_id IS NOT NULL;
+
+CREATE INDEX idx_orders_freemius_trial_id
+  ON public.orders (freemius_trial_id)
+  WHERE freemius_trial_id IS NOT NULL;
+
 CREATE INDEX idx_package_activations_package_id
   ON public.package_activations (package_id);
 

@@ -32,6 +32,7 @@ export default function CheckoutSuccessPage() {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasRemainingCheckoutItems, setHasRemainingCheckoutItems] = useState(false);
+  const [orderStatus, setOrderStatus] = useState<string | null>(null);
   const processedSessionIdRef = useRef<string | null>(null);
 
   const labels = useMemo(() => buildInvoiceDocumentLabels(t), [t]);
@@ -90,6 +91,7 @@ export default function CheckoutSuccessPage() {
 
         if (result.invoice) {
           const resolvedInvoice = result.invoice as InvoicePresentationData;
+          setOrderStatus((result as any).status || resolvedInvoice.order.status || null);
           const purchasedKeys = new Set(
             resolvedInvoice.order.items.map((item) =>
               buildPurchasedItemKey(item.product_id, item.variant_id)
@@ -129,11 +131,25 @@ export default function CheckoutSuccessPage() {
       invoice={localizedInvoice}
       labels={labels}
       locale={getInvoiceLocale(lang)}
-      title={translateOrFallback(
-        t,
-        'ecommerce.checkout_successful',
-        'Payment received'
-      )}
+      title={
+        orderStatus === 'trial'
+          ? translateOrFallback(
+              t,
+              'ecommerce.checkout_trial_started',
+              'Trial started'
+            )
+          : orderStatus === 'pending'
+            ? translateOrFallback(
+                t,
+                'ecommerce.checkout_order_pending',
+                'Order pending'
+              )
+            : translateOrFallback(
+                t,
+                'ecommerce.checkout_successful',
+                'Payment received'
+              )
+      }
       description={translateOrFallback(
         t,
         'print_invoice_help',

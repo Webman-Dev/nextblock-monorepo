@@ -1,42 +1,31 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
+import {
+  syncFreemiusOrderFromWebhookEvent,
+  verifyFreemiusWebhookSignature,
+} from '@nextblock-cms/ecommerce/server';
 
 export async function POST(req: Request) {
   try {
     const rawBody = await req.text();
-    const signature = req.headers.get('x-freemius-signature');
-    const secretKey = process.env.FREEMIUS_SECRET_KEY;
+    const signature =
+      req.headers.get('x-signature') ?? req.headers.get('x-freemius-signature');
 
-    if (!signature || !secretKey) {
-      return NextResponse.json({ error: 'Missing signature or configuration' }, { status: 400 });
+    if (!signature && process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true') {
+      return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
     }
 
-    // Verify Freemius Signature
-    // Freemius signs webhooks using HMAC SHA-256 with the Secret Key
-    const hash = crypto.createHmac('sha256', secretKey).update(rawBody).digest('hex');
-    if (hash !== signature && process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true') {
-        // We bypass exact signature matching strictly in local sandbox if needed, but in prod it runs
-        console.warn('Freemius Webhook Signature mismatch. Continuing if sandbox...');
-        if (process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true') {
-           return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-        }
+    if (
+      signature &&
+      !verifyFreemiusWebhookSignature(rawBody, signature) &&
+      process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true'
+    ) {
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
     const event = JSON.parse(rawBody);
-    
-    // We only care about purchase created or install upgraded events
-    if (event.type !== 'install.upgraded' && event.type !== 'license.activated') {
-      return NextResponse.json({ received: true, ignored: true, type: event.type });
-    }
+    const result = await syncFreemiusOrderFromWebhookEvent({ event });
 
-    // Freemius doesn't elegantly pass custom metadata to webhooks out of the box. 
-    // In a production app, we would match on user_email or sync the license directly.
-    
-    // For this context, the user just wants the cart to empty dynamically on frontend.
-    // If the success page is hit with `session_id`, it should automatically trigger order fulfillment 
-    // if webhooks are delayed.
-
-    return NextResponse.json({ received: true });
+    return NextResponse.json({ received: true, ...result });
     
   } catch (error) {
     console.error('Freemius Webhook Error:', error);

@@ -167,6 +167,7 @@ function MetaRow({
 function StatusBadge({ status, size = 'md' }: { status: string; size?: 'md' | 'lg' }) {
   let colorClass = 'bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-gray-300';
   if (status === 'paid') colorClass = 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
+  if (status === 'trial') colorClass = 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300';
   if (status === 'pending') colorClass = 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
   if (status === 'shipped') colorClass = 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
   if (status === 'cancelled') colorClass = 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300';

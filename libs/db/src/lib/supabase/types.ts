@@ -475,6 +475,15 @@ export type Database = {
           currency: string
           customer_details: Json | null
           exchange_rate_at_purchase: number
+          freemius_last_event_type: string | null
+          freemius_last_synced_at: string | null
+          freemius_license_id: string | null
+          freemius_plan_id: string | null
+          freemius_product_id: string | null
+          freemius_subscription_id: string | null
+          freemius_trial_ends_at: string | null
+          freemius_trial_id: string | null
+          freemius_user_id: string | null
           id: string
           inventory_deducted_at: string | null
           invoice_number: string | null
@@ -495,6 +504,15 @@ export type Database = {
           currency?: string
           customer_details?: Json | null
           exchange_rate_at_purchase?: number
+          freemius_last_event_type?: string | null
+          freemius_last_synced_at?: string | null
+          freemius_license_id?: string | null
+          freemius_plan_id?: string | null
+          freemius_product_id?: string | null
+          freemius_subscription_id?: string | null
+          freemius_trial_ends_at?: string | null
+          freemius_trial_id?: string | null
+          freemius_user_id?: string | null
           id?: string
           inventory_deducted_at?: string | null
           invoice_number?: string | null
@@ -515,6 +533,15 @@ export type Database = {
           currency?: string
           customer_details?: Json | null
           exchange_rate_at_purchase?: number
+          freemius_last_event_type?: string | null
+          freemius_last_synced_at?: string | null
+          freemius_license_id?: string | null
+          freemius_plan_id?: string | null
+          freemius_product_id?: string | null
+          freemius_subscription_id?: string | null
+          freemius_trial_ends_at?: string | null
+          freemius_trial_id?: string | null
+          freemius_user_id?: string | null
           id?: string
           inventory_deducted_at?: string | null
           invoice_number?: string | null
@@ -985,9 +1012,9 @@ export type Database = {
           status: string
           stock: number | null
           title: string
+          translation_group_id: string
           trial_period_days: number
           trial_requires_payment_method: boolean
-          translation_group_id: string
           upc: string | null
           updated_at: string | null
         }
@@ -1014,9 +1041,9 @@ export type Database = {
           status?: string
           stock?: number | null
           title: string
+          translation_group_id?: string
           trial_period_days?: number
           trial_requires_payment_method?: boolean
-          translation_group_id?: string
           upc?: string | null
           updated_at?: string | null
         }
@@ -1043,9 +1070,9 @@ export type Database = {
           status?: string
           stock?: number | null
           title?: string
+          translation_group_id?: string
           trial_period_days?: number
           trial_requires_payment_method?: boolean
-          translation_group_id?: string
           upc?: string | null
           updated_at?: string | null
         }

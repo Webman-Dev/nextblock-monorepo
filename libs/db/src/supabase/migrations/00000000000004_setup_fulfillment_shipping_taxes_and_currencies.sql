@@ -1,18 +1,26 @@
 -- 00000000000004_setup_fulfillment_shipping_taxes_and_currencies.sql
 -- Consolidated migration preserving original statement order within grouped sections.
 
--- 00000000000012_setup_orders_and_invoiceing.sql
 -- Orders, line items, and invoice numbering primitives.
 
 CREATE TABLE public.orders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
-  status text NOT NULL CHECK (status IN ('pending', 'paid', 'shipped', 'cancelled', 'refunded')) DEFAULT 'pending',
+  status text NOT NULL CHECK (status IN ('pending', 'trial', 'paid', 'shipped', 'cancelled', 'refunded')) DEFAULT 'pending',
   total integer NOT NULL,
   stripe_session_id text UNIQUE,
   payment_intent_id text,
   customer_details jsonb,
   provider text CHECK (provider IN ('stripe', 'freemius')) DEFAULT 'stripe',
+  freemius_product_id text,
+  freemius_plan_id text,
+  freemius_license_id text,
+  freemius_subscription_id text,
+  freemius_trial_id text,
+  freemius_user_id text,
+  freemius_trial_ends_at timestamptz,
+  freemius_last_event_type text,
+  freemius_last_synced_at timestamptz,
   currency text NOT NULL DEFAULT 'USD',
   subtotal integer,
   shipping_total integer,
@@ -42,6 +50,18 @@ COMMENT ON COLUMN public.orders.invoice_number IS
   'Stable printable invoice number assigned once when the order first becomes paid.';
 COMMENT ON COLUMN public.orders.paid_at IS
   'Timestamp when the order was first marked as paid.';
+COMMENT ON COLUMN public.orders.freemius_license_id IS
+  'Freemius license ID used to reconcile checkout callbacks and webhooks.';
+COMMENT ON COLUMN public.orders.freemius_subscription_id IS
+  'Freemius subscription ID when the order is associated with recurring billing.';
+COMMENT ON COLUMN public.orders.freemius_trial_id IS
+  'Freemius trial ID when checkout starts in trial mode.';
+COMMENT ON COLUMN public.orders.freemius_trial_ends_at IS
+  'Freemius trial expiration timestamp when supplied by checkout or webhook data.';
+COMMENT ON COLUMN public.orders.freemius_last_event_type IS
+  'Last Freemius checkout callback or webhook event applied to the order.';
+COMMENT ON COLUMN public.orders.freemius_last_synced_at IS
+  'Timestamp when Freemius metadata was last reconciled locally.';
 
 CREATE UNIQUE INDEX idx_orders_invoice_number_unique
   ON public.orders (invoice_number)

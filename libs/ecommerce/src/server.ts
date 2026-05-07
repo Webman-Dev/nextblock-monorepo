@@ -18,6 +18,7 @@ export * from './lib/product-actions'; // Assuming product actions are also serv
 export * from './lib/factory';
 export * from './lib/providers/stripe';
 export * from './lib/providers/freemius';
+export * from './lib/freemius-order-sync';
 export {
   getProduct as getCmsProduct,
   getProducts as getCmsProducts,

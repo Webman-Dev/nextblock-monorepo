@@ -51,6 +51,7 @@ export async function fulfillOrderAction(sessionId: string) {
       return {
         success: true,
         alreadyPaid: result.alreadyPaid,
+        status: 'paid',
         invoice,
       };
     }
@@ -102,45 +103,27 @@ export async function fulfillOrderAction(sessionId: string) {
       return {
         success: true,
         alreadyPaid: true,
+        status: 'paid',
         invoice: await getInvoicePresentationData(order.id, supabase as any),
       };
     }
 
-    const { error: updateError } = await supabase
-      .from('orders')
-      .update({ status: 'paid' })
-      .eq('id', order.id);
-
-    if (updateError) {
-      console.error('Failed to update order status:', updateError);
+    if (order.status === 'trial') {
       return {
-        success: false,
-        error: 'Failed to update order status',
-        errorKey: 'ecommerce.checkout_success_status_update_failed',
+        success: true,
+        alreadyPaid: false,
+        status: 'trial',
+        invoice: await getInvoicePresentationData(order.id, supabase as any),
       };
     }
-
-    try {
-      await applyOrderInventoryDeduction(supabase as any, order.id);
-    } catch (inventoryError) {
-      console.error('Failed to deduct inventory for paid order:', inventoryError);
-      return {
-        success: false,
-        error: 'Failed to update order inventory',
-        errorKey: 'ecommerce.checkout_success_inventory_update_failed',
-      };
-    }
-
-    await assignInvoiceMetadata({
-      orderId: order.id,
-      paidAt: order.paid_at ?? null,
-      client: supabase as any,
-    });
 
     return {
-      success: true,
-      alreadyPaid: false,
-      invoice: await getInvoicePresentationData(order.id, supabase as any),
+      success: false,
+      error: 'Payment is still pending',
+      errorKey:
+        order.status === 'cancelled'
+          ? 'order_status_cancelled'
+          : 'ecommerce.checkout_payment_pending',
     };
   } catch (error) {
     console.error('Action error reconciling order:', error);

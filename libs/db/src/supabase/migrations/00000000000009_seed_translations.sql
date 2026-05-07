@@ -400,6 +400,10 @@ VALUES
     '{"en": "Pending", "fr": "En attente"}'::jsonb
   ),
   (
+    'order_status_trial',
+    '{"en": "Trial", "fr": "Essai"}'::jsonb
+  ),
+  (
     'order_status_shipped',
     '{"en": "Shipped", "fr": "Expédiée"}'::jsonb
   ),
@@ -414,6 +418,14 @@ VALUES
   (
     'back_to_orders',
     '{"en": "Back to orders", "fr": "Retour aux commandes"}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_trial_started',
+    '{"en": "Trial started", "fr": "Essai demarre"}'::jsonb
+  ),
+  (
+    'ecommerce.checkout_order_pending',
+    '{"en": "Order pending", "fr": "Commande en attente"}'::jsonb
   )
 ON CONFLICT (key) DO UPDATE
 SET translations = EXCLUDED.translations;

@@ -729,6 +729,29 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
 
       if (data.customProps && data.customProps.provider === 'freemius') {
         const cp = data.customProps;
+        let checkoutSyncPromise: Promise<void> | null = null;
+        const redirectToFreemiusSuccess = () => {
+          window.location.href = `/checkout/success?session_id=${cp.order_id}`;
+        };
+        const syncFreemiusCheckout = (checkoutResponse: any) => {
+          if (!checkoutSyncPromise) {
+            checkoutSyncPromise = fetch('/api/checkout/freemius/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                orderId: cp.order_id,
+                checkoutResponse,
+              }),
+            }).then(async (syncResponse) => {
+              if (!syncResponse.ok) {
+                const syncPayload = await syncResponse.json().catch(() => null);
+                console.error('Freemius checkout sync failed:', syncPayload);
+              }
+            });
+          }
+
+          return checkoutSyncPromise;
+        };
         const checkoutConfig = {
           product_id: cp.plugin_id,
           public_key: cp.public_key,
@@ -743,8 +766,17 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
           user_firstname: cp.user_firstname,
           user_lastname: cp.user_lastname,
           sandbox: cp.sandbox,
-          success: function () {
-            window.location.href = `/checkout/success?session_id=${cp.order_id}`;
+          purchaseCompleted: function (checkoutResponse: any) {
+            void syncFreemiusCheckout(checkoutResponse);
+          },
+          success: function (checkoutResponse: any) {
+            void (async () => {
+              try {
+                await syncFreemiusCheckout(checkoutResponse);
+              } finally {
+                redirectToFreemiusSuccess();
+              }
+            })();
           },
         };
 
@@ -1250,6 +1282,9 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                     });
                     const trialSummary = getTrialSummary(item);
                     const itemKey = `freemius:${item.id}`;
+                    const selectedTrialPreference = trialSummary
+                      ? trialPreferences[itemKey] || 'paid'
+                      : undefined;
 
                     return (
                       <div key={itemKey} className="rounded-lg border p-3 space-y-3">
@@ -1320,7 +1355,20 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                         <Button
                           className="w-full h-auto min-h-[2.75rem] py-2"
                           variant={freemiusItems.length > 1 ? 'outline' : 'default'}
-                          onClick={() => handlePay('freemius', [{...item, trial_preference: trialPreferences[itemKey] || 'paid'}], itemKey)}
+                          onClick={() =>
+                            handlePay(
+                              'freemius',
+                              [
+                                {
+                                  ...item,
+                                  ...(selectedTrialPreference
+                                    ? { trial_preference: selectedTrialPreference }
+                                    : {}),
+                                },
+                              ],
+                              itemKey
+                            )
+                          }
                           disabled={processingKey !== null}
                         >
                           {processingKey === itemKey ? (

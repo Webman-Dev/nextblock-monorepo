@@ -106,7 +106,9 @@ export function SalesLedger({ sales }: SalesLedgerProps) {
                           className={`capitalize text-[10px] px-1.5 py-0 ${
                             sale.status === 'paid' 
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800' 
-                              : 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700'
+                              : sale.status === 'trial'
+                                ? 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/20 dark:text-cyan-300 dark:border-cyan-800'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700'
                           }`}
                         >
                           {sale.status}

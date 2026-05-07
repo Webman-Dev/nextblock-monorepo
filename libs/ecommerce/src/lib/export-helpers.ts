@@ -54,13 +54,20 @@ export function mapGeneralSalesLedger(orders: ReportData[]) {
     'Total': (order.total / 100).toFixed(2),
     'Currency': order.currency.toUpperCase(),
     'Payment Status': order.status,
-    'Fulfillment Status': order.status === 'shipped' ? 'Shipped' : (order.status === 'paid' ? 'Paid' : 'Pending'),
+    'Fulfillment Status':
+      order.status === 'shipped'
+        ? 'Shipped'
+        : order.status === 'paid'
+          ? 'Paid'
+          : order.status === 'trial'
+            ? 'Trial'
+            : 'Pending',
     'Payment Gateway': order.provider === 'freemius' ? 'Freemius' : 'Stripe'
   }));
 }
 
 export function mapTaxLiabilitySummary(orders: ReportData[]) {
-  return orders.map(order => {
+  return orders.filter(order => order.status === 'paid').map(order => {
     const shipping = order.customer_details?.shipping || order.customer_details?.billing;
     const country = shipping?.country_code || 'N/A';
     const state = shipping?.state || 'N/A';
@@ -84,7 +91,7 @@ export function mapTaxLiabilitySummary(orders: ReportData[]) {
 export function mapMultiCurrencyRevenue(orders: ReportData[]) {
   const summary: Record<string, { volume: number, subtotal: number, tax: number }> = {};
 
-  orders.forEach(order => {
+  orders.filter(order => order.status === 'paid').forEach(order => {
     const currency = order.currency.toUpperCase();
     if (!summary[currency]) {
       summary[currency] = { volume: 0, subtotal: 0, tax: 0 };

@@ -12,13 +12,13 @@ import {
   resolvePriceForCurrency,
 } from '../currency';
 
-type FreemiusCheckoutCredentialEntry = {
+export type FreemiusCheckoutCredentialEntry = {
     publicKey?: string;
     secretKey?: string;
     apiKey?: string;
 };
 
-function readFreemiusEnvValue(name: keyof NodeJS.ProcessEnv) {
+export function readFreemiusEnvValue(name: keyof NodeJS.ProcessEnv) {
     const raw = process.env[name];
 
     if (!raw) {
@@ -138,7 +138,7 @@ function getFreemiusLicenseQuota(value: unknown) {
     return Math.round(parsed);
 }
 
-function parseFreemiusCheckoutCredentialsMap():
+export function parseFreemiusCheckoutCredentialsMap():
     | Record<string, FreemiusCheckoutCredentialEntry>
     | null {
     const raw = readFreemiusEnvValue('FREEMIUS_CHECKOUT_PRODUCTS_JSON');
@@ -159,7 +159,7 @@ function parseFreemiusCheckoutCredentialsMap():
     }
 }
 
-function resolveFreemiusCheckoutCredentials(productId: string | number) {
+export function resolveFreemiusCheckoutCredentials(productId: string | number) {
     const credentialsMap = parseFreemiusCheckoutCredentialsMap();
     const productKey = String(productId);
     const productScopedCredentials = credentialsMap?.[productKey];
@@ -317,12 +317,14 @@ export class FreemiusProvider implements PaymentProvider {
       const totalAmount = unitAmount * item.quantity;
       const trialPeriodDays = normalizeFreemiusTrialPeriod(product.trial_period_days);
       const trialMode =
-          item.trial_preference ? item.trial_preference :
           trialPeriodDays > 0
-              ? product.trial_requires_payment_method
-                  ? 'paid'
-                  : 'free'
+              ? item.trial_preference
+                  ? item.trial_preference
+                  : product.trial_requires_payment_method
+                      ? 'paid'
+                      : 'free'
               : null;
+      const initialOrderStatus = trialMode ? 'trial' : 'pending';
       const freemiusCustomerName = splitFreemiusCustomerName(
         billingAddress?.recipient_name ?? null
       );
@@ -331,11 +333,13 @@ export class FreemiusProvider implements PaymentProvider {
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
-          status: 'pending',
+          status: initialOrderStatus,
           total: totalAmount,
           currency: selectedCurrency.code,
           exchange_rate_at_purchase: selectedCurrency.exchange_rate,
           provider: 'freemius',
+          freemius_product_id: String(freemiusProductId),
+          freemius_plan_id: String(freemiusPlanId),
           user_id: userId || null,
           customer_details: normalizeOrderCustomerDetails({
             email: customerEmail,
@@ -498,6 +502,7 @@ export class FreemiusProvider implements PaymentProvider {
               trial: trialMode,
               trial_period_days: trialPeriodDays,
               trial_requires_payment_method: product.trial_requires_payment_method,
+              initial_order_status: initialOrderStatus,
               order_id: order.id
           }
       };
