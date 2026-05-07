@@ -1,6 +1,12 @@
+/* eslint-disable @nx/enforce-module-boundaries */
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { toJSONSchema } from 'zod';
+import {
+  editorBlockDocumentSchema,
+  editorGeneratedBlockDocumentSchema,
+  getEditorBlocksJsonSchema,
+} from '../../../libs/utils/src/lib/editor-blocks';
 
 dotenv.config({ path: '.env.local' });
 
@@ -67,17 +73,7 @@ async function readDatabaseSample() {
   return data;
 }
 
-function loadEditorBlockSchemas() {
-  return require('@nextblock-cms/utils') as typeof import('@nextblock-cms/utils');
-}
-
 async function main() {
-  const {
-    editorBlockDocumentSchema,
-    editorGeneratedBlockDocumentSchema,
-    getEditorBlocksJsonSchema,
-  } = loadEditorBlockSchemas();
-
   if (process.argv.includes('--generated-schema-diagnostics')) {
     const jsonSchema = toJSONSchema(editorGeneratedBlockDocumentSchema, {
       cycles: 'ref',

@@ -4,7 +4,7 @@ import { normalizePriceMap, normalizeSalePriceMap } from '@nextblock-cms/ecommer
 import { getVariantEffectivePriceRange } from '@nextblock-cms/ecommerce/variation-utils';
 
 
-import { ProductGridBlockContent } from './ecommerce-block-schemas';
+import type { ProductGridBlockContent } from './ecommerce-block-schemas';
 
 import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
 

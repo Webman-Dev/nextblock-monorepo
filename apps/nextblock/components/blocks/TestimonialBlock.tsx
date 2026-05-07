@@ -1,5 +1,5 @@
 import React from 'react';
-import { z } from 'zod';
+import { z } from '../../lib/zod-config';
 import { BlockConfig, BlockProps, BlockEditorProps } from '@nextblock-cms/sdk';
 import { Avatar, AvatarFallback, AvatarImage } from '@nextblock-cms/ui/avatar';
 import { Card, CardContent } from '@nextblock-cms/ui/card';

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '../zod-config';
 import { TestimonialBlockConfig, TestimonialBlockContent } from '../../components/blocks/TestimonialBlock';
 import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSchema, FeaturedProductBlockContent, CartBlockSchema, CartBlockContent, CheckoutBlockSchema, CheckoutBlockContent, ProductDetailsBlockSchema, ProductDetailsBlockContent } from './ecommerce-block-schemas';
 

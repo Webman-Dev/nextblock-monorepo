@@ -1,4 +1,4 @@
-import { toJSONSchema, z } from 'zod';
+import { toJSONSchema, z } from './zod-config';
 
 const nullableStringSchema = z.string().nullable().optional();
 const nullableBooleanSchema = z.boolean().nullable().optional();

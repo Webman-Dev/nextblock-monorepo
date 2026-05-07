@@ -3,7 +3,7 @@ import { getProduct } from '@nextblock-cms/ecommerce/server';
 import { normalizePriceMap, normalizeSalePriceMap } from '@nextblock-cms/ecommerce/currency';
 import { getVariantEffectivePriceRange } from '@nextblock-cms/ecommerce/variation-utils';
 
-import { FeaturedProductBlockContent } from './ecommerce-block-schemas';
+import type { FeaturedProductBlockContent } from './ecommerce-block-schemas';
 import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
 
 // Component (Server Component)

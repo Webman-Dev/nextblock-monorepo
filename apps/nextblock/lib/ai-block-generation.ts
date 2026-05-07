@@ -1,5 +1,5 @@
 import { generateText } from 'ai';
-import { z } from 'zod';
+import { z } from './zod-config';
 
 import {
   buildCortexAiRoutingPolicy,

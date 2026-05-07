@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from './zod-config';
 
 const productTypeSchema = z
   .enum(['physical', 'digital'])

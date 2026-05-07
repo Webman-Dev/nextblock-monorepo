@@ -1,6 +1,6 @@
 import { stepCountIs, streamText } from 'ai';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
+import { z } from '../../../../lib/zod-config';
 
 import {
   createClient,

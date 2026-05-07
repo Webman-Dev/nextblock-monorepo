@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '../zod-config';
 
 // Product Grid Block Schema
 export const ProductGridBlockSchema = z.object({
