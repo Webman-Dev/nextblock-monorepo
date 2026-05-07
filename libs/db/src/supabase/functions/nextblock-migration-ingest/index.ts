@@ -1,3 +1,4 @@
+/// <reference types="deno" />
 import { createClient } from "@supabase/supabase-js";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 

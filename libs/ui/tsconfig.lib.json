@@ -7,12 +7,7 @@
       "node",
       "@nx/react/typings/cssmodule.d.ts",
       "@nx/react/typings/image.d.ts"
-    ],
-    "paths": {
-      "@nextblock-cms/utils": ["dist/libs/utils/index"],
-      "@nextblock-cms/utils/*": ["dist/libs/utils/*"],
-      "@nextblock-cms/utils/server": ["dist/libs/utils/server"]
-    },
+    ]
   },
   "include": [
     "src/**/*.ts",

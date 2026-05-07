@@ -765,11 +765,7 @@ function stripStandardMetadata(value: unknown): unknown {
 
 export function getEditorBlocksJsonSchema() {
   return stripStandardMetadata(
-    toJSONSchema(editorBlockDocumentSchema, {
-      cycles: 'ref',
-      reused: 'ref',
-      target: 'draft-07',
-    })
+    toJSONSchema(editorBlockDocumentSchema as any)
   );
 }
 

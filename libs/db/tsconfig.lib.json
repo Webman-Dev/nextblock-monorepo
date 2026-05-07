@@ -5,5 +5,10 @@
     "declaration": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "../../libs/environment.d.ts"]
+  "include": ["src/**/*.ts", "../../libs/environment.d.ts"],
+  "references": [
+    {
+      "path": "../utils/tsconfig.lib.json"
+    }
+  ]
 }

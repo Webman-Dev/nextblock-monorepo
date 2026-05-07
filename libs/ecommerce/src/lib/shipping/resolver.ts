@@ -70,13 +70,13 @@ export async function resolveShippingOptions(
     
     // Check for State match first if destination has one
     if (destination.state) {
-        const stateMatch = matches.find(m => m.state_code === destination.state);
+        const stateMatch = matches.find((m: any) => m.state_code === destination.state);
         if (stateMatch) selectedZoneId = stateMatch.zone_id;
     }
     
     // Fallback to Country match
     if (!selectedZoneId) {
-        const countryMatch = matches.find(m => !m.state_code && !m.postal_code);
+        const countryMatch = matches.find((m: any) => !m.state_code && !m.postal_code);
         if (countryMatch) selectedZoneId = countryMatch.zone_id;
     }
     
@@ -96,7 +96,7 @@ export async function resolveShippingOptions(
     }
 
     // 4. Filter methods based on cart total (e.g., Free Shipping only if > $100)
-    const validMethods = methods.filter((method) => {
+    const validMethods = methods.filter((method: any) => {
         const convertedThreshold = resolveShippingRateAmountForCurrency({
             amountMap: method.min_order_amounts || {},
             fallbackAmount: method.min_order_amount || 0,
@@ -110,7 +110,7 @@ export async function resolveShippingOptions(
     });
 
     // 5. Convert valid methods into the shopper currency, then pick the cheapest.
-    const resolvedMethods = validMethods.map((method) => ({
+    const resolvedMethods = validMethods.map((method: any) => ({
         id: method.id,
         name: resolveTranslatedText(
           method.name,
@@ -128,7 +128,7 @@ export async function resolveShippingOptions(
         currency: selectedCurrencyCode,
         type: method.method_type as 'flat_rate' | 'free_shipping',
     }));
-    const cheapestMethod = resolvedMethods.sort((left, right) => left.amount - right.amount)[0];
+    const cheapestMethod = resolvedMethods.sort((left: any, right: any) => left.amount - right.amount)[0];
 
     if (!cheapestMethod) {
         return [];
