@@ -106,6 +106,9 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
       billing_cycle: selectedCycle,
       freemius_product_id: product.freemius_product_id,
       freemius_plan_id: planId, // Overwrite if we got a real plan id
+      trial_period_days: product.trial_period_days ?? 0,
+      trial_requires_payment_method: product.trial_requires_payment_method ?? false,
+      is_taxable: product.is_taxable,
       currency_code: activeCurrencyCode,
     });
 

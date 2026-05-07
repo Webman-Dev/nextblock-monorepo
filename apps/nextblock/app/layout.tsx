@@ -443,6 +443,7 @@ export default async function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <script
           nonce={nonce}
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{ __html: TRUSTED_TYPES_BOOTSTRAP }}
         />
       </head>

@@ -1318,28 +1318,30 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                         )}
 
                         <Button
-                          className="w-full"
+                          className="w-full h-auto min-h-[2.75rem] py-2"
                           variant={freemiusItems.length > 1 ? 'outline' : 'default'}
                           onClick={() => handlePay('freemius', [{...item, trial_preference: trialPreferences[itemKey] || 'paid'}], itemKey)}
                           disabled={processingKey !== null}
                         >
                           {processingKey === itemKey ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" />
                           ) : (
-                            <Download className="mr-2 h-4 w-4" />
+                            <Download className="mr-2 h-4 w-4 shrink-0" />
                           )}
-                          {processingKey === itemKey
-                            ? t('ecommerce.processing')
-                            : freemiusItems.length > 1
-                              ? translateOrFallback(
-                                  'ecommerce.checkout_product',
-                                  'Checkout {title}',
-                                  { title: item.title }
-                                )
-                              : translateOrFallback(
-                                  'ecommerce.checkout_digital_product',
-                                  'Checkout Digital Product'
-                                )}
+                          <span className="whitespace-normal text-left">
+                            {processingKey === itemKey
+                              ? t('ecommerce.processing')
+                              : freemiusItems.length > 1
+                                ? translateOrFallback(
+                                    'ecommerce.checkout_product',
+                                    'Checkout {title}',
+                                    { title: item.title }
+                                  )
+                                : translateOrFallback(
+                                    'ecommerce.checkout_digital_product',
+                                    'Checkout Digital Product'
+                                  )}
+                          </span>
                         </Button>
                       </div>
                     );
