@@ -8,7 +8,7 @@ import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
-  ExternalLink,
+  ExternalLink, Paintbrush,
 } from "lucide-react"
 import { Button } from "@nextblock-cms/ui"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
@@ -201,6 +201,7 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
   // Fallback for general /cms/settings if no more specific language path matches
   else if (pathname.startsWith("/cms/settings/logos")) pageTitle = "Branding";
   else if (pathname.startsWith("/cms/settings/copyright")) pageTitle = "Copyright Settings";
+  else if (pathname.startsWith("/cms/settings/global-css")) pageTitle = "Global CSS Settings";
   else if (pathname.startsWith("/cms/settings/extra-translations")) pageTitle = "Extra Translations";
   else if (pathname.startsWith("/cms/settings/currencies")) pageTitle = "Currency Settings";
   else if (pathname.startsWith("/cms/settings/taxes")) pageTitle = "Tax Settings";
@@ -340,6 +341,9 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                    </NavItem>
                     <NavItem href="/cms/settings/copyright" icon={CopyrightIcon} isActive={pathname.startsWith("/cms/settings/copyright")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Copyright
+                    </NavItem>
+                    <NavItem href="/cms/settings/global-css" icon={Paintbrush} isActive={pathname.startsWith("/cms/settings/global-css")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Global CSS
                     </NavItem>
                     <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Extra Translations

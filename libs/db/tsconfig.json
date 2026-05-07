@@ -9,5 +9,6 @@
     "noFallthroughCasesInSwitch": true,
     "noPropertyAccessFromIndexSignature": true,
     "composite": true
-  }
+  },
+  "include": ["src/**/*.ts", "../../libs/environment.d.ts"]
 }
