@@ -202,19 +202,19 @@ async function main() {
   }
 
   // 7. Push Database
-  console.log(chalk.blue('\nPushing Database schema and config...'));
+  console.log(chalk.blue('\nPushing pending database migrations...'));
   try {
     const { setupPush } = await inquirer.prompt([
       {
         type: 'confirm',
         name: 'setupPush',
-        message: 'Ready to push database schema? This will overwrite the linked database with local schema.',
+        message: 'Ready to apply pending migrations to the linked database? This does not reset existing data.',
         default: true
       }
     ]);
 
     if (setupPush) {
-      await execa('npm', ['run', 'db:push'], {
+      await execa('npm', ['run', 'db:migrate:fresh'], {
         stdio: 'inherit',
         cwd: REPO_ROOT,
         env: {
@@ -227,10 +227,10 @@ async function main() {
       });
       console.log(chalk.green('\n✓ Database pushed successfully.'));
     } else {
-      console.log(chalk.yellow('\nSkipped db push. Run `npm run db:push` to synchronize your database.'));
+      console.log(chalk.yellow('\nSkipped db push. Run `npm run db:migrate:fresh` to initialize this database.'));
     }
   } catch {
-    console.error(chalk.red('\nDatabase push failed. Please check your credentials and run `npm run db:push` manually.'));
+    console.error(chalk.red('\nDatabase push failed. Please check your credentials and run `npm run db:migrate:fresh` manually for a new database.'));
   }
 
   // 8. Configure SMTP in Supabase Auth

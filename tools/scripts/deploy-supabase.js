@@ -103,18 +103,18 @@ async function deploy() {
 
   console.log(`${colors.green}Linking to Supabase project...${colors.reset}`);
   runCommand(
-    `npx supabase link --project-ref ${process.env.SUPABASE_PROJECT_ID} --password ${dbPassword} ${workDirFlag}`,
+    `npx supabase link --project-ref ${process.env.SUPABASE_PROJECT_ID} --password ${dbPassword} ${workDirFlag} --yes`,
   );
 
   console.log(
     `${colors.green}Pushing database migrations...${colors.reset}`,
   );
-  runCommand(`npx supabase db push --include-all ${workDirFlag}`);
+  runCommand('node tools/scripts/push-db-migrations.js --confirm --skip-link');
 
   console.log(
     `${colors.green}Pushing Supabase config (Site URL: ${process.env.NEXT_PUBLIC_URL})...${colors.reset}`,
   );
-  runCommand(`npx supabase config push ${workDirFlag}`);
+  runCommand(`npx supabase config push ${workDirFlag} --yes`);
 
   console.log(
     `${colors.green}Syncing Supabase Auth SMTP + email templates...${colors.reset}`,

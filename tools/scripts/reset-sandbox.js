@@ -1,4 +1,5 @@
 const http = require('http');
+const https = require('https');
 const path = require('path');
 const fs = require('fs');
 const dotenv = require('dotenv');
@@ -16,6 +17,17 @@ if (fs.existsSync(envPath)) {
 
 const CRON_SECRET = process.env.CRON_SECRET;
 const NEXT_PUBLIC_URL = process.env.NEXT_PUBLIC_URL || 'http://localhost:4200';
+
+if (
+  process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true' ||
+  process.env.SANDBOX_RESET_ENABLED !== 'true'
+) {
+  console.error(
+    '\x1b[31m%s\x1b[0m',
+    'Refusing to trigger sandbox reset because sandbox reset is not explicitly enabled.',
+  );
+  process.exit(1);
+}
 
 if (!CRON_SECRET) {
   console.error('\x1b[31m%s\x1b[0m', 'Error: CRON_SECRET is not set in .env.local');
@@ -36,7 +48,8 @@ const options = {
   }
 };
 
-const req = http.request(options, (res) => {
+const requestClient = url.protocol === 'https:' ? https : http;
+const req = requestClient.request(options, (res) => {
   let data = '';
   res.on('data', (chunk) => {
     data += chunk;

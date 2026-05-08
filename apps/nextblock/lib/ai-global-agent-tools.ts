@@ -1,4 +1,5 @@
 import { tool } from 'ai';
+import { createCortexDatabaseAgentTools } from './ai-global-agent-db-tools';
 import { z } from './zod-config';
 
 export const availableCortexAiBlockTypes = [
@@ -2733,7 +2734,12 @@ export async function executeSearchDocumentation(
     .filter((snippet) => snippet.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, parsed.limit)
-    .map(({ score: _score, ...snippet }) => snippet);
+    .map((snippet) => ({
+      excerpt: snippet.excerpt,
+      source: snippet.source,
+      title: snippet.title,
+      url: snippet.url,
+    }));
 
   return {
     query: parsed.query,
@@ -4695,6 +4701,7 @@ export async function executeCmsActionPlan(
 
 export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
   return {
+    ...createCortexDatabaseAgentTools(context),
     fetch_ecommerce_stats: tool({
       description:
         'Fetch quantitative ecommerce statistics and reports from the database. Use this to answer questions about revenue, order counts, order status counts such as pending or trial, and top-selling products over a time range. This tool is read-only and does not require confirmation.',
