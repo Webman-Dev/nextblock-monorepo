@@ -49,7 +49,7 @@ async function main() {
     {
       type: 'password',
       name: 'postgresUrl',
-      message: 'Connection String (Dashboard > Connect > URI mode):',
+      message: 'Connection String (Dashboard > Connect > URI mode) [POSTGRES_URL]:',
       validate: (val) => (val ? true : 'Connection string is required'),
     },
     {
@@ -150,6 +150,7 @@ async function main() {
     'NEXT_PUBLIC_SUPABASE_ANON_KEY=': `NEXT_PUBLIC_SUPABASE_ANON_KEY=${answers.anonKey}`,
     'SUPABASE_SERVICE_ROLE_KEY=': `SUPABASE_SERVICE_ROLE_KEY=${answers.serviceKey}`,
     'SUPABASE_ACCESS_TOKEN=': `SUPABASE_ACCESS_TOKEN=${answers.accessToken}`,
+    'POSTGRES_PASSWORD=': `POSTGRES_PASSWORD="${dbPassword}"`,
   };
 
   if (r2Values) {
@@ -185,9 +186,14 @@ async function main() {
   // 6. Link Supabase
   console.log(chalk.blue('\nLinking Supabase project...'));
   try {
-    await execa('npx', ['supabase', 'link', '--project-ref', answers.projectId, '--password', dbPassword, '--workdir', 'libs/db/src'], {
+    await execa('npm', ['run', 'db:link'], {
       stdio: 'inherit',
       cwd: REPO_ROOT,
+      env: {
+        ...process.env,
+        SUPABASE_PROJECT_ID: answers.projectId,
+        POSTGRES_PASSWORD: dbPassword,
+      }
     });
     console.log(chalk.green('✓ Supabase successfully linked.'));
   } catch {
