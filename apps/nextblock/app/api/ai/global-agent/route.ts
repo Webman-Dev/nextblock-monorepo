@@ -95,6 +95,7 @@ const GLOBAL_AGENT_SYSTEM_PROMPT = [
   'For follow-up requests like "also add it in French", use the prior requested item and apply it to the named language. For page/post/product translations, pass the current translationGroupId into the creation tool so the backend links the language versions.',
   'Use search_documentation before answering implementation or CMS usage questions that require factual project context.',
   'Use fetch_ecommerce_stats for quantitative questions about revenue, products, or order counts. This tool is read-only.',
+  'For order-status questions like "how many pending orders" or "how many trial orders", use the tool result report.matchingOrderStatus or report.orderStatusCounts, and use all_time unless the user names a specific time period.',
   'Never invent database fields, raw SQL, markdown content, or unsupported tool arguments.',
 ].join(' ');
 
