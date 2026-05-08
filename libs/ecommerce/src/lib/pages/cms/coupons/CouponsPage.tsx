@@ -43,6 +43,38 @@ function statusVariant(status: string, isActive: boolean) {
   return status === 'synced' || status === 'not_required' ? 'default' : 'secondary';
 }
 
+function getScopedSkuCount(
+  couponProducts: Array<{ product_id?: string | null }> | null | undefined,
+  productSkuById: Map<string, string>
+) {
+  const scopedKeys = new Set<string>();
+
+  for (const couponProduct of couponProducts || []) {
+    const productId = couponProduct.product_id;
+
+    if (!productId) {
+      continue;
+    }
+
+    scopedKeys.add(productSkuById.get(productId) || productId);
+  }
+
+  return scopedKeys.size;
+}
+
+function formatProductScope(
+  couponProducts: Array<{ product_id?: string | null }> | null | undefined,
+  productSkuById: Map<string, string>
+) {
+  const scopedSkuCount = getScopedSkuCount(couponProducts, productSkuById);
+
+  if (scopedSkuCount === 0) {
+    return 'All eligible products';
+  }
+
+  return `${scopedSkuCount} scoped SKU${scopedSkuCount === 1 ? '' : 's'}`;
+}
+
 export async function CouponsPage({
   searchParams,
 }: {
@@ -87,6 +119,12 @@ export async function CouponsPage({
     currencies?.find((currency: any) => currency.is_default)?.code ||
     currencies?.[0]?.code ||
     'USD';
+  const productSkuById = new Map<string, string>(
+    (products || []).map((product: any) => [
+      product.id,
+      product.sku?.trim().toUpperCase() || product.id,
+    ])
+  );
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-6 py-8">
@@ -166,9 +204,7 @@ export async function CouponsPage({
                       <td className="px-4 py-3">
                         <span className="capitalize">{coupon.provider_scope}</span>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {coupon.coupon_products?.length
-                            ? `${coupon.coupon_products.length} scoped product(s)`
-                            : 'All eligible products'}
+                          {formatProductScope(coupon.coupon_products, productSkuById)}
                         </p>
                       </td>
                       <td className="px-4 py-3 font-medium">
