@@ -54,7 +54,7 @@ export function InvoiceViewerShell({
 }: InvoiceViewerShellProps) {
   return (
     <>
-      <style {...{ jsx: true, global: true } as any}>{`
+      <style>{`
         @media print {
           @page {
             size: portrait;
