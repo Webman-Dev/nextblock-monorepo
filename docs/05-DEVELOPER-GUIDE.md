@@ -38,7 +38,20 @@ If you skip `npm run setup`, the misspelled root sample file
 ### Database workflows
 
 - `npm run db:link`: link the Supabase CLI to the target project
-- `npm run db:push`: push migrations, config, and seed sandbox images
+- `npm run db:migrate:check`: preview pending remote migrations without
+  applying them
+- `npm run db:migrate`: apply pending migration files only; this is the
+  production-safe path for live databases
+- `npm run db:migrate:fresh`: apply the full migration baseline to a
+  brand-new empty database
+- `npm run db:migrate:repair-history:check`: preview the migration-history
+  baseline repair for an existing database whose schema is already present
+- `npm run db:migrate:repair-history`: mark historical baseline migrations as
+  applied without running their SQL
+- `npm run db:push`: alias for `npm run db:migrate`
+- `npm run db:push:sandbox`: legacy sandbox bootstrap path that pushes
+  migrations with `--include-all`, pushes Supabase config, seeds sandbox
+  images, and deploys the migration-ingest function
 - `npm run db:reset`: reset the local/linked Supabase database from the db
   workdir
 - `npm run db:types`: regenerate typed Supabase definitions
@@ -60,12 +73,16 @@ repo expects at least:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_PROJECT_ID` for Supabase CLI migration tooling
+- `SUPABASE_ACCESS_TOKEN` for Supabase CLI linking
 - `POSTGRES_URL` or `DATABASE_URL` for SQL fallback paths and db tooling
 - `NEXT_PUBLIC_URL`
 - `CRON_SECRET` for cron routes
 
 Optional but commonly needed:
 
+- `SANDBOX_RESET_ENABLED=true` only on disposable sandbox deployments that
+  should allow `/api/cron/reset-sandbox`
 - R2 credentials for media storage
 - SMTP credentials for hosted auth email configuration
 - Stripe keys for physical-product checkout
@@ -98,13 +115,40 @@ The migration source of truth is:
 Normal contributor workflow:
 
 1. update code and migrations together
-2. push or reset the linked Supabase project
-3. regenerate db types if the schema changed
-4. verify the app routes or server actions against the new shape
+2. run `npm run db:migrate:check`
+3. run `npm run db:migrate` against the intended Supabase project
+4. regenerate db types if the schema changed
+5. verify the app routes or server actions against the new shape
 
-Because the migration set is already squashed, contributors should treat the
-existing files as grouped domains rather than looking for one-file-per-feature
-history.
+Production rule:
+
+- Do not edit migration files that have already been applied to production.
+- Add a new forward-only `.sql` file under
+  `libs/db/src/supabase/migrations` for each production schema/data change.
+- Use `npm run db:migrate:check` before `npm run db:migrate`.
+- If `db:migrate:check` lists historical baseline migrations such as
+  `00000000000001_setup_cms_core.sql` on an existing production database, do
+  not run `db:migrate` yet. Run `npm run db:migrate:repair-history:check`,
+  then `npm run db:migrate:repair-history`, then check again. The expected
+  result after repair is that only new unapplied migrations remain.
+- Do not use `npm run db:reset`, `npm run sandbox:reset`, or
+  `npm run db:push:sandbox` against production.
+
+Fresh local and sandbox rebuilds may still use the reset/bootstrap flow when
+the target database is disposable.
+
+The migration-only script:
+
+- loads `.env.local` and `.env`
+- links the Supabase CLI to `SUPABASE_PROJECT_ID`
+- uses `SUPABASE_DB_PASSWORD`, `POSTGRES_PASSWORD`, `POSTGRES_URL`, or
+  `DATABASE_URL` for the database password
+- runs `supabase db push` without `--include-all`
+- never runs a reset, seed script, function deploy, or config push
+
+Because the migration set started as a squashed baseline, contributors should
+treat the existing baseline files as grouped domains. New production changes
+after the baseline should be appended as new migrations.
 
 ## Sandbox Reset Operations
 
@@ -120,11 +164,15 @@ The sandbox automation is code-driven.
 `npm run sandbox:reset`:
 
 - loads `.env.local`
+- refuses to run unless `NEXT_PUBLIC_IS_SANDBOX=true` and
+  `SANDBOX_RESET_ENABLED=true`
 - reads `NEXT_PUBLIC_URL` and `CRON_SECRET`
 - calls `GET /api/cron/reset-sandbox`
 
 The cron route then:
 
+- returns 404 immediately unless `NEXT_PUBLIC_IS_SANDBOX=true` and
+  `SANDBOX_RESET_ENABLED=true`
 - executes the generated reset SQL
 - reseeds media assets
 - reseeds commerce content

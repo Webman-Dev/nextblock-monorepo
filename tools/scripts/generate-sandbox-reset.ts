@@ -86,7 +86,7 @@ ${concatenatedSql}
 // Regenerate it from repo root with: npm run generate:sandbox
 // Source of truth: tools/scripts/generate-sandbox-reset.ts and libs/db/src/supabase/migrations/*.sql
 
-export const SANDBOX_RESET_SQL = \`\n${procedureSql.replace(/`/g, '\\`').replace(/\$\{/g, '\\${')}\n\`;\n`;
+export const SANDBOX_RESET_SQL = \`\n${procedureSql.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${')}\n\`;\n`;
   fs.writeFileSync(OUT_FILE, tsContent);
   
   console.log(`[generate-sandbox-reset] ✅ Successfully compiled Sandbox Reset SQL to ${OUT_FILE}`);

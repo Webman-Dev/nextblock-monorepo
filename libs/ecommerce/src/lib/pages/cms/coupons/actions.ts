@@ -69,6 +69,10 @@ function parseDiscountAmount(input: {
   return Math.round(parsed);
 }
 
+function parseCheckbox(formData: FormData, name: string) {
+  return formData.getAll(name).some((value) => value === 'true');
+}
+
 function parseCouponPayload(formData: FormData) {
   const code = normalizeCouponCode(cleanString(formData.get('code')));
   const name = cleanString(formData.get('name'));
@@ -102,7 +106,7 @@ function parseCouponPayload(formData: FormData) {
       provider_scope: providerScope,
       discount_type: discountType,
       discount_amount: discountAmount,
-      is_active: formData.get('is_active') === 'true',
+      is_active: parseCheckbox(formData, 'is_active'),
       starts_at: parseDate(formData.get('starts_at')),
       ends_at: parseDate(formData.get('ends_at')),
       redemption_limit: redemptionLimitRaw ? Number.parseInt(redemptionLimitRaw, 10) : null,

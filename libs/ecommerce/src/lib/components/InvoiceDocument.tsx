@@ -67,8 +67,8 @@ export function InvoiceDocument({
               {data.settings.businessName ? (
                 <p className="text-base font-semibold">{data.settings.businessName}</p>
               ) : null}
-              {sellerAddressLines.map((line) => (
-                <p key={`seller-${line}`}>{line}</p>
+              {sellerAddressLines.map((line, index) => (
+                <p key={`seller-${index}-${line}`}>{line}</p>
               ))}
               {data.settings.email ? <p>{data.settings.email}</p> : null}
               {data.settings.phone ? <p>{data.settings.phone}</p> : null}
@@ -78,8 +78,8 @@ export function InvoiceDocument({
               <div className="rounded-xl border bg-slate-50 px-4 py-3 text-sm print:px-3 print:py-2 print:text-[10px]">
                 <p className="mb-2 font-semibold">{labels.taxRegistrations}</p>
                 <div className="space-y-1">
-                  {data.settings.taxRegistrations.map((registration) => (
-                    <p key={`${registration.label}-${registration.value}`}>
+                  {data.settings.taxRegistrations.map((registration, index) => (
+                    <p key={`${registration.label}-${registration.value}-${index}`}>
                       <span className="font-medium">{registration.label}</span>
                       {registration.label && registration.value ? ': ' : ''}
                       {registration.value}
@@ -255,8 +255,8 @@ function AddressBlock({ title, lines }: { title: string; lines: string[] }) {
       </p>
       {lines.length ? (
         <div className="space-y-1 text-sm print:text-[10px]">
-          {lines.map((line) => (
-            <p key={`${title}-${line}`}>{line}</p>
+          {lines.map((line, index) => (
+            <p key={`${title}-${index}-${line}`}>{line}</p>
           ))}
         </div>
       ) : (

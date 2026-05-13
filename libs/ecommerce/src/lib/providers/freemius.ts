@@ -359,7 +359,9 @@ export class FreemiusProvider implements PaymentProvider {
                       ? 'paid'
                       : 'free'
               : null;
-      const initialOrderStatus = trialMode ? 'trial' : 'pending';
+      // The order is only a local checkout attempt until Freemius confirms the
+      // purchase or trial through the checkout callback/webhook.
+      const initialOrderStatus = 'pending';
       const freemiusCustomerName = splitFreemiusCustomerName(
         billingAddress?.recipient_name ?? null
       );

@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { Badge } from '@nextblock-cms/ui/badge';
@@ -40,6 +41,7 @@ export function CouponForm({
   const [quote, setQuote] = useState<CouponQuote | null>(null);
   const [error, setError] = useState('');
   const [isApplying, setIsApplying] = useState(false);
+  const lastValidationKeyRef = useRef<string | null>(null);
   const cartSignature = useMemo(
     () =>
       items
@@ -52,6 +54,10 @@ export function CouponForm({
     const translated = t(key);
     return translated === key ? fallback : translated;
   }, [t]);
+  const getValidationKey = useCallback(
+    (code: string) => `${normalizeCouponCode(code)}:${currencyCode}:${cartSignature}`,
+    [cartSignature, currencyCode]
+  );
 
   const applyCode = useCallback(async (nextCode: string, options?: { silent?: boolean }) => {
     const normalizedCode = normalizeCouponCode(nextCode);
@@ -64,36 +70,49 @@ export function CouponForm({
     setIsApplying(true);
     setError('');
 
-    const result = await getCouponQuoteAction({
-      code: normalizedCode,
-      items,
-      currencyCode,
-    });
+    try {
+      const result = await getCouponQuoteAction({
+        code: normalizedCode,
+        items,
+        currencyCode,
+      });
 
-    setIsApplying(false);
+      if (!result.success) {
+        setQuote(null);
+        onQuoteChange?.(null);
+        clearAppliedCoupon?.();
+        setError(result.errorKey ? translateOrFallback(result.errorKey, result.error) : result.error);
+        return;
+      }
 
-    if (!result.success) {
+      lastValidationKeyRef.current = getValidationKey(result.quote.code);
+      setQuote(result.quote);
+      onQuoteChange?.(result.quote);
+      if (!options?.silent) {
+        setAppliedCoupon?.({
+          code: result.quote.code,
+          couponId: result.quote.couponId,
+        });
+        setCodeInput('');
+      }
+
+      if (!options?.silent) {
+        setError('');
+      }
+    } catch (validationError) {
+      console.error('Failed to validate coupon:', validationError);
       setQuote(null);
       onQuoteChange?.(null);
-      clearAppliedCoupon?.();
-      setError(result.errorKey ? translateOrFallback(result.errorKey, result.error) : result.error);
-      return;
-    }
-
-    setQuote(result.quote);
-    onQuoteChange?.(result.quote);
-    setAppliedCoupon?.({
-      code: result.quote.code,
-      couponId: result.quote.couponId,
-    });
-    setCodeInput('');
-
-    if (!options?.silent) {
-      setError('');
+      setError(
+        translateOrFallback('ecommerce.coupon_validation_failed', 'Failed to validate coupon.')
+      );
+    } finally {
+      setIsApplying(false);
     }
   }, [
     clearAppliedCoupon,
     currencyCode,
+    getValidationKey,
     items,
     onQuoteChange,
     setAppliedCoupon,
@@ -106,17 +125,25 @@ export function CouponForm({
     }
 
     if (!appliedCoupon || items.length === 0) {
+      lastValidationKeyRef.current = null;
       setQuote(null);
       onQuoteChange?.(null);
       return;
     }
 
+    const validationKey = getValidationKey(appliedCoupon.code);
+
+    if (lastValidationKeyRef.current === validationKey) {
+      return;
+    }
+
+    lastValidationKeyRef.current = validationKey;
     void applyCode(appliedCoupon.code, { silent: true });
   }, [
-    appliedCoupon,
+    appliedCoupon?.code,
     applyCode,
-    cartSignature,
     clearAppliedCoupon,
+    getValidationKey,
     items.length,
     onQuoteChange,
     setAppliedCoupon,

@@ -34,6 +34,10 @@ import {
   executeUpdateSectionColumnBlock,
   type CortexAiPageContext,
 } from '../../../../lib/ai-global-agent-tools';
+import {
+  executeDatabaseActionPlan,
+  executeDatabaseMutation,
+} from '../../../../lib/ai-global-agent-db-tools';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +56,8 @@ const confirmedToolCallSchema = z.strictObject({
     'create_cms_post',
     'create_cms_product',
     'delete_cms_item',
+    'execute_database_action_plan',
+    'execute_database_mutation',
     'execute_cms_action_plan',
     'insert_content_block',
     'update_cms_item_field',
@@ -94,7 +100,10 @@ const GLOBAL_AGENT_SYSTEM_PROMPT = [
   'When a user names a language, pass that language name or its locale code in languageCode; examples: French maps to fr, English maps to en.',
   'For follow-up requests like "also add it in French", use the prior requested item and apply it to the named language. For page/post/product translations, pass the current translationGroupId into the creation tool so the backend links the language versions.',
   'Use search_documentation before answering implementation or CMS usage questions that require factual project context.',
+  'Use describe_database_schema, read_database_records, execute_database_mutation, and execute_database_action_plan for direct database tasks that are not covered by a more specific CMS tool. Use typed CRUD tools only; never ask for or invent raw SQL.',
+  'For direct database mutations, always return the confirmation preview first. Never claim a database mutation is complete until the confirmed tool result has mutationExecuted=true. Do not edit auth users, profiles, user addresses, password fields, API keys, tokens, secrets, private keys, credentials, or the cortex_ai_openrouter_api_key site setting.',
   'Use fetch_ecommerce_stats for quantitative questions about revenue, products, or order counts. This tool is read-only.',
+  'For order-status questions like "how many pending orders" or "how many trial orders", use the tool result report.matchingOrderStatus or report.orderStatusCounts, and use all_time unless the user names a specific time period.',
   'Never invent database fields, raw SQL, markdown content, or unsupported tool arguments.',
 ].join(' ');
 
@@ -386,6 +395,33 @@ function getToolCompletionMessage(toolName?: string, output?: unknown) {
     return 'I fetched the latest ecommerce statistics for you.';
   }
 
+  if (toolName === 'describe_database_schema') {
+    return 'I inspected the available database schema.';
+  }
+
+  if (toolName === 'read_database_records') {
+    return 'I read the requested database records.';
+  }
+
+  if (toolName === 'execute_database_mutation') {
+    const affectedCount = readNumberField(output, 'affectedCount');
+    const table = readStringField(output, 'table');
+    const auditLogged = isRecord(output) && output.auditLogged === true;
+
+    return mutationExecuted
+      ? `Done. I updated ${affectedCount ? pluralize(affectedCount, 'database row') : 'the database'}${table ? ` in ${table}` : ''}.${auditLogged ? ' Audit logged.' : ''}`
+      : 'I prepared the database mutation.';
+  }
+
+  if (toolName === 'execute_database_action_plan') {
+    const actionCount = readNumberField(output, 'actionCount');
+    const auditLogged = isRecord(output) && output.auditLogged === true;
+
+    return mutationExecuted
+      ? `Done. I completed ${actionCount ? pluralize(actionCount, 'database action') : 'the database action plan'}.${auditLogged ? ' Audit logged.' : ''}`
+      : 'I prepared the database action plan.';
+  }
+
   if (toolName === 'update_current_cms_fields') {
     return 'Done. I updated the current CMS fields.';
   }
@@ -471,6 +507,10 @@ async function executeConfirmedToolCall(params: {
       return executeCreateCmsProduct(params.input as any, params.context);
     case 'delete_cms_item':
       return executeDeleteCmsItem(params.input as any, params.context);
+    case 'execute_database_action_plan':
+      return executeDatabaseActionPlan(params.input as any, params.context);
+    case 'execute_database_mutation':
+      return executeDatabaseMutation(params.input as any, params.context);
     case 'execute_cms_action_plan':
       return executeCmsActionPlan(params.input as any, params.context);
     case 'update_cms_item_field':

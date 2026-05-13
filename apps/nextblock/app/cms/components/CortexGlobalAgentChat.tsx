@@ -99,6 +99,8 @@ const MUTATING_TOOL_NAMES = new Set([
   "create_cms_post",
   "create_cms_product",
   "delete_cms_item",
+  "execute_database_action_plan",
+  "execute_database_mutation",
   "execute_cms_action_plan",
   "insert_content_block",
   "update_cms_item_field",
@@ -129,6 +131,22 @@ const TOOL_COPY: Record<string, { done: string; running: string }> = {
   execute_cms_action_plan: {
     done: "CMS plan completed",
     running: "Preparing CMS plan...",
+  },
+  describe_database_schema: {
+    done: "Database schema inspected",
+    running: "Inspecting database schema...",
+  },
+  execute_database_action_plan: {
+    done: "Database plan completed",
+    running: "Preparing database plan...",
+  },
+  execute_database_mutation: {
+    done: "Database updated",
+    running: "Preparing database update...",
+  },
+  read_database_records: {
+    done: "Database records read",
+    running: "Reading database records...",
   },
   insert_content_block: {
     done: "Content block inserted",
@@ -377,7 +395,7 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
 
 function getConfirmationSummary(activity: ToolActivity) {
   if (!isRecord(activity.output) || !isRecord(activity.output.preview)) {
-    return "Complete the requested CMS change.";
+    return "Complete the requested change.";
   }
 
   const preview = activity.output.preview;
@@ -443,7 +461,7 @@ function getConfirmationSummary(activity: ToolActivity) {
     return `Delete ${affectedCount !== null ? pluralize(affectedCount, contentType || "CMS item") : `the selected ${contentType || "CMS item"}`}${title || slug ? ` for "${title || slug}"` : ""}.`;
   }
 
-  return "Complete the requested CMS change.";
+  return "Complete the requested change.";
 }
 
 function getConfirmedToolCall(activity: ToolActivity): ConfirmedToolCall | null {
@@ -655,10 +673,12 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 function ToolActivityRow({
   activity,
   disabled,
+  onCancel,
   onConfirm,
 }: {
   activity: ToolActivity;
   disabled?: boolean;
+  onCancel: (activity: ToolActivity) => void;
   onConfirm: (toolCall: ConfirmedToolCall) => void;
 }) {
   const copy = getToolCopy(activity.name);
@@ -693,14 +713,25 @@ function ToolActivityRow({
       )}
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {confirmedToolCall ? (
-        <Button
-          className="h-7 rounded-md px-2.5 text-xs"
-          disabled={disabled}
-          onClick={() => onConfirm(confirmedToolCall)}
-          type="button"
-        >
-          Confirm
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            className="h-7 rounded-md px-2.5 text-xs"
+            disabled={disabled}
+            onClick={() => onConfirm(confirmedToolCall)}
+            type="button"
+          >
+            Confirm
+          </Button>
+          <Button
+            className="h-7 rounded-md px-2.5 text-xs"
+            disabled={disabled}
+            onClick={() => onCancel(activity)}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+        </div>
       ) : (
         <Wrench className="h-3.5 w-3.5 shrink-0 text-slate-400" />
       )}
@@ -749,6 +780,9 @@ export function CortexGlobalAgentChat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [toolActivities, setToolActivities] = useState<ToolActivity[]>([]);
+  const [cancelledConfirmationKeys, setCancelledConfirmationKeys] = useState<Set<string>>(
+    () => new Set()
+  );
   const [, setMetadata] = useState<{ credentialSource: string; modelId: string } | null>(
     null
   );
@@ -839,6 +873,10 @@ export function CortexGlobalAgentChat() {
           const confirmationKey = getConfirmationKey(activity);
 
           if (confirmationKey) {
+            if (cancelledConfirmationKeys.has(confirmationKey)) {
+              return false;
+            }
+
             return !toolActivities
               .slice(index + 1)
               .some((nextActivity) => getConfirmationKey(nextActivity) === confirmationKey);
@@ -851,7 +889,7 @@ export function CortexGlobalAgentChat() {
           .slice(index + 1)
           .some((nextActivity) => nextActivity.status === "success" && !toolOutputIsNotice(nextActivity.output));
       }),
-    [hasSuccessfulMutationActivity, toolActivities]
+    [cancelledConfirmationKeys, hasSuccessfulMutationActivity, toolActivities]
   );
 
   const updateThreadMessages = (
@@ -896,6 +934,7 @@ export function CortexGlobalAgentChat() {
     setInput("");
     setStreamError(null);
     setToolActivities([]);
+    setCancelledConfirmationKeys(new Set());
     setShowHistory(false);
   };
 
@@ -907,6 +946,7 @@ export function CortexGlobalAgentChat() {
     setActiveThreadId(threadId);
     setStreamError(null);
     setToolActivities([]);
+    setCancelledConfirmationKeys(new Set());
     setShowHistory(false);
   };
 
@@ -1093,6 +1133,7 @@ export function CortexGlobalAgentChat() {
     setInput("");
     setStreamError(null);
     setToolActivities([]);
+    setCancelledConfirmationKeys(new Set());
     setIsStreaming(true);
     setShowHistory(false);
     let shouldRefreshAfterMutation = false;
@@ -1243,6 +1284,18 @@ export function CortexGlobalAgentChat() {
     setIsStreaming(false);
   };
 
+  const cancelToolCall = (activity: ToolActivity) => {
+    const confirmationKey = getConfirmationKey(activity);
+
+    if (confirmationKey) {
+      setCancelledConfirmationKeys((current) => {
+        const next = new Set(current);
+        next.add(confirmationKey);
+        return next;
+      });
+    }
+  };
+
   const confirmToolCall = (toolCall: ConfirmedToolCall) => {
     void sendMessage({
       confirmedToolCall: toolCall,
@@ -1378,6 +1431,7 @@ export function CortexGlobalAgentChat() {
                   key={activity.id}
                   activity={activity}
                   disabled={isStreaming}
+                  onCancel={cancelToolCall}
                   onConfirm={confirmToolCall}
                 />
               ))}

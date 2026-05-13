@@ -72,6 +72,210 @@ export type Database = {
           },
         ]
       }
+      coupon_freemius_mappings: {
+        Row: {
+          coupon_id: string
+          created_at: string
+          freemius_coupon_code: string
+          freemius_coupon_id: string | null
+          freemius_product_id: string
+          id: string
+          last_synced_at: string | null
+          product_id: string | null
+          remote_payload: Json | null
+          sync_error: string | null
+          sync_status: string
+          updated_at: string
+        }
+        Insert: {
+          coupon_id: string
+          created_at?: string
+          freemius_coupon_code: string
+          freemius_coupon_id?: string | null
+          freemius_product_id: string
+          id?: string
+          last_synced_at?: string | null
+          product_id?: string | null
+          remote_payload?: Json | null
+          sync_error?: string | null
+          sync_status?: string
+          updated_at?: string
+        }
+        Update: {
+          coupon_id?: string
+          created_at?: string
+          freemius_coupon_code?: string
+          freemius_coupon_id?: string | null
+          freemius_product_id?: string
+          id?: string
+          last_synced_at?: string | null
+          product_id?: string | null
+          remote_payload?: Json | null
+          sync_error?: string | null
+          sync_status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coupon_freemius_mappings_coupon_id_fkey"
+            columns: ["coupon_id"]
+            isOneToOne: false
+            referencedRelation: "coupons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coupon_freemius_mappings_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coupon_products: {
+        Row: {
+          coupon_id: string
+          created_at: string
+          product_id: string
+        }
+        Insert: {
+          coupon_id: string
+          created_at?: string
+          product_id: string
+        }
+        Update: {
+          coupon_id?: string
+          created_at?: string
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coupon_products_coupon_id_fkey"
+            columns: ["coupon_id"]
+            isOneToOne: false
+            referencedRelation: "coupons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coupon_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coupon_redemptions: {
+        Row: {
+          coupon_code: string
+          coupon_id: string | null
+          customer_email: string | null
+          discount_total: number
+          id: string
+          metadata: Json
+          order_id: string | null
+          provider: string
+          redeemed_at: string
+          user_id: string | null
+        }
+        Insert: {
+          coupon_code: string
+          coupon_id?: string | null
+          customer_email?: string | null
+          discount_total?: number
+          id?: string
+          metadata?: Json
+          order_id?: string | null
+          provider: string
+          redeemed_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          coupon_code?: string
+          coupon_id?: string | null
+          customer_email?: string | null
+          discount_total?: number
+          id?: string
+          metadata?: Json
+          order_id?: string | null
+          provider?: string
+          redeemed_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coupon_redemptions_coupon_id_fkey"
+            columns: ["coupon_id"]
+            isOneToOne: false
+            referencedRelation: "coupons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coupon_redemptions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coupons: {
+        Row: {
+          code: string
+          created_at: string
+          discount_amount: number
+          discount_type: string
+          ends_at: string | null
+          freemius_sync_error: string | null
+          freemius_sync_status: string
+          id: string
+          internal_note: string | null
+          is_active: boolean
+          name: string
+          provider_scope: string
+          redemption_limit: number | null
+          redemptions_count: number
+          starts_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          discount_amount: number
+          discount_type: string
+          ends_at?: string | null
+          freemius_sync_error?: string | null
+          freemius_sync_status?: string
+          id?: string
+          internal_note?: string | null
+          is_active?: boolean
+          name: string
+          provider_scope?: string
+          redemption_limit?: number | null
+          redemptions_count?: number
+          starts_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          discount_amount?: number
+          discount_type?: string
+          ends_at?: string | null
+          freemius_sync_error?: string | null
+          freemius_sync_status?: string
+          id?: string
+          internal_note?: string | null
+          is_active?: boolean
+          name?: string
+          provider_scope?: string
+          redemption_limit?: number | null
+          redemptions_count?: number
+          starts_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       currencies: {
         Row: {
           auto_sync_product_prices: boolean
@@ -471,9 +675,13 @@ export type Database = {
       }
       orders: {
         Row: {
+          coupon_code: string | null
+          coupon_id: string | null
           created_at: string | null
           currency: string
           customer_details: Json | null
+          discount_details: Json | null
+          discount_total: number
           exchange_rate_at_purchase: number
           freemius_last_event_type: string | null
           freemius_last_synced_at: string | null
@@ -500,9 +708,13 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          coupon_code?: string | null
+          coupon_id?: string | null
           created_at?: string | null
           currency?: string
           customer_details?: Json | null
+          discount_details?: Json | null
+          discount_total?: number
           exchange_rate_at_purchase?: number
           freemius_last_event_type?: string | null
           freemius_last_synced_at?: string | null
@@ -529,9 +741,13 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          coupon_code?: string | null
+          coupon_id?: string | null
           created_at?: string | null
           currency?: string
           customer_details?: Json | null
+          discount_details?: Json | null
+          discount_total?: number
           exchange_rate_at_purchase?: number
           freemius_last_event_type?: string | null
           freemius_last_synced_at?: string | null
@@ -557,7 +773,15 @@ export type Database = {
           total?: number
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "orders_coupon_id_fkey"
+            columns: ["coupon_id"]
+            isOneToOne: false
+            referencedRelation: "coupons"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       package_activations: {
         Row: {

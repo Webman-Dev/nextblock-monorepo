@@ -155,8 +155,25 @@ export const useCartStore = create<CartState>()(
           });
         }
       },
-      setAppliedCoupon: (coupon) => set({ appliedCoupon: coupon }),
-      removeCoupon: () => set({ appliedCoupon: null }),
+      setAppliedCoupon: (coupon) => {
+        const currentCoupon = get().appliedCoupon;
+
+        if (
+          currentCoupon?.code === coupon?.code &&
+          currentCoupon?.couponId === coupon?.couponId
+        ) {
+          return;
+        }
+
+        set({ appliedCoupon: coupon });
+      },
+      removeCoupon: () => {
+        if (!get().appliedCoupon) {
+          return;
+        }
+
+        set({ appliedCoupon: null });
+      },
       clearCart: () => set({ items: [], appliedCoupon: null }),
       toggleCart: () => set((state) => ({ isOpen: !state.isOpen })),
       setIsOpen: (isOpen) => set({ isOpen }),

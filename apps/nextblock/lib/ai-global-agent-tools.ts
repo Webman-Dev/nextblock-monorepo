@@ -1,4 +1,5 @@
 import { tool } from 'ai';
+import { createCortexDatabaseAgentTools } from './ai-global-agent-db-tools';
 import { z } from './zod-config';
 
 export const availableCortexAiBlockTypes = [
@@ -134,8 +135,9 @@ export const fetchEcommerceStatsInputSchema = z.object({
     .min(3)
     .max(3)
     .optional()
-    .default('USD')
-    .describe('The currency code for monetary values (e.g., USD, CAD).'),
+    .describe(
+      'Optional currency code for currency-specific monetary reports (e.g., USD, CAD). Do not set this for plain order-status counts unless the user asks for a currency.'
+    ),
   query: z.string().describe('The analytical question about orders, products, or revenue.'),
   reportType: z
     .enum(['revenue', 'orders', 'products', 'general'])
@@ -145,8 +147,8 @@ export const fetchEcommerceStatsInputSchema = z.object({
   timeRange: z
     .enum(['today', 'this_month', 'last_7_days', 'last_30_days', 'last_month', 'last_90_days', 'all_time'])
     .optional()
-    .default('last_30_days')
-    .describe('The time period for the report.'),
+    .default('all_time')
+    .describe('The time period for the report. Use all_time for current order-status counts unless the user names a specific period.'),
 });
 
 export const cortexAiPageContextSchema = z.strictObject({
@@ -2732,7 +2734,12 @@ export async function executeSearchDocumentation(
     .filter((snippet) => snippet.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, parsed.limit)
-    .map(({ score: _score, ...snippet }) => snippet);
+    .map((snippet) => ({
+      excerpt: snippet.excerpt,
+      source: snippet.source,
+      title: snippet.title,
+      url: snippet.url,
+    }));
 
   return {
     query: parsed.query,
@@ -2761,6 +2768,74 @@ export async function executeSearchDocumentationWithTimeout(
       timedOut: true,
     })
   );
+}
+
+const knownOrderStatuses = [
+  'pending',
+  'trial',
+  'paid',
+  'shipped',
+  'cancelled',
+  'refunded',
+  'failed',
+] as const;
+
+type KnownOrderStatus = (typeof knownOrderStatuses)[number];
+
+const orderStatusAliases: Record<string, KnownOrderStatus> = {
+  awaiting: 'pending',
+  canceled: 'cancelled',
+  cancelled: 'cancelled',
+  complete: 'paid',
+  completed: 'paid',
+  failed: 'failed',
+  paid: 'paid',
+  payment_pending: 'pending',
+  pending: 'pending',
+  refund: 'refunded',
+  refunded: 'refunded',
+  refunds: 'refunded',
+  shipped: 'shipped',
+  trial: 'trial',
+  trials: 'trial',
+};
+
+function normalizeOrderStatus(value: unknown) {
+  const normalized = String(value ?? 'unknown').trim().toLowerCase();
+  return normalized || 'unknown';
+}
+
+function buildOrderStatusCounts(rows: any[]) {
+  const counts: Record<string, number> = Object.fromEntries(
+    knownOrderStatuses.map((status) => [status, 0])
+  );
+
+  for (const row of rows) {
+    const status = normalizeOrderStatus(row.status);
+    counts[status] = (counts[status] ?? 0) + 1;
+  }
+
+  return counts;
+}
+
+function inferRequestedOrderStatus(query: string) {
+  const normalizedQuery = query.toLowerCase().replace(/[^a-z0-9_]+/g, ' ');
+  const terms = normalizedQuery.split(/\s+/).filter(Boolean);
+
+  for (const term of terms) {
+    const status = orderStatusAliases[term];
+
+    if (status) {
+      return status;
+    }
+  }
+
+  return null;
+}
+
+function toFiniteNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export async function executeFetchEcommerceStats(
@@ -2799,65 +2874,158 @@ export async function executeFetchEcommerceStats(
       break;
   }
 
-  const queryBuilder = supabase
-    .from('order_items')
-    .select(`
-      quantity,
-      price_at_purchase,
-      products!inner (
-        id,
-        title,
-        product_type
-      ),
-      orders!inner (
-        id,
-        status,
-        paid_at,
-        currency
-      )
-    `)
-    .eq('orders.status', 'paid')
-    .eq('orders.currency', parsed.currency);
+  const currency = parsed.currency?.toUpperCase();
+  const requestedStatus = inferRequestedOrderStatus(parsed.query);
+  const orderQueryBuilder = supabase
+    .from('orders')
+    .select('id, status, total, currency, created_at, paid_at');
 
+  if (currency) {
+    orderQueryBuilder.eq('currency', currency);
+  }
   if (startDate) {
-    queryBuilder.gte('orders.paid_at', startDate.toISOString());
+    orderQueryBuilder.gte('created_at', startDate.toISOString());
   }
   if (endDate) {
-    queryBuilder.lte('orders.paid_at', endDate.toISOString());
+    orderQueryBuilder.lte('created_at', endDate.toISOString());
   }
 
-  const { data, error } = await queryBuilder;
+  const shouldFetchLineItems =
+    parsed.reportType === 'products' ||
+    parsed.reportType === 'revenue' ||
+    parsed.reportType === 'general';
+  const lineItemsQueryBuilder = shouldFetchLineItems
+    ? supabase
+        .from('order_items')
+        .select(`
+          quantity,
+          price_at_purchase,
+          products!inner (
+            id,
+            title,
+            product_type
+          ),
+          orders!inner (
+            id,
+            status,
+            paid_at,
+            currency
+          )
+        `)
+        .eq('orders.status', 'paid')
+    : null;
 
-  if (error) {
-    throw new Error(`Failed to fetch ecommerce stats: ${serializeError(error)}`);
+  if (lineItemsQueryBuilder) {
+    if (currency) {
+      lineItemsQueryBuilder.eq('orders.currency', currency);
+    }
+    if (startDate) {
+      lineItemsQueryBuilder.gte('orders.paid_at', startDate.toISOString());
+    }
+    if (endDate) {
+      lineItemsQueryBuilder.lte('orders.paid_at', endDate.toISOString());
+    }
   }
 
-  const rows = Array.isArray(data) ? data : [];
+  const shouldFetchAllTimeOrderStatuses =
+    parsed.timeRange !== 'all_time' && (parsed.reportType === 'orders' || requestedStatus);
+  const allTimeOrderQueryBuilder = shouldFetchAllTimeOrderStatuses
+    ? supabase.from('orders').select('id, status, currency')
+    : null;
+
+  if (allTimeOrderQueryBuilder && currency) {
+    allTimeOrderQueryBuilder.eq('currency', currency);
+  }
+
+  const [
+    { data: orderData, error: orderError },
+    { data: lineItemData, error: lineItemError },
+    allTimeOrderResult,
+  ] = await Promise.all([
+    orderQueryBuilder,
+    lineItemsQueryBuilder ?? Promise.resolve({ data: [], error: null }),
+    allTimeOrderQueryBuilder ?? Promise.resolve({ data: null, error: null }),
+  ]);
+
+  if (orderError) {
+    throw new Error(`Failed to fetch ecommerce stats: ${serializeError(orderError)}`);
+  }
+
+  if (lineItemError) {
+    throw new Error(`Failed to fetch ecommerce stats: ${serializeError(lineItemError)}`);
+  }
+
+  if (allTimeOrderResult.error) {
+    throw new Error(`Failed to fetch ecommerce stats: ${serializeError(allTimeOrderResult.error)}`);
+  }
+
+  const orderRows = Array.isArray(orderData) ? orderData : [];
+  const rows = Array.isArray(lineItemData) ? lineItemData : [];
+  const orderStatusCounts = buildOrderStatusCounts(orderRows);
+  const allTimeOrderRows = Array.isArray(allTimeOrderResult.data) ? allTimeOrderResult.data : null;
+  const allTimeOrderStatusCounts = allTimeOrderRows ? buildOrderStatusCounts(allTimeOrderRows) : null;
+  const revenueByCurrency: Record<string, number> = {};
+
+  for (const row of rows) {
+    const order = Array.isArray(row.orders) ? row.orders[0] : row.orders;
+    const orderCurrency = String(order?.currency || currency || 'unknown').toUpperCase();
+    revenueByCurrency[orderCurrency] =
+      (revenueByCurrency[orderCurrency] ?? 0) +
+      (toFiniteNumber(row.quantity) * toFiniteNumber(row.price_at_purchase)) / 100;
+  }
+
   const report: Record<string, any> = {
-    currency: parsed.currency,
+    currency: currency ?? null,
+    currencyFiltered: Boolean(currency),
+    orderStatusCounts,
+    paidOrderCount: orderStatusCounts.paid ?? 0,
     query: parsed.query,
     reportType: parsed.reportType,
+    revenueByCurrency,
     timeRange: parsed.timeRange,
-    totalOrders: new Set(rows.map((row: any) => row.orders.id)).size,
-    totalRevenue: rows.reduce((sum: number, row: any) => sum + row.quantity * row.price_at_purchase, 0) / 100,
+    totalOrders: orderRows.length,
+    totalRevenue: Object.values(revenueByCurrency).reduce(
+      (sum: number, revenue: number) => sum + revenue,
+      0
+    ),
   };
+
+  if (allTimeOrderStatusCounts) {
+    report.allTimeOrderStatusCounts = allTimeOrderStatusCounts;
+  }
+
+  if (requestedStatus) {
+    report.matchingOrderStatus = {
+      allTimeCount: allTimeOrderStatusCounts?.[requestedStatus] ?? orderStatusCounts[requestedStatus] ?? 0,
+      count: orderStatusCounts[requestedStatus] ?? 0,
+      status: requestedStatus,
+      timeRange: parsed.timeRange,
+    };
+  }
 
   if (parsed.reportType === 'products' || parsed.reportType === 'revenue' || parsed.reportType === 'general') {
     const productStats: Record<string, { id: string; revenue: number; quantity: number; title: string; type: string }> = {};
 
     for (const row of rows) {
-      const productId = row.products.id;
+      const product = Array.isArray(row.products) ? row.products[0] : row.products;
+
+      if (!product?.id) {
+        continue;
+      }
+
+      const productId = product.id;
       if (!productStats[productId]) {
         productStats[productId] = {
           id: productId,
           quantity: 0,
           revenue: 0,
-          title: row.products.title,
-          type: row.products.product_type,
+          title: product.title,
+          type: product.product_type,
         };
       }
-      productStats[productId].quantity += row.quantity;
-      productStats[productId].revenue += (row.quantity * row.price_at_purchase) / 100;
+      productStats[productId].quantity += toFiniteNumber(row.quantity);
+      productStats[productId].revenue +=
+        (toFiniteNumber(row.quantity) * toFiniteNumber(row.price_at_purchase)) / 100;
     }
 
     report.topProducts = Object.values(productStats)
@@ -4533,9 +4701,10 @@ export async function executeCmsActionPlan(
 
 export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
   return {
+    ...createCortexDatabaseAgentTools(context),
     fetch_ecommerce_stats: tool({
       description:
-        'Fetch quantitative ecommerce statistics and reports from the database. Use this to answer questions about revenue, order counts, and top-selling products over a time range. This tool is read-only and does not require confirmation.',
+        'Fetch quantitative ecommerce statistics and reports from the database. Use this to answer questions about revenue, order counts, order status counts such as pending or trial, and top-selling products over a time range. This tool is read-only and does not require confirmation.',
       execute: (input) => executeFetchEcommerceStats(input, context),
       inputSchema: fetchEcommerceStatsInputSchema,
       strict: true,
