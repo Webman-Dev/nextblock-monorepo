@@ -10,5 +10,11 @@
     "noPropertyAccessFromIndexSignature": true,
     "composite": true
   },
-  "include": ["src/**/*.ts", "../../libs/environment.d.ts"]
+  "files": [],
+  "include": [],
+  "references": [
+    {
+      "path": "./tsconfig.lib.json"
+    }
+  ]
 }

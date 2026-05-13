@@ -11,5 +11,11 @@
       "@nextblock-cms/utils": ["./src/index.ts"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "../../libs/environment.d.ts"],
+  "files": [],
+  "include": [],
+  "references": [
+    {
+      "path": "./tsconfig.lib.json"
+    }
+  ]
 }

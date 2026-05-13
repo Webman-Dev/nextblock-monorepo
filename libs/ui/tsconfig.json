@@ -6,11 +6,12 @@
     "strict": true,
     "composite": true,
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "../../libs/environment.d.ts"],
+  "files": [],
+  "include": [],
   "extends": "../../tsconfig.base.json",
   "references": [
     {
-      "path": "../utils/tsconfig.json"
+      "path": "./tsconfig.lib.json"
     }
   ]
 }
