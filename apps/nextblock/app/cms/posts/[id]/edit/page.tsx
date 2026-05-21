@@ -6,6 +6,7 @@ import PostForm from "../../components/PostForm"; // Adjusted path
 import { updatePost } from "../../actions";
 import type { Database } from "@nextblock-cms/db"; // Ensure Language and Media are imported
 import { notFound, redirect } from "next/navigation";
+import { draftMode } from "next/headers";
 
 type PostType = Database['public']['Tables']['posts']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
@@ -13,7 +14,7 @@ type Language = Database['public']['Tables']['languages']['Row'];
 import BlockEditorArea from "../../../blocks/components/BlockEditorArea";
 import Link from "next/link";
 import { Button } from "@nextblock-cms/ui";
-import { Eye, ArrowLeft } from "lucide-react"; // Removed SeparatorVertical, use <Separator />
+import { ArrowLeft, Eye, EyeOff, FilePenLine } from "lucide-react"; // Removed SeparatorVertical, use <Separator />
 import ContentLanguageSwitcher from "../../../components/ContentLanguageSwitcher";
 import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server"; // Correct server-side fetch
 import CopyContentFromLanguage from "../../../components/CopyContentFromLanguage";
@@ -111,6 +112,10 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
 
   const updatePostWithId = updatePost.bind(null, postId);
   const publicPostUrl = `/article/${postWithBlocks.slug}`;
+  const draft = await draftMode();
+  const draftModeUrl = `${
+    draft.isEnabled ? "/api/draft/disable" : "/api/draft/start"
+  }?path=${encodeURIComponent(publicPostUrl)}`;
   
   return (
     <UploadFolderProvider defaultFolder={`posts/${postWithBlocks.slug}/`}>
@@ -158,6 +163,16 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
               <Link href={publicPostUrl} target="_blank" rel="noopener noreferrer">
                 <Eye className="mr-2 h-4 w-4" /> View Live Post
               </Link>
+            </Button>
+            <Button variant={draft.isEnabled ? "default" : "secondary"} asChild>
+              <a href={draftModeUrl} target="_blank" rel="noopener noreferrer">
+                {draft.isEnabled ? (
+                  <EyeOff className="mr-2 h-4 w-4" />
+                ) : (
+                  <FilePenLine className="mr-2 h-4 w-4" />
+                )}
+                {draft.isEnabled ? "Exit Draft" : "Preview Draft"}
+              </a>
             </Button>
             <RevisionHistoryButton parentType="post" parentId={postId} />
         </div>

@@ -18,13 +18,10 @@ if (fs.existsSync(envPath)) {
 const CRON_SECRET = process.env.CRON_SECRET;
 const NEXT_PUBLIC_URL = process.env.NEXT_PUBLIC_URL || 'http://localhost:4200';
 
-if (
-  process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true' ||
-  process.env.SANDBOX_RESET_ENABLED !== 'true'
-) {
+if (process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true') {
   console.error(
     '\x1b[31m%s\x1b[0m',
-    'Refusing to trigger sandbox reset because sandbox reset is not explicitly enabled.',
+    'Refusing to trigger sandbox reset because NEXT_PUBLIC_IS_SANDBOX is not true.',
   );
   process.exit(1);
 }

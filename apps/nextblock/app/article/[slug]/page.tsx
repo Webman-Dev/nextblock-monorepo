@@ -13,6 +13,7 @@ import { getSsgSupabaseClient } from "@nextblock-cms/db/server"; // Correct impo
 import type { HeroBlockContent } from '../../../lib/blocks/blockRegistry';
 import { resolveMediaUrl } from '../../../lib/media/resolveMediaUrl';
 import { resolveMetaDescription } from '../../lib/seo';
+import { draftMode } from 'next/headers';
 
 export const dynamicParams = true;
 export const revalidate = 3600;
@@ -180,7 +181,23 @@ export default async function DynamicPostPage({ params: paramsPromise }: PostPag
     }
   }
 
-  const postBlocks = initialPostData ? <BlockRenderer blocks={initialPostData.blocks} languageId={initialPostData.language_id} /> : null;
+  const draft = await draftMode();
+  const visualEditingEnabled =
+    draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
+  const postBlocks = initialPostData ? (
+    <BlockRenderer
+      blocks={initialPostData.blocks}
+      languageId={initialPostData.language_id}
+      visualEditing={{
+        enabled: visualEditingEnabled,
+        documentType: "post",
+        documentId: initialPostData.id,
+        slug: initialPostData.slug,
+        languageId: initialPostData.language_id,
+        draftId: initialPostData.draft_id ?? null,
+      }}
+    />
+  ) : null;
 
   return (
     <>

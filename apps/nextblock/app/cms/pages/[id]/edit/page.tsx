@@ -4,6 +4,7 @@ import { createClient } from "@nextblock-cms/db/server";
 import { updatePage } from "../../actions";
 import type { Database } from "@nextblock-cms/db";
 import { notFound, redirect } from "next/navigation";
+import { draftMode } from "next/headers";
 
 type Page = Database['public']['Tables']['pages']['Row'];
 type Block = Database['public']['Tables']['blocks']['Row'];
@@ -64,6 +65,7 @@ export default async function EditPage(props: { params: Promise<{ id: string }> 
 
   if (!pageWithBlocks) return notFound();
 
+  const draft = await draftMode();
   const updatePageWithId = updatePage.bind(null, pageId);
   const publicPageUrl = `/${pageWithBlocks.slug}`;
 
@@ -74,6 +76,7 @@ export default async function EditPage(props: { params: Promise<{ id: string }> 
       allSiteLanguages={allSiteLanguages}
       updatePageAction={updatePageWithId}
       publicPageUrl={publicPageUrl}
+      isDraftModeEnabled={draft.isEnabled}
     />
   );
 }

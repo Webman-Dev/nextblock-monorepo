@@ -6,7 +6,7 @@ import type { Metadata } from 'next';
 import PageClientContent from "./PageClientContent";
 import { getPageDataBySlug } from "./page.utils";
 import BlockRenderer from "../../components/BlockRenderer";
-import { cookies, headers } from "next/headers";
+import { cookies, draftMode, headers } from "next/headers";
 import { resolveMetaDescription } from "../lib/seo";
 
 export const dynamicParams = true;
@@ -149,7 +149,23 @@ export default async function DynamicPage({ params: paramsPromise }: PageProps) 
 
 
 
-  const pageBlocks = pageData ? <BlockRenderer blocks={pageData.blocks} languageId={pageData.language_id} /> : null;
+  const draft = await draftMode();
+  const visualEditingEnabled =
+    draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
+  const pageBlocks = pageData ? (
+    <BlockRenderer
+      blocks={pageData.blocks}
+      languageId={pageData.language_id}
+      visualEditing={{
+        enabled: visualEditingEnabled,
+        documentType: "page",
+        documentId: pageData.id,
+        slug: pageData.slug,
+        languageId: pageData.language_id,
+        draftId: pageData.draft_id ?? null,
+      }}
+    />
+  ) : null;
 
   return (
     <>

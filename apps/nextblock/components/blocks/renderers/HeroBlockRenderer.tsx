@@ -1,6 +1,11 @@
 // components/blocks/renderers/HeroBlockRenderer.tsx
 import React from "react";
 import type { SectionBlockContent, Gradient } from "../../../lib/blocks/blockRegistry";
+import { buildVisualEditAttributes } from "../../../lib/visual-editing/edit-info";
+import type {
+  VisualEditAttributes,
+  VisualEditingDocumentContext,
+} from "../../../lib/visual-editing/types";
 import Image from 'next/image';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
@@ -31,6 +36,10 @@ function resolveImageQuality(value: unknown, fallback: number): number {
 interface SectionBlockRendererProps {
   content: SectionBlockContent;
   languageId: number;
+  visualEditAttributes?: VisualEditAttributes;
+  visualEditing?: VisualEditingDocumentContext;
+  parentBlockId?: number;
+  parentBlockIndex?: number;
 }
 
 // Container class mapping
@@ -158,7 +167,8 @@ import HeadingBlockRenderer from './HeadingBlockRenderer';
 const StaticNestedBlockRenderer: React.FC<{
   block: SectionBlockContent['column_blocks'][0][0];
   languageId: number;
-}> = ({ block, languageId }) => {
+  visualEditAttributes?: VisualEditAttributes;
+}> = ({ block, languageId, visualEditAttributes }) => {
   // Use static imports for common hero block components to eliminate loading delays
   switch (block.block_type) {
     case 'text':
@@ -166,6 +176,7 @@ const StaticNestedBlockRenderer: React.FC<{
         <TextBlockRenderer
           content={block.content as any}
           languageId={languageId}
+          visualEditAttributes={visualEditAttributes}
         />
       );
     case 'heading':
@@ -173,6 +184,7 @@ const StaticNestedBlockRenderer: React.FC<{
         <HeadingBlockRenderer
           content={block.content as any}
           languageId={languageId}
+          visualEditAttributes={visualEditAttributes}
         />
       );
     case 'image':
@@ -181,6 +193,7 @@ const StaticNestedBlockRenderer: React.FC<{
           content={block.content as any}
           languageId={languageId}
           priority={true}
+          visualEditAttributes={visualEditAttributes}
         />
       );
     case 'button':
@@ -188,12 +201,16 @@ const StaticNestedBlockRenderer: React.FC<{
         <ButtonBlockRenderer
           content={block.content as any}
           languageId={languageId}
+          visualEditAttributes={visualEditAttributes}
         />
       );
     default:
       // Fallback for unsupported block types in hero
       return (
-        <div className="p-2 border rounded bg-destructive/10 text-destructive text-sm">
+        <div
+          className="p-2 border rounded bg-destructive/10 text-destructive text-sm"
+          {...visualEditAttributes}
+        >
           <strong>Unsupported hero block type:</strong> {block.block_type}
         </div>
       );
@@ -203,6 +220,10 @@ const StaticNestedBlockRenderer: React.FC<{
 const HeroBlockRenderer: React.FC<SectionBlockRendererProps> = ({
   content,
   languageId,
+  visualEditAttributes,
+  visualEditing,
+  parentBlockId,
+  parentBlockIndex,
 }) => {
   const { styles, className: backgroundClassName } = generateBackgroundStyles(content.background);
   
@@ -232,6 +253,7 @@ const HeroBlockRenderer: React.FC<SectionBlockRendererProps> = ({
     <section
       className={`relative w-full flex items-center ${paddingTopClass} ${paddingBottomClass} ${backgroundClassName}`.trim()}
       style={styles}
+      {...visualEditAttributes}
     >
       {backgroundImage && (
         <Image
@@ -264,6 +286,19 @@ const HeroBlockRenderer: React.FC<SectionBlockRendererProps> = ({
                   key={`${block.block_type}-${columnIndex}-${blockIndex}`}
                   block={block}
                   languageId={languageId}
+                  visualEditAttributes={
+                    typeof parentBlockId === "number" && typeof parentBlockIndex === "number"
+                      ? buildVisualEditAttributes(visualEditing, {
+                          kind: "nested",
+                          parentBlockId,
+                          parentBlockIndex,
+                          parentBlockType: "hero",
+                          columnIndex,
+                          blockIndex,
+                          blockType: block.block_type,
+                        })
+                      : undefined
+                  }
                 />
               ))}
             </div>

@@ -24,10 +24,65 @@ import { resolvePriceForCurrency } from '../currency';
 import { isDigitalProduct } from '../types';
 import { getTrialSummary } from '../trials';
 
-export const ProductDetailsLayout: React.FC = () => {
+type ProductVisualEditingField = 'title' | 'short_description' | 'description_json';
+type ProductVisualEditingInput = 'plain-text' | 'tiptap';
+
+type ProductVisualEditAttributes = {
+  'data-vercel-edit-info'?: string;
+  'data-vercel-edit-target'?: string;
+  'data-nextblock-visual-edit'?: string;
+};
+
+interface ProductDetailsLayoutProps {
+  visualEditingEnabled?: boolean;
+}
+
+function buildProductVisualEditAttributes(
+  product: ReturnType<typeof useProduct>,
+  field: ProductVisualEditingField,
+  input: ProductVisualEditingInput,
+  label: string
+): ProductVisualEditAttributes | undefined {
+  const target = {
+    kind: 'product-field' as const,
+    field,
+    input,
+    label,
+  };
+
+  return {
+    'data-vercel-edit-info': JSON.stringify({
+      origin: 'nextblock',
+      editUrl: `/cms/products/${product.id}/edit`,
+      data: {
+        parentType: 'product',
+        parentId: product.id,
+        slug: product.slug,
+        languageId: product.language_id,
+        draftId: null,
+        target,
+      },
+    }),
+    'data-vercel-edit-target': JSON.stringify(target),
+    'data-nextblock-visual-edit': `product:${field}`,
+  };
+}
+
+export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
+  visualEditingEnabled = false,
+}) => {
   const product = useProduct();
   const { t } = useTranslations();
   const { activeCurrencyCode, currencies } = useCurrency();
+  const titleVisualEditAttributes = visualEditingEnabled
+    ? buildProductVisualEditAttributes(product, 'title', 'plain-text', 'Product title')
+    : undefined;
+  const shortDescriptionVisualEditAttributes = visualEditingEnabled
+    ? buildProductVisualEditAttributes(product, 'short_description', 'plain-text', 'Short description')
+    : undefined;
+  const descriptionVisualEditAttributes = visualEditingEnabled
+    ? buildProductVisualEditAttributes(product, 'description_json', 'tiptap', 'Product description')
+    : undefined;
 
   const translateOrFallback = (
     key: string,
@@ -223,16 +278,26 @@ export const ProductDetailsLayout: React.FC = () => {
                 )}
               </div>
 
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-foreground leading-[1.1]">
+              <h1
+                className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-foreground leading-[1.1]"
+                {...titleVisualEditAttributes}
+              >
                 {product.title}
               </h1>
 
-              <div className="prose prose-neutral dark:prose-invert max-w-none text-muted-foreground leading-relaxed text-left">
+              <div
+                className="prose prose-neutral dark:prose-invert max-w-none text-muted-foreground leading-relaxed text-left"
+                {...shortDescriptionVisualEditAttributes}
+              >
                 {product.short_description ? (
                   <div
                     className="text-lg mb-6 leading-relaxed"
                     dangerouslySetInnerHTML={{ __html: product.short_description }}
                   />
+                ) : visualEditingEnabled ? (
+                  <p className="text-lg mb-6 italic text-muted-foreground">
+                    Add a short product description.
+                  </p>
                 ) : null}
               </div>
 
@@ -358,7 +423,10 @@ export const ProductDetailsLayout: React.FC = () => {
         </div>
       </div>
 
-      <div className="prose prose-neutral dark:prose-invert max-w-none leading-relaxed mt-12">
+      <div
+        className="prose prose-neutral dark:prose-invert max-w-none leading-relaxed mt-12"
+        {...descriptionVisualEditAttributes}
+      >
         {product.description_json ? (
           <SimpleTiptapRenderer content={product.description_json} />
         ) : (

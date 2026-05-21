@@ -23,6 +23,7 @@ type AppShellProps = {
   footerNavItems: NavigationItem[];
   hasSupabaseEnv: boolean;
   headerNavItems: NavigationItem[];
+  isDraftModeEnabled: boolean;
   isEcommerceActive: boolean;
   logo: Logo | null;
   siteTitle: string;
@@ -35,6 +36,7 @@ export function AppShell({
   footerNavItems,
   hasSupabaseEnv,
   headerNavItems,
+  isDraftModeEnabled,
   isEcommerceActive,
   logo,
   siteTitle,
@@ -67,6 +69,7 @@ export function AppShell({
                 <Header
                   navItems={headerNavItems}
                   canAccessCms={canAccessCms}
+                  isDraftModeEnabled={isDraftModeEnabled}
                   logo={logo}
                   siteTitle={siteTitle}
                   isEcommerceActive={isEcommerceActive}

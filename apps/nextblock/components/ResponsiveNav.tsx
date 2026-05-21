@@ -1,6 +1,7 @@
 "use client";
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import type { Database } from '@nextblock-cms/db' // Relative path from components/
 import { useCurrentContent } from '../context/CurrentContentContext';
@@ -10,7 +11,7 @@ import { DeferredGlobalSearch } from './DeferredGlobalSearch';
 type Logo = Database['public']['Tables']['logos']['Row'] & { media: (Database['public']['Tables']['media']['Row'] & { alt_text: string | null }) | null };
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
 import Image from 'next/image'
-import { Pencil } from 'lucide-react';
+import { EyeOff, FilePenLine, Pencil } from 'lucide-react';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 const FALLBACK_LOGO_PATH = '/images/nextblock-logo-small.webp';
@@ -68,6 +69,7 @@ interface ResponsiveNavProps {
   navItems: NavigationItem[]
   canAccessCms: boolean;
   cmsDashboardLinkHref: string;
+  isDraftModeEnabled: boolean;
   renderHeaderAuth: () => React.ReactNode;
   renderLanguageSwitcher: () => React.ReactNode;
   renderCurrencySwitcher?: () => React.ReactNode;
@@ -90,6 +92,7 @@ export default function ResponsiveNav({
   navItems,
   canAccessCms,
   cmsDashboardLinkHref,
+  isDraftModeEnabled,
   renderHeaderAuth,
   renderLanguageSwitcher,
   renderCurrencySwitcher,
@@ -99,6 +102,7 @@ export default function ResponsiveNav({
   isEcommerceActive = false,
 }: ResponsiveNavProps) {
   const { t } = useTranslations();
+  const pathname = usePathname() || '/';
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [expandedMobileItems, setExpandedMobileItems] = useState<Record<string, boolean>>({});
 
@@ -120,6 +124,7 @@ export default function ResponsiveNav({
   const { currentContent } = useCurrentContent();
 
   let editPathDetails: { href: string; label: string } | null = null;
+  let draftModeDetails: { href: string; label: string; ariaLabel: string } | null = null;
 
   if (canAccessCms && currentContent.id && currentContent.type) {
     if (currentContent.type === 'page') {
@@ -138,6 +143,25 @@ export default function ResponsiveNav({
         label: t('edit_product'),
       };
     }
+  }
+
+  const canToggleDraftForCurrentContent =
+    canAccessCms &&
+    Boolean(currentContent.id) &&
+    (currentContent.type === 'page' ||
+      currentContent.type === 'post' ||
+      currentContent.type === 'product') &&
+    !pathname.startsWith('/cms');
+
+  if (canToggleDraftForCurrentContent) {
+    const draftRoute = isDraftModeEnabled ? '/api/draft/disable' : '/api/draft/start';
+    draftModeDetails = {
+      href: `${draftRoute}?path=${encodeURIComponent(pathname)}`,
+      label: isDraftModeEnabled ? 'Exit Draft' : 'Draft',
+      ariaLabel: isDraftModeEnabled
+        ? 'Exit draft mode'
+        : `Enable draft mode for this ${currentContent.type}`,
+    };
   }
   // The old path-based logic for determining editPathDetails is removed
   // as the context is now the source of truth for ID and type.
@@ -325,6 +349,24 @@ export default function ResponsiveNav({
 
         {/* Right side: Auth, LangSwitcher (desktop), Hamburger (mobile) */}
         <div className="hidden min-h-10 items-center gap-4 md:flex">
+          {draftModeDetails && (
+            <a
+              href={draftModeDetails.href}
+              aria-label={draftModeDetails.ariaLabel}
+              className={`flex items-center rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+                isDraftModeEnabled
+                  ? 'bg-amber-500 text-white hover:bg-amber-600'
+                  : 'text-foreground hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+            >
+              {isDraftModeEnabled ? (
+                <EyeOff className="mr-2 h-4 w-4" />
+              ) : (
+                <FilePenLine className="mr-2 h-4 w-4" />
+              )}
+              {draftModeDetails.label}
+            </a>
+          )}
           {canAccessCms && editPathDetails && (
             <Link href={editPathDetails.href} className="hover:underline font-semibold text-sm text-foreground mr-3 flex items-center">
               <Pencil className="w-4 h-4 mr-2" />
@@ -392,6 +434,27 @@ export default function ResponsiveNav({
             
             {canAccessCms && (
               <div className="mt-auto space-y-1 border-t border-gray-200 dark:border-gray-800">
+                {draftModeDetails && (
+                  <a
+                    href={draftModeDetails.href}
+                    aria-label={draftModeDetails.ariaLabel}
+                    className={`flex items-center rounded-md px-3 py-2 text-base font-medium ${
+                      isDraftModeEnabled
+                        ? 'bg-amber-500 text-white hover:bg-amber-600'
+                        : 'text-foreground hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`}
+                    onClick={() => {
+                      toggleMobileMenu();
+                    }}
+                  >
+                    {isDraftModeEnabled ? (
+                      <EyeOff className="mr-2 h-4 w-4" />
+                    ) : (
+                      <FilePenLine className="mr-2 h-4 w-4" />
+                    )}
+                    {draftModeDetails.label}
+                  </a>
+                )}
                 {editPathDetails && (
                   <Link
                     href={editPathDetails.href}

@@ -1,14 +1,17 @@
 import React from "react";
 import type { HeadingBlockContent } from '../../../lib/blocks/blockRegistry';
+import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
 
 interface HeadingBlockRendererProps {
   content: HeadingBlockContent;
   languageId: number;
+  visualEditAttributes?: VisualEditAttributes;
 }
 
 const HeadingBlockRenderer: React.FC<HeadingBlockRendererProps> = ({
   content,
   languageId,
+  visualEditAttributes,
 }) => {
   void languageId;
   // Ensure level is between 1 and 6, default to 2
@@ -32,7 +35,7 @@ const HeadingBlockRenderer: React.FC<HeadingBlockRendererProps> = ({
 
   const combinedClasses = `my-6 font-bold container mx-auto ${alignmentClass} ${colorClass}`.trim();
   return (
-    <Tag className={combinedClasses}>
+    <Tag className={combinedClasses} {...visualEditAttributes}>
       {content.text_content}
     </Tag>
   );

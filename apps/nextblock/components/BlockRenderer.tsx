@@ -2,6 +2,11 @@
 import React from "react";
 import type { Database } from "@nextblock-cms/db";
 import type { SectionBlockContent } from "../lib/blocks/blockRegistry";
+import { buildVisualEditAttributes } from "../lib/visual-editing/edit-info";
+import type {
+  VisualEditAttributes,
+  VisualEditingDocumentContext,
+} from "../lib/visual-editing/types";
 import { getPublicBlockRendererLoader } from "./blocks/publicRendererLoaders";
 
 type Block = Database['public']['Tables']['blocks']['Row'];
@@ -27,20 +32,30 @@ interface BlockRendererProps {
   languageId: number;
   excludeProductId?: string;
   excludeTranslationGroupId?: string | null;
+  visualEditing?: VisualEditingDocumentContext;
+  productVisualEditingEnabled?: boolean;
 }
 
 interface BlockRenderContext {
   block: Block;
+  blockIndex: number;
   languageId: number;
   excludeProductId?: string;
   excludeTranslationGroupId?: string | null;
+  visualEditing?: VisualEditingDocumentContext;
+  productVisualEditingEnabled?: boolean;
+  visualEditAttributes?: VisualEditAttributes;
 }
 
 async function renderLoadedBlock({
   block,
+  blockIndex,
   languageId,
   excludeProductId,
   excludeTranslationGroupId,
+  visualEditing,
+  productVisualEditingEnabled,
+  visualEditAttributes,
 }: BlockRenderContext) {
   const rendererLoader = getPublicBlockRendererLoader(block.block_type);
 
@@ -56,6 +71,8 @@ async function renderLoadedBlock({
           languageId={languageId}
           excludeProductId={excludeProductId}
           excludeTranslationGroupId={excludeTranslationGroupId}
+          visualEditAttributes={visualEditAttributes}
+          productVisualEditingEnabled={productVisualEditingEnabled}
         />
       );
     }
@@ -64,6 +81,7 @@ async function renderLoadedBlock({
       <div
         key={block.id}
         className="my-4 p-4 border rounded bg-destructive/10 text-destructive"
+        {...visualEditAttributes}
       >
         <p>
           <strong>Unsupported block type:</strong> {block.block_type}
@@ -77,7 +95,13 @@ async function renderLoadedBlock({
 
   // Keep common LCP-adjacent text blocks out of the dynamic renderer manifest.
   if (block.block_type === 'text') {
-    return <ClientTextBlockRenderer content={block.content as any} languageId={languageId} />;
+    return (
+      <ClientTextBlockRenderer
+        content={block.content as any}
+        languageId={languageId}
+        visualEditAttributes={visualEditAttributes}
+      />
+    );
   }
 
   const { default: RendererComponent } = await rendererLoader();
@@ -90,6 +114,7 @@ async function renderLoadedBlock({
         content={block.content}
         languageId={languageId}
         block={block}
+        visualEditAttributes={visualEditAttributes}
       />
     );
   }
@@ -100,18 +125,27 @@ async function renderLoadedBlock({
       languageId={languageId}
       excludeProductId={excludeProductId}
       excludeTranslationGroupId={excludeTranslationGroupId}
+      visualEditAttributes={visualEditAttributes}
+      productVisualEditingEnabled={productVisualEditingEnabled}
+      visualEditing={visualEditing}
+      parentBlockId={block.id}
+      parentBlockIndex={blockIndex}
     />
   );
 }
 
 async function renderBlock(context: BlockRenderContext) {
-  const { block, languageId } = context;
+  const { block, blockIndex, languageId, visualEditAttributes, visualEditing } = context;
 
   if (block.block_type === 'hero') {
     return (
       <HeroBlockRenderer
         content={block.content as unknown as SectionBlockContent}
         languageId={languageId}
+        visualEditAttributes={visualEditAttributes}
+        visualEditing={visualEditing}
+        parentBlockId={block.id}
+        parentBlockIndex={blockIndex}
       />
     );
   }
@@ -124,19 +158,30 @@ export default async function BlockRenderer({
   languageId,
   excludeProductId,
   excludeTranslationGroupId,
+  visualEditing,
+  productVisualEditingEnabled,
 }: BlockRendererProps) {
   if (!blocks || blocks.length === 0) {
     return null;
   }
 
   const renderedBlocks = await Promise.all(
-    blocks.map(async (block) => ({
+    blocks.map(async (block, blockIndex) => ({
       id: block.id,
       node: await renderBlock({
         block,
+        blockIndex,
         languageId,
         excludeProductId,
         excludeTranslationGroupId,
+        visualEditing,
+        productVisualEditingEnabled,
+        visualEditAttributes: buildVisualEditAttributes(visualEditing, {
+          kind: "top-level",
+          blockId: block.id,
+          blockIndex,
+          blockType: block.block_type,
+        }),
       }),
     }))
   );

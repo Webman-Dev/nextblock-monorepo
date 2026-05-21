@@ -15,6 +15,7 @@ type Logo =
 interface HeaderProps {
   navItems: NavigationItem[];
   canAccessCms: boolean;
+  isDraftModeEnabled: boolean;
   logo: Logo | null;
   currentPageData?: { slug: string; translation_group_id: string | null };
   siteTitle: string;
@@ -24,6 +25,7 @@ interface HeaderProps {
 export default function Header({
   navItems,
   canAccessCms,
+  isDraftModeEnabled,
   logo,
   currentPageData,
   siteTitle,
@@ -35,6 +37,7 @@ export default function Header({
       navItems={navItems}
       canAccessCms={canAccessCms}
       cmsDashboardLinkHref="/cms/dashboard"
+      isDraftModeEnabled={isDraftModeEnabled}
       renderHeaderAuth={() => <HeaderAuth />}
       renderLanguageSwitcher={() => <LanguageSwitcher currentPageData={currentPageData} />}
       renderCurrencySwitcher={isEcommerceActive ? () => <CurrencySwitcher /> : undefined}

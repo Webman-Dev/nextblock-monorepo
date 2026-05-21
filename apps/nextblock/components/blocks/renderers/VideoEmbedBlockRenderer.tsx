@@ -1,18 +1,32 @@
 import React from "react";
 import type { VideoEmbedBlockContent } from '../../../lib/blocks/blockRegistry';
+import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
 
 interface VideoEmbedBlockRendererProps {
   content: VideoEmbedBlockContent;
   languageId: number;
+  visualEditAttributes?: VisualEditAttributes;
 }
 
 const VideoEmbedBlockRenderer: React.FC<VideoEmbedBlockRendererProps> = ({
   content,
   languageId,
+  visualEditAttributes,
 }) => {
   void languageId;
   if (!content.url) {
-    return null;
+    if (!visualEditAttributes) {
+      return null;
+    }
+
+    return (
+      <div
+        className="my-4 p-4 border rounded text-center text-muted-foreground italic"
+        {...visualEditAttributes}
+      >
+        (Video block: URL missing)
+      </div>
+    );
   }
 
   // Convert YouTube URLs to embed format
@@ -33,7 +47,7 @@ const VideoEmbedBlockRenderer: React.FC<VideoEmbedBlockRendererProps> = ({
   };
 
   return (
-    <div className="my-4">
+    <div className="my-4" {...visualEditAttributes}>
       {content.title && (
         <h3 className="text-lg font-semibold mb-2">{content.title}</h3>
       )}

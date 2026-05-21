@@ -1,4 +1,4 @@
-import { useState, useEffect, type ComponentType, Suspense, LazyExoticComponent, useCallback } from "react";
+import { useState, useEffect, type ComponentType, Suspense, LazyExoticComponent, useCallback, type CSSProperties } from "react";
 import { cn } from "@nextblock-cms/utils";
 import {
   Dialog,
@@ -28,6 +28,14 @@ export type BlockEditorProps<T = unknown> = {
   sectionBackground?: import("@/lib/blocks/blockRegistry").SectionBlockContent['background'];
 };
 
+export type EditorSurfaceContext = {
+  isDark: boolean;
+  style: CSSProperties;
+};
+
+export type BlockEditorSaveMode = "manual" | "autosave";
+export type BlockEditorSaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
+
 type BlockEditorModalProps = {
   block: Block;
   isOpen: boolean;
@@ -35,6 +43,22 @@ type BlockEditorModalProps = {
   onSave: (updatedContent: unknown) => void;
   EditorComponent: LazyExoticComponent<ComponentType<BlockEditorProps<unknown>>> | ComponentType<BlockEditorProps<unknown>>;
   sectionBackground?: import("@/lib/blocks/blockRegistry").SectionBlockContent['background'];
+  editorSurfaceContext?: EditorSurfaceContext | null;
+  titleOverride?: string;
+  useContextualSurface?: boolean;
+  saveMode?: BlockEditorSaveMode;
+  saveStatus?: BlockEditorSaveStatus;
+  saveStatusText?: string;
+  onAutoChange?: (content: unknown) => void;
+  onFlushBeforeClose?: () => Promise<boolean>;
+};
+
+const autosaveStatusLabels: Record<BlockEditorSaveStatus, string> = {
+  idle: "Saved",
+  dirty: "Unsaved",
+  saving: "Saving...",
+  saved: "Saved",
+  error: "Save failed",
 };
 
 export function BlockEditorModal({
@@ -44,42 +68,113 @@ export function BlockEditorModal({
   onSave,
   EditorComponent,
   sectionBackground,
+  editorSurfaceContext,
+  titleOverride,
+  useContextualSurface,
+  saveMode = "manual",
+  saveStatus = "idle",
+  saveStatusText,
+  onAutoChange,
+  onFlushBeforeClose,
 }: BlockEditorModalProps) {
   const [tempContent, setTempContent] = useState(block.content);
   const [showConfirmClose, setShowConfirmClose] = useState(false);
+  const [isFlushingBeforeClose, setIsFlushingBeforeClose] = useState(false);
   const isValid = true; // Placeholder for future validation logic
+  const isAutosaveMode = saveMode === "autosave";
 
   useEffect(() => {
     // When the modal is opened with a new block, reset the temp content
     if (isOpen) {
       setTempContent(block.content);
       setShowConfirmClose(false);
+      setIsFlushingBeforeClose(false);
     }
   }, [isOpen, block.content]);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     onSave(tempContent);
-  };
+  }, [onSave, tempContent]);
 
   const hasUnsavedChanges = useCallback(() => {
     return JSON.stringify(block.content) !== JSON.stringify(tempContent);
   }, [block.content, tempContent]);
 
+  const flushAutosave = useCallback(async () => {
+    if (!onFlushBeforeClose) {
+      return true;
+    }
+
+    setIsFlushingBeforeClose(true);
+    try {
+      return await onFlushBeforeClose();
+    } finally {
+      setIsFlushingBeforeClose(false);
+    }
+  }, [onFlushBeforeClose]);
+
   const handleCloseAttempt = useCallback(() => {
+    if (isAutosaveMode) {
+      void (async () => {
+        const didFlush = await flushAutosave();
+        if (didFlush) {
+          onClose();
+        }
+      })();
+      return;
+    }
+
     if (hasUnsavedChanges()) {
       setShowConfirmClose(true);
     } else {
       onClose();
     }
-  }, [hasUnsavedChanges, onClose]);
+  }, [flushAutosave, hasUnsavedChanges, isAutosaveMode, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "s") {
+        return;
+      }
+
+      event.preventDefault();
+      if (isAutosaveMode) {
+        void flushAutosave();
+      } else {
+        handleSave();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [flushAutosave, handleSave, isAutosaveMode, isOpen]);
 
   const handleContentChange = (newContent: unknown) => {
     setTempContent(newContent);
+    if (isAutosaveMode) {
+      onAutoChange?.(newContent);
+    }
     // Potentially add validation here and set isValid
   };
 
   const blockInfo = blockRegistry[block.type];
   const displayText = blockInfo?.label || "Block";
+  const shouldUseContextualSurface =
+    useContextualSurface ?? (block.type === 'text' || block.type === 'heading');
+  const contextualSurfaceStyle = shouldUseContextualSurface ? editorSurfaceContext?.style : undefined;
+  const editorClassName = cn(
+    "bg-transparent text-foreground border-none shadow-none focus-within:ring-0 min-h-[60vh]",
+    shouldUseContextualSurface &&
+      editorSurfaceContext?.isDark &&
+      "[&_.ProseMirror]:text-white [&_.ProseMirror.prose]:prose-invert"
+  );
+  const resolvedSaveStatusText = saveStatusText ?? autosaveStatusLabels[saveStatus];
 
   return (
     <>
@@ -100,15 +195,43 @@ export function BlockEditorModal({
           }}
         >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b bg-background/95 backdrop-blur z-10">
+            <div className="flex items-center justify-between p-4 border-b bg-background/95 text-foreground backdrop-blur z-10">
                 <div className="flex items-center gap-2">
-                   <DialogTitle className="text-lg font-semibold">Edit {displayText}</DialogTitle>
+                   <DialogTitle className="text-lg font-semibold">
+                    {titleOverride ?? `Edit ${displayText}`}
+                   </DialogTitle>
                 </div>
                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" onClick={handleCloseAttempt}>Cancel</Button>
-                    <Button onClick={handleSave} disabled={!isValid} size="sm">
-                      Save (CMD+S)
+                    {isAutosaveMode && (
+                      <span
+                        aria-live="polite"
+                        className={cn(
+                          "rounded-md px-2 py-1 text-xs font-medium",
+                          saveStatus === "error"
+                            ? "bg-destructive/10 text-destructive"
+                            : saveStatus === "dirty"
+                              ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                              : "bg-muted text-muted-foreground",
+                          "max-w-[360px] truncate"
+                        )}
+                        title={resolvedSaveStatusText}
+                      >
+                        {resolvedSaveStatusText}
+                      </span>
+                    )}
+                    <Button
+                      variant={isAutosaveMode ? "default" : "ghost"}
+                      size="sm"
+                      onClick={handleCloseAttempt}
+                      disabled={isAutosaveMode && isFlushingBeforeClose}
+                    >
+                      {isAutosaveMode ? "Done" : "Cancel"}
                     </Button>
+                    {!isAutosaveMode && (
+                      <Button onClick={handleSave} disabled={!isValid} size="sm">
+                        Save (CMD+S)
+                      </Button>
+                    )}
                  </div>
             </div>
 
@@ -120,25 +243,27 @@ export function BlockEditorModal({
                   // Conditional Background Logic:
                   // Only apply specific section background to 'text' and 'heading' blocks to allow "Live Preview" of copy.
                   // For complex blocks like Forms, Buttons, etc., keep a neutral background to ensure input field contrast.
-                  (block.type === 'text' || block.type === 'heading') ? (
+                  shouldUseContextualSurface ? (
                      // If no specific background, use white/dark default
                      (!sectionBackground || sectionBackground.type === 'none') && "bg-muted/10"
                   ) : "bg-muted/10", // Default for non-text blocks
 
                   // Apply theme classes if present (ONLY for text/heading)
-                  (block.type === 'text' || block.type === 'heading') && sectionBackground?.type === 'theme' && sectionBackground.theme === 'primary' && 'bg-primary text-primary-foreground',
-                  (block.type === 'text' || block.type === 'heading') && sectionBackground?.type === 'theme' && sectionBackground.theme === 'secondary' && 'bg-secondary text-secondary-foreground',
-                  (block.type === 'text' || block.type === 'heading') && sectionBackground?.type === 'theme' && sectionBackground.theme === 'muted' && 'bg-muted text-muted-foreground',
+                  shouldUseContextualSurface && sectionBackground?.type === 'theme' && sectionBackground.theme === 'primary' && 'bg-primary text-primary-foreground',
+                  shouldUseContextualSurface && sectionBackground?.type === 'theme' && sectionBackground.theme === 'secondary' && 'bg-secondary text-secondary-foreground',
+                  shouldUseContextualSurface && sectionBackground?.type === 'theme' && sectionBackground.theme === 'muted' && 'bg-muted text-muted-foreground',
                   
                    // Dark mode prose invert if dark background (approximate check for solid color)
-                  (block.type === 'text' || block.type === 'heading') && (sectionBackground?.type === 'solid' && sectionBackground.solid_color && ['#000', '#111', '#0f172a', 'black'].some(c => sectionBackground.solid_color?.includes(c))) && "[&_.prose]:prose-invert"
+                  shouldUseContextualSurface && (sectionBackground?.type === 'solid' && sectionBackground.solid_color && ['#000', '#111', '#0f172a', 'black'].some(c => sectionBackground.solid_color?.includes(c))) && "[&_.prose]:prose-invert",
+                  shouldUseContextualSurface && editorSurfaceContext?.isDark && "[&_.prose]:prose-invert [&_.ProseMirror]:text-white"
               )}
               style={{
                   // Only apply custom color/gradient styles for text/heading
-                  backgroundColor: (block.type === 'text' || block.type === 'heading') && sectionBackground?.type === 'solid' ? sectionBackground.solid_color : undefined,
-                  backgroundImage: (block.type === 'text' || block.type === 'heading') && sectionBackground?.type === 'gradient' && sectionBackground.gradient ? 
+                  backgroundColor: shouldUseContextualSurface && sectionBackground?.type === 'solid' ? sectionBackground.solid_color : undefined,
+                  backgroundImage: shouldUseContextualSurface && sectionBackground?.type === 'gradient' && sectionBackground.gradient ? 
                     `${sectionBackground.gradient.type}-gradient(${sectionBackground.gradient.direction}, ${sectionBackground.gradient.stops.map(s => `${s.color} ${s.position}%`).join(', ')})` 
-                    : undefined
+                    : undefined,
+                  ...contextualSurfaceStyle,
               }}
             >
                <div className="max-w-6xl mx-auto">
@@ -147,7 +272,7 @@ export function BlockEditorModal({
                         block={block}
                         content={tempContent} 
                         onChange={handleContentChange} 
-                        className="bg-transparent border-none shadow-none focus-within:ring-0 min-h-[60vh]" // Make editor transparent
+                        className={editorClassName}
                         sectionBackground={sectionBackground} // Pass down if editor supports it
                     />
                   </Suspense>

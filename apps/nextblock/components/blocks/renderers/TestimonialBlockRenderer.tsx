@@ -2,6 +2,7 @@ import React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar";
 import { Card, CardContent } from "@nextblock-cms/ui/card";
 import { MessageSquareQuote } from "lucide-react";
+import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
 
 type TestimonialBlockContent = {
   quote?: string;
@@ -12,15 +13,17 @@ type TestimonialBlockContent = {
 
 interface TestimonialBlockRendererProps {
   content: TestimonialBlockContent;
+  visualEditAttributes?: VisualEditAttributes;
 }
 
 const TestimonialBlockRenderer: React.FC<TestimonialBlockRendererProps> = ({
   content,
+  visualEditAttributes,
 }) => {
   const authorName = content.author_name || "Customer";
 
   return (
-    <div className="container m-8">
+    <div className="container m-8" {...visualEditAttributes}>
       <Card className="h-full">
         <CardContent className="pt-6 flex flex-col gap-4 h-full">
           <MessageSquareQuote className="w-8 h-8 text-primary/40" />

@@ -1,0 +1,1025 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+} from "react";
+import type { Json } from "@nextblock-cms/db";
+import { Button, Input, Label, Textarea } from "@nextblock-cms/ui";
+import { Loader2, Pencil, Send, Trash2 } from "lucide-react";
+import {
+  discardVisualEditingDraft,
+  discardVisualEditingProductDraft,
+  loadVisualEditingBlockContent,
+  loadVisualEditingProductField,
+  publishVisualEditingDraft,
+  publishVisualEditingProductDraft,
+} from "../../app/actions/visualEditingActions";
+import {
+  BlockEditorModal,
+  type Block,
+  type BlockEditorProps,
+  type BlockEditorSaveStatus,
+  type EditorSurfaceContext,
+} from "../../app/cms/blocks/components/BlockEditorModal";
+import type {
+  NextblockDocumentType,
+  NextblockVisualDocumentType,
+  NextblockVisualEditInfo,
+  VisualEditingBlockRequest,
+  VisualEditingProductFieldRequest,
+  VisualEditingProductFieldTarget,
+} from "../../lib/visual-editing/types";
+import type { BlockType } from "../../lib/blocks/blockRegistry";
+
+type EditorComponent = ComponentType<BlockEditorProps<unknown>>;
+type HoverTarget = {
+  element: HTMLElement;
+  info: NextblockVisualEditInfo;
+  rect: DOMRect;
+};
+type ActiveDocument = {
+  parentType: NextblockVisualDocumentType;
+  parentId: number | string;
+};
+type ProductFieldVisualEditInfo = NextblockVisualEditInfo & {
+  data: Omit<NextblockVisualEditInfo["data"], "parentType" | "target"> & {
+    parentType: "product";
+    target: VisualEditingProductFieldTarget;
+  };
+};
+type ParsedCssColor = {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+};
+
+const VISUAL_DRAFT_AUTOSAVE_DELAY_MS = 900;
+
+const TextBlockEditor = dynamic(
+  () => import("../../app/cms/blocks/editors/TextBlockEditor"),
+  { ssr: false }
+) as EditorComponent;
+const HeadingBlockEditor = dynamic(
+  () => import("../../app/cms/blocks/editors/HeadingBlockEditor"),
+  { ssr: false }
+) as EditorComponent;
+const ImageBlockEditor = dynamic(
+  () => import("../../app/cms/blocks/editors/ImageBlockEditor"),
+  { ssr: false }
+) as EditorComponent;
+const ButtonBlockEditor = dynamic(
+  () => import("../../app/cms/blocks/editors/ButtonBlockEditor"),
+  { ssr: false }
+) as EditorComponent;
+const PostsGridBlockEditor = dynamic(
+  () => import("../../app/cms/blocks/editors/PostsGridBlockEditor"),
+  { ssr: false }
+) as EditorComponent;
+const VideoEmbedBlockEditor = dynamic(
+  () => import("../../app/cms/blocks/editors/VideoEmbedBlockEditor"),
+  { ssr: false }
+) as EditorComponent;
+const FormBlockEditor = dynamic(
+  () => import("../../app/cms/blocks/editors/FormBlockEditor"),
+  { ssr: false }
+) as EditorComponent;
+const ProductGridBlockEditor = dynamic(
+  () => import("../../app/cms/blocks/editors/ProductGridBlockEditor"),
+  { ssr: false }
+) as EditorComponent;
+const ProductDescriptionEditor = dynamic(
+  () =>
+    import("../../app/cms/products/ClientNotionEditor").then((module) => {
+      const ClientNotionEditor = module.default;
+
+      return function VisualProductDescriptionEditor({
+        content,
+        onChange,
+      }: BlockEditorProps<unknown>) {
+        return (
+          <div className="rounded-md border bg-background text-foreground">
+            <ClientNotionEditor
+              initialContent={content ?? { type: "doc", content: [] }}
+              onUpdate={onChange}
+              showAiPrompt={false}
+            />
+          </div>
+        );
+      };
+    }),
+  { ssr: false }
+) as EditorComponent;
+const FeaturedProductBlockEditor = dynamic(
+  () => import("../../app/cms/blocks/editors/FeaturedProductBlockEditor"),
+  { ssr: false }
+) as EditorComponent;
+const TestimonialBlockEditor = dynamic(
+  () =>
+    import("../blocks/TestimonialBlock").then(
+      (module) => module.TestimonialBlockConfig.EditorComponent as EditorComponent
+    ),
+  { ssr: false }
+) as EditorComponent;
+const SectionBlockEditor = dynamic(
+  () =>
+    import("../../app/cms/blocks/editors/SectionBlockEditor").then((module) => {
+      const Editor = module.default;
+      return function VisualSectionBlockEditor(props: BlockEditorProps<unknown>) {
+        return (
+          <Editor
+            content={props.content as any}
+            onChange={props.onChange as any}
+            isConfigPanelOpen={true}
+            blockType={props.block.type === "hero" ? "hero" : "section"}
+          />
+        );
+      };
+    }),
+  { ssr: false }
+) as EditorComponent;
+
+const editorComponents: Partial<Record<BlockType, EditorComponent>> = {
+  text: TextBlockEditor,
+  heading: HeadingBlockEditor,
+  image: ImageBlockEditor,
+  button: ButtonBlockEditor,
+  posts_grid: PostsGridBlockEditor,
+  video_embed: VideoEmbedBlockEditor,
+  section: SectionBlockEditor,
+  hero: SectionBlockEditor,
+  form: FormBlockEditor,
+  testimonial: TestimonialBlockEditor,
+  product_grid: ProductGridBlockEditor,
+  featured_product: FeaturedProductBlockEditor,
+};
+
+function parseEditInfo(element: Element | null): NextblockVisualEditInfo | null {
+  const raw = element?.getAttribute("data-vercel-edit-info");
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as NextblockVisualEditInfo;
+    return parsed?.origin === "nextblock" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function isProductFieldTarget(target: unknown): target is VisualEditingProductFieldTarget {
+  return Boolean(
+    target &&
+      typeof target === "object" &&
+      "kind" in target &&
+      (target as { kind?: unknown }).kind === "product-field"
+  );
+}
+
+function isProductFieldInfo(info: NextblockVisualEditInfo): info is ProductFieldVisualEditInfo {
+  return info.data.parentType === "product" && isProductFieldTarget(info.data.target);
+}
+
+function blockRequestFromInfo(info: NextblockVisualEditInfo): VisualEditingBlockRequest {
+  if (info.data.parentType !== "page" && info.data.parentType !== "post") {
+    throw new Error("Invalid block draft document.");
+  }
+
+  if (isProductFieldTarget(info.data.target)) {
+    throw new Error("Invalid block draft target.");
+  }
+
+  return {
+    parentType: info.data.parentType,
+    parentId: Number(info.data.parentId),
+    target: info.data.target as VisualEditingBlockRequest["target"],
+  };
+}
+
+function productFieldRequestFromInfo(info: NextblockVisualEditInfo): VisualEditingProductFieldRequest {
+  if (!isProductFieldInfo(info)) {
+    throw new Error("Invalid product draft target.");
+  }
+
+  return {
+    parentType: "product",
+    parentId: String(info.data.parentId),
+    target: info.data.target,
+  };
+}
+
+function documentFromInfo(info: NextblockVisualEditInfo): ActiveDocument {
+  return {
+    parentType: info.data.parentType,
+    parentId: info.data.parentId,
+  };
+}
+
+function serializeDraftContent(content: unknown) {
+  try {
+    return JSON.stringify(content ?? null);
+  } catch {
+    return String(content);
+  }
+}
+
+function getActionError(result: unknown) {
+  if (!result || typeof result !== "object" || !("error" in result)) {
+    return "";
+  }
+
+  const error = (result as { error?: unknown }).error;
+  return typeof error === "string" ? error : "";
+}
+
+async function saveVisualEditingBlockDraftViaApi(
+  request: VisualEditingBlockRequest,
+  content: Json
+) {
+  const response = await fetch("/api/visual-editing/block-draft", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ request, content }),
+    cache: "no-store",
+  });
+
+  let result: unknown = null;
+  try {
+    result = await response.json();
+  } catch {
+    // Keep the UI error concise if the route fails before returning JSON.
+  }
+
+  const actionError = getActionError(result);
+  if (actionError) {
+    return { error: actionError };
+  }
+
+  if (!response.ok) {
+    return { error: "Failed to save draft." };
+  }
+
+  return { success: true };
+}
+
+async function saveVisualEditingProductDraftViaApi(
+  request: VisualEditingProductFieldRequest,
+  content: Json
+) {
+  const response = await fetch("/api/visual-editing/product-draft", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ request, content }),
+    cache: "no-store",
+  });
+
+  let result: unknown = null;
+  try {
+    result = await response.json();
+  } catch {
+    // Keep the UI error concise if the route fails before returning JSON.
+  }
+
+  const actionError = getActionError(result);
+  if (actionError) {
+    return { error: actionError };
+  }
+
+  if (!response.ok) {
+    return { error: "Failed to save product draft." };
+  }
+
+  return { success: true };
+}
+
+function createInfoKey(info: NextblockVisualEditInfo) {
+  return JSON.stringify({
+    parentType: info.data.parentType,
+    parentId: info.data.parentId,
+    target: info.data.target,
+  });
+}
+
+function findElementForInfo(info: NextblockVisualEditInfo) {
+  const expectedKey = createInfoKey(info);
+  const elements = document.querySelectorAll<HTMLElement>("[data-vercel-edit-info]");
+
+  for (const element of elements) {
+    const parsed = parseEditInfo(element);
+    if (parsed && createInfoKey(parsed) === expectedKey) {
+      return element;
+    }
+  }
+
+  return null;
+}
+
+function parseCssColor(value: string): ParsedCssColor | null {
+  const normalized = value.trim().toLowerCase();
+
+  if (!normalized || normalized === "transparent") {
+    return null;
+  }
+
+  const rgbMatch = normalized.match(/^rgba?\((.+)\)$/);
+  if (!rgbMatch) {
+    return null;
+  }
+
+  const parts = rgbMatch[1]
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length < 3) {
+    return null;
+  }
+
+  const [r, g, b] = parts.slice(0, 3).map((part) => Number.parseFloat(part));
+  const a = parts[3] === undefined ? 1 : Number.parseFloat(parts[3]);
+
+  if (![r, g, b, a].every(Number.isFinite)) {
+    return null;
+  }
+
+  return { r, g, b, a };
+}
+
+function isDarkColor(value: string) {
+  const color = parseCssColor(value);
+  if (!color || color.a <= 0) {
+    return false;
+  }
+
+  const r = color.r * color.a + 255 * (1 - color.a);
+  const g = color.g * color.a + 255 * (1 - color.a);
+  const b = color.b * color.a + 255 * (1 - color.a);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+
+  return yiq < 140;
+}
+
+function isLightColor(value: string) {
+  const color = parseCssColor(value);
+  if (!color || color.a <= 0) {
+    return false;
+  }
+
+  const yiq = (color.r * 299 + color.g * 587 + color.b * 114) / 1000;
+  return yiq > 180;
+}
+
+function getVisualEditorSurfaceContext(element: HTMLElement | null): EditorSurfaceContext | null {
+  if (!element || typeof window === "undefined") {
+    return null;
+  }
+
+  let current: HTMLElement | null = element;
+
+  while (current && current !== document.body && current !== document.documentElement) {
+    const computed = window.getComputedStyle(current);
+    const backgroundImage = computed.backgroundImage;
+    const hasBackgroundImage = Boolean(backgroundImage && backgroundImage !== "none");
+    const backgroundColor = parseCssColor(computed.backgroundColor);
+    const hasSolidBackground = Boolean(backgroundColor && backgroundColor.a > 0.55);
+
+    if (hasBackgroundImage || hasSolidBackground) {
+      const style: EditorSurfaceContext["style"] = {
+        backgroundColor: backgroundColor && backgroundColor.a > 0 ? computed.backgroundColor : undefined,
+        backgroundImage: hasBackgroundImage ? backgroundImage : undefined,
+        backgroundPosition: computed.backgroundPosition,
+        backgroundRepeat: computed.backgroundRepeat,
+        backgroundSize: computed.backgroundSize,
+      };
+
+      return {
+        isDark: hasBackgroundImage || isDarkColor(computed.backgroundColor),
+        style,
+      };
+    }
+
+    current = current.parentElement;
+  }
+
+  const textColor = window.getComputedStyle(element).color;
+  if (isLightColor(textColor)) {
+    return {
+      isDark: true,
+      style: {
+        backgroundColor: "#0f172a",
+      },
+    };
+  }
+
+  return null;
+}
+
+function JsonBlockEditor({ content, onChange }: BlockEditorProps<unknown>) {
+  const [value, setValue] = useState(() => JSON.stringify(content ?? {}, null, 2));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setValue(JSON.stringify(content ?? {}, null, 2));
+    setError(null);
+  }, [content]);
+
+  return (
+    <div className="space-y-3 p-3 border-t mt-2">
+      <Label htmlFor="nextblock-visual-json-editor">JSON Content</Label>
+      <Textarea
+        id="nextblock-visual-json-editor"
+        value={value}
+        onChange={(event) => {
+          const nextValue = event.target.value;
+          setValue(nextValue);
+
+          try {
+            onChange(JSON.parse(nextValue));
+            setError(null);
+          } catch (parseError) {
+            setError(parseError instanceof Error ? parseError.message : "Invalid JSON");
+          }
+        }}
+        className="min-h-[360px] font-mono text-sm"
+        spellCheck={false}
+      />
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+function ProductPlainTextFieldEditor({ block, content, onChange }: BlockEditorProps<unknown>) {
+  const value = typeof content === "string" ? content : "";
+  const field = typeof block.productField === "string" ? block.productField : "title";
+
+  if (field === "short_description") {
+    return (
+      <div className="space-y-2 p-3 border-t mt-2">
+        <Label htmlFor="nextblock-visual-product-short-description">Short Description</Label>
+        <Textarea
+          id="nextblock-visual-product-short-description"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="min-h-[140px] text-sm"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 p-3 border-t mt-2">
+      <Label htmlFor="nextblock-visual-product-title">Product Title</Label>
+      <Input
+        id="nextblock-visual-product-title"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="text-base"
+      />
+    </div>
+  );
+}
+
+function getEditorComponent(blockType: string) {
+  return editorComponents[blockType as BlockType] ?? JsonBlockEditor;
+}
+
+function getProductFieldEditorComponent(target: VisualEditingProductFieldTarget) {
+  return target.field === "description_json"
+    ? ProductDescriptionEditor
+    : ProductPlainTextFieldEditor;
+}
+
+export function NextblockVisualEditing() {
+  const router = useRouter();
+  const [hoverTarget, setHoverTarget] = useState<HoverTarget | null>(null);
+  const [activeInfo, setActiveInfo] = useState<NextblockVisualEditInfo | null>(null);
+  const [activeDocument, setActiveDocument] = useState<ActiveDocument | null>(null);
+  const [activeBlock, setActiveBlock] = useState<Block | null>(null);
+  const [activeSurfaceContext, setActiveSurfaceContext] = useState<EditorSurfaceContext | null>(null);
+  const [activeModalTitle, setActiveModalTitle] = useState<string | undefined>(undefined);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isLoadingBlock, setIsLoadingBlock] = useState(false);
+  const [isSavingBlock, setIsSavingBlock] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isDiscarding, setIsDiscarding] = useState(false);
+  const [autosaveStatus, setAutosaveStatus] = useState<BlockEditorSaveStatus>("idle");
+  const [message, setMessage] = useState<string | null>(null);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeInfoRef = useRef<NextblockVisualEditInfo | null>(null);
+  const activeDocumentRef = useRef<ActiveDocument | null>(null);
+  const latestContentRef = useRef<unknown>(null);
+  const lastSavedContentRef = useRef<string>("");
+  const lastFailedContentRef = useRef<string>("");
+  const isAutosaveInFlightRef = useRef(false);
+  const activeAutosavePromiseRef = useRef<Promise<boolean> | null>(null);
+  const hasQueuedAutosaveRef = useRef(false);
+  const hasSavedSinceOpenRef = useRef(false);
+
+  useEffect(() => {
+    activeInfoRef.current = activeInfo;
+  }, [activeInfo]);
+
+  useEffect(() => {
+    activeDocumentRef.current = activeDocument;
+  }, [activeDocument]);
+
+  const clearAutosaveTimer = useCallback(() => {
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+  }, []);
+
+  const performAutosave = useCallback(async (): Promise<boolean> => {
+    const info = activeInfoRef.current;
+    if (!info) {
+      return true;
+    }
+
+    clearAutosaveTimer();
+
+    const nextContent = latestContentRef.current;
+    const nextSerialized = serializeDraftContent(nextContent);
+    if (nextSerialized === lastSavedContentRef.current) {
+      setAutosaveStatus("saved");
+      return true;
+    }
+
+    if (nextSerialized === lastFailedContentRef.current && autosaveStatus === "error") {
+      return false;
+    }
+
+    if (isAutosaveInFlightRef.current) {
+      hasQueuedAutosaveRef.current = true;
+      setAutosaveStatus("dirty");
+      return activeAutosavePromiseRef.current ?? false;
+    }
+
+    const autosaveOperation = (async () => {
+      isAutosaveInFlightRef.current = true;
+      hasQueuedAutosaveRef.current = false;
+      setIsSavingBlock(true);
+      setAutosaveStatus("saving");
+      setMessage(null);
+
+      try {
+        const result = isProductFieldInfo(info)
+          ? await saveVisualEditingProductDraftViaApi(
+              productFieldRequestFromInfo(info),
+              nextContent as Json
+            )
+          : await saveVisualEditingBlockDraftViaApi(
+              blockRequestFromInfo(info),
+              nextContent as Json
+            );
+        const actionError = getActionError(result);
+
+        if (actionError) {
+          lastFailedContentRef.current = nextSerialized;
+          setAutosaveStatus("error");
+          setMessage(actionError);
+          return false;
+        }
+      } catch (error) {
+        lastFailedContentRef.current = nextSerialized;
+        setAutosaveStatus("error");
+        setMessage(error instanceof Error ? error.message : "Failed to save draft.");
+        return false;
+      } finally {
+        isAutosaveInFlightRef.current = false;
+        setIsSavingBlock(false);
+      }
+
+      lastSavedContentRef.current = nextSerialized;
+      lastFailedContentRef.current = "";
+      hasSavedSinceOpenRef.current = true;
+      setAutosaveStatus("saved");
+      setMessage(null);
+
+      if (hasQueuedAutosaveRef.current) {
+        hasQueuedAutosaveRef.current = false;
+        return performAutosave();
+      }
+
+      return true;
+    })();
+
+    activeAutosavePromiseRef.current = autosaveOperation;
+
+    try {
+      return await autosaveOperation;
+    } finally {
+      if (activeAutosavePromiseRef.current === autosaveOperation) {
+        activeAutosavePromiseRef.current = null;
+      }
+    }
+  }, [autosaveStatus, clearAutosaveTimer]);
+
+  const scheduleAutosave = useCallback(
+    (content: unknown) => {
+      latestContentRef.current = content;
+
+      const nextSerialized = serializeDraftContent(content);
+      if (nextSerialized === lastSavedContentRef.current) {
+        clearAutosaveTimer();
+        setAutosaveStatus("saved");
+        return;
+      }
+
+      if (nextSerialized === lastFailedContentRef.current && autosaveStatus === "error") {
+        return;
+      }
+
+      lastFailedContentRef.current = "";
+      setAutosaveStatus("dirty");
+
+      if (isAutosaveInFlightRef.current) {
+        hasQueuedAutosaveRef.current = true;
+        return;
+      }
+
+      clearAutosaveTimer();
+      autosaveTimerRef.current = setTimeout(() => {
+        void performAutosave();
+      }, VISUAL_DRAFT_AUTOSAVE_DELAY_MS);
+    },
+    [autosaveStatus, clearAutosaveTimer, performAutosave]
+  );
+
+  useEffect(() => {
+    return () => {
+      clearAutosaveTimer();
+    };
+  }, [clearAutosaveTimer]);
+
+  const openEditor = useCallback(async (
+    info: NextblockVisualEditInfo,
+    sourceElement?: HTMLElement | null
+  ) => {
+    const editorElement = sourceElement ?? findElementForInfo(info);
+    const document = documentFromInfo(info);
+    activeInfoRef.current = info;
+    activeDocumentRef.current = document;
+    setActiveInfo(info);
+    setActiveDocument(document);
+    setActiveBlock(null);
+    setActiveSurfaceContext(getVisualEditorSurfaceContext(editorElement));
+    setActiveModalTitle(
+      isProductFieldInfo(info) ? `Edit ${info.data.target.label}` : undefined
+    );
+    setIsEditorOpen(true);
+    setIsLoadingBlock(true);
+    clearAutosaveTimer();
+    latestContentRef.current = null;
+    lastSavedContentRef.current = "";
+    lastFailedContentRef.current = "";
+    isAutosaveInFlightRef.current = false;
+    activeAutosavePromiseRef.current = null;
+    hasQueuedAutosaveRef.current = false;
+    hasSavedSinceOpenRef.current = false;
+    setAutosaveStatus("idle");
+    setMessage(null);
+
+    const result = isProductFieldInfo(info)
+      ? await loadVisualEditingProductField(productFieldRequestFromInfo(info))
+      : await loadVisualEditingBlockContent(blockRequestFromInfo(info));
+    setIsLoadingBlock(false);
+    const actionError = getActionError(result);
+
+    if (actionError) {
+      setMessage(actionError);
+      return;
+    }
+
+    const blockType = isProductFieldInfo(info)
+      ? "text"
+      : (blockRequestFromInfo(info).target.blockType as BlockType);
+    const content = "content" in result ? result.content : null;
+    latestContentRef.current = content;
+    lastSavedContentRef.current = serializeDraftContent(content);
+    setActiveBlock({
+      type: blockType,
+      content,
+      productField: isProductFieldInfo(info) ? info.data.target.field : undefined,
+    });
+  }, [clearAutosaveTimer]);
+
+  useEffect(() => {
+    const firstEditable = document.querySelector("[data-vercel-edit-info]");
+    const firstInfo = parseEditInfo(firstEditable);
+    if (firstInfo) {
+      const document = documentFromInfo(firstInfo);
+      activeDocumentRef.current = document;
+      setActiveDocument(document);
+    }
+
+    const handlePointerOver = (event: PointerEvent) => {
+      const target = event.target instanceof Element
+        ? event.target.closest("[data-vercel-edit-info]")
+        : null;
+      const info = parseEditInfo(target);
+
+      if (target instanceof HTMLElement && info) {
+        setHoverTarget({
+          element: target,
+          info,
+          rect: target.getBoundingClientRect(),
+        });
+      }
+    };
+
+    const handleEditTargetClick = (event: MouseEvent) => {
+      if (isEditorOpen || event.button !== 0) {
+        return;
+      }
+
+      const target = event.target instanceof Element
+        ? event.target.closest("[data-vercel-edit-info]")
+        : null;
+      const info = parseEditInfo(target);
+
+      if (!(target instanceof HTMLElement) || !info) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setHoverTarget({
+        element: target,
+        info,
+        rect: target.getBoundingClientRect(),
+      });
+      void openEditor(info, target);
+    };
+
+    const handleToolbarEdit = (event: Event) => {
+      const detail = (event as CustomEvent).detail as
+        | {
+            element?: HTMLElement;
+            target?: string;
+            editInfo?: NextblockVisualEditInfo;
+          }
+        | undefined;
+
+      if (detail?.editInfo?.origin === "nextblock") {
+          void openEditor(detail.editInfo, detail.element);
+        return;
+      }
+
+      const element =
+        detail?.element ??
+        (detail?.target ? document.querySelector(detail.target) : null) ??
+        document.querySelector("[data-vercel-edit-info]");
+      const info = parseEditInfo(element);
+
+      if (info) {
+        void openEditor(info, element instanceof HTMLElement ? element : null);
+      }
+    };
+
+    document.addEventListener("pointerover", handlePointerOver, true);
+    document.addEventListener("click", handleEditTargetClick, true);
+    window.addEventListener("edit:open", handleToolbarEdit);
+    window.addEventListener("vercel-toolbar:edit", handleToolbarEdit);
+    window.addEventListener("vercel-toolbar:visual-edit", handleToolbarEdit);
+    window.addEventListener("visual-editing:edit", handleToolbarEdit);
+
+    return () => {
+      document.removeEventListener("pointerover", handlePointerOver, true);
+      document.removeEventListener("click", handleEditTargetClick, true);
+      window.removeEventListener("edit:open", handleToolbarEdit);
+      window.removeEventListener("vercel-toolbar:edit", handleToolbarEdit);
+      window.removeEventListener("vercel-toolbar:visual-edit", handleToolbarEdit);
+      window.removeEventListener("visual-editing:edit", handleToolbarEdit);
+    };
+  }, [isEditorOpen, openEditor]);
+
+  const overlayPosition = useMemo(() => {
+    if (!hoverTarget) {
+      return null;
+    }
+
+    const viewportWidth = typeof window === "undefined" ? 1024 : window.innerWidth;
+    const top = Math.max(12, hoverTarget.rect.top + 8);
+    const left = Math.min(viewportWidth - 52, Math.max(12, hoverTarget.rect.right - 44));
+    return { top, left };
+  }, [hoverTarget]);
+
+  const closeVisualEditor = useCallback(() => {
+    clearAutosaveTimer();
+    activeInfoRef.current = null;
+    setIsEditorOpen(false);
+    setActiveInfo(null);
+    setActiveBlock(null);
+    setActiveSurfaceContext(null);
+    setActiveModalTitle(undefined);
+  }, [clearAutosaveTimer]);
+
+  const flushAutosaveBeforeClose = useCallback(async () => {
+    clearAutosaveTimer();
+    if (autosaveStatus === "error") {
+      return true;
+    }
+
+    const didSave = await performAutosave();
+
+    if (didSave && hasSavedSinceOpenRef.current) {
+      hasSavedSinceOpenRef.current = false;
+      router.refresh();
+    }
+
+    return didSave;
+  }, [autosaveStatus, clearAutosaveTimer, performAutosave, router]);
+
+  const flushPendingEditorChanges = useCallback(async () => {
+    clearAutosaveTimer();
+
+    if (!activeInfoRef.current) {
+      return true;
+    }
+
+    if (autosaveStatus === "error") {
+      return false;
+    }
+
+    return performAutosave();
+  }, [autosaveStatus, clearAutosaveTimer, performAutosave]);
+
+  const publishDraft = useCallback(async () => {
+    const document = activeDocumentRef.current ?? activeDocument;
+    if (!document) {
+      return;
+    }
+
+    const didFlush = await flushPendingEditorChanges();
+    if (!didFlush) {
+      return;
+    }
+
+    setIsPublishing(true);
+    setMessage(null);
+    const result =
+      document.parentType === "product"
+        ? await publishVisualEditingProductDraft(String(document.parentId))
+        : await publishVisualEditingDraft(
+            document.parentType as NextblockDocumentType,
+            Number(document.parentId)
+          );
+    setIsPublishing(false);
+    const actionError = getActionError(result);
+
+    if (actionError) {
+      setMessage(actionError);
+      return;
+    }
+
+    setMessage("Draft published.");
+    hasSavedSinceOpenRef.current = false;
+    closeVisualEditor();
+    router.refresh();
+  }, [activeDocument, closeVisualEditor, flushPendingEditorChanges, router]);
+
+  const discardDraft = useCallback(async () => {
+    const document = activeDocumentRef.current ?? activeDocument;
+    if (!document) {
+      return;
+    }
+
+    clearAutosaveTimer();
+    setIsDiscarding(true);
+    setMessage(null);
+    const result =
+      document.parentType === "product"
+        ? await discardVisualEditingProductDraft(String(document.parentId))
+        : await discardVisualEditingDraft(
+            document.parentType as NextblockDocumentType,
+            Number(document.parentId)
+          );
+    setIsDiscarding(false);
+    const actionError = getActionError(result);
+
+    if (actionError) {
+      setMessage(actionError);
+      return;
+    }
+
+    setMessage("Draft discarded.");
+    hasSavedSinceOpenRef.current = false;
+    closeVisualEditor();
+    router.refresh();
+  }, [activeDocument, clearAutosaveTimer, closeVisualEditor, router]);
+
+  const EditorComponent =
+    activeBlock && activeInfo && isProductFieldInfo(activeInfo)
+      ? getProductFieldEditorComponent(activeInfo.data.target)
+      : activeBlock
+        ? getEditorComponent(activeBlock.type)
+        : JsonBlockEditor;
+  const draftActions = (
+    <>
+      <Button
+        type="button"
+        size="sm"
+        onClick={publishDraft}
+        disabled={!activeDocument || isPublishing || isDiscarding || isSavingBlock}
+      >
+        {isPublishing ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Send className="mr-2 h-4 w-4" />
+        )}
+        Publish
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={discardDraft}
+        disabled={!activeDocument || isPublishing || isDiscarding}
+      >
+        {isDiscarding ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Trash2 className="mr-2 h-4 w-4" />
+        )}
+        Discard
+      </Button>
+    </>
+  );
+
+  return (
+    <>
+      <style jsx global>{`
+        [data-nextblock-visual-edit] {
+          cursor: pointer;
+          outline-offset: 3px;
+          transition: outline-color 120ms ease, box-shadow 120ms ease;
+        }
+
+        [data-nextblock-visual-edit]:hover {
+          outline: 2px solid rgb(37 99 235 / 0.72);
+        }
+      `}</style>
+
+      {overlayPosition && hoverTarget && (
+        <button
+          type="button"
+          aria-label="Edit block"
+          title="Edit block"
+          className="fixed z-[1000] inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-foreground shadow-lg transition hover:bg-muted"
+          style={overlayPosition}
+          onClick={() => void openEditor(hoverTarget.info, hoverTarget.element)}
+        >
+          <Pencil className="h-4 w-4" />
+        </button>
+      )}
+
+      {!isEditorOpen && (
+        <div
+          data-nextblock-draft-toolbar
+          className="fixed bottom-4 left-1/2 z-[1000] flex -translate-x-1/2 items-center gap-2 rounded-md border border-border bg-background/95 px-3 py-2 text-sm shadow-lg backdrop-blur"
+        >
+          <span className="font-medium">Draft editing</span>
+          {draftActions}
+          {(message || isSavingBlock || isLoadingBlock) && (
+            <span className="max-w-[260px] truncate text-muted-foreground">
+              {isLoadingBlock
+                ? "Loading block..."
+                : isSavingBlock
+                  ? "Saving..."
+                  : message}
+            </span>
+          )}
+        </div>
+      )}
+
+      {activeBlock && (
+        <BlockEditorModal
+          block={activeBlock}
+          isOpen={isEditorOpen}
+          onClose={closeVisualEditor}
+          onSave={() => {
+            void performAutosave();
+          }}
+          EditorComponent={EditorComponent}
+          editorSurfaceContext={activeSurfaceContext}
+          titleOverride={activeModalTitle}
+          useContextualSurface={!activeInfo || !isProductFieldInfo(activeInfo)}
+          saveMode="autosave"
+          saveStatus={autosaveStatus}
+          saveStatusText={message && autosaveStatus === "error" ? message : undefined}
+          onAutoChange={scheduleAutosave}
+          onFlushBeforeClose={flushAutosaveBeforeClose}
+        />
+      )}
+    </>
+  );
+}
