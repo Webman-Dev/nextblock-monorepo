@@ -3,7 +3,9 @@ import react from '@vitejs/plugin-react';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import * as fs from 'fs';
+import { fileURLToPath } from 'url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageJsonPath = path.resolve(__dirname, 'package.json');
 const { version } = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 

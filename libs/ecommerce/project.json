@@ -10,7 +10,7 @@
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/ecommerce",
-        "configFile": "libs/ecommerce/vite.config.ts",
+        "configFile": "libs/ecommerce/vite.config.mts",
         "assets": ["libs/ecommerce/*.md", "libs/ecommerce/package.json"]
       }
     }

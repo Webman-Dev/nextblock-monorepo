@@ -14,13 +14,49 @@ async function processMediaUpload(url: string, r2Config: any, warnings: string[]
        return null;
    }
 
-   try {
-       const fileResponse = await fetch(url);
-       if (!fileResponse.ok) {
-           warnings.push(`Fetch failed for ${url}: HTTP ${fileResponse.status}`);
-           return null;
+    try {
+       let arrayBuffer: ArrayBuffer;
+       let contentType: string;
+       let filename: string;
+
+       if (url.startsWith('data:')) {
+           const commaIdx = url.indexOf(',');
+           const header = url.substring(0, commaIdx);
+           const base64Data = url.substring(commaIdx + 1);
+           const mimeMatch = header.match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/);
+           contentType = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+           
+           const binaryString = atob(base64Data);
+           const len = binaryString.length;
+           const bytes = new Uint8Array(len);
+           for (let i = 0; i < len; i++) {
+               bytes[i] = binaryString.charCodeAt(i);
+           }
+           arrayBuffer = bytes.buffer;
+           
+           const extension = contentType.split('/')[1] || 'jpg';
+           filename = `upload_${crypto.randomUUID()}.${extension}`;
+       } else {
+           const controller = new AbortController();
+           const timeoutId = setTimeout(() => controller.abort(), 6000); // 6-second timeout
+           let fileResponse;
+           try {
+               fileResponse = await fetch(url, { signal: controller.signal });
+               clearTimeout(timeoutId);
+           } catch (err: any) {
+               clearTimeout(timeoutId);
+               console.error(`Fetch aborted/failed for ${url}:`, err.message || err);
+               warnings.push(`Fetch aborted/failed for ${url}: ${err.message || 'Timeout'}`);
+               return null;
+           }
+           if (!fileResponse.ok) {
+               warnings.push(`Fetch failed for ${url}: HTTP ${fileResponse.status}`);
+               return null;
+           }
+           arrayBuffer = await fileResponse.arrayBuffer();
+           contentType = fileResponse.headers.get('content-type') || 'application/octet-stream';
+           filename = url.split('/').pop() || crypto.randomUUID();
        }
-       const arrayBuffer = await fileResponse.arrayBuffer();
        
        const s3Client = new S3Client({
            region: "auto",
@@ -31,10 +67,8 @@ async function processMediaUpload(url: string, r2Config: any, warnings: string[]
            },
        });
 
-       const filename = url.split('/').pop() || crypto.randomUUID();
        const extension = filename.split('.').pop() || 'jpg';
        const objectKey = `migrated/${crypto.randomUUID()}.${extension}`; 
-       const contentType = fileResponse.headers.get('content-type') || 'application/octet-stream';
 
        await s3Client.send(new PutObjectCommand({
            Bucket: r2Config.bucket,
@@ -84,11 +118,19 @@ Deno.serve(async (req: Request) => {
         }
     }
 
+    const normalizeLanguageCode = (code: unknown): string => {
+        const normalized = String(code || '').trim().toLowerCase().replace('_', '-');
+        return normalized.split('-')[0] || 'en';
+    };
+
     const { data: languages, error: langError } = await supabaseClient.from('languages').select('id, code');
     if (langError) throw langError;
     const langMap = new Map();
     if (languages) {
-        languages.forEach((l: any) => langMap.set(l.code, l.id));
+        languages.forEach((l: any) => {
+            langMap.set(normalizeLanguageCode(l.code), l.id);
+            langMap.set(String(l.code || '').toLowerCase(), l.id);
+        });
     }
 
     const { data: allUsers } = await supabaseClient.auth.admin.listUsers();
@@ -275,24 +317,72 @@ Deno.serve(async (req: Request) => {
 
     // NAVIGATION MENU LOOP
     } else if (entity_type === 'nav_menu') {
-        
-       let menuIndex = 0;
-       const menuKeys = ['HEADER', 'FOOTER', 'SIDEBAR'];
-       
+       type MenuKey = 'HEADER' | 'FOOTER' | 'SIDEBAR';
+       const validMenuKeys: MenuKey[] = ['HEADER', 'FOOTER', 'SIDEBAR'];
+       const selectedMenus = new Map<string, { item: any; menuKey: MenuKey; languageCode: string; languageId: number }>();
+
+       const resolveMenuKey = (item: any): MenuKey => {
+          const rawKey = String(item.nextblock_key || item.menu_key || item.slug || '').toUpperCase();
+          if (validMenuKeys.includes(rawKey as MenuKey)) {
+              return rawKey as MenuKey;
+          }
+
+          const location = String(item.location || '').toLowerCase();
+          if (location.includes('footer')) return 'FOOTER';
+          if (location.includes('sidebar')) return 'SIDEBAR';
+          return 'HEADER';
+       };
+
+       const resolveLanguageId = (languageCode: string): number => {
+          return langMap.get(languageCode) || langMap.get('en') || 1;
+       };
+
        for (const item of data) {
-          const menuKey = menuKeys[menuIndex] || 'HEADER';
-          menuIndex++;
-          const language_id = langMap.get('en') || 1;
+          const menuKey = resolveMenuKey(item);
+          const languageCode = normalizeLanguageCode(item.translation?.iso_code || item.language_code || item.locale || 'en');
+          const selectedKey = `${menuKey}:${languageCode}`;
+
+          if (selectedMenus.has(selectedKey)) {
+              const kept = selectedMenus.get(selectedKey);
+              warnings.push(
+                  `Skipped duplicate ${menuKey}/${languageCode} menu "${item.name || item.id || 'unknown'}"; keeping "${kept?.item?.name || kept?.item?.id || 'first selected menu'}".`
+              );
+              continue;
+          }
+          selectedMenus.set(selectedKey, {
+              item,
+              menuKey,
+              languageCode,
+              languageId: resolveLanguageId(languageCode),
+          });
+       }
+
+       const menuKeysToClear = new Set<MenuKey>();
+       for (const selected of selectedMenus.values()) {
+          menuKeysToClear.add(selected.menuKey);
+       }
+
+       for (const menuKey of menuKeysToClear) {
+          await supabaseClient.from('navigation_items').delete().eq('menu_key', menuKey);
+       }
+
+       for (const { item, menuKey, languageCode, languageId } of selectedMenus.values()) {
           
           const insertMenuNode = async (node: any, parent_id: number | null, orderIdx: number) => {
-              const { data: inserted, error } = await supabaseClient.from('navigation_items').insert({
-                  language_id,
+              const navigationItem: any = {
+                  language_id: languageId,
                   menu_key: menuKey,
                   label: node.title,
                   url: node.url,
                   parent_id: parent_id,
                   order: orderIdx
-              }).select('id').single();
+              };
+
+              if (node.translation_group_id) {
+                  navigationItem.translation_group_id = node.translation_group_id;
+              }
+
+              const { data: inserted, error } = await supabaseClient.from('navigation_items').insert(navigationItem).select('id').single();
 
               if (!error && inserted && node.children) {
                   let childOrder = 0;
@@ -301,16 +391,13 @@ Deno.serve(async (req: Request) => {
                   }
               }
           };
-          
-          // Clear previous menus for this key to avoid duplication
-          await supabaseClient.from('navigation_items').delete().eq('menu_key', menuKey).eq('language_id', language_id);
-          
+
           let rootOrder = 0;
           for (const rootNode of item.tree) {
               await insertMenuNode(rootNode, null, rootOrder++);
           }
           
-          processedEntities.push({ menu: menuKey });
+          processedEntities.push({ menu: menuKey, language: languageCode, source_menu_id: item.id, source_menu_name: item.name });
        }
        
     // STANDARD POST/PRODUCT CONTENT STREAM
@@ -318,20 +405,35 @@ Deno.serve(async (req: Request) => {
        for (const item of data) {
           const language_id = langMap.get(item.translation?.iso_code) || langMap.get('en');
 
-          // R2 Inline HTML Image Swap Engine — broadened to catch ALL img src URLs
-          let content_html = item.content_html || null;
-          if (content_html && r2_config?.bucket) {
-              const imgMatches = content_html.match(/src="(https?:\/\/[^"]+\.(jpe?g|png|gif|webp|svg|bmp|avif)[^"]*)"/gi);
-              if (imgMatches) {
-                  for (const match of imgMatches) {
-                      const url = match.replace('src="', '').replace('"', '');
-                      const uploaded = await processMediaUpload(url, r2_config, warnings);
-                      if (uploaded) {
-                          content_html = content_html.split(url).join(uploaded.publicUrl);
-                      }
-                  }
-              }
-          }
+            // R2 Inline HTML Image Swap Engine — matches both https:// URLs AND data: base64 URIs
+            let content_html = item.content_html || null;
+            if (content_html) {
+                // Strip srcset and sizes attributes to prevent loading broken WP URLs
+                content_html = content_html.replace(/\s*srcset=["']([^"']+)["']/gi, '');
+                content_html = content_html.replace(/\s*sizes=["']([^"']+)["']/gi, '');
+
+                if (r2_config?.bucket) {
+                    // Match src="..." or src='...'
+                    const matches = content_html.match(/src=["']([^"']+)["']/gi) || [];
+                    if (matches.length > 0) {
+                        for (const match of matches) {
+                            const urlMatch = match.match(/src=["']([^"']+)["']/i);
+                            if (urlMatch && urlMatch[1]) {
+                                const url = urlMatch[1];
+                                const isHttpImage = /^https?:\/\/[^'"]+\.(jpe?g|png|gif|webp|svg|bmp|avif)(\?.*)?$/i.test(url);
+                                const isBase64Image = /^data:image\/[^'"]+$/i.test(url);
+                                if (isHttpImage || isBase64Image) {
+                                    const uploaded = await processMediaUpload(url, r2_config, warnings);
+                                    if (uploaded) {
+                                        content_html = content_html.split(url).join(uploaded.publicUrl);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                item.content_html = content_html;
+            }
 
           // Featured Image Extraction & public.media mapping
           let feature_image_id = null;
@@ -388,8 +490,6 @@ Deno.serve(async (req: Request) => {
               stock: ecom?.stock_qty || 0,
               status: ecom?.stock_status === 'instock' ? 'active' : 'draft', 
               short_description: item.excerpt ? item.excerpt.replace(/<script\b[^>]*>(.*?)<\/script>/is, '') : null,
-              // Store as raw HTML string — SimpleTiptapRenderer handles this via dangerouslySetInnerHTML
-              // Strip scripts to prevent React hydration crashes
               description_json: content_html ? content_html.replace(/<script\b[^>]*>(.*?)<\/script>/gi, '') : null,
               meta_title: item.seo?.meta_title || null,
               meta_description: item.seo?.meta_description || null,
@@ -397,6 +497,7 @@ Deno.serve(async (req: Request) => {
               is_taxable: true,
               created_at: item.created_at,
               updated_at: item.updated_at,
+              _feature_image_id: feature_image_id,
             });
           }
        }
@@ -438,13 +539,29 @@ Deno.serve(async (req: Request) => {
                   const langId = langMap.get(item.translation?.iso_code) || langMap.get('en');
                   const dbRec = upsertedData.find((u: any) => u.slug === item.slug && u.language_id === langId);
                   
-                  if (dbRec && item.content_html) {
+                  if (!dbRec) continue;
+
+                  let blockOrder = 0;
+
+                  // Auto-inject product_grid block for WooCommerce shop pages
+                  if (item.is_shop_page && entity_type === 'page') {
+                      blocksToInsert.push({
+                          page_id: dbRec.id,
+                          language_id: langId,
+                          block_type: 'product_grid',
+                          content: { type: 'latest', limit: 12, title: '' },
+                          order: blockOrder++
+                      });
+                  }
+
+                  // Add the HTML content block if present
+                  if (item.content_html) {
                       blocksToInsert.push({
                           [entity_type === 'post' ? 'post_id' : 'page_id']: dbRec.id,
                           language_id: langId,
                           block_type: 'text',
                           content: { html_content: item.content_html },
-                          order: 0
+                          order: blockOrder++
                       });
                   }
               }
@@ -463,9 +580,53 @@ Deno.serve(async (req: Request) => {
               const uniqueKey = `${entity.language_id}_${entity.slug}`;
               uniqueEntitiesMap.set(uniqueKey, entity);
           }
-          const finalEntitiesToUpsert = Array.from(uniqueEntitiesMap.values());
+          const finalEntities = Array.from(uniqueEntitiesMap.values());
 
-          result = await supabaseClient.from('products').upsert(finalEntitiesToUpsert, { onConflict: 'language_id, slug' });
+          // Extract _feature_image_id before upsert (not a real DB column)
+          const featureImageMap = new Map<string, string>();
+          for (const entity of finalEntities) {
+              if (entity._feature_image_id) {
+                  featureImageMap.set(`${entity.language_id}_${entity.slug}`, entity._feature_image_id);
+              }
+              delete entity._feature_image_id;
+          }
+
+          const { data: upsertedProducts, error: prodErr } = await supabaseClient
+            .from('products')
+            .upsert(finalEntities, { onConflict: 'language_id, slug' })
+            .select('id, slug, language_id');
+
+          if (prodErr) {
+            console.error('Product upsert failed:', prodErr);
+            throw prodErr;
+          }
+
+          // Link featured images → product_media junction table
+          if (upsertedProducts) {
+            const productMediaInserts = [];
+            for (const prod of upsertedProducts) {
+              const key = `${prod.language_id}_${prod.slug}`;
+              const mediaId = featureImageMap.get(key);
+              if (mediaId) {
+                productMediaInserts.push({
+                  product_id: prod.id,
+                  media_id: mediaId,
+                  sort_order: 0,
+                });
+              }
+            }
+            if (productMediaInserts.length > 0) {
+              const { error: pmErr } = await supabaseClient.from('product_media').upsert(
+                productMediaInserts,
+                { onConflict: 'product_id, media_id' }
+              );
+              if (pmErr) {
+                warnings.push(`product_media linking failed: ${pmErr.message}`);
+              }
+            }
+          }
+
+          result = { error: null };
        }
     }
 

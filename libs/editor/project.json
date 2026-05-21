@@ -12,7 +12,7 @@
       ],
       "options": {
         "outputPath": "dist/libs/editor",
-        "configFile": "libs/editor/vite.config.ts",
+        "configFile": "libs/editor/vite.config.mts",
         "assets": [
           "libs/editor/*.md",
           "libs/editor/package.json"

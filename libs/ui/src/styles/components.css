@@ -23,7 +23,7 @@
     padding-right: 0;
   }
 
-  .post-article__body .prose {
+  .prose {
     width: 100%;
     max-width: 52rem;
     margin-left: auto;
@@ -33,7 +33,16 @@
     line-height: 1.85;
   }
 
-  .post-article__body .prose h2 {
+  .prose h1,
+  .prose h2,
+  .prose h3,
+  .prose h4,
+  .prose h5,
+  .prose h6 {
+    clear: both !important;
+  }
+
+  .prose h2 {
     font-size: clamp(2rem, 4vw, 2.8rem);
     line-height: 1.05;
     letter-spacing: -0.03em;
@@ -41,7 +50,7 @@
     margin-bottom: 1rem;
   }
 
-  .post-article__body .prose h3 {
+  .prose h3 {
     font-size: clamp(1.5rem, 3vw, 2rem);
     line-height: 1.12;
     letter-spacing: -0.025em;
@@ -49,31 +58,31 @@
     margin-bottom: 0.85rem;
   }
 
-  .post-article__body .prose h4 {
+  .prose h4 {
     margin-top: 2rem;
     margin-bottom: 0.75rem;
   }
 
-  .post-article__body .prose p,
-  .post-article__body .prose ul,
-  .post-article__body .prose ol,
-  .post-article__body .prose pre,
-  .post-article__body .prose blockquote {
+  .prose p,
+  .prose ul,
+  .prose ol,
+  .prose pre,
+  .prose blockquote {
     margin-top: 1rem;
     margin-bottom: 1rem;
   }
 
-  .post-article__body .prose a {
+  .prose a {
     color: hsl(var(--primary));
     text-decoration-thickness: 0.08em;
     text-underline-offset: 0.2em;
   }
 
-  .post-article__body .prose strong {
+  .prose strong {
     color: hsl(var(--foreground));
   }
 
-  .post-article__body .prose code {
+  .prose code {
     color: hsl(var(--foreground));
     background: hsl(var(--muted) / 0.82);
     border: 1px solid hsl(var(--border) / 0.7);
@@ -82,7 +91,7 @@
     font-size: 0.92em;
   }
 
-  .post-article__body .prose pre {
+  .prose pre {
     overflow-x: auto;
     border: 1px solid hsl(var(--border));
     border-radius: 0.9rem;
@@ -91,7 +100,7 @@
     padding: 1.2rem 1.4rem;
   }
 
-  .post-article__body .prose pre code {
+  .prose pre code {
     display: block;
     background: transparent;
     border: 0;
@@ -99,7 +108,7 @@
     line-height: 1.85;
   }
 
-  .post-article__body .prose blockquote {
+  .prose blockquote {
     border-left: 4px solid hsl(var(--primary));
     background: linear-gradient(135deg, hsl(var(--muted) / 0.78), hsl(var(--background)));
     color: hsl(var(--foreground) / 0.78);
@@ -107,18 +116,18 @@
     padding: 1rem 1.2rem;
   }
 
-  .post-article__body .prose ul > li::marker,
-  .post-article__body .prose ol > li::marker {
+  .prose ul > li::marker,
+  .prose ol > li::marker {
     color: hsl(var(--primary));
   }
 
-  .post-article__body .prose img {
+  .prose img {
     border-radius: 1.5rem;
     border: 1px solid hsl(var(--border));
     box-shadow: 0 24px 60px -36px rgba(15, 23, 42, 0.4);
   }
 
-  .post-article__body .prose hr {
+  .prose hr {
     margin-top: 3rem;
     margin-bottom: 3rem;
   }
@@ -232,5 +241,76 @@
 
   .post-article--tutorial .post-article__body .prose pre.terminal-block .terminal-env-value {
     color: rgb(226 232 240);
+  }
+
+  /* WordPress image alignment and sizing overrides inside prose */
+  .prose img {
+    max-width: 100%;
+    height: auto;
+    display: inline-block;
+  }
+
+  .prose img.aligncenter,
+  .prose .aligncenter img,
+  .prose figure.aligncenter {
+    display: block !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    float: none !important;
+  }
+
+  .prose img.alignleft,
+  .prose .alignleft img,
+  .prose figure.alignleft {
+    float: left !important;
+    margin: 0.5em 1.5em 1.5em 0 !important;
+    display: block !important;
+  }
+
+  .prose img.alignright,
+  .prose .alignright img,
+  .prose figure.alignright {
+    float: right !important;
+    margin: 0.5em 0 1.5em 1.5em !important;
+    display: block !important;
+  }
+
+  .prose img.alignnone,
+  .prose .alignnone img,
+  .prose figure.alignnone {
+    display: block !important;
+    float: none !important;
+  }
+
+  .prose::after {
+    content: "";
+    display: table;
+    clear: both;
+  }
+
+  /* WordPress Gutenberg Block Styles */
+  .prose .wp-block-columns {
+    display: flex;
+    box-sizing: border-box;
+    flex-wrap: wrap;
+    gap: 1.5em;
+    margin-top: 1.5em;
+    margin-bottom: 1.5em;
+    clear: both;
+  }
+  @media (min-width: 782px) {
+    .prose .wp-block-columns {
+      flex-wrap: nowrap;
+    }
+  }
+  .prose .wp-block-column {
+    flex-grow: 1;
+    flex-basis: 0;
+    min-width: 0;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+  .prose .wp-block-column[style*="flex-basis"] {
+    flex-grow: 0;
   }
 }

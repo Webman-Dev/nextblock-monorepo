@@ -203,14 +203,20 @@ export async function getProduct(supabase: SupabaseClient<Database>, id: string)
     .single();
 }
 
-export async function getProductBySlug(supabase: SupabaseClient<Database>, slug: string) {
-  return supabase
+export async function getProductBySlug(
+  supabase: SupabaseClient<Database>,
+  slug: string,
+  preferredLanguageCode?: string
+) {
+  const { data: products, error } = await supabase
     .from('products')
     .select(
       `
       *,
       languages (
-        code
+        id,
+        code,
+        is_default
       ),
       product_media (
         media_id,
@@ -277,8 +283,47 @@ export async function getProductBySlug(supabase: SupabaseClient<Database>, slug:
       )
     `
     )
-    .eq('slug', slug)
-    .single();
+    .eq('slug', slug);
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  if (!products || products.length === 0) {
+    return { data: null, error: { message: 'Product not found', code: 'PGRST116' } as any };
+  }
+
+  let selectedProduct: any = null;
+
+  if (preferredLanguageCode) {
+    selectedProduct = products.find(p => {
+      const lang = Array.isArray(p.languages) ? p.languages[0] : p.languages;
+      return lang?.code === preferredLanguageCode;
+    });
+  }
+
+  if (!selectedProduct) {
+    // Prefer default language
+    selectedProduct = products.find(p => {
+      const lang = Array.isArray(p.languages) ? p.languages[0] : p.languages;
+      return lang?.is_default;
+    });
+  }
+
+  if (!selectedProduct) {
+    // Fallback to English
+    selectedProduct = products.find(p => {
+      const lang = Array.isArray(p.languages) ? p.languages[0] : p.languages;
+      return lang?.code === 'en';
+    });
+  }
+
+  if (!selectedProduct) {
+    // Fallback to the first available product
+    selectedProduct = products[0];
+  }
+
+  return { data: selectedProduct, error: null };
 }
 
 export async function createProduct(supabase: SupabaseClient<Database>, data: ProductFormValues) {

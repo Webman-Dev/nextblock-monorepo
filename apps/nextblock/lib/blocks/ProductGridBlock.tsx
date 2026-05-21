@@ -56,7 +56,13 @@ export const ProductGridBlock = async ({
       // The type from getProducts select is: product_media: { media: { file_path: string | null } | null }[]
       const mediaItem = p.product_media?.[0]?.media;
       if (mediaItem?.file_path) {
-         imageUrl = `${process.env.NEXT_PUBLIC_R2_BASE_URL}/${mediaItem.file_path}`;
+         if (mediaItem.file_path.startsWith('http')) {
+           imageUrl = mediaItem.file_path;
+         } else if (process.env.NEXT_PUBLIC_R2_BASE_URL) {
+           imageUrl = `${process.env.NEXT_PUBLIC_R2_BASE_URL}/${mediaItem.file_path}`;
+         } else {
+           imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/media/${mediaItem.file_path}`;
+         }
       }
 
       const variantPriceRange = getVariantEffectivePriceRange(

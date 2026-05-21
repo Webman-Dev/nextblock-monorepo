@@ -5,6 +5,12 @@
         "btrim",
         "freemius",
         "Freemius",
-        "plpgsql"
+        "nextblock",
+        "nosniff",
+        "plpgsql",
+        "SAMEORIGIN",
+        "supabase",
+        "Supabase",
+        "SUPABASE"
     ]
 }

@@ -9,6 +9,7 @@ import {
 import { getSsgSupabaseClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 import { notFound } from 'next/navigation';
 import { Metadata } from 'next';
+import { cookies, headers } from 'next/headers';
 import { getPageDataBySlug } from "../../[slug]/page.utils";
 import BlockRenderer from "../../../components/BlockRenderer";
 import { CurrentContentSetter } from "../../../components/CurrentContentSetter";
@@ -40,7 +41,23 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
   const { slug } = await params;
   const supabase = getSsgSupabaseClient();
-  const { data: product } = await getProductBySlug(supabase, slug);
+  let preferredLocale: string | undefined;
+  try {
+    const store = await cookies();
+    preferredLocale = store.get("NEXT_USER_LOCALE")?.value || store.get("NEXT_LOCALE")?.value;
+  } catch {
+    preferredLocale = undefined;
+  }
+  if (!preferredLocale) {
+    try {
+      const hdrs = await headers();
+      const al = hdrs.get("accept-language");
+      if (al) preferredLocale = al.split(",")[0]?.split("-")[0];
+    } catch {
+      // ignore
+    }
+  }
+  const { data: product } = await getProductBySlug(supabase, slug, preferredLocale);
   const productRecord = product as any;
 
   if (!productRecord) return { title: 'Product Not Found' };
@@ -107,8 +124,25 @@ export default async function ProductPage({ params }: ProductPageProps) {
       notFound();
   }
 
+  let preferredLocale: string | undefined;
+  try {
+    const store = await cookies();
+    preferredLocale = store.get("NEXT_USER_LOCALE")?.value || store.get("NEXT_LOCALE")?.value;
+  } catch {
+    preferredLocale = undefined;
+  }
+  if (!preferredLocale) {
+    try {
+      const hdrs = await headers();
+      const al = hdrs.get("accept-language");
+      if (al) preferredLocale = al.split(",")[0]?.split("-")[0];
+    } catch {
+      // ignore
+    }
+  }
+
   // 1. Fetch Product Data
-  const { data: product } = await getProductBySlug(supabase, slug);
+  const { data: product } = await getProductBySlug(supabase, slug, preferredLocale);
   const productRecord = product as any;
 
   if (!productRecord) {

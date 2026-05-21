@@ -4,6 +4,7 @@ import '@nextblock-cms/editor/styles/editor.css';
 // app/layout.tsx
 
 import type { Metadata } from 'next';
+import Script from 'next/script';
 import { Providers } from './providers';
 import { DeferredCartDrawer } from '../components/DeferredCartDrawer';
 import { CURRENCY_COOKIE_NAME } from '@nextblock-cms/ecommerce/currency-constants';
@@ -27,6 +28,8 @@ const defaultUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
 
 const DEFAULT_LOCALE_FOR_LAYOUT = 'en';
 const PUBLIC_LAYOUT_REVALIDATE_SECONDS = 60;
+const TRUSTED_TYPES_SCRIPT_STRATEGY =
+  process.env.NODE_ENV === 'production' ? 'beforeInteractive' : 'afterInteractive';
 const TRUSTED_TYPES_BOOTSTRAP = `
 (function () {
   if (!window.trustedTypes || window.__nextblockTrustedTypesPolicy) return;
@@ -470,14 +473,16 @@ export default async function RootLayout({
       <head>
         <meta name="description" content={DEFAULT_SITE_DESCRIPTION} />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <script
-          nonce={nonce}
-          suppressHydrationWarning
-          dangerouslySetInnerHTML={{ __html: TRUSTED_TYPES_BOOTSTRAP }}
-        />
         {globalCss && <style dangerouslySetInnerHTML={{ __html: globalCss }} />}
       </head>
       <body className="min-h-screen">
+        {/* In development this loads after hydration to avoid browser-hidden nonce comparisons. */}
+        <Script
+          id="trusted-types-bootstrap"
+          strategy={TRUSTED_TYPES_SCRIPT_STRATEGY}
+          nonce={nonce}
+          dangerouslySetInnerHTML={{ __html: TRUSTED_TYPES_BOOTSTRAP }}
+        />
         <Providers
           serverUser={user}
           serverProfile={profile}

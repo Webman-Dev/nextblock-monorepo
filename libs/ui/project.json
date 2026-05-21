@@ -16,7 +16,7 @@
       ],
       "options": {
         "outputPath": "dist/libs/ui",
-        "configFile": "libs/ui/vite.config.ts",
+        "configFile": "libs/ui/vite.config.mts",
         "assets": [
           "libs/ui/*.md",
           "libs/ui/package.json"

@@ -19,7 +19,7 @@
     "src/**/*.spec.tsx",
     "src/**/*.stories.ts",
     "src/**/*.stories.tsx",
-    "vite.config.ts"
+    "vite.config.mts"
   ],
   "references": [
     {

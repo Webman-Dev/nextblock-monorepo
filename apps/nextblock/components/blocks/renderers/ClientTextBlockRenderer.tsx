@@ -221,6 +221,13 @@ const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({ conte
   const options: HTMLReactParserOptions = {
     replace: (domNode) => {
       if (domNode instanceof Element && domNode.attribs) {
+        // Clean up event handlers (like onclick) to prevent React warnings and XSS
+        for (const key of Object.keys(domNode.attribs)) {
+          if (key.toLowerCase().startsWith('on')) {
+            delete domNode.attribs[key];
+          }
+        }
+
         if (domNode.name === 'img') {
           return renderOptimizedCmsImage(domNode.attribs);
         } else if (domNode.attribs['fetchpriority']) {
