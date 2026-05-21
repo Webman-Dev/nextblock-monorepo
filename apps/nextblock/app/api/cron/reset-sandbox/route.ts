@@ -1804,9 +1804,7 @@ async function seedFakeStoreData(sql: SqlClient, supabaseAdmin: any) {
 
 export async function GET(request: NextRequest) {
   // 1. Guard: fail closed anywhere that is not explicitly the sandbox.
-  const isSandboxResetEnabled =
-    process.env.NEXT_PUBLIC_IS_SANDBOX === 'true' &&
-    process.env.SANDBOX_RESET_ENABLED === 'true';
+  const isSandboxResetEnabled = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
 
   if (!isSandboxResetEnabled) {
     return new NextResponse('Not Found', { status: 404 });

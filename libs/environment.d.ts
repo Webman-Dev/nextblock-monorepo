@@ -13,7 +13,6 @@ declare namespace NodeJS {
     SMTP_PASS: string;
     SMTP_FROM_EMAIL: string;
     SMTP_FROM_NAME: string;
-    SANDBOX_RESET_ENABLED?: string;
     FREEMIUS_STORE_ID: string;
     FREEMIUS_DEVELOPER_ID?: string;
     FREEMIUS_PRODUCT_ID?: string;

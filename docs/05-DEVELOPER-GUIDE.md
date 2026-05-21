@@ -81,8 +81,6 @@ repo expects at least:
 
 Optional but commonly needed:
 
-- `SANDBOX_RESET_ENABLED=true` only on disposable sandbox deployments that
-  should allow `/api/cron/reset-sandbox`
 - R2 credentials for media storage
 - SMTP credentials for hosted auth email configuration
 - Stripe keys for physical-product checkout
@@ -164,15 +162,13 @@ The sandbox automation is code-driven.
 `npm run sandbox:reset`:
 
 - loads `.env.local`
-- refuses to run unless `NEXT_PUBLIC_IS_SANDBOX=true` and
-  `SANDBOX_RESET_ENABLED=true`
+- refuses to run unless `NEXT_PUBLIC_IS_SANDBOX=true`
 - reads `NEXT_PUBLIC_URL` and `CRON_SECRET`
 - calls `GET /api/cron/reset-sandbox`
 
 The cron route then:
 
-- returns 404 immediately unless `NEXT_PUBLIC_IS_SANDBOX=true` and
-  `SANDBOX_RESET_ENABLED=true`
+- returns 404 immediately unless `NEXT_PUBLIC_IS_SANDBOX=true`
 - executes the generated reset SQL
 - reseeds media assets
 - reseeds commerce content
