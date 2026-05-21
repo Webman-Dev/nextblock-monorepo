@@ -1,9 +1,19 @@
 // app/[slug]/page.utils.ts
-import { getSsgSupabaseClient } from "@nextblock-cms/db/server";
+import { createClient, getSsgSupabaseClient } from "@nextblock-cms/db/server";
 import type { Database } from "@nextblock-cms/db";
+import { draftMode } from "next/headers";
+import { getContentDraft } from "../../lib/visual-editing/draft-content";
+import type { ContentDraftRow, DraftBlockSnapshot } from "../../lib/visual-editing/types";
 
 type PageType = Database['public']['Tables']['pages']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
+type PublicPageData = PageType & {
+  blocks: BlockType[];
+  language_code: string;
+  language_id: number;
+  translation_group_id: string | null;
+  draft_id?: number | null;
+};
 
 // Define a more specific type for the content of an Image Block
 export type ImageBlockContent = {
@@ -29,11 +39,81 @@ interface SelectedPageType extends PageType { // Assumes PageType includes field
   blocks: BlockType[];
 }
 
+function hasMetaValue(draft: ContentDraftRow, key: string) {
+  return Object.prototype.hasOwnProperty.call(draft.meta, key);
+}
+
+function draftString(draft: ContentDraftRow, key: string, fallback: string): string {
+  const value = draft.meta[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function draftNullableString(
+  draft: ContentDraftRow,
+  key: string,
+  fallback: string | null
+): string | null {
+  if (!hasMetaValue(draft, key)) {
+    return fallback;
+  }
+
+  const value = draft.meta[key];
+  return typeof value === "string" ? value : null;
+}
+
+function draftNumber(draft: ContentDraftRow, key: string, fallback: number): number {
+  const value = draft.meta[key];
+  return typeof value === "number" ? value : fallback;
+}
+
+function draftBlockToPageBlock(
+  block: DraftBlockSnapshot,
+  pageId: number,
+  fallbackUpdatedAt: string
+): BlockType {
+  return {
+    id: block.id ?? -(block.order + 1),
+    page_id: pageId,
+    post_id: null,
+    language_id: block.language_id,
+    block_type: block.block_type,
+    content: block.content,
+    order: block.order,
+    created_at: block.created_at ?? fallbackUpdatedAt,
+    updated_at: block.updated_at ?? fallbackUpdatedAt,
+  };
+}
+
+function applyDraftToPage(page: SelectedPageType, draft: ContentDraftRow): SelectedPageType {
+  const languageId = draftNumber(draft, "language_id", page.language_id);
+
+  return {
+    ...page,
+    title: draftString(draft, "title", page.title),
+    slug: draftString(draft, "slug", page.slug),
+    language_id: languageId,
+    language_details: languageId === page.language_id ? page.language_details : null,
+    status: draftString(draft, "status", page.status) as PageType["status"],
+    meta_title: draftNullableString(draft, "meta_title", page.meta_title),
+    meta_description: draftNullableString(draft, "meta_description", page.meta_description),
+    translation_group_id: draftString(
+      draft,
+      "translation_group_id",
+      page.translation_group_id
+    ),
+    blocks: draft.blocks.map((block) =>
+      draftBlockToPageBlock(block, page.id, draft.updated_at || page.updated_at)
+    ),
+  };
+}
+
 export async function getPageDataBySlug(
   slug: string,
   preferredLanguageCode?: string,
-): Promise<(PageType & { blocks: BlockType[]; language_code: string; language_id: number; translation_group_id: string | null; }) | null> {
-  const supabase = getSsgSupabaseClient();
+): Promise<PublicPageData | null> {
+  const draft = await draftMode();
+  const isDraftModeEnabled = draft.isEnabled;
+  const supabase = isDraftModeEnabled ? createClient() : getSsgSupabaseClient();
 
   const baseSelect = `
       id, slug, title, meta_title, meta_description, status, language_id, translation_group_id, author_id, created_at, updated_at,
@@ -51,14 +131,18 @@ export async function getPageDataBySlug(
 
   // First try to fetch the preferred language explicitly when provided
   if (preferredLanguageCode) {
-    const { data: preferredData, error: preferredError } = await supabase
+    let preferredQuery = supabase
       .from("pages")
       .select(baseSelect)
       .eq("slug", slug)
-      .eq("status", "published")
       .eq("languages.code", preferredLanguageCode)
-      .order('order', { foreignTable: 'blocks', ascending: true })
-      .maybeSingle();
+      .order('order', { foreignTable: 'blocks', ascending: true });
+
+    if (!isDraftModeEnabled) {
+      preferredQuery = preferredQuery.eq("status", "published");
+    }
+
+    const { data: preferredData, error: preferredError } = await preferredQuery.maybeSingle();
     if (!preferredError && preferredData) {
       candidatePages = toSelected([preferredData]);
     }
@@ -66,12 +150,17 @@ export async function getPageDataBySlug(
 
   // Fallback: fetch all published pages with this slug
   if (candidatePages.length === 0) {
-    const { data: candidatePagesData, error: pageError } = await supabase
+    let pageQuery = supabase
       .from("pages")
       .select(baseSelect)
       .eq("slug", slug)
-      .eq("status", "published")
       .order('order', { foreignTable: 'blocks', ascending: true });
+
+    if (!isDraftModeEnabled) {
+      pageQuery = pageQuery.eq("status", "published");
+    }
+
+    const { data: candidatePagesData, error: pageError } = await pageQuery;
 
     if (pageError) {
       return null;
@@ -119,6 +208,14 @@ export async function getPageDataBySlug(
   
   if (!selectedPage) {
     return null;
+  }
+
+  const contentDraft = isDraftModeEnabled
+    ? await getContentDraft("page", selectedPage.id)
+    : null;
+
+  if (contentDraft) {
+    selectedPage = applyDraftToPage(selectedPage, contentDraft);
   }
   
   let languageCode: string | undefined = selectedPage.language_details?.code;
@@ -226,5 +323,6 @@ export async function getPageDataBySlug(
     language_code: languageCode,
     language_id: languageId,
     translation_group_id: selectedPage.translation_group_id,
+    draft_id: contentDraft?.id ?? null,
   };
 }

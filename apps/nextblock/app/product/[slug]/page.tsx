@@ -9,9 +9,14 @@ import {
 import { getSsgSupabaseClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 import { notFound } from 'next/navigation';
 import { Metadata } from 'next';
+import { draftMode } from 'next/headers';
 import { getPageDataBySlug } from "../../[slug]/page.utils";
 import BlockRenderer from "../../../components/BlockRenderer";
 import { CurrentContentSetter } from "../../../components/CurrentContentSetter";
+import {
+  applyProductDraftToProductRecord,
+  getProductDraft,
+} from "../../../lib/visual-editing/product-drafts";
 // Ensure BlockType is imported or compatible with BlockRenderer props
 import type { Database } from "@nextblock-cms/db";
 type BlockType = Database['public']['Tables']['blocks']['Row'];
@@ -109,10 +114,19 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   // 1. Fetch Product Data
   const { data: product } = await getProductBySlug(supabase, slug);
-  const productRecord = product as any;
+  let productRecord = product as any;
 
   if (!productRecord) {
     notFound();
+  }
+
+  const draft = await draftMode();
+  const visualEditingEnabled =
+    draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
+
+  if (visualEditingEnabled) {
+    const productDraft = await getProductDraft(productRecord.id);
+    productRecord = applyProductDraftToProductRecord(productRecord, productDraft);
   }
 
   // 2. Fetch Template Page
@@ -151,6 +165,17 @@ export default async function ProductPage({ params }: ProductPageProps) {
       }
     ] as any as BlockType[];
   }
+
+  const productTemplateVisualEditing = templatePage
+    ? {
+        enabled: visualEditingEnabled,
+        documentType: "page" as const,
+        documentId: templatePage.id,
+        slug: templatePage.slug,
+        languageId: templatePage.language_id,
+        draftId: templatePage.draft_id ?? null,
+      }
+    : undefined;
 
   // 4. Transform Product Data for Context
   // Value Mapping
@@ -250,6 +275,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
               languageId={languageId} 
               excludeProductId={productRecord.id}
               excludeTranslationGroupId={productRecord.translation_group_id}
+              visualEditing={productTemplateVisualEditing}
+              productVisualEditingEnabled={visualEditingEnabled}
             />
         </ProductProvider>
     </div>

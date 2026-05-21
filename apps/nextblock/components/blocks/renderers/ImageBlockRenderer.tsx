@@ -1,5 +1,6 @@
 import React from "react";
 import Image from "next/image";
+import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
 
 export type ImageBlockContent = {
     media_id: string | null;
@@ -17,17 +18,22 @@ interface ImageBlockRendererProps {
   content: ImageBlockContent;
   languageId: number;
   priority?: boolean;
+  visualEditAttributes?: VisualEditAttributes;
 }
 
 const ImageBlockRenderer: React.FC<ImageBlockRendererProps> = ({
   content,
   languageId,
   priority = false,
+  visualEditAttributes,
 }) => {
   void languageId;
   if (!content.media_id || !content.object_key) {
     return (
-      <div className="my-4 p-4 border rounded text-center text-muted-foreground italic">
+      <div
+        className="my-4 p-4 border rounded text-center text-muted-foreground italic"
+        {...visualEditAttributes}
+      >
         (Image block: Media not selected or object_key missing)
       </div>
     );
@@ -40,7 +46,10 @@ const ImageBlockRenderer: React.FC<ImageBlockRendererProps> = ({
     content.height <= 0
   ) {
     return (
-      <div className="my-4 p-4 border rounded text-center text-muted-foreground italic">
+      <div
+        className="my-4 p-4 border rounded text-center text-muted-foreground italic"
+        {...visualEditAttributes}
+      >
         (Image block: Image dimensions are missing or invalid)
       </div>
     );
@@ -49,7 +58,7 @@ const ImageBlockRenderer: React.FC<ImageBlockRendererProps> = ({
   const displayImageUrl = `${R2_BASE_URL}/${content.object_key}`;
   
   return (
-    <div className="w-full">
+    <div className="w-full" {...visualEditAttributes}>
       <figure
         className="my-6 text-center mx-auto max-w-full"
         // Removed inline style: style={{ width: content.width }}

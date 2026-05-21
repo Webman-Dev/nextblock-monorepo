@@ -2,7 +2,20 @@
 
 import React from 'react';
 import { ProductDetailsLayout } from '@nextblock-cms/ecommerce/components/ProductDetailsLayout';
+import type { VisualEditAttributes } from '../../../lib/visual-editing/types';
 
-export default function ProductDetailsBlockRenderer() {
-  return <ProductDetailsLayout />;
+interface ProductDetailsBlockRendererProps {
+  visualEditAttributes?: VisualEditAttributes;
+  productVisualEditingEnabled?: boolean;
+}
+
+export default function ProductDetailsBlockRenderer({
+  visualEditAttributes,
+  productVisualEditingEnabled = false,
+}: ProductDetailsBlockRendererProps) {
+  return (
+    <div {...visualEditAttributes}>
+      <ProductDetailsLayout visualEditingEnabled={productVisualEditingEnabled} />
+    </div>
+  );
 }

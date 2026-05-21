@@ -11,13 +11,14 @@ import { ToasterProvider } from './ToasterProvider';
 import { AppShell } from '../components/AppShell';
 import { DeferredGoogleTagManager } from '../components/DeferredGoogleTagManager';
 import { DeferredSpeedInsights } from '../components/DeferredSpeedInsights';
+import { NextblockVisualEditing } from '../components/visual-editing/NextblockVisualEditing';
 import {
   createClient as createSupabaseServerClient,
   getProfileWithRoleServerSide,
 } from '@nextblock-cms/db/server';
 import { getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
 import type { Database } from '@nextblock-cms/db';
-import { headers, cookies } from 'next/headers';
+import { headers, cookies, draftMode } from 'next/headers';
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { unstable_cache } from 'next/cache';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
@@ -464,6 +465,16 @@ export default async function RootLayout({
     isEcommerceActive,
     globalCss,
   } = await loadLayoutData();
+  const draft = await draftMode();
+  const visualEditingEnabled =
+    draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
+  const isVercelDeployment = process.env.VERCEL === '1';
+  const toolbarEnabled =
+    process.env.NEXTBLOCK_VERCEL_TOOLBAR_ENABLED === 'true' ||
+    (isVercelDeployment && visualEditingEnabled);
+  const Toolbar = toolbarEnabled
+    ? (await import('@vercel/toolbar/next')).VercelToolbar
+    : null;
 
   return (
     <html lang={serverDeterminedLocale} suppressHydrationWarning>
@@ -496,6 +507,7 @@ export default async function RootLayout({
             footerNavItems={footerNavItems}
             hasSupabaseEnv={hasSupabaseEnv}
             headerNavItems={headerNavItems}
+            isDraftModeEnabled={draft.isEnabled}
             isEcommerceActive={isEcommerceActive}
             logo={logo}
             siteTitle={siteTitle}
@@ -504,6 +516,8 @@ export default async function RootLayout({
           </AppShell>
 
           {isEcommerceActive && <DeferredCartDrawer />}
+          {visualEditingEnabled && <NextblockVisualEditing />}
+          {Toolbar && <Toolbar nonce={nonce} />}
         </Providers>
         <DeferredSpeedInsights />
         <DeferredGoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID} nonce={nonce} />

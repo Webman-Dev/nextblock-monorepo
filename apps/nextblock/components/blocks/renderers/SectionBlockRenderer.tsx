@@ -1,6 +1,11 @@
 // components/blocks/renderers/SectionBlockRenderer.tsx
 import React from "react";
 import type { SectionBlockContent } from "../../../lib/blocks/blockRegistry";
+import { buildVisualEditAttributes } from "../../../lib/visual-editing/edit-info";
+import type {
+  VisualEditAttributes,
+  VisualEditingDocumentContext,
+} from "../../../lib/visual-editing/types";
 import { getPublicBlockRendererLoader } from "../publicRendererLoaders";
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
@@ -21,6 +26,10 @@ function loadEcommerceBlockRenderer(blockType: string) {
 interface SectionBlockRendererProps {
   content: SectionBlockContent;
   languageId: number;
+  visualEditAttributes?: VisualEditAttributes;
+  visualEditing?: VisualEditingDocumentContext;
+  parentBlockId?: number;
+  parentBlockIndex?: number;
 }
 
 // Container class mapping
@@ -127,9 +136,20 @@ function generateBackgroundStyles(background: SectionBlockContent['background'])
 interface NestedBlockRendererProps {
   block: SectionBlockContent['column_blocks'][0][0];
   languageId: number;
+  parentBlockId?: number;
+  parentBlockIndex?: number;
+  visualEditing?: VisualEditingDocumentContext;
+  visualEditAttributes?: VisualEditAttributes;
 }
 
-async function renderNestedBlock({ block, languageId }: NestedBlockRendererProps) {
+async function renderNestedBlock({
+  block,
+  languageId,
+  parentBlockId,
+  parentBlockIndex,
+  visualEditing,
+  visualEditAttributes,
+}: NestedBlockRendererProps) {
   const rendererLoader = getPublicBlockRendererLoader(block.block_type);
 
   if (!rendererLoader) {
@@ -142,12 +162,16 @@ async function renderNestedBlock({ block, languageId }: NestedBlockRendererProps
         <EcommerceRendererComponent
           content={block.content}
           languageId={languageId}
+          visualEditAttributes={visualEditAttributes}
         />
       );
     }
 
     return (
-      <div className="p-2 border rounded bg-destructive/10 text-destructive text-sm">
+      <div
+        className="p-2 border rounded bg-destructive/10 text-destructive text-sm"
+        {...visualEditAttributes}
+      >
         <strong>Unsupported block type:</strong> {block.block_type}
       </div>
     );
@@ -162,6 +186,7 @@ async function renderNestedBlock({ block, languageId }: NestedBlockRendererProps
         content={block.content}
         languageId={languageId}
         block={{ ...block, id: 0, language_id: languageId, order: 0, created_at: '', updated_at: '' }}
+        visualEditAttributes={visualEditAttributes}
       />
     );
   }
@@ -170,6 +195,10 @@ async function renderNestedBlock({ block, languageId }: NestedBlockRendererProps
     <RendererComponent
       content={block.content}
       languageId={languageId}
+      visualEditAttributes={visualEditAttributes}
+      visualEditing={visualEditing}
+      parentBlockId={parentBlockId}
+      parentBlockIndex={parentBlockIndex}
     />
   );
 }
@@ -177,6 +206,10 @@ async function renderNestedBlock({ block, languageId }: NestedBlockRendererProps
 export default async function SectionBlockRenderer({
   content,
   languageId,
+  visualEditAttributes,
+  visualEditing,
+  parentBlockId,
+  parentBlockIndex,
 }: SectionBlockRendererProps) {
   const { styles, className: backgroundClassName } = generateBackgroundStyles(content.background);
 
@@ -194,7 +227,25 @@ export default async function SectionBlockRenderer({
       const renderedBlocks = await Promise.all(
         blocks.map(async (block, blockIndex) => ({
           key: `${block.block_type}-${columnIndex}-${blockIndex}`,
-          node: await renderNestedBlock({ block, languageId }),
+          node: await renderNestedBlock({
+            block,
+            languageId,
+            parentBlockId,
+            parentBlockIndex,
+            visualEditing,
+            visualEditAttributes:
+              typeof parentBlockId === "number" && typeof parentBlockIndex === "number"
+                ? buildVisualEditAttributes(visualEditing, {
+                    kind: "nested",
+                    parentBlockId,
+                    parentBlockIndex,
+                    parentBlockType: "section",
+                    columnIndex,
+                    blockIndex,
+                    blockType: block.block_type,
+                  })
+                : undefined,
+          }),
         }))
       );
 
@@ -206,6 +257,7 @@ export default async function SectionBlockRenderer({
     <section
       className={`w-full ${paddingTopClass} ${paddingBottomClass} ${backgroundClassName}`.trim()}
       style={styles}
+      {...visualEditAttributes}
     >
       <div className={containerClass}>
         <div className={`grid ${gridClass} ${gapClass} ${alignmentClass}`}>

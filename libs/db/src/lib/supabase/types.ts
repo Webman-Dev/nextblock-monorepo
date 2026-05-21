@@ -72,6 +72,59 @@ export type Database = {
           },
         ]
       }
+      cortex_ai_db_mutation_audit: {
+        Row: {
+          action_name: string
+          actor_user_id: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          operation_summary: string
+          payload: Json
+          payload_hash: string
+          preview: Json
+          status: string
+          target_tables: string[]
+          tool_name: string
+        }
+        Insert: {
+          action_name: string
+          actor_user_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          operation_summary: string
+          payload?: Json
+          payload_hash: string
+          preview?: Json
+          status: string
+          target_tables?: string[]
+          tool_name: string
+        }
+        Update: {
+          action_name?: string
+          actor_user_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          operation_summary?: string
+          payload?: Json
+          payload_hash?: string
+          preview?: Json
+          status?: string
+          target_tables?: string[]
+          tool_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cortex_ai_db_mutation_audit_actor_user_id_fkey"
+            columns: ["actor_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coupon_freemius_mappings: {
         Row: {
           coupon_id: string

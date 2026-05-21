@@ -8,6 +8,7 @@ type UserRole = Database['public']['Enums']['user_role'];
 const LANGUAGE_COOKIE_KEY = 'NEXT_USER_LOCALE';
 const DEFAULT_LOCALE = 'en';
 const SUPPORTED_LOCALES = ['en', 'fr'];
+const cacheLoggingEnabled = process.env.NEXTBLOCK_CACHE_LOGGING_ENABLED === 'true';
 
 const cmsRoutePermissions: Record<string, UserRole[]> = {
   '/cms': ['WRITER', 'ADMIN'],
@@ -398,10 +399,8 @@ export async function proxy(request: NextRequest) {
 
   applySecurityHeaders(finalResponse, contentSecurityPolicy);
 
-  const responseForLogging = finalResponse.clone();
-  const cacheStatus = responseForLogging.headers.get('x-vercel-cache') || 'none';
-
-  if (!pathname.startsWith('/api/')) {
+  if (cacheLoggingEnabled && !pathname.startsWith('/api/')) {
+    const cacheStatus = finalResponse.headers.get('x-vercel-cache') || 'none';
     console.log(
       JSON.stringify({
         type: 'cache',

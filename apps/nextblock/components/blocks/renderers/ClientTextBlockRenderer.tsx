@@ -8,10 +8,12 @@ import parse, {
 import AlertWidgetRenderer from "./inline/AlertWidgetRenderer";
 import CtaWidgetRenderer from "./inline/CtaWidgetRenderer";
 import type { TextBlockContent } from "./TextBlockRenderer";
+import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
 
 interface ClientTextBlockRendererProps {
   content: TextBlockContent;
   languageId: number;
+  visualEditAttributes?: VisualEditAttributes;
 }
 
 function normalizeHtmlEncodingArtifacts(html: string): string {
@@ -215,7 +217,11 @@ function renderOptimizedCmsImage(attribs: Record<string, string>) {
   );
 }
 
-const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({ content, languageId }) => {
+const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({
+  content,
+  languageId,
+  visualEditAttributes,
+}) => {
   void languageId;
   const normalizedHtml = normalizeHtmlEncodingArtifacts(content.html_content || "");
   const options: HTMLReactParserOptions = {
@@ -272,7 +278,10 @@ const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({ conte
   };
 
   return (
-    <div className="my-4 prose dark:prose-invert container mx-auto">
+    <div
+      className="my-4 prose dark:prose-invert container mx-auto"
+      {...visualEditAttributes}
+    >
       {parse(normalizedHtml, options)}
     </div>
   );

@@ -4,7 +4,7 @@ import Link from "next/link";
 import React from "react";
 import { Separator } from "@nextblock-cms/ui";
 import { Button } from "@nextblock-cms/ui";
-import { Eye, ArrowLeft } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, FilePenLine } from "lucide-react";
 import PageForm from "../../components/PageForm";
 import BlockEditorArea from "../../../blocks/components/BlockEditorArea";
 import ContentLanguageSwitcher from "../../../components/ContentLanguageSwitcher";
@@ -30,6 +30,7 @@ interface EditPageClientProps {
   allSiteLanguages: Language[];
   updatePageAction: (formData: FormData) => Promise<{ error?: string } | void>;
   publicPageUrl: string;
+  isDraftModeEnabled: boolean;
 }
 
 export default function EditPageClient({
@@ -38,7 +39,12 @@ export default function EditPageClient({
   allSiteLanguages,
   updatePageAction,
   publicPageUrl,
+  isDraftModeEnabled,
 }: EditPageClientProps) {
+  const draftModeUrl = `${
+    isDraftModeEnabled ? "/api/draft/disable" : "/api/draft/start"
+  }?path=${encodeURIComponent(publicPageUrl)}`;
+
   return (
     <UploadFolderProvider defaultFolder={`pages/${page.slug}/`}>
       <CortexAiPageContextRegistrar
@@ -102,6 +108,20 @@ export default function EditPageClient({
               >
                 <Eye className="mr-2 h-4 w-4" /> View Live
               </Link>
+            </Button>
+            <Button variant={isDraftModeEnabled ? "default" : "secondary"} asChild>
+              <a
+                href={draftModeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {isDraftModeEnabled ? (
+                  <EyeOff className="mr-2 h-4 w-4" />
+                ) : (
+                  <FilePenLine className="mr-2 h-4 w-4" />
+                )}
+                {isDraftModeEnabled ? "Exit Draft" : "Preview Draft"}
+              </a>
             </Button>
             <RevisionHistoryButton parentType="page" parentId={pageId} />
           </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { cookies, headers } from 'next/headers';
+import { cookies, draftMode, headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
@@ -128,8 +128,22 @@ export default async function RootPage() {
     }
   }
 
+  const draft = await draftMode();
+  const visualEditingEnabled =
+    draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
   const pageBlocks = (
-    <BlockRenderer blocks={pageData.blocks} languageId={pageData.language_id} />
+    <BlockRenderer
+      blocks={pageData.blocks}
+      languageId={pageData.language_id}
+      visualEditing={{
+        enabled: visualEditingEnabled,
+        documentType: "page",
+        documentId: pageData.id,
+        slug: pageData.slug,
+        languageId: pageData.language_id,
+        draftId: pageData.draft_id ?? null,
+      }}
+    />
   );
 
   return (

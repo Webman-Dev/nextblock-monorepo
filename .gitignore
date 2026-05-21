@@ -41,6 +41,7 @@ Thumbs.db
 
 .nx/cache
 .nx/workspace-data
+.vercel
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 
@@ -56,9 +57,12 @@ vitest.config.*.timestamp*
 
 # custom
 apps/nextblock/backups/
+supabase/.temp
 
 nextblock-cms
 .claude/worktrees
 .claude/settings.local.json
 .nx/polygraph
 .nx/self-healing
+
+.vercel

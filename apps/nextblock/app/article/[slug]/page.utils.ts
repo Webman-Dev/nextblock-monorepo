@@ -1,10 +1,24 @@
 // app/article/[slug]/page.utils.ts
-import { createClient } from "@nextblock-cms/db/server";
+import { createClient, getSsgSupabaseClient } from "@nextblock-cms/db/server";
 import type { Database } from "@nextblock-cms/db";
+import { draftMode } from "next/headers";
 import { resolveMediaUrl } from "../../../lib/media/resolveMediaUrl";
+import { getContentDraft } from "../../../lib/visual-editing/draft-content";
+import type { ContentDraftRow, DraftBlockSnapshot } from "../../../lib/visual-editing/types";
 
 type PostType = Database['public']['Tables']['posts']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
+type PublicPostData = PostType & {
+  blocks: BlockType[];
+  language_code: string;
+  language_id: number;
+  translation_group_id: string;
+  feature_image_url?: string | null;
+  feature_image_blur_data_url?: string | null;
+  feature_image_width?: number | null;
+  feature_image_height?: number | null;
+  draft_id?: number | null;
+};
 
 // Define a more specific type for the content of an Image Block
 export type ImageBlockContent = {
@@ -24,19 +38,86 @@ interface SectionOrHeroBlockContent {
     };
   };
 }
-export async function getPostDataBySlug(slug: string): Promise<(PostType & {
-  blocks: BlockType[];
-  language_code: string;
-  language_id: number;
-  translation_group_id: string;
-  feature_image_url?: string | null;
-  feature_image_blur_data_url?: string | null;
-  feature_image_width?: number | null;
-  feature_image_height?: number | null;
-}) | null> {
-  const supabase = createClient();
 
-  const { data: postData, error: postError } = await supabase
+function hasMetaValue(draft: ContentDraftRow, key: string) {
+  return Object.prototype.hasOwnProperty.call(draft.meta, key);
+}
+
+function draftString(draft: ContentDraftRow, key: string, fallback: string): string {
+  const value = draft.meta[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function draftNullableString(
+  draft: ContentDraftRow,
+  key: string,
+  fallback: string | null
+): string | null {
+  if (!hasMetaValue(draft, key)) {
+    return fallback;
+  }
+
+  const value = draft.meta[key];
+  return typeof value === "string" ? value : null;
+}
+
+function draftNumber(draft: ContentDraftRow, key: string, fallback: number): number {
+  const value = draft.meta[key];
+  return typeof value === "number" ? value : fallback;
+}
+
+function draftBlockToPostBlock(
+  block: DraftBlockSnapshot,
+  postId: number,
+  fallbackUpdatedAt: string
+): BlockType {
+  return {
+    id: block.id ?? -(block.order + 1),
+    page_id: null,
+    post_id: postId,
+    language_id: block.language_id,
+    block_type: block.block_type,
+    content: block.content,
+    order: block.order,
+    created_at: block.created_at ?? fallbackUpdatedAt,
+    updated_at: block.updated_at ?? fallbackUpdatedAt,
+  };
+}
+
+function applyDraftToPost(post: any, draft: ContentDraftRow) {
+  const languageId = draftNumber(draft, "language_id", post.language_id);
+
+  return {
+    ...post,
+    title: draftString(draft, "title", post.title),
+    slug: draftString(draft, "slug", post.slug),
+    language_id: languageId,
+    languages: languageId === post.language_id ? post.languages : null,
+    status: draftString(draft, "status", post.status) as PostType["status"],
+    meta_title: draftNullableString(draft, "meta_title", post.meta_title),
+    meta_description: draftNullableString(draft, "meta_description", post.meta_description),
+    label: draftNullableString(draft, "label", post.label),
+    excerpt: draftNullableString(draft, "excerpt", post.excerpt),
+    subtitle: draftNullableString(draft, "subtitle", post.subtitle),
+    published_at: draftNullableString(draft, "published_at", post.published_at),
+    feature_image_id: draftNullableString(draft, "feature_image_id", post.feature_image_id),
+    translation_group_id: draftString(
+      draft,
+      "translation_group_id",
+      post.translation_group_id
+    ),
+    blocks: draft.blocks.map((block) =>
+      draftBlockToPostBlock(block, post.id, draft.updated_at || post.updated_at)
+    ),
+  };
+}
+
+export async function getPostDataBySlug(slug: string): Promise<PublicPostData | null> {
+  const draft = await draftMode();
+  const isDraftModeEnabled = draft.isEnabled;
+  const supabase = isDraftModeEnabled ? createClient() : getSsgSupabaseClient();
+
+  let postQuery = supabase
     .from("posts")
     .select(`
       *,
@@ -45,24 +126,38 @@ export async function getPostDataBySlug(slug: string): Promise<(PostType & {
       media ( object_key, blur_data_url, width, height )
     `)
     .eq("slug", slug) // Find the post by its unique slug for this language
-    .eq("status", "published")
-    .or(`published_at.is.null,published_at.lte.${new Date().toISOString()}`) // Check published_at
-    .order('order', { foreignTable: 'blocks', ascending: true })
-    .maybeSingle();
+    .order('order', { foreignTable: 'blocks', ascending: true });
+
+  if (!isDraftModeEnabled) {
+    postQuery = postQuery
+      .eq("status", "published")
+      .or(`published_at.is.null,published_at.lte.${new Date().toISOString()}`); // Check published_at
+  }
+
+  const { data: initialPostData, error: postError } = await postQuery.maybeSingle();
+  let postData = initialPostData;
 
   if (postError || !postData) {
     if(postError) console.error(`Error fetching post data for slug '${slug}':`, postError);
     return null;
   }
 
+  const contentDraft = isDraftModeEnabled
+    ? await getContentDraft("post", postData.id)
+    : null;
+
+  if (contentDraft) {
+    postData = applyDraftToPost(postData, contentDraft);
+  }
+
   // Ensure language information is correctly extracted
-  const langInfo = postData.languages as unknown as { id: number; code: string };
+  let langInfo = postData.languages as unknown as { id: number; code: string } | null;
   if (!langInfo || !langInfo.id || !langInfo.code) {
       console.error(`Language information missing or incomplete for post slug '${slug}'. DB response:`, postData.languages);
       if (!postData.language_id) return null; 
       const {data: fallbackLang} = await supabase.from("languages").select("code").eq("id", postData.language_id).single();
       if (!fallbackLang) return null;
-      Object.assign(langInfo, {id: postData.language_id, code: fallbackLang.code });
+      langInfo = { id: postData.language_id, code: fallbackLang.code };
   }
   
   if (!postData.translation_group_id) {
@@ -143,14 +238,6 @@ export async function getPostDataBySlug(slug: string): Promise<(PostType & {
     feature_image_blur_data_url: postData.media?.blur_data_url,
     feature_image_width: postData.media?.width ?? null,
     feature_image_height: postData.media?.height ?? null,
-  } as (PostType & {
-    blocks: BlockType[];
-    language_code: string;
-    language_id: number;
-    translation_group_id: string;
-    feature_image_url?: string | null;
-    feature_image_blur_data_url?: string | null;
-    feature_image_width?: number | null;
-    feature_image_height?: number | null;
-  });
+    draft_id: contentDraft?.id ?? null,
+  } as PublicPostData;
 }
