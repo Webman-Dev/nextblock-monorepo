@@ -7,13 +7,13 @@ import type { Database } from '@nextblock-cms/db' // Relative path from componen
 import { useCurrentContent } from '../context/CurrentContentContext';
 import { useTranslations } from '@nextblock-cms/utils';
 import { DeferredGlobalSearch } from './DeferredGlobalSearch';
+import { resolveMediaUrl } from '../lib/media/resolveMediaUrl';
 
 type Logo = Database['public']['Tables']['logos']['Row'] & { media: (Database['public']['Tables']['media']['Row'] & { alt_text: string | null }) | null };
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
 import Image from 'next/image'
 import { EyeOff, FilePenLine, Pencil } from 'lucide-react';
 
-const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 const FALLBACK_LOGO_PATH = '/images/nextblock-logo-small.webp';
 
 // Define a type for hierarchical navigation items
@@ -319,11 +319,7 @@ export default function ResponsiveNav({
           >
             {logo && logo.media ? (
               <Image
-                src={
-                  logo.media.object_key.startsWith('/') || logo.media.object_key.startsWith('http')
-                    ? logo.media.object_key
-                    : `${R2_BASE_URL}/${logo.media.object_key}`
-                }
+                src={resolveMediaUrl(logo.media.object_key) || FALLBACK_LOGO_PATH}
                 alt={logo.media.alt_text || siteTitle || 'Nextblock'}
                 width={logo.media.width || 100}
                 height={logo.media.height || 32}

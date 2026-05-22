@@ -6,12 +6,14 @@ import { deleteLogo } from "../actions";
 import { useTransition, useState } from 'react';
 import { ConfirmationModal } from '../../../components/ConfirmationModal';
 import { toast } from 'react-hot-toast';
+import { useRouter } from 'next/navigation';
 
 interface DeleteLogoButtonProps {
   logoId: string;
 }
 
 export default function DeleteLogoButton({ logoId }: DeleteLogoButtonProps) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -22,6 +24,7 @@ export default function DeleteLogoButton({ logoId }: DeleteLogoButtonProps) {
         toast.error(`Error: ${result.error}`);
       } else {
           toast.success("Logo deleted successfully");
+          router.refresh();
       }
       setIsModalOpen(false);
     });

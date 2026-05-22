@@ -2,9 +2,16 @@
 
 import { createClient } from '@nextblock-cms/db/server'
 import { INVOICE_SETTINGS_KEY, serializeInvoiceSettings, type InvoiceSettings } from '@nextblock-cms/ecommerce'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { Logo } from './types'
+
+const PUBLIC_LAYOUT_LOGO_CACHE_TAG = 'public-layout-logo'
+
+function revalidateLogoViews() {
+  revalidatePath('/cms/settings/logos')
+  updateTag(PUBLIC_LAYOUT_LOGO_CACHE_TAG)
+}
 
 export async function createLogo(payload: {
   name: string
@@ -19,7 +26,7 @@ export async function createLogo(payload: {
     return { success: false, error: error.message }
   }
 
-  revalidatePath('/cms/settings/logos')
+  revalidateLogoViews()
   return { success: true }
 }
 
@@ -40,7 +47,7 @@ export async function updateLogo(payload: {
     return
   }
 
-  revalidatePath('/cms/settings/logos')
+  revalidateLogoViews()
   revalidatePath(`/cms/settings/logos/${id}/edit`)
   redirect('/cms/settings/logos')
 }
@@ -55,7 +62,7 @@ export async function deleteLogo(id: string) {
     return { success: false, error: error.message }
   }
 
-  revalidatePath('/cms/settings/logos')
+  revalidateLogoViews()
   return { success: true }
 }
 
