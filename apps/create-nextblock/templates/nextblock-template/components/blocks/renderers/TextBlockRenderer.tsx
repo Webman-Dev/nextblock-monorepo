@@ -1,6 +1,7 @@
 import React from "react";
 import { headers } from 'next/headers';
 import ClientTextBlockRenderer from "./ClientTextBlockRenderer";
+import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
 
 export type TextBlockContent = {
     html_content?: string;
@@ -9,6 +10,7 @@ export type TextBlockContent = {
 interface TextBlockRendererProps {
   content: TextBlockContent;
   languageId: number;
+  visualEditAttributes?: VisualEditAttributes;
 }
 
 function addNonceToInlineScripts(html: string, nonce: string): string {
@@ -20,12 +22,22 @@ function addNonceToInlineScripts(html: string, nonce: string): string {
   });
 }
 
-const TextBlockRenderer: React.FC<TextBlockRendererProps> = async ({ content, languageId }) => {
+const TextBlockRenderer: React.FC<TextBlockRendererProps> = async ({
+  content,
+  languageId,
+  visualEditAttributes,
+}) => {
   const hdrs = await headers();
   const nonce = hdrs.get('x-nonce') || '';
   const htmlWithNonce = content.html_content ? addNonceToInlineScripts(content.html_content, nonce) : '';
   const patchedContent = { ...content, html_content: htmlWithNonce };
-  return <ClientTextBlockRenderer content={patchedContent} languageId={languageId} />;
+  return (
+    <ClientTextBlockRenderer
+      content={patchedContent}
+      languageId={languageId}
+      visualEditAttributes={visualEditAttributes}
+    />
+  );
 };
 
 export default TextBlockRenderer;

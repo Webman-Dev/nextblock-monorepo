@@ -1,6 +1,6 @@
 "use client";
 
-import { CustomerProfileForm, ExtendedProfileUpdateData } from "@nextblock-cms/ecommerce";
+import { CustomerProfileForm, ExtendedProfileUpdateData, addressesMatch, type CustomerAddressInput } from "@nextblock-cms/ecommerce";
 import MediaPickerDialog from "../../media/components/MediaPickerDialog";
 import type { Database } from "@nextblock-cms/db";
 import { useSearchParams } from "next/navigation";
@@ -11,11 +11,14 @@ type Profile = Database['public']['Tables']['profiles']['Row'];
 interface UserFormProps {
   userToEditAuth: { email: string | undefined; id: string };
   userToEditProfile: Profile | null;
+  userToEditAddresses: {
+    billingAddress: CustomerAddressInput | null;
+    shippingAddress: CustomerAddressInput | null;
+  };
   formAction: (formData: FormData) => Promise<{ error?: string } | void>;
-  actionButtonText?: string;
 }
 
-export default function UserForm({ userToEditAuth, userToEditProfile, formAction, actionButtonText }: UserFormProps) {
+export default function UserForm({ userToEditAuth, userToEditProfile, userToEditAddresses, formAction }: UserFormProps) {
   const searchParams = useSearchParams();
   const successMsg = searchParams.get('success');
 
@@ -31,9 +34,9 @@ export default function UserForm({ userToEditAuth, userToEditProfile, formAction
       if (data.phone !== undefined) formData.append('phone', data.phone || '');
       if (data.role !== undefined) formData.append('role', data.role);
       
-      if (data.billing_address) {
-          formData.append('billing_address', JSON.stringify(data.billing_address));
-      }
+      formData.append('billing_address', JSON.stringify(data.billing_address ?? null));
+      formData.append('shipping_address', JSON.stringify(data.shipping_address ?? null));
+      formData.append('use_billing_for_shipping', data.use_billing_for_shipping ? 'true' : 'false');
 
       return await formAction(formData);
   };
@@ -48,7 +51,14 @@ export default function UserForm({ userToEditAuth, userToEditProfile, formAction
               github_username: userToEditProfile?.github_username || '',
               phone: userToEditProfile?.phone || '',
               role: userToEditProfile?.role || 'USER',
-              billing_address: userToEditProfile?.billing_address as any,
+              billing_address: userToEditAddresses.billingAddress,
+              shipping_address: userToEditAddresses.shippingAddress,
+              use_billing_for_shipping:
+                !userToEditAddresses.shippingAddress ||
+                addressesMatch(
+                  userToEditAddresses.billingAddress,
+                  userToEditAddresses.shippingAddress
+                ),
           }}
           MediaPickerComponent={MediaPickerDialog}
           isAdmin={true}

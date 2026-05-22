@@ -1,4 +1,4 @@
-﻿// app/cms/blocks/components/BackgroundSelector.tsx
+// app/cms/blocks/components/BackgroundSelector.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -6,8 +6,7 @@ import Image from "next/image";
 import { Label, Select, SelectTrigger, SelectContent, SelectItem, SelectValue, Button, Input, Checkbox } from "@nextblock-cms/ui";
 import { CustomSelectWithInput, ColorPicker } from "@nextblock-cms/ui";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
-import { ImageIcon, X as XIcon, Save } from "lucide-react";
-import { cn } from "@nextblock-cms/utils";
+import { Trash } from "lucide-react";
 import type { Database } from "@nextblock-cms/db";
 import { SectionBlockContent } from '../../../../lib/blocks/blockRegistry';
 import MediaPickerDialog from "../../media/components/MediaPickerDialog";
@@ -126,11 +125,6 @@ export default function BackgroundSelector({ background, onChange }: BackgroundS
     }
   };
 
-  const handleBackgroundPropertyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    onChange({ ...background, [name]: value });
-  };
-
   const handleOverlayGradientChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     if (background?.type === "image" && background.image) {
@@ -160,176 +154,6 @@ export default function BackgroundSelector({ background, onChange }: BackgroundS
     }
   };
 
-  const hasMinHeightChanged = (background?.min_height || "") !== minHeight;
-  const imageSizeClass = selectedImage?.size === "contain" ? "object-contain" : "object-cover";
-  const hasOverlayDirectionChanged = (selectedImage?.overlay?.gradient?.direction || "to bottom") !== overlayDirection;
-  const selectedImageUrl = resolveMediaUrl(selectedImage?.object_key);
-
-  return (
-    <TooltipProvider>
-      <div className="space-y-4">
-        <div className="grid gap-2">
-          <Label>Background Type</Label>
-          <Select value={backgroundType} onValueChange={(v) => handleTypeChange(v as any)}>
-            <SelectTrigger className="w-full max-w-[250px]"><SelectValue placeholder="Select type" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              <SelectItem value="gradient">Gradient</SelectItem>
-              <SelectItem value="image">Image</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="min_height">Minimum Height (e.g., 250px)</Label>
-          <div className="flex items-center gap-2">
-            <Input id="min_height" name="min_height" value={minHeight} onChange={(e) => setMinHeight(e.target.value)} placeholder="e.g., 250px" className="max-w-[200px]" />
-            <Button type="button" variant="ghost" size="icon" onClick={() => handleBackgroundPropertyChange({ target: { name: "min_height", value: minHeight } } as any)} disabled={!hasMinHeightChanged} title="Save Minimum Height">
-              <Save className={cn("h-5 w-5", hasMinHeightChanged && "text-green-600")} />
-            </Button>
-          </div>
-        </div>
-
-        {backgroundType === "image" && (
-          <>
-            <div className="mt-3 p-3 border rounded-md bg-muted/30 min-h-[120px] flex flex-col items-center justify-center">
-              {selectedImage?.object_key ? (
-                <div className="relative group w-full" style={{ height: background?.min_height || "250px", overflow: "hidden" }}>
-                  {selectedImageUrl ? (
-                    <Image src={selectedImageUrl} alt="Selected background image" width={selectedImage.width || 500} height={selectedImage.height || 300} sizes="100vw" className={`w-full h-full ${imageSizeClass}`} style={{ objectPosition: selectedImage.position }} />
-                  ) : null}
-                  {selectedImage.overlay && (
-                    <div className="absolute inset-0" style={{ background: generateGradientCss(selectedImage.overlay.gradient) }} />
-                  )}
-                  <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6" onClick={handleRemoveImage} title="Remove Image">
-                    <XIcon className="h-3 w-3" />
-                  </Button>
-                </div>
-              ) : (
-                <ImageIcon className="h-16 w-16 text-muted-foreground" />
-              )}
-
-              <div className="mt-3">
-                <MediaPickerDialog
-                  triggerLabel={selectedImage?.object_key ? "Change Image" : "Select from Library"}
-                  onSelect={handleSelectMediaFromLibrary}
-                  accept={(m) => !!m.file_type?.startsWith("image/")}
-                  title="Select or Upload Background Image"
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Image Size</Label>
-              <Select value={selectedImage?.size || "cover"} onValueChange={(v) => handleImagePropertyChange("size", v)}>
-                <SelectTrigger className="w-full max-w-[250px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cover">Cover</SelectItem>
-                  <SelectItem value="contain">Contain</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Image Position</Label>
-              <Select value={imagePosition} onValueChange={(v) => { setImagePosition(v); handleImagePropertyChange("position", v); }}>
-                <SelectTrigger className="w-full max-w-[250px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="center">Center</SelectItem>
-                  <SelectItem value="top">Top</SelectItem>
-                  <SelectItem value="bottom">Bottom</SelectItem>
-                  <SelectItem value="left">Left</SelectItem>
-                  <SelectItem value="right">Right</SelectItem>
-                  <SelectItem value="top left">Top Left</SelectItem>
-                  <SelectItem value="top right">Top Right</SelectItem>
-                  <SelectItem value="bottom left">Bottom Left</SelectItem>
-                  <SelectItem value="bottom right">Bottom Right</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center space-x-2 mt-2">
-              <Checkbox id="gradientOverlay" checked={!!selectedImage?.overlay} onCheckedChange={(c) => handleOverlayToggle(!!c)} />
-              <div className="grid gap-1.5 leading-none">
-                <label htmlFor="gradientOverlay" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Add Gradient Overlay</label>
-              </div>
-            </div>
-
-            {selectedImage?.overlay && (
-              <div className="mt-3 p-3 border rounded-md bg-muted/30 space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="flex-grow">
-                    <CustomSelectWithInput
-                      label="Direction"
-                      tooltipContent="Select a preset or enter a custom angle like '45deg' or 'to top left'. See MDN's linear-gradient docs for more options."
-                      value={overlayDirection}
-                      onChange={setOverlayDirection}
-                      options={[
-                        { value: "to bottom", label: "To Bottom" },
-                        { value: "to top", label: "To Top" },
-                        { value: "to left", label: "To Left" },
-                        { value: "to right", label: "To Right" },
-                        { value: "to bottom right", label: "To Bottom Right" },
-                        { value: "to top left", label: "To Top Left" },
-                      ]}
-                    />
-                  </div>
-                  <Button size="icon" variant="ghost" onClick={() => handleOverlayGradientChange({ target: { name: "direction", value: overlayDirection } } as any)} disabled={!hasOverlayDirectionChanged} title="Save Overlay Direction">
-                    <Save className={cn("h-5 w-5 mt-[1.3rem]", hasOverlayDirectionChanged && "text-green-600")} />
-                  </Button>
-                </div>
-                <div className="flex items-center gap-4">
-                  <ColorPicker
-                    label="Start Color"
-                    color={selectedImage.overlay.gradient?.stops?.[0]?.color || "rgba(0,0,0,0.5)"}
-                    onChange={(color) => handleOverlayGradientChange({ target: { name: "startColor", value: color } } as any)}
-                  />
-                  <ColorPicker
-                    label="End Color"
-                    color={selectedImage.overlay.gradient?.stops?.[1]?.color || "rgba(0,0,0,0)"}
-                    onChange={(color) => handleOverlayGradientChange({ target: { name: "endColor", value: color } } as any)}
-                  />
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        {backgroundType === "gradient" && (
-          <div className="mt-3 p-3 border rounded-md bg-muted/30 space-y-4">
-            <div>
-              <CustomSelectWithInput
-                label="Direction"
-                tooltipContent="Select a preset or enter a custom angle like '45deg' or 'to top left'. See MDN's linear-gradient docs for more options."
-                value={background.gradient?.direction || "to right"}
-                onChange={(value: string) => handleBackgroundGradientChange({ target: { name: "direction", value } } as any)}
-                options={[
-                  { value: "to right", label: "To Right" },
-                  { value: "to left", label: "To Left" },
-                  { value: "to top", label: "To Top" },
-                  { value: "to bottom", label: "To Bottom" },
-                  { value: "to bottom right", label: "To Bottom Right" },
-                  { value: "to top left", label: "To Top Left" },
-                ]}
-              />
-            </div>
-            <div className="flex items-center gap-4">
-              <ColorPicker
-                label="Start Color"
-                color={background.gradient?.stops?.[0]?.color || "#3b82f6"}
-                onChange={(color) => handleBackgroundGradientChange({ target: { name: "startColor", value: color } } as any)}
-              />
-              <ColorPicker
-                label="End Color"
-                color={background.gradient?.stops?.[1]?.color || "#8b5cf6"}
-                onChange={(color) => handleBackgroundGradientChange({ target: { name: "endColor", value: color } } as any)}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-    </TooltipProvider>
-  );
   const handleBackgroundGradientChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target as any;
     if (backgroundType !== 'gradient') return;
@@ -347,4 +171,239 @@ export default function BackgroundSelector({ background, onChange }: BackgroundS
       onChange({ type: 'gradient', gradient: { ...current, stops: updatedStops } });
     }
   };
+
+  const selectedImageUrl = resolveMediaUrl(selectedImage?.object_key);
+
+  return (
+    <TooltipProvider>
+      <div className="flex flex-wrap items-end gap-3.5 pt-1">
+        {/* Background Type */}
+        <div className="space-y-1.5 w-[140px]">
+          <Label className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Background Type</Label>
+          <Select value={backgroundType} onValueChange={(v) => handleTypeChange(v as any)}>
+            <SelectTrigger className="h-9 text-sm">
+              <SelectValue placeholder="Select type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              <SelectItem value="gradient">Gradient</SelectItem>
+              <SelectItem value="image">Image</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Minimum Height */}
+        <div className="space-y-1.5 w-[110px]">
+          <Label htmlFor="min_height" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Min Height</Label>
+          <Input
+            id="min_height"
+            name="min_height"
+            value={minHeight}
+            onChange={(e) => setMinHeight(e.target.value)}
+            onBlur={() => {
+              onChange({ ...background, min_height: minHeight });
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.currentTarget.blur();
+              }
+            }}
+            placeholder="e.g., 250px"
+            className="h-9 text-sm"
+          />
+        </div>
+
+        {/* Gradient Background configuration (rendered inline) */}
+        {backgroundType === "gradient" && (
+          <>
+            <div className="w-[200px]">
+              <CustomSelectWithInput
+                label="Gradient Direction"
+                tooltipContent="Select a preset or enter a custom angle like '45deg' or 'to top left'."
+                value={background.gradient?.direction || "to right"}
+                onChange={(value: string) => handleBackgroundGradientChange({ target: { name: "direction", value } } as any)}
+                options={[
+                  { value: "to right", label: "To Right" },
+                  { value: "to left", label: "To Left" },
+                  { value: "to top", label: "To Top" },
+                  { value: "to bottom", label: "To Bottom" },
+                  { value: "to bottom right", label: "To Bottom Right" },
+                  { value: "to top left", label: "To Top Left" },
+                ]}
+              />
+            </div>
+            <div className="w-[150px]">
+              <ColorPicker
+                label="Start Color"
+                color={background.gradient?.stops?.[0]?.color || "#3b82f6"}
+                onChange={(color) => handleBackgroundGradientChange({ target: { name: "startColor", value: color } } as any)}
+              />
+            </div>
+            <div className="w-[150px]">
+              <ColorPicker
+                label="End Color"
+                color={background.gradient?.stops?.[1]?.color || "#8b5cf6"}
+                onChange={(color) => handleBackgroundGradientChange({ target: { name: "endColor", value: color } } as any)}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Image Size (only if image type) */}
+        {backgroundType === "image" && (
+          <div className="space-y-1.5 w-[110px]">
+            <Label className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Image Size</Label>
+            <Select value={selectedImage?.size || "cover"} onValueChange={(v) => handleImagePropertyChange("size", v)}>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cover">Cover</SelectItem>
+                <SelectItem value="contain">Contain</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Image Position (only if image type) */}
+        {backgroundType === "image" && (
+          <div className="space-y-1.5 w-[130px]">
+            <Label className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Image Position</Label>
+            <Select value={imagePosition} onValueChange={(v) => { setImagePosition(v); handleImagePropertyChange("position", v); }}>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="center">Center</SelectItem>
+                <SelectItem value="top">Top</SelectItem>
+                <SelectItem value="bottom">Bottom</SelectItem>
+                <SelectItem value="left">Left</SelectItem>
+                <SelectItem value="right">Right</SelectItem>
+                <SelectItem value="top left">Top Left</SelectItem>
+                <SelectItem value="top right">Top Right</SelectItem>
+                <SelectItem value="bottom left">Bottom Left</SelectItem>
+                <SelectItem value="bottom right">Bottom Right</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Image Picker Trigger / Thumbnail */}
+        {backgroundType === "image" && (
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Image</Label>
+            {selectedImage?.object_key ? (
+              <div className="flex items-center gap-2 h-9">
+                <div className="relative w-9 h-9 rounded border bg-muted overflow-hidden flex-shrink-0 shadow-sm">
+                  {selectedImageUrl ? (
+                    <Image
+                      src={selectedImageUrl}
+                      alt="Thumbnail"
+                      fill
+                      sizes="36px"
+                      className="object-cover"
+                      style={{ objectPosition: selectedImage.position }}
+                    />
+                  ) : null}
+                  {selectedImage.overlay && (
+                    <div className="absolute inset-0" style={{ background: generateGradientCss(selectedImage.overlay.gradient) }} />
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <MediaPickerDialog
+                    triggerLabel="Change"
+                    triggerVariant="outline"
+                    onSelect={handleSelectMediaFromLibrary}
+                    accept={(m) => !!m.file_type?.startsWith("image/")}
+                    title="Select Background Image"
+                  >
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 text-xs">
+                      Change
+                    </Button>
+                  </MediaPickerDialog>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 text-destructive border-destructive/20 hover:bg-destructive/10 hover:text-destructive flex-shrink-0"
+                    onClick={handleRemoveImage}
+                    title="Remove Image"
+                  >
+                    <Trash className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="h-9 flex items-center">
+                <MediaPickerDialog
+                  triggerLabel="Select Image"
+                  triggerVariant="outline"
+                  onSelect={handleSelectMediaFromLibrary}
+                  accept={(m) => !!m.file_type?.startsWith("image/")}
+                  title="Select Background Image"
+                >
+                  <Button type="button" variant="outline" size="sm" className="h-9 px-3 text-xs">
+                    Select Image
+                  </Button>
+                </MediaPickerDialog>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Overlay Checkbox */}
+        {backgroundType === "image" && selectedImage?.object_key && (
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Overlay</Label>
+            <div className="flex items-center justify-center h-9 border border-input rounded-md px-3 bg-background">
+              <Checkbox
+                id="gradientOverlay"
+                checked={!!selectedImage?.overlay}
+                onCheckedChange={(c) => handleOverlayToggle(!!c)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Gradient Overlay configuration fields (inline) */}
+        {backgroundType === "image" && selectedImage?.overlay && (
+          <>
+            <div className="w-[200px]">
+              <CustomSelectWithInput
+                label="Overlay Direction"
+                tooltipContent="Select a preset or enter a custom angle like '45deg' or 'to top left'."
+                value={overlayDirection}
+                onChange={(val) => {
+                  setOverlayDirection(val);
+                  handleOverlayGradientChange({ target: { name: "direction", value: val } } as any);
+                }}
+                options={[
+                  { value: "to bottom", label: "To Bottom" },
+                  { value: "to top", label: "To Top" },
+                  { value: "to left", label: "To Left" },
+                  { value: "to right", label: "To Right" },
+                  { value: "to bottom right", label: "To Bottom Right" },
+                  { value: "to top left", label: "To Top Left" },
+                ]}
+              />
+            </div>
+            <div className="w-[150px]">
+              <ColorPicker
+                label="Overlay Start"
+                color={selectedImage.overlay.gradient?.stops?.[0]?.color || "rgba(0,0,0,0.5)"}
+                onChange={(color) => handleOverlayGradientChange({ target: { name: "startColor", value: color } } as any)}
+              />
+            </div>
+            <div className="w-[150px]">
+              <ColorPicker
+                label="Overlay End"
+                color={selectedImage.overlay.gradient?.stops?.[1]?.color || "rgba(0,0,0,0)"}
+                onChange={(color) => handleOverlayGradientChange({ target: { name: "endColor", value: color } } as any)}
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </TooltipProvider>
+  );
 }

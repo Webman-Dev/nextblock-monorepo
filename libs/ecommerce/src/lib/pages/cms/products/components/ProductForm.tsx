@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { z } from 'zod';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -96,7 +96,7 @@ interface ProductFormProps {
   enabledProviders: EnabledPaymentProviders;
   configStatus: PaymentConfigStatus;
   createAction?: (data: ProductFormValues) => Promise<void>;
-  updateAction?: (data: ProductFormValues) => Promise<void>;
+  updateAction?: (data: ProductFormValues) => Promise<{ success: boolean } | void>;
 }
 
 interface FormSectionProps {
@@ -334,6 +334,32 @@ export function ProductForm({
     setError,
     formState: { errors, dirtyFields },
   } = form;
+
+  const isFirstRender = useRef(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const allValues = watch();
+  const isDirty = form.formState.isDirty;
+
+  useEffect(() => {
+    if (!isEdit) return;
+
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
+    if (!isDirty) return;
+
+    const timer = setTimeout(() => {
+      if (!isSubmitting) {
+        handleSubmit(onSubmit)();
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [allValues, isEdit, isDirty, isSubmitting, handleSubmit]);
 
   // Auto-generate slug from title if title is modified
   const title = watch('title');
@@ -641,14 +667,23 @@ export function ProductForm({
 
   const onSubmit = async (data: ProductFormValues) => {
     setIsSubmitting(true);
+    setIsSaving(true);
+    setSaveError(null);
     
     try {
       if (!derivedPaymentProvider) {
+        const errorMsg = 'Select whether this product is physical or digital before saving.';
         setError('product_type', {
           type: 'manual',
-          message: 'Select whether this product is physical or digital before saving.',
+          message: errorMsg,
         });
+        if (isEdit) {
+          setSaveError(errorMsg);
+        } else {
+          alert(errorMsg);
+        }
         setIsSubmitting(false);
+        setIsSaving(false);
         return;
       }
 
@@ -656,11 +691,18 @@ export function ProductForm({
         data.status === 'active' &&
         (!isProviderEnabled || !isProviderReady)
       ) {
+        const errorMsg = `${derivedPaymentProvider === 'stripe' ? 'Stripe' : 'Freemius'} must be enabled and fully configured before this product can be published.`;
         setError('product_type', {
           type: 'manual',
-          message: `${derivedPaymentProvider === 'stripe' ? 'Stripe' : 'Freemius'} must be enabled and fully configured before this product can be published.`,
+          message: errorMsg,
         });
+        if (isEdit) {
+          setSaveError(errorMsg);
+        } else {
+          alert(errorMsg);
+        }
         setIsSubmitting(false);
+        setIsSaving(false);
         return;
       }
 
@@ -690,6 +732,7 @@ export function ProductForm({
 
       if (isEdit && updateAction) {
         await updateAction(sanitizedData);
+        setLastSaved(new Date());
       } else if (createAction) {
         await createAction(sanitizedData);
       } else {
@@ -700,25 +743,33 @@ export function ProductForm({
       if (error.message === 'NEXT_REDIRECT') {
           return;
       }
+      
+      let errorMsg = error.message || 'An error occurred while saving.';
       if (error.code === '23505') {
         const msg = error.message?.toLowerCase() || '';
         if (msg.includes('products_slug_key') || msg.includes('slug')) {
+          errorMsg = 'This slug is already in use. Please choose another one.';
           setError('slug', { 
               type: 'manual', 
-              message: 'This slug is already in use. Please choose another one.' 
+              message: errorMsg 
           });
         } else if (msg.includes('products_sku_key') || msg.includes('sku')) {
+          errorMsg = 'This SKU is already in use.';
           setError('sku', { 
               type: 'manual', 
-              message: 'This SKU is already in use.' 
+              message: errorMsg 
           });
-        } else {
-          alert(`Error saving product (Unique Violation): ${error.message}`);
         }
-      } else {
-          alert(`Error saving product: ${error.message}`);
       }
+      
+      if (isEdit) {
+        setSaveError(errorMsg);
+      } else {
+        alert(errorMsg);
+      }
+    } finally {
       setIsSubmitting(false);
+      setIsSaving(false);
     }
   };
 
@@ -805,6 +856,30 @@ export function ProductForm({
           title="Product Information"
           hideHeader
         >
+          {isEdit && (
+            <div className="flex items-center justify-between text-xs text-muted-foreground pb-2 border-b border-border/40 mb-2.5">
+              <span className="font-semibold text-[11px] uppercase tracking-wider text-muted-foreground/80">Product Settings</span>
+              <div className="flex items-center gap-1.5 min-h-[16px]">
+                {isSaving ? (
+                  <>
+                    <div className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                    </div>
+                    <span className="text-amber-600 dark:text-amber-400 font-medium">Autosaving settings...</span>
+                  </>
+                ) : saveError ? (
+                  <span className="text-red-500 font-medium">Error saving settings: {saveError}</span>
+                ) : lastSaved ? (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                    Settings autosaved at {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground/60">Settings autosave in draft mode</span>
+                )}
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
             <div className="col-span-2 space-y-1">
               <Label htmlFor="title" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Title</Label>
@@ -826,15 +901,30 @@ export function ProductForm({
               <Input id="upc_ean" placeholder="000000000" {...register('upc')} className="h-8 text-sm font-mono" readOnly={hasVariants} />
             </div>
           </div>
-          <div className="grid grid-cols-4 gap-2.5 mt-2">
-            <div className="col-span-1 space-y-1">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 mt-2">
+            <div className="lg:col-span-2 col-span-2 space-y-1">
               <Label htmlFor="meta_title" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Meta Title</Label>
               <Input id="meta_title" {...register('meta_title')} placeholder="SEO page title (50-60 chars)" className="h-8 text-sm" />
             </div>
-            <div className="col-span-3 space-y-1">
+            <div className={`lg:col-span-${isEdit ? '3' : '4'} col-span-2 space-y-1`}>
               <Label htmlFor="meta_description" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Meta Description</Label>
               <Input id="meta_description" {...register('meta_description')} placeholder="SEO description (150-160 chars)" className="h-8 text-sm" />
             </div>
+            {isEdit && (
+              <div className="lg:col-span-1 col-span-2 space-y-1">
+                <Label htmlFor="status" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Status</Label>
+                <Select onValueChange={(val) => setValue('status', val as any, { shouldDirty: true })} value={watch('status')}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         </FormSection>
 
@@ -1002,7 +1092,7 @@ export function ProductForm({
               {editorNode ? (
                 React.cloneElement(editorNode as React.ReactElement<any>, {
                   initialContent: watch('description_json') || {},
-                  onUpdate: (content: any) => setValue('description_json', content)
+                  onUpdate: (content: any) => setValue('description_json', content, { shouldDirty: true })
                 })
               ) : (
                 <div className="p-3 text-[10px] text-muted-foreground italic text-center mt-8">Editor disabled.</div>
@@ -1010,7 +1100,7 @@ export function ProductForm({
             </div>
           </div>
         </FormSection>
-
+ 
         <FormSection title="Media Gallery" description="Drag to reorder. First image is the hero.">
           <ProductMediaManager
             initialMedia={mediaForManager}
@@ -1019,25 +1109,27 @@ export function ProductForm({
           />
           <input type="hidden" {...register('product_media')} />
         </FormSection>
-
-        <div className="rounded-lg border bg-card p-3 px-4 shadow-sm flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Status</span>
-            <Select onValueChange={(val) => setValue('status', val as any)} value={watch('status')}>
-              <SelectTrigger className="h-8 w-[110px] text-sm">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
-              </SelectContent>
-            </Select>
+ 
+        {!isEdit && (
+          <div className="rounded-lg border bg-card p-3 px-4 shadow-sm flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Status</span>
+              <Select onValueChange={(val) => setValue('status', val as any)} value={watch('status')}>
+                <SelectTrigger className="h-8 w-[110px] text-sm">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button disabled={isSubmitting} type="submit" size="sm" className="h-8 text-sm px-5">
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
+            </Button>
           </div>
-          <Button disabled={isSubmitting} type="submit" size="sm" className="h-8 text-sm px-5">
-            {isSubmitting ? 'Saving...' : 'Save Changes'}
-          </Button>
-        </div>
+        )}
       </div>
     </form>
   );

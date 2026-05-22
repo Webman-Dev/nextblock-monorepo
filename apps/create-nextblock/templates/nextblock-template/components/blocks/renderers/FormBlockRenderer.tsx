@@ -4,16 +4,18 @@ import React, { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { handleFormSubmission } from '../../../app/actions/formActions';
 import type { FormBlockContent, FormField } from '../../../lib/blocks/blockRegistry';
-import { Button } from '@nextblock-cms/ui/button';
-import { Checkbox } from '@nextblock-cms/ui/checkbox';
-import { Input } from '@nextblock-cms/ui/input';
-import { Label } from '@nextblock-cms/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui/select';
-import { Textarea } from '@nextblock-cms/ui/textarea';
+import { Button } from '@nextblock-cms/ui';
+import { Checkbox } from '@nextblock-cms/ui';
+import { Input } from '@nextblock-cms/ui';
+import { Label } from '@nextblock-cms/ui';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui';
+import { Textarea } from '@nextblock-cms/ui';
+import type { VisualEditAttributes } from '../../../lib/visual-editing/types';
 
 interface FormBlockRendererProps {
   content: FormBlockContent;
   languageId: number;
+  visualEditAttributes?: VisualEditAttributes;
 }
 
 function SubmitButton({ text }: { text: string }) {
@@ -21,18 +23,29 @@ function SubmitButton({ text }: { text: string }) {
   return <Button type="submit" disabled={pending}>{pending ? 'Submitting...' : text}</Button>;
 }
 
-const FormBlockRenderer: React.FC<FormBlockRendererProps> = ({ content }) => {
+const FormBlockRenderer: React.FC<FormBlockRendererProps> = ({ content, visualEditAttributes }) => {
   const [state, formAction] = useActionState(handleFormSubmission.bind(null, content.recipient_email), {
     success: false,
     message: '',
   });
 
   if (state.success) {
-    return <div className="p-4 rounded-md bg-green-100 text-green-800">{content.success_message}</div>;
+    return (
+      <div
+        className="p-4 rounded-md bg-green-100 text-green-800 text-center"
+        {...visualEditAttributes}
+      >
+        {content.success_message}
+      </div>
+    );
   }
 
   return (
-    <form action={formAction} className="space-y-4 my-6 container mx-auto">
+    <form
+      action={formAction}
+      className="space-y-4 my-6 container mx-auto"
+      {...visualEditAttributes}
+    >
       {content.fields.map((field: FormField) => (
         <div key={field.temp_id} className="space-y-2">
           <Label htmlFor={field.temp_id}>

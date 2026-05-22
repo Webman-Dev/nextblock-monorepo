@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '../zod-config';
 import { TestimonialBlockConfig, TestimonialBlockContent } from '../../components/blocks/TestimonialBlock';
 import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSchema, FeaturedProductBlockContent, CartBlockSchema, CartBlockContent, CheckoutBlockSchema, CheckoutBlockContent, ProductDetailsBlockSchema, ProductDetailsBlockContent } from './ecommerce-block-schemas';
 
@@ -99,8 +99,13 @@ const BackgroundSchema = z.object({
 
 const BlockInColumnSchema = z.object({
   block_type: z.enum(availableBlockTypes),
-  content: z.record(z.any()),
+  content: z.record(z.string(), z.any()),
   temp_id: z.string().optional(),
+});
+
+const SlideSchema = z.object({
+  background: BackgroundSchema,
+  column_blocks: z.array(z.array(BlockInColumnSchema)),
 });
 
 export const SectionBlockSchema = z.object({
@@ -118,6 +123,11 @@ export const SectionBlockSchema = z.object({
   }),
   vertical_alignment: z.enum(['start', 'center', 'end', 'stretch']).optional(),
   column_blocks: z.array(z.array(BlockInColumnSchema)),
+  is_hero: z.boolean().optional(),
+  slider: z.boolean().optional(),
+  autoplay: z.boolean().optional(),
+  timeframe: z.number().optional(),
+  slides: z.array(SlideSchema).optional(),
 });
 export type SectionBlockContent = z.infer<typeof SectionBlockSchema>;
 
@@ -381,7 +391,12 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
         [{ block_type: "text", content: { html_content: "<p>Column 1</p>" } }],
         [{ block_type: "text", content: { html_content: "<p>Column 2</p>" } }],
         [{ block_type: "text", content: { html_content: "<p>Column 3</p>" } }]
-      ]
+      ],
+      is_hero: false,
+      slider: false,
+      autoplay: false,
+      timeframe: 5,
+      slides: []
     } as SectionBlockContent,
     editorComponentFilename: "SectionBlockEditor.tsx",
     rendererComponentFilename: "SectionBlockRenderer.tsx",
@@ -428,7 +443,7 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
       ],
     } as HeroBlockContent,
     editorComponentFilename: "SectionBlockEditor.tsx", // Reusing section editor
-    rendererComponentFilename: "HeroBlockRenderer.tsx", // Specific renderer for hero
+    rendererComponentFilename: "SectionBlockRenderer.tsx", // Unified Section renderer
     schema: HeroBlockSchema,
     documentation: {
       description: 'A specialized hero section for the top of a page, with prioritized images and pre-populated content.',
@@ -533,7 +548,7 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
 
   "product_details": {
     type: "product_details",
-    label: "Product Details (Context)",
+    label: "Product Details",
     icon: "Tag",
     initialContent: {} as ProductDetailsBlockContent,
     editorComponentFilename: "ProductDetailsBlockEditor.tsx",
@@ -657,7 +672,7 @@ export function validateBlockContent(
     return { isValid: true, errors: [], warnings: [] };
   } else {
     // Format Zod errors
-    const errors = result.error.errors.map(e => {
+    const errors = result.error.issues.map(e => {
       const path = e.path.join('.');
       return path ? `${path}: ${e.message}` : e.message;
     });

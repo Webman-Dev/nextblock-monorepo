@@ -8,7 +8,13 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  Input,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
 } from "@nextblock-cms/ui";
+import { Search, X, Package } from 'lucide-react';
 import { blockRegistry, BlockType } from '../../../../lib/blocks/blockRegistry';
 import BlockTypeCard from './BlockTypeCard';
 
@@ -19,40 +25,181 @@ interface BlockTypeSelectorProps {
   allowedBlockTypes?: BlockType[];
 }
 
+const CATEGORIES = ["All", "Layout", "Content", "Media", "Interactive", "E-commerce"];
+
+const getBlockCategory = (type: string): string => {
+  switch (type) {
+    case 'section':
+      return 'Layout';
+    case 'text':
+    case 'heading':
+    case 'button':
+    case 'testimonial':
+      return 'Content';
+    case 'image':
+    case 'video_embed':
+      return 'Media';
+    case 'form':
+    case 'posts_grid':
+      return 'Interactive';
+    case 'product_grid':
+    case 'featured_product':
+    case 'cart':
+    case 'checkout':
+    case 'product_details':
+      return 'E-commerce';
+    default:
+      return 'Content';
+  }
+};
+
 const BlockTypeSelector: React.FC<BlockTypeSelectorProps> = ({
   isOpen,
   onOpenChange,
   onSelectBlockType,
   allowedBlockTypes,
 }) => {
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [activeCategory, setActiveCategory] = React.useState('All');
+
+  // Reset state when modal is opened
+  React.useEffect(() => {
+    if (isOpen) {
+      setSearchQuery('');
+      setActiveCategory('All');
+    }
+  }, [isOpen]);
+
   const handleSelect = (blockType: BlockType) => {
     onSelectBlockType(blockType);
     onOpenChange(false);
   };
 
-  const blockDefs = Object.values(blockRegistry).filter(
-    (blockDef) => !allowedBlockTypes || allowedBlockTypes.includes(blockDef.type)
-  );
+  // Exclude 'hero' section block as requested (memoized for performance)
+  const blockDefs = React.useMemo(() => {
+    return Object.values(blockRegistry).filter(
+      (blockDef) =>
+        blockDef.type !== 'hero' &&
+        (!allowedBlockTypes || allowedBlockTypes.includes(blockDef.type))
+    );
+  }, [allowedBlockTypes]);
+
+  // Memoized filter and search results to prevent re-calculations during key strokes
+  const filteredBlockDefs = React.useMemo(() => {
+    return blockDefs
+      .filter((blockDef) => {
+        // Category Filter
+        if (activeCategory !== 'All' && getBlockCategory(blockDef.type) !== activeCategory) {
+          return false;
+        }
+        // Search Filter
+        if (searchQuery.trim() !== '') {
+          const query = searchQuery.toLowerCase();
+          const matchesLabel = blockDef.label.toLowerCase().includes(query);
+          const matchesDesc = blockDef.documentation?.description?.toLowerCase().includes(query) || false;
+          return matchesLabel || matchesDesc;
+        }
+        return true;
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [blockDefs, searchQuery, activeCategory]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[625px]">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[700px] max-h-[85vh] flex flex-col gap-0 p-6 overflow-hidden">
+        <DialogHeader className="pb-4">
           <DialogTitle>Add a New Block</DialogTitle>
           <DialogDescription>
             Choose a block type from the options below to add it to the page.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 py-4">
-          {blockDefs.map((blockDef) => (
-            <BlockTypeCard
-              key={blockDef.type}
-              name={blockDef.label}
-              description={blockDef.documentation?.description}
-              icon={blockDef.icon}
-              onClick={() => handleSelect(blockDef.type)}
-            />
-          ))}
+
+        <div className="flex flex-col gap-4 py-2 overflow-hidden flex-grow">
+          {/* Search and Filters Header */}
+          <div className="space-y-3 flex-shrink-0">
+            <div className="relative flex items-center">
+              <Search className="absolute left-3 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                type="text"
+                placeholder="Search block types..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-8 h-9 text-sm bg-muted/40 hover:bg-muted/60 focus:bg-background transition-colors duration-150 rounded-lg border-border"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 p-0.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors duration-150"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Category Filter Tabs */}
+            <div className="flex flex-wrap gap-1.5 pb-3 border-b border-border">
+              {CATEGORIES.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setActiveCategory(category)}
+                  className={`text-xs py-1 px-3 rounded-full transition-all duration-150 border outline-none ${
+                    activeCategory === category
+                      ? 'bg-primary text-primary-foreground border-primary font-medium shadow-sm'
+                      : 'bg-secondary/40 hover:bg-secondary/80 border-transparent text-muted-foreground'
+                  }`}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Grid Area */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto pr-1 py-1 flex-grow">
+            <TooltipProvider delayDuration={200}>
+              {filteredBlockDefs.map((blockDef) => (
+                <Tooltip key={blockDef.type}>
+                  <TooltipTrigger asChild>
+                    <div>
+                      <BlockTypeCard
+                        name={blockDef.label}
+                        icon={blockDef.icon}
+                        onClick={() => handleSelect(blockDef.type)}
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="top"
+                    align="center"
+                    className="max-w-[280px] p-3 text-xs bg-popover border border-border shadow-lg rounded-md z-[60]"
+                  >
+                    <div className="space-y-1">
+                      <div className="font-semibold text-foreground">{blockDef.label}</div>
+                      <div className="text-muted-foreground leading-normal">
+                        {blockDef.documentation?.description || 'No description available.'}
+                      </div>
+                      {blockDef.documentation?.useCases && blockDef.documentation.useCases.length > 0 && (
+                        <div className="pt-1.5 border-t border-border mt-1.5 text-[10px] text-muted-foreground/80">
+                          <span className="font-semibold text-foreground/90">Use cases: </span>
+                          {blockDef.documentation.useCases.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </TooltipProvider>
+
+            {filteredBlockDefs.length === 0 && (
+              <div className="col-span-full py-12 text-center flex flex-col items-center justify-center text-muted-foreground">
+                <Package className="h-8 w-8 mb-2 opacity-30 animate-pulse" />
+                <p className="text-sm font-medium">No block types found</p>
+                <p className="text-xs">Adjust your search query or select another category</p>
+              </div>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

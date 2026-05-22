@@ -1,6 +1,11 @@
 'use server';
 
 import { createClient } from '@nextblock-cms/db/server';
+import {
+  applyOrderInventoryDeduction,
+  assignInvoiceMetadata,
+} from '@nextblock-cms/ecommerce/server';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { OrderWithDetails } from './types';
 
 const ITEMS_PER_PAGE = 20;
@@ -145,11 +150,6 @@ export async function getOrderDetails(orderId: string): Promise<OrderWithDetails
   } as OrderWithDetails;
 }
 
-// Import SupabaseClient and createClient from supabase-js for manual admin client
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-
-// ... (existing imports)
-
 export async function markOrderAsPaid(orderId: string): Promise<{ success: boolean; error?: string }> {
     const supabase = createClient();
     
@@ -190,6 +190,12 @@ export async function markOrderAsPaid(orderId: string): Promise<{ success: boole
     if (!updatedData || updatedData.length === 0) {
         return { success: false, error: 'Order not found or update failed.' };
     }
+
+    await assignInvoiceMetadata({
+        orderId,
+        client: adminSupabase as any,
+    });
+    await applyOrderInventoryDeduction(adminSupabase as any, orderId);
 
     return { success: true };
 }

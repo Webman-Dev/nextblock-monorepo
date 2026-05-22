@@ -4,7 +4,6 @@ import { createClient, getServiceRoleSupabaseClient } from '@nextblock-cms/db/se
 import { ProductFormValues } from '../../../product-schema';
 import { 
   createProduct as createProductLib, 
-  updateProduct as updateProductLib, 
   deleteProduct as deleteProductLib 
 } from '../../../product-actions';
 import { normalizeCurrencyRecord } from '../../../currency';
@@ -43,6 +42,11 @@ export async function createProductAction(data: ProductFormValues) {
 
 export async function updateProductAction(id: string, data: ProductFormValues) {
   const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error('User not authenticated.');
+  }
+
   const { data: currencies } = await supabase
     .from('currencies')
     .select(
@@ -55,10 +59,25 @@ export async function updateProductAction(id: string, data: ProductFormValues) {
     (currencies || []).map((currency) => normalizeCurrencyRecord(currency))
   );
 
-  await updateProductLib(supabase, id, sanitizedData);
+  const { error: upsertError } = await supabase
+    .from('product_drafts')
+    .upsert(
+      {
+        product_id: id,
+        author_id: user.id,
+        meta: sanitizedData as any,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'product_id' }
+    );
+
+  if (upsertError) {
+    throw new Error(`Failed to save product draft: ${upsertError.message}`);
+  }
+
   revalidatePath('/cms/products');
   revalidatePath(`/cms/products/${id}/edit`);
-  redirect('/cms/products');
+  return { success: true };
 }
 
 export async function deleteProductAction(id: string) {

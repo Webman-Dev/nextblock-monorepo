@@ -4,21 +4,22 @@ import { createClient } from "@nextblock-cms/db/server";
 import { updatePage } from "../../actions";
 import type { Database } from "@nextblock-cms/db";
 import { notFound, redirect } from "next/navigation";
+import { draftMode } from "next/headers";
 
 type Page = Database['public']['Tables']['pages']['Row'];
 type Block = Database['public']['Tables']['blocks']['Row'];
 type Language = Database['public']['Tables']['languages']['Row'];
 import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server";
 import EditPageClient from "./EditPageClient";
+import { normalizeContentDraftRow } from "../../../../../lib/visual-editing/draft-content";
 
-// ... (Interface PageWithBlocks and getPageDataWithBlocks remain the same) ...
 interface PageWithBlocks extends Page {
   blocks: Block[];
   language_code?: string;
   translation_group_id: string;
 }
 
-async function getPageDataWithBlocks(id: number): Promise<PageWithBlocks | null> {
+async function getPageDataWithBlocks(id: number): Promise<{ page: PageWithBlocks; hasDraft: boolean } | null> {
   const supabase = createClient();
   const { data: pageData, error: pageError } = await supabase
     .from("pages")
@@ -40,7 +41,36 @@ async function getPageDataWithBlocks(id: number): Promise<PageWithBlocks | null>
     ? pageData.languages[0]?.code
     : (pageData.languages as Language)?.code;
 
-  return { ...pageData, blocks: pageData.blocks || [], language_code: langCode } as PageWithBlocks;
+  let pageWithBlocks: PageWithBlocks = {
+    ...pageData,
+    blocks: pageData.blocks || [],
+    language_code: langCode,
+    translation_group_id: pageData.translation_group_id ?? "",
+  } as PageWithBlocks;
+
+  const { data: draftData } = await supabase
+    .from("content_drafts")
+    .select("*")
+    .eq("parent_type", "page")
+    .eq("parent_id", id)
+    .maybeSingle();
+
+  const hasDraft = draftData !== null;
+  if (draftData) {
+    const draft = normalizeContentDraftRow(draftData);
+    pageWithBlocks = {
+      ...pageWithBlocks,
+      title: (draft.meta.title as string) ?? pageWithBlocks.title,
+      slug: (draft.meta.slug as string) ?? pageWithBlocks.slug,
+      language_id: (draft.meta.language_id as number) ?? pageWithBlocks.language_id,
+      status: (draft.meta.status as any) ?? pageWithBlocks.status,
+      meta_title: (draft.meta.meta_title as string) ?? pageWithBlocks.meta_title,
+      meta_description: (draft.meta.meta_description as string) ?? pageWithBlocks.meta_description,
+      blocks: draft.blocks as any[],
+    };
+  }
+
+  return { page: pageWithBlocks, hasDraft };
 }
 
 
@@ -57,13 +87,13 @@ export default async function EditPage(props: { params: Promise<{ id: string }> 
       return <div className="p-6">Access Denied.</div>;
   }
 
-  const [pageWithBlocks, allSiteLanguages] = await Promise.all([
-    getPageDataWithBlocks(pageId),
-    getActiveLanguagesServerSide()
-  ]);
+  const pageDataResult = await getPageDataWithBlocks(pageId);
+  if (!pageDataResult) return notFound();
+  const { page: pageWithBlocks, hasDraft } = pageDataResult;
 
-  if (!pageWithBlocks) return notFound();
+  const allSiteLanguages = await getActiveLanguagesServerSide();
 
+  const draft = await draftMode();
   const updatePageWithId = updatePage.bind(null, pageId);
   const publicPageUrl = `/${pageWithBlocks.slug}`;
 
@@ -74,6 +104,8 @@ export default async function EditPage(props: { params: Promise<{ id: string }> 
       allSiteLanguages={allSiteLanguages}
       updatePageAction={updatePageWithId}
       publicPageUrl={publicPageUrl}
+      isDraftModeEnabled={draft.isEnabled}
+      hasDraft={hasDraft}
     />
   );
 }

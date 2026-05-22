@@ -1,15 +1,30 @@
 import { getProductBySlug, getProducts } from '@nextblock-cms/ecommerce/server';
-import { ProductProvider } from '@nextblock-cms/ecommerce';
+import {
+  ProductProvider,
+  mapRawVariantRelations,
+  getVariantEffectivePriceRange,
+  normalizePriceMap,
+  normalizeSalePriceMap,
+} from '@nextblock-cms/ecommerce';
 import { getSsgSupabaseClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 import { notFound } from 'next/navigation';
 import { Metadata } from 'next';
-import { cookies, headers } from 'next/headers';
+import { draftMode, cookies, headers } from 'next/headers';
 import { getPageDataBySlug } from "../../[slug]/page.utils";
 import BlockRenderer from "../../../components/BlockRenderer";
 import { CurrentContentSetter } from "../../../components/CurrentContentSetter";
+import {
+  applyProductDraftToProductRecord,
+  getProductDraft,
+} from "../../../lib/visual-editing/product-drafts";
 // Ensure BlockType is imported or compatible with BlockRenderer props
 import type { Database } from "@nextblock-cms/db";
 type BlockType = Database['public']['Tables']['blocks']['Row'];
+
+export const dynamicParams = true;
+export const revalidate = 360;
+export const dynamic = 'force-dynamic'; // keeps per-request locale; paired with short revalidate
+export const fetchCache = 'force-no-store';
 
 interface ProductPageProps {
   params: Promise<{
@@ -20,8 +35,9 @@ interface ProductPageProps {
 export async function generateStaticParams() {
   const supabase = getSsgSupabaseClient();
   const { data: products } = await getProducts(supabase);
-  if (!products) return [];
-  return products.map((product) => ({
+  const productRows = (products || []) as any[];
+  if (productRows.length === 0) return [];
+  return productRows.map((product: any) => ({
     slug: product.slug,
   }));
 }
@@ -46,12 +62,13 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
     }
   }
   const { data: product } = await getProductBySlug(supabase, slug, preferredLocale);
+  const productRecord = product as any;
 
-  if (!product) return { title: 'Product Not Found' };
+  if (!productRecord) return { title: 'Product Not Found' };
   
   // Resolve image URL for OG Image
   let imageUrl = undefined;
-  const mediaItem = product.product_media?.[0]?.media;
+  const mediaItem = productRecord.product_media?.[0]?.media;
   if (mediaItem?.file_path) {
      if (mediaItem.file_path.startsWith('http')) {
         imageUrl = mediaItem.file_path;
@@ -62,11 +79,41 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
      }
   }
 
+  const siteUrl = process.env.NEXT_PUBLIC_URL || "";
+  const [languagesResult, productTranslationsResult] = await Promise.all([
+    supabase.from('languages').select('id, code'),
+    supabase
+      .from('products')
+      .select('language_id, slug')
+      .eq('translation_group_id', productRecord.translation_group_id)
+      .eq('status', 'active')
+  ]);
+
+  const { data: languages } = languagesResult;
+  const { data: productTranslations } = productTranslationsResult;
+
+  const alternates: { [key: string]: string } = {};
+  if (languages && productTranslations) {
+    productTranslations.forEach(pt => {
+      const langInfo = languages.find(l => l.id === pt.language_id);
+      if (langInfo) {
+        alternates[langInfo.code] = `${siteUrl}/product/${pt.slug}`;
+      }
+    });
+  }
+
   return {
-    title: product.title,
-    description: product.short_description || `Buy ${product.title}`,
+    title: productRecord.meta_title || productRecord.title,
+    description: productRecord.meta_description || productRecord.short_description || `Buy ${productRecord.title}`,
     openGraph: {
+      title: productRecord.meta_title || productRecord.title,
+      description: productRecord.meta_description || productRecord.short_description || `Buy ${productRecord.title}`,
       images: imageUrl ? [imageUrl] : [],
+      url: `${siteUrl}/product/${slug}`,
+    },
+    alternates: {
+      canonical: `${siteUrl}/product/${slug}`,
+      languages: Object.keys(alternates).length > 0 ? alternates : undefined,
     },
   };
 }
@@ -100,9 +147,19 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   // 1. Fetch Product Data
   const { data: product } = await getProductBySlug(supabase, slug, preferredLocale);
+  let productRecord = product as any;
 
-  if (!product) {
+  if (!productRecord) {
     notFound();
+  }
+
+  const draft = await draftMode();
+  const visualEditingEnabled =
+    draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
+
+  if (visualEditingEnabled) {
+    const productDraft = await getProductDraft(productRecord.id);
+    productRecord = applyProductDraftToProductRecord(productRecord, productDraft);
   }
 
   // 2. Fetch Template Page
@@ -130,21 +187,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
         updated_at: new Date().toISOString()
       },
       {
-         id: 'fallback-related-title',
-         block_type: 'heading',
-         content: { level: 2, text_content: "You might also like", textAlign: "center" },
-         page_id: 'temp',
-         order: 1,
-         language_id: 1,
-         created_at: new Date().toISOString(),
-         updated_at: new Date().toISOString()
-      },
-      {
          id: 'fallback-product-grid',
          block_type: 'product_grid',
-         content: { type: 'latest', limit: 4 },
+         content: { type: 'latest', limit: 4, title: "You might also like" },
          page_id: 'temp',
-         order: 2,
+         order: 1,
          language_id: 1,
          created_at: new Date().toISOString(),
          updated_at: new Date().toISOString()
@@ -152,15 +199,26 @@ export default async function ProductPage({ params }: ProductPageProps) {
     ] as any as BlockType[];
   }
 
+  const productTemplateVisualEditing = templatePage
+    ? {
+        enabled: visualEditingEnabled,
+        documentType: "page" as const,
+        documentId: templatePage.id,
+        slug: templatePage.slug,
+        languageId: templatePage.language_id,
+        draftId: templatePage.draft_id ?? null,
+      }
+    : undefined;
+
   // 4. Transform Product Data for Context
   // Value Mapping
   // Image URL resolution
   let imageUrl: string | undefined = undefined;
   const images: { url: string; alt?: string }[] = [];
   
-  if (product.product_media && product.product_media.length > 0) {
+  if (productRecord.product_media && productRecord.product_media.length > 0) {
       // Sort by sort_order
-      const sortedMedia = [...product.product_media].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+      const sortedMedia = [...productRecord.product_media].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
       
       sortedMedia.forEach(pm => {
           if (pm.media?.file_path) {
@@ -173,7 +231,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                   url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/media/${pm.media.file_path}`;
               }
               
-              images.push({ url, alt: product.title });
+              images.push({ url, alt: productRecord.title });
               
               // Set primary image if it's the first one
               if (!imageUrl) imageUrl = url;
@@ -181,17 +239,55 @@ export default async function ProductPage({ params }: ProductPageProps) {
       });
   }
 
+  const languageCode = Array.isArray(productRecord.languages)
+    ? productRecord.languages[0]?.code
+    : productRecord.languages?.code;
+  const { attributes, variants } = mapRawVariantRelations(
+    productRecord.product_variants || [],
+    languageCode
+  );
+  const variantPriceRange = getVariantEffectivePriceRange(variants);
+
   const contextProduct = {
-    id: product.id,
-    title: product.title,
-    slug: product.slug,
-    price: product.price,
-    sale_price: product.sale_price || null,
+    id: productRecord.id,
+    title: productRecord.title,
+    slug: productRecord.slug,
+    sku: productRecord.sku,
+    upc: productRecord.upc || undefined,
+    price: productRecord.price,
+    prices: normalizePriceMap(productRecord.prices),
+    sale_price: productRecord.sale_price || null,
+    sale_prices: normalizeSalePriceMap(productRecord.sale_prices),
+    is_taxable: productRecord.is_taxable ?? true,
+    product_type: productRecord.product_type ?? undefined,
+    payment_provider: productRecord.payment_provider ?? undefined,
+    price_range_min: variantPriceRange?.min ?? null,
+    price_range_max: variantPriceRange?.max ?? null,
     image_url: imageUrl,
     images: images,
-    short_description: product.short_description || undefined,
-    description_json: product.description_json,
-    stock: product.stock !== undefined && product.stock !== null ? product.stock : undefined
+    short_description: productRecord.short_description || undefined,
+    description_json: productRecord.description_json,
+    stock:
+      productRecord.stock !== undefined && productRecord.stock !== null
+        ? productRecord.stock
+        : undefined,
+    freemius_product_id: productRecord.freemius_product_id || undefined,
+    freemius_plan_id: productRecord.freemius_plan_id || undefined,
+    trial_period_days: productRecord.trial_period_days ?? 0,
+    trial_requires_payment_method: productRecord.trial_requires_payment_method ?? false,
+    freemius_plans: productRecord.freemius_plans,
+    language_id: productRecord.language_id,
+    translation_group_id: productRecord.translation_group_id || "",
+    has_variants: variants.length > 0,
+    attributes,
+    variants,
+    product_variants: (productRecord.product_variants || []).map((variant: any) => ({
+      id: variant.id,
+      price: variant.price,
+      prices: normalizePriceMap(variant.prices),
+      sale_price: variant.sale_price,
+      sale_prices: normalizeSalePriceMap(variant.sale_prices),
+    })),
   };
 
   return (
@@ -201,8 +297,20 @@ export default async function ProductPage({ params }: ProductPageProps) {
               BlockRenderer expects languageId property. 
               If templatePage is null, we defaulted languageId to 1.
             */}
-            <CurrentContentSetter id={product.id} type="product" slug={product.slug} />
-            <BlockRenderer blocks={blocks} languageId={languageId} />
+            <CurrentContentSetter
+              id={productRecord.id}
+              type="product"
+              slug={productRecord.slug}
+              translation_group_id={productRecord.translation_group_id}
+            />
+            <BlockRenderer 
+              blocks={blocks} 
+              languageId={languageId} 
+              excludeProductId={productRecord.id}
+              excludeTranslationGroupId={productRecord.translation_group_id}
+              visualEditing={productTemplateVisualEditing}
+              productVisualEditingEnabled={visualEditingEnabled}
+            />
         </ProductProvider>
     </div>
   );

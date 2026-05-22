@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useAuth } from '../../../context/AuthContext';
 import { usePathname } from "next/navigation"
 import { toast } from "react-hot-toast"
@@ -30,12 +30,17 @@ interface FeedbackModalProps {
 }
 
 export function FeedbackModal({ sidebarOpen = true }: FeedbackModalProps) {
+  const [mounted, setMounted] = useState(false)
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [subject, setSubject] = useState("suggestion")
   const [message, setMessage] = useState("")
   const { user, profile } = useAuth()
   const pathname = usePathname()
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,18 +75,27 @@ export function FeedbackModal({ sidebarOpen = true }: FeedbackModalProps) {
     }
   }
 
+  const trigger = (
+    <button
+      className={cn(
+        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all w-full text-left",
+        "text-slate-600 hover:text-primary hover:bg-primary/5 dark:text-slate-300 dark:hover:bg-primary/10"
+      )}
+      type="button"
+    >
+      <MessageSquarePlus className="h-5 w-5" />
+      {sidebarOpen && <span>Feedback</span>}
+    </button>
+  )
+
+  if (!mounted) {
+    return trigger
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <button
-          className={cn(
-            "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all w-full text-left",
-            "text-slate-600 hover:text-primary hover:bg-primary/5 dark:text-slate-300 dark:hover:bg-primary/10"
-          )}
-        >
-          <MessageSquarePlus className="h-5 w-5" />
-          {sidebarOpen && <span>Feedback</span>}
-        </button>
+        {trigger}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>

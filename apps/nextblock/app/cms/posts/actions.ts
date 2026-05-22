@@ -6,12 +6,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Database } from "@nextblock-cms/db";
 import { v4 as uuidv4 } from 'uuid';
+import { getOrCreateContentDraft } from "../../../lib/visual-editing/draft-content";
 
 type PageStatus = Database['public']['Enums']['page_status'];
 import { encodedRedirect } from "@nextblock-cms/utils/server"; // Ensure this is correctly imported
-import { getFullPostContent } from "../revisions/utils";
-import { createPostRevision } from "../revisions/service";
-
 // --- createPost and updatePost functions to be updated similarly for error returns ---
 
 export async function createPost(formData: FormData) {
@@ -133,7 +131,7 @@ export async function updatePost(postId: number, formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   const postEditPath = `/cms/posts/${postId}/edit`;
 
-  if (!user) return encodedRedirect("error", postEditPath, "User not authenticated.");
+  if (!user) return { error: "User not authenticated." };
 
   const { data: existingPost, error: fetchError } = await supabase
     .from("posts")
@@ -142,7 +140,7 @@ export async function updatePost(postId: number, formData: FormData) {
     .single();
 
   if (fetchError || !existingPost) {
-    return encodedRedirect("error", "/cms/posts", "Original post not found or error fetching it.");
+    return { error: "Original post not found or error fetching it." };
   }
 
   const featureImageIdStr_update = formData.get("feature_image_id") as string;
@@ -166,10 +164,10 @@ export async function updatePost(postId: number, formData: FormData) {
   };
 
   if (!rawFormData.title || !rawFormData.slug || isNaN(rawFormData.language_id) || !rawFormData.status) {
-     return encodedRedirect("error", postEditPath, "Missing required fields: title, slug, language, or status.");
+     return { error: "Missing required fields: title, slug, language, or status." };
   }
   if (rawFormData.language_id !== existingPost.language_id) {
-      return encodedRedirect("error", postEditPath, "Changing the language of an existing post version is not allowed. Create a new translation instead.");
+      return { error: "Changing the language of an existing post version is not allowed. Create a new translation instead." };
   }
 
   let publishedAtISO: string | null = null;
@@ -193,38 +191,29 @@ export async function updatePost(postId: number, formData: FormData) {
     feature_image_id: rawFormData.feature_image_id,
   };
 
-  // capture previous full content
-  const previousContent = await getFullPostContent(postId);
+  try {
+    const draft = await getOrCreateContentDraft(supabase, "post", postId, user.id);
+    const updatedMeta = {
+      ...draft.meta,
+      ...postUpdateData,
+    };
 
-  const { error: updateError } = await supabase
-    .from("posts")
-    .update(postUpdateData)
-    .eq("id", postId);
+    const { error: updateError } = await supabase
+      .from("content_drafts")
+      .update({ meta: updatedMeta as any })
+      .eq("id", draft.id);
 
-  if (updateError) {
-    console.error("Error updating post:", updateError);
-    if (updateError.code === '23505' && updateError.message.includes('posts_language_id_slug_key')) {
-        return encodedRedirect("error", postEditPath, `The slug "${postUpdateData.slug}" already exists for the selected language. Please use a unique slug.`);
+    if (updateError) {
+      console.error("Error updating post draft:", updateError);
+      return { error: `Failed to update draft: ${updateError.message}` };
     }
-    return encodedRedirect("error", postEditPath, `Failed to update post: ${updateError.message}`);
+  } catch (err: any) {
+    console.error("Error loading/creating draft for post metadata update:", err);
+    return { error: `Failed to load draft: ${err.message || err}` };
   }
 
-  // create revision after update
-  if (previousContent && user) {
-    const newContent = await getFullPostContent(postId);
-    if (newContent) {
-      await createPostRevision(postId, user.id, previousContent, newContent);
-    }
-  }
-
-  revalidatePath("/cms/posts");
-  if (existingPost.slug) revalidatePath(`/article/${existingPost.slug}`);
-  if (rawFormData.slug && rawFormData.slug !== existingPost.slug) {
-      revalidatePath(`/article/${rawFormData.slug}`);
-  }
-  revalidatePath("/articles");
   revalidatePath(postEditPath);
-  redirect(`${postEditPath}?success=Post updated successfully`);
+  return { success: true };
 }
 
 

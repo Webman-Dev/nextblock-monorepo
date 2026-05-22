@@ -15,7 +15,7 @@ const publicBlockRendererLoaders: Partial<
   posts_grid: () => import("./renderers/PostsGridBlockRenderer"),
   video_embed: () => import("./renderers/VideoEmbedBlockRenderer"),
   section: () => import("./renderers/SectionBlockRenderer"),
-  hero: () => import("./renderers/HeroBlockRenderer"),
+  hero: () => import("./renderers/SectionBlockRenderer"),
   form: () => import("./renderers/FormBlockRenderer"),
   testimonial: () => import("./renderers/TestimonialBlockRenderer"),
 };

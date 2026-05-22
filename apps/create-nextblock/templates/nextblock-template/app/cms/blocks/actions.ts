@@ -3,12 +3,10 @@
 
 import { createClient } from "@nextblock-cms/db/server";
 import { revalidatePath } from "next/cache";
-import type { Database, Json } from "@nextblock-cms/db";
+import type { Database } from "@nextblock-cms/db";
 import { getInitialContent, isValidBlockType } from "../../../lib/blocks/blockRegistry";
-import { getFullPageContent, getFullPostContent } from "../revisions/utils";
-import { createPageRevision, createPostRevision } from "../revisions/service";
+import { getOrCreateContentDraft } from "../../../lib/visual-editing/draft-content";
 
-type Block = Database['public']['Tables']['blocks']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row']['block_type'];
 
 // Helper to verify user can edit the parent (page/post)
@@ -29,17 +27,7 @@ async function canEditParent(
   if (!profile || !["ADMIN", "WRITER"].includes(profile.role)) {
     return false;
   }
-  // Further checks could be added here to see if a WRITER owns the page/post
   return true;
-}
-
-interface CreateBlockPayload {
-  page_id?: number | null;
-  post_id?: number | null;
-  language_id: number;
-  block_type: BlockType;
-  content: object; // Content structure defined by block registry
-  order: number;
 }
 
 export async function createBlockForPage(pageId: number, languageId: number, blockType: BlockType, order: number) {
@@ -62,34 +50,44 @@ export async function createBlockForPage(pageId: number, languageId: number, blo
     return { error: "Failed to get initial content for block type." };
   }
 
-  const payload: CreateBlockPayload = {
-    page_id: pageId,
-    language_id: languageId,
-    block_type: blockType,
-    content: initialContent,
-    order: order,
-  };
-
-  // capture previous state for revision (before insert)
-  const previousContent = await getFullPageContent(pageId);
-
-  const { data, error } = await supabase.from("blocks").insert(payload).select().single();
-
-  if (error) {
-    console.error("Error creating block:", error);
-    return { error: `Failed to create block: ${error.message}` };
-  }
-
-  // create revision (after successful insert)
-  if (previousContent && user) {
-    const newContent = await getFullPageContent(pageId);
-    if (newContent) {
-      await createPageRevision(pageId, user.id, previousContent, newContent);
+  try {
+    const draft = await getOrCreateContentDraft(supabase, "page", pageId, user.id);
+    let newBlockId = -1 - Math.floor(Math.random() * 9999999);
+    while (draft.blocks.some(b => b.id === newBlockId)) {
+      newBlockId = -1 - Math.floor(Math.random() * 9999999);
     }
-  }
 
-  revalidatePath(`/cms/pages/${pageId}/edit`);
-  return { success: true, newBlock: data as Block };
+    const newBlock = {
+      id: newBlockId,
+      page_id: pageId,
+      post_id: null,
+      language_id: languageId,
+      block_type: blockType,
+      content: initialContent,
+      order: order,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const updatedBlocks = [...draft.blocks, newBlock];
+    updatedBlocks.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    const { error: updateError } = await supabase
+      .from("content_drafts")
+      .update({ blocks: updatedBlocks as any })
+      .eq("id", draft.id);
+
+    if (updateError) {
+      console.error("Error creating draft block for page:", updateError);
+      return { error: `Failed to save draft block: ${updateError.message}` };
+    }
+
+    revalidatePath(`/cms/pages/${pageId}/edit`);
+    return { success: true, newBlock: newBlock as any };
+  } catch (err: any) {
+    console.error("Error getting draft for page blocks update:", err);
+    return { error: `Failed to load page draft: ${err.message || err}` };
+  }
 }
 
 export async function createBlockForPost(postId: number, languageId: number, blockType: BlockType, order: number) {
@@ -112,33 +110,44 @@ export async function createBlockForPost(postId: number, languageId: number, blo
     return { error: "Failed to get initial content for block type." };
   }
 
-  const payload: CreateBlockPayload = {
-    post_id: postId,
-    language_id: languageId,
-    block_type: blockType,
-    content: initialContent,
-    order: order,
-  };
-
-  // capture previous content
-  const previousContent = await getFullPostContent(postId);
-
-  const { data, error } = await supabase.from("blocks").insert(payload).select().single();
-
-  if (error) {
-    console.error("Error creating block:", error);
-    return { error: `Failed to create block: ${error.message}` };
-  }
-
-  if (previousContent && user) {
-    const newContent = await getFullPostContent(postId);
-    if (newContent) {
-      await createPostRevision(postId, user.id, previousContent, newContent);
+  try {
+    const draft = await getOrCreateContentDraft(supabase, "post", postId, user.id);
+    let newBlockId = -1 - Math.floor(Math.random() * 9999999);
+    while (draft.blocks.some(b => b.id === newBlockId)) {
+      newBlockId = -1 - Math.floor(Math.random() * 9999999);
     }
-  }
 
-  revalidatePath(`/cms/posts/${postId}/edit`);
-  return { success: true, newBlock: data as Block };
+    const newBlock = {
+      id: newBlockId,
+      page_id: null,
+      post_id: postId,
+      language_id: languageId,
+      block_type: blockType,
+      content: initialContent,
+      order: order,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const updatedBlocks = [...draft.blocks, newBlock];
+    updatedBlocks.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    const { error: updateError } = await supabase
+      .from("content_drafts")
+      .update({ blocks: updatedBlocks as any })
+      .eq("id", draft.id);
+
+    if (updateError) {
+      console.error("Error creating draft block for post:", updateError);
+      return { error: `Failed to save draft block: ${updateError.message}` };
+    }
+
+    revalidatePath(`/cms/posts/${postId}/edit`);
+    return { success: true, newBlock: newBlock as any };
+  } catch (err: any) {
+    console.error("Error getting draft for post blocks update:", err);
+    return { error: `Failed to load post draft: ${err.message || err}` };
+  }
 }
 
 export async function updateBlock(blockId: number, newContent: unknown, pageId?: number | null, postId?: number | null) {
@@ -150,51 +159,38 @@ export async function updateBlock(blockId: number, newContent: unknown, pageId?:
     return { error: "Unauthorized to update this block." };
   }
 
-  // fetch current block to identify parent and previous state
-  const { data: existingBlock, error: fetchError } = await supabase
-    .from('blocks')
-    .select('id, page_id, post_id, content')
-    .eq('id', blockId)
-    .single();
-  if (fetchError || !existingBlock) {
-    return { error: "Block not found." };
-  }
+  const parentType = pageId ? "page" : "post";
+  const parentId = pageId || postId;
+  if (!parentId) return { error: "Missing pageId or postId." };
 
-  let prevContentAggregate: Awaited<ReturnType<typeof getFullPageContent>> | Awaited<ReturnType<typeof getFullPostContent>> | null = null;
-  if (existingBlock.page_id) {
-    prevContentAggregate = await getFullPageContent(existingBlock.page_id);
-  } else if (existingBlock.post_id) {
-    prevContentAggregate = await getFullPostContent(existingBlock.post_id);
-  }
-
-  const { data, error } = await supabase
-    .from("blocks")
-    .update({ content: newContent, updated_at: new Date().toISOString() })
-    .eq("id", blockId)
-    .select()
-    .single();
-
-  if (error) {
-    console.error("Error updating block:", error);
-    return { error: `Failed to update block: ${error.message}` };
-  }
-
-  // create revision after successful update
-  if (user && prevContentAggregate) {
-    if (existingBlock.page_id) {
-      const nextContentAggregate = await getFullPageContent(existingBlock.page_id, { overrideBlockId: blockId, overrideBlockContent: newContent });
-      if (nextContentAggregate) {
-        await createPageRevision(existingBlock.page_id, user.id, prevContentAggregate, nextContentAggregate);
-      }
-    } else if (existingBlock.post_id) {
-      const nextContentAggregate = await getFullPostContent(existingBlock.post_id, { overrideBlockId: blockId, overrideBlockContent: newContent });
-      if (nextContentAggregate) {
-        await createPostRevision(existingBlock.post_id, user.id, prevContentAggregate as any, nextContentAggregate as any);
-      }
+  try {
+    const draft = await getOrCreateContentDraft(supabase, parentType, parentId, user.id);
+    const existingBlock = draft.blocks.find(b => b.id === blockId);
+    if (!existingBlock) {
+      return { error: "Block not found in draft." };
     }
-  }
 
-  return { success: true, updatedBlock: data as Block };
+    const updatedBlocks = draft.blocks.map(b => 
+      b.id === blockId 
+        ? { ...b, content: newContent as any, updated_at: new Date().toISOString() } 
+        : b
+    );
+
+    const { error: updateError } = await supabase
+      .from("content_drafts")
+      .update({ blocks: updatedBlocks as any })
+      .eq("id", draft.id);
+
+    if (updateError) {
+      console.error("Error updating draft block content:", updateError);
+      return { error: `Failed to update draft block: ${updateError.message}` };
+    }
+
+    return { success: true, updatedBlock: { ...existingBlock, content: newContent } as any };
+  } catch (err: any) {
+    console.error("Error getting draft for block content update:", err);
+    return { error: `Failed to load draft: ${err.message || err}` };
+  }
 }
 
 export async function updateMultipleBlockOrders(
@@ -210,26 +206,41 @@ export async function updateMultipleBlockOrders(
         return { error: "Unauthorized to reorder blocks." };
     }
 
-    // Supabase upsert can be used for batch updates if primary key `id` is included.
-    // Or loop through updates (less efficient for many updates but simpler to write without complex SQL).
-    const updatePromises = updates.map(update =>
-        supabase.from('blocks').update({ order: update.order, updated_at: new Date().toISOString() }).eq('id', update.id)
-    );
+    const parentType = pageId ? "page" : "post";
+    const parentId = pageId || postId;
+    if (!parentId) return { error: "Missing pageId or postId." };
 
-    const results = await Promise.all(updatePromises);
-    const errors = results.filter(result => result.error);
+    try {
+      const draft = await getOrCreateContentDraft(supabase, parentType, parentId, user.id);
+      const updatedBlocks = draft.blocks.map(b => {
+        const update = updates.find(u => u.id === b.id);
+        if (update) {
+          return { ...b, order: update.order, updated_at: new Date().toISOString() };
+        }
+        return b;
+      });
 
-    if (errors.length > 0) {
-        console.error("Error updating block orders:", errors.map(e => e.error?.message).join(", "));
-        return { error: `Failed to update some block orders: ${errors.map(e => e.error?.message).join(", ")}` };
+      updatedBlocks.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+      const { error: updateError } = await supabase
+        .from("content_drafts")
+        .update({ blocks: updatedBlocks as any })
+        .eq("id", draft.id);
+
+      if (updateError) {
+        console.error("Error updating draft blocks order:", updateError);
+        return { error: `Failed to save blocks order draft: ${updateError.message}` };
+      }
+
+      if (pageId) revalidatePath(`/cms/pages/${pageId}/edit`);
+      if (postId) revalidatePath(`/cms/posts/${postId}/edit`);
+
+      return { success: true };
+    } catch (err: any) {
+      console.error("Error getting draft for blocks order update:", err);
+      return { error: `Failed to load draft: ${err.message || err}` };
     }
-
-    if (pageId) revalidatePath(`/cms/pages/${pageId}/edit`);
-    if (postId) revalidatePath(`/cms/posts/${postId}/edit`);
-
-    return { success: true };
 }
-
 
 export async function deleteBlock(blockId: number, pageId?: number | null, postId?: number | null) {
   const supabase = createClient();
@@ -240,49 +251,32 @@ export async function deleteBlock(blockId: number, pageId?: number | null, postI
     return { error: "Unauthorized to delete this block." };
   }
 
-  // fetch parent and capture previous aggregate
-  const { data: existingBlock, error: fetchError } = await supabase
-    .from('blocks')
-    .select('id, page_id, post_id')
-    .eq('id', blockId)
-    .single();
-  if (fetchError || !existingBlock) {
-    return { error: "Block not found." };
-  }
+  const parentType = pageId ? "page" : "post";
+  const parentId = pageId || postId;
+  if (!parentId) return { error: "Missing pageId or postId." };
 
-  let previousAggregate: Awaited<ReturnType<typeof getFullPageContent>> | Awaited<ReturnType<typeof getFullPostContent>> | null = null;
-  if (existingBlock.page_id) {
-    previousAggregate = await getFullPageContent(existingBlock.page_id);
-  } else if (existingBlock.post_id) {
-    previousAggregate = await getFullPostContent(existingBlock.post_id);
-  }
+  try {
+    const draft = await getOrCreateContentDraft(supabase, parentType, parentId, user.id);
+    const updatedBlocks = draft.blocks.filter(b => b.id !== blockId);
 
-  const { error } = await supabase.from("blocks").delete().eq("id", blockId);
+    const { error: updateError } = await supabase
+      .from("content_drafts")
+      .update({ blocks: updatedBlocks as any })
+      .eq("id", draft.id);
 
-  if (error) {
-    console.error("Error deleting block:", error);
-    return { error: `Failed to delete block: ${error.message}` };
-  }
-
-  // create revision after delete
-  if (user && previousAggregate) {
-    if (existingBlock.page_id) {
-      const nextAggregate = await getFullPageContent(existingBlock.page_id, { excludeDeletedBlockId: blockId });
-      if (nextAggregate) {
-        await createPageRevision(existingBlock.page_id, user.id, previousAggregate, nextAggregate);
-      }
-    } else if (existingBlock.post_id) {
-      const nextAggregate = await getFullPostContent(existingBlock.post_id, { excludeDeletedBlockId: blockId });
-      if (nextAggregate) {
-        await createPostRevision(existingBlock.post_id, user.id, previousAggregate as any, nextAggregate as any);
-      }
+    if (updateError) {
+      console.error("Error deleting draft block:", updateError);
+      return { error: `Failed to delete block from draft: ${updateError.message}` };
     }
+
+    if (pageId) revalidatePath(`/cms/pages/${pageId}/edit`);
+    if (postId) revalidatePath(`/cms/posts/${postId}/edit`);
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error getting draft for block deletion:", err);
+    return { error: `Failed to load draft: ${err.message || err}` };
   }
-
-  if (pageId) revalidatePath(`/cms/pages/${pageId}/edit`);
-  if (postId) revalidatePath(`/cms/posts/${postId}/edit`);
-
-  return { success: true };
 }
 
 export async function copyBlocksFromLanguage(
@@ -306,7 +300,6 @@ export async function copyBlocksFromLanguage(
 
   let sourceParentId: number | null = null;
 
-  // 1. Fetch Source Page/Post ID
   try {
     if (parentType === "page") {
       const { data: sourcePage, error: sourcePageError } = await supabase
@@ -342,87 +335,66 @@ export async function copyBlocksFromLanguage(
         return { error: "Could not determine source parent ID." };
     }
 
-    // 2. Fetch Blocks from Source
-    const { data: sourceBlocks, error: sourceBlocksError } = await supabase
-      .from("blocks")
-      .select("page_id, post_id, language_id, block_type, content, order") // Select only existing columns
-      .eq(parentType === "page" ? "page_id" : "post_id", sourceParentId)
-      .order("order", { ascending: true });
+    // 1. Check if source draft exists
+    const { data: sourceDraft } = await supabase
+      .from("content_drafts")
+      .select("blocks")
+      .eq("parent_type", parentType)
+      .eq("parent_id", sourceParentId)
+      .maybeSingle();
 
-    if (sourceBlocksError) {
-      console.error("Error fetching source blocks:", sourceBlocksError);
-      return { error: `Failed to fetch blocks from source: ${sourceBlocksError.message}` };
+    let blocksToCopy: any[] = [];
+    if (sourceDraft && sourceDraft.blocks && Array.isArray(sourceDraft.blocks)) {
+      blocksToCopy = sourceDraft.blocks;
+    } else {
+      // 2. Fetch live blocks from source
+      const { data: liveBlocks, error: sourceBlocksError } = await supabase
+        .from("blocks")
+        .select("block_type, content, order")
+        .eq(parentType === "page" ? "page_id" : "post_id", sourceParentId)
+        .order("order", { ascending: true });
+
+      if (sourceBlocksError) {
+        console.error("Error fetching source blocks:", sourceBlocksError);
+        return { error: `Failed to fetch blocks from source: ${sourceBlocksError.message}` };
+      }
+      blocksToCopy = liveBlocks || [];
     }
 
-    // 3. Delete Existing Blocks from Target
-    const { error: deleteError } = await supabase
-      .from("blocks")
-      .delete()
-      .eq(parentType === "page" ? "page_id" : "post_id", parentId)
-      .eq("language_id", targetLanguageId); // Ensure we only delete for the target language
-
-    if (deleteError) {
-      console.error("Error deleting existing blocks:", deleteError);
-      return { error: `Failed to delete existing blocks: ${deleteError.message}` };
-    }
-
-    // 4. Re-create Blocks for Target
-    if (sourceBlocks && sourceBlocks.length > 0) {
-      const newBlocksToInsert = sourceBlocks.map((block: {
-        page_id: number | null;
-        post_id: number | null;
-        language_id: number;
-        block_type: BlockType;
-        content: Json;
-        order: number;
-      }) => ({
-        // id, created_at, updated_at will be set by DB
+    // 3. Generate new blocks with negative IDs for draft array
+    const copiedBlocks = blocksToCopy.map((block: any, index: number) => {
+      const newId = -1 - Math.floor(Math.random() * 9999999);
+      return {
+        id: newId,
         page_id: parentType === "page" ? parentId : null,
         post_id: parentType === "post" ? parentId : null,
         language_id: targetLanguageId,
         block_type: block.block_type,
-        content: block.content, // Directly copy content, which includes any type-specific configs like cols_config
-        order: block.order,
-      }));
+        content: block.content,
+        order: block.order ?? index,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+    });
 
-      const { error: insertError } = await supabase.from("blocks").insert(newBlocksToInsert);
+    // 4. Load or create target draft and update blocks
+    const targetDraft = await getOrCreateContentDraft(supabase, parentType, parentId, user.id);
+    const { error: updateError } = await supabase
+      .from("content_drafts")
+      .update({ blocks: copiedBlocks as any })
+      .eq("id", targetDraft.id);
 
-      if (insertError) {
-        console.error("Error re-creating blocks:", insertError);
-        return { error: `Failed to re-create blocks: ${insertError.message}` };
-      }
+    if (updateError) {
+      console.error("Error writing copied blocks to target draft:", updateError);
+      return { error: `Failed to copy blocks to draft: ${updateError.message}` };
     }
 
     // 5. Revalidation
-    let targetSlug: string | null = null;
     if (parentType === "page") {
-        const { data: pageData, error: pageError } = await supabase
-            .from("pages")
-            .select("slug")
-            .eq("id", parentId)
-            .single();
-        if (pageError || !pageData) {
-            console.warn("Could not fetch target page slug for revalidation:", pageError);
-        } else {
-            targetSlug = pageData.slug;
-            if (targetSlug) revalidatePath(`/${targetSlug}`);
-        }
-        revalidatePath(`/cms/pages/${parentId}/edit`); // Revalidate edit page
+        revalidatePath(`/cms/pages/${parentId}/edit`);
     } else if (parentType === "post") {
-        const { data: postData, error: postError } = await supabase
-            .from("posts")
-            .select("slug")
-            .eq("id", parentId)
-            .single();
-        if (postError || !postData) {
-            console.warn("Could not fetch target post slug for revalidation:", postError);
-        } else {
-            targetSlug = postData.slug;
-            if (targetSlug) revalidatePath(`/article/${targetSlug}`);
-        }
-        revalidatePath(`/cms/posts/${parentId}/edit`); // Revalidate edit page
+        revalidatePath(`/cms/posts/${parentId}/edit`);
     }
-
 
     return { success: true, message: "Blocks copied successfully." };
 

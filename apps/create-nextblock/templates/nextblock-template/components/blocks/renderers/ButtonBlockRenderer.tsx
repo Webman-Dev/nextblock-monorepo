@@ -1,8 +1,9 @@
 "use client";
 import React from "react";
 import Link from "next/link";
-import { buttonVariants } from "@nextblock-cms/ui/button";
+import { buttonVariants } from "@nextblock-cms/ui";
 import { cn } from "@nextblock-cms/utils";
+import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
 
 export type ButtonBlockContent = {
     text?: string;
@@ -15,10 +16,12 @@ export type ButtonBlockContent = {
 interface ButtonBlockRendererProps {
   content: ButtonBlockContent;
   languageId: number; // This prop seems unused
+  visualEditAttributes?: VisualEditAttributes;
 }
 
 const ButtonBlockRenderer: React.FC<ButtonBlockRendererProps> = ({
   content,
+  visualEditAttributes,
 }) => {
   const isExternal =
     content.url?.startsWith("http") ||
@@ -57,7 +60,10 @@ const ButtonBlockRenderer: React.FC<ButtonBlockRendererProps> = ({
   );
 
   return (
-    <div className={cn("my-6 flex w-full", alignmentClasses[buttonPosition])}>
+    <div
+      className={cn("my-6 flex w-full", alignmentClasses[buttonPosition])}
+      {...visualEditAttributes}
+    >
       {/* Case 1: Internal link */}
       {!isExternal && !isAnchor && !!content.url ? (
         <Link href={content.url} className={classes}>

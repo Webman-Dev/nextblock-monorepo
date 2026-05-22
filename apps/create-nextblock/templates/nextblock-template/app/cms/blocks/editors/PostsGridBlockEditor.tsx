@@ -1,9 +1,8 @@
 // app/cms/blocks/editors/PostsGridBlockEditor.tsx
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { BlockEditorProps } from '../components/BlockEditorModal';
 import { Input } from '@nextblock-cms/ui';
 import { Label } from '@nextblock-cms/ui';
-// import { useToast } from "@nextblock-cms/ui"; // Assuming you have a toast component - Removed for now
 
 interface PostsGridBlockContent {
   title?: string;
@@ -13,20 +12,17 @@ interface PostsGridBlockContent {
 }
 
 const PostsGridBlockEditor: React.FC<BlockEditorProps<PostsGridBlockContent>> = ({ content, onChange }) => {
-  const [currentTitle, setCurrentTitle] = useState(content.title || 'Recent Posts');
-  const [currentPostsPerPage, setCurrentPostsPerPage] = useState(content.postsPerPage || 6);
-  const [currentColumns, setCurrentColumns] = useState(content.columns || 3);
+  const currentTitle = content.title || 'Recent Posts';
+  const currentPostsPerPage = content.postsPerPage || 6;
+  const currentColumns = content.columns || 3;
   const showPagination = content.showPagination === undefined ? true : content.showPagination;
 
-  useEffect(() => {
-    const newContentPayload = {
-      title: currentTitle,
-      postsPerPage: Number(currentPostsPerPage),
-      columns: Number(currentColumns),
-      showPagination: showPagination,
-    };
-    onChange(newContentPayload);
-  }, [currentTitle, currentPostsPerPage, currentColumns, showPagination, onChange]);
+  const handleChange = (field: keyof PostsGridBlockContent, value: any) => {
+    onChange({
+      ...content,
+      [field]: value,
+    });
+  };
 
   return (
     <div className="space-y-4 p-4 border rounded-md">
@@ -37,7 +33,7 @@ const PostsGridBlockEditor: React.FC<BlockEditorProps<PostsGridBlockContent>> = 
         <Input
           id="posts-grid-title"
           value={currentTitle}
-          onChange={(e) => setCurrentTitle(e.target.value)}
+          onChange={(e) => handleChange('title', e.target.value)}
           placeholder="Enter title for the posts grid"
         />
       </div>
@@ -48,7 +44,7 @@ const PostsGridBlockEditor: React.FC<BlockEditorProps<PostsGridBlockContent>> = 
           id="posts-grid-per-page"
           type="number"
           value={currentPostsPerPage}
-          onChange={(e) => setCurrentPostsPerPage(parseInt(e.target.value, 10))}
+          onChange={(e) => handleChange('postsPerPage', parseInt(e.target.value, 10))}
           min="1"
         />
       </div>
@@ -59,9 +55,9 @@ const PostsGridBlockEditor: React.FC<BlockEditorProps<PostsGridBlockContent>> = 
           id="posts-grid-columns"
           type="number"
           value={currentColumns}
-          onChange={(e) => setCurrentColumns(parseInt(e.target.value, 10))}
+          onChange={(e) => handleChange('columns', parseInt(e.target.value, 10))}
           min="1"
-          max="6" // Example max, adjust as needed
+          max="6"
         />
       </div>
       

@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@nextblock-cms/db/server'
+import { INVOICE_SETTINGS_KEY, serializeInvoiceSettings, type InvoiceSettings } from '@nextblock-cms/ecommerce'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { Logo } from './types'
@@ -70,7 +71,7 @@ export async function getLogos() {
     throw new Error(`Failed to fetch logos: ${error.message}`)
   }
 
-  return data
+  return data as unknown as Logo[]
 }
 
 export async function getLogoById(id: string) {
@@ -110,4 +111,20 @@ export async function getActiveLogo(): Promise<Logo | null> {
   }
 
   return data as Logo | null
+}
+
+export async function saveInvoiceSettings(payload: InvoiceSettings) {
+  const supabase = createClient()
+  const { error } = await supabase.from('site_settings').upsert({
+    key: INVOICE_SETTINGS_KEY,
+    value: serializeInvoiceSettings(payload),
+  })
+
+  if (error) {
+    console.error('Error saving invoice settings:', error.message)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath('/cms/settings/logos')
+  return { success: true }
 }

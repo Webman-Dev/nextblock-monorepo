@@ -11,6 +11,9 @@ import { getPostDataBySlug } from "./page.utils";
 import BlockRenderer from "../../../components/BlockRenderer";
 import { getSsgSupabaseClient } from "@nextblock-cms/db/server"; // Correct import
 import type { HeroBlockContent } from '../../../lib/blocks/blockRegistry';
+import { resolveMediaUrl } from '../../../lib/media/resolveMediaUrl';
+import { resolveMetaDescription } from '../../lib/seo';
+import { draftMode } from 'next/headers';
 
 export const dynamicParams = true;
 export const revalidate = 3600;
@@ -100,12 +103,18 @@ export async function generateMetadata(
     });
   }
 
+  const description = resolveMetaDescription(
+    postData.meta_description,
+    postData.excerpt,
+    postData.subtitle
+  );
+
   return {
     title: postData.meta_title || postData.title,
-    description: postData.meta_description || postData.excerpt || "",
+    description,
     openGraph: {
       title: postData.meta_title || postData.title,
-      description: postData.meta_description || postData.excerpt || "",
+      description,
       type: 'article',
       publishedTime: postData.published_at || postData.created_at,
       url: `${siteUrl}/article/${params.slug}`,
@@ -156,9 +165,8 @@ export default async function DynamicPostPage({ params: paramsPromise }: PostPag
   }
 
   let lcpImageUrl: string | null = null;
-  const r2BaseUrl = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 
-  if (initialPostData && initialPostData.blocks && r2BaseUrl) {
+  if (initialPostData && initialPostData.blocks) {
     const heroBlock = initialPostData.blocks.find(block => block.block_type === 'hero');
     if (heroBlock) {
       const heroContent = heroBlock.content as unknown as HeroBlockContent;
@@ -168,12 +176,28 @@ export default async function DynamicPostPage({ params: paramsPromise }: PostPag
         heroContent.background.image &&
         heroContent.background.image.object_key
       ) {
-        lcpImageUrl = `${r2BaseUrl}/${heroContent.background.image.object_key}`;
+        lcpImageUrl = resolveMediaUrl(heroContent.background.image.object_key);
       }
     }
   }
 
-  const postBlocks = initialPostData ? <BlockRenderer blocks={initialPostData.blocks} languageId={initialPostData.language_id} /> : null;
+  const draft = await draftMode();
+  const visualEditingEnabled =
+    draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
+  const postBlocks = initialPostData ? (
+    <BlockRenderer
+      blocks={initialPostData.blocks}
+      languageId={initialPostData.language_id}
+      visualEditing={{
+        enabled: visualEditingEnabled,
+        documentType: "post",
+        documentId: initialPostData.id,
+        slug: initialPostData.slug,
+        languageId: initialPostData.language_id,
+        draftId: initialPostData.draft_id ?? null,
+      }}
+    />
+  ) : null;
 
   return (
     <>

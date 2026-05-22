@@ -2,26 +2,27 @@
 import React from "react";
 import { Separator } from "@nextblock-cms/ui";
 import { createClient } from "@nextblock-cms/db/server";
-import PostForm from "../../components/PostForm"; // Adjusted path
+import PostForm from "../../components/PostForm";
 import { updatePost } from "../../actions";
-import type { Database } from "@nextblock-cms/db"; // Ensure Language and Media are imported
+import type { Database } from "@nextblock-cms/db";
 import { notFound, redirect } from "next/navigation";
-import { draftMode } from "next/headers";
-
-type PostType = Database['public']['Tables']['posts']['Row'];
-type BlockType = Database['public']['Tables']['blocks']['Row'];
-type Language = Database['public']['Tables']['languages']['Row'];
 import BlockEditorArea from "../../../blocks/components/BlockEditorArea";
 import Link from "next/link";
 import { Button } from "@nextblock-cms/ui";
-import { ArrowLeft, Eye, EyeOff, FilePenLine } from "lucide-react"; // Removed SeparatorVertical, use <Separator />
+import { ArrowLeft, Eye, FilePenLine } from "lucide-react";
 import ContentLanguageSwitcher from "../../../components/ContentLanguageSwitcher";
-import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server"; // Correct server-side fetch
+import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server";
+import { normalizeContentDraftRow } from "../../../../../lib/visual-editing/draft-content";
 import CopyContentFromLanguage from "../../../components/CopyContentFromLanguage";
 import { UploadFolderProvider } from '../../../media/UploadFolderContext';
 import RevisionHistoryButton from "../../../revisions/RevisionHistoryButton";
 import { resolveMediaUrl } from "../../../../../lib/media/resolveMediaUrl";
 import { CortexAiPageContextRegistrar } from "../../../components/CortexAiPageContext";
+import DraftStatusActions from "../../../components/DraftStatusActions";
+
+type PostType = Database['public']['Tables']['posts']['Row'];
+type BlockType = Database['public']['Tables']['blocks']['Row'];
+type Language = Database['public']['Tables']['languages']['Row'];
 
 interface PostWithBlocks extends PostType {
   blocks: BlockType[];
@@ -29,7 +30,7 @@ interface PostWithBlocks extends PostType {
   translation_group_id: string;
 }
 
-async function getPostDataWithBlocks(id: number): Promise<PostWithBlocks | null> {
+async function getPostDataWithBlocks(id: number): Promise<{ post: PostWithBlocks; hasDraft: boolean } | null> {
   const supabase = createClient();
   const { data: postData, error: postError } = await supabase
     .from("posts")
@@ -47,14 +48,45 @@ async function getPostDataWithBlocks(id: number): Promise<PostWithBlocks | null>
     return null;
   }
 
-  const langCode = (postData.languages as unknown as Language)?.code;
+  const langCode = Array.isArray(postData.languages)
+    ? postData.languages[0]?.code
+    : (postData.languages as unknown as Language)?.code;
 
-  return {
+  let postWithBlocks: PostWithBlocks = {
     ...postData,
     blocks: postData.blocks || [],
     language_code: langCode,
-    translation_group_id: postData.translation_group_id,
+    translation_group_id: postData.translation_group_id ?? "",
   } as PostWithBlocks;
+
+  const { data: draftData } = await supabase
+    .from("content_drafts")
+    .select("*")
+    .eq("parent_type", "post")
+    .eq("parent_id", id)
+    .maybeSingle();
+
+  const hasDraft = draftData !== null;
+  if (draftData) {
+    const draft = normalizeContentDraftRow(draftData);
+    postWithBlocks = {
+      ...postWithBlocks,
+      title: (draft.meta.title as string) ?? postWithBlocks.title,
+      slug: (draft.meta.slug as string) ?? postWithBlocks.slug,
+      language_id: (draft.meta.language_id as number) ?? postWithBlocks.language_id,
+      status: (draft.meta.status as any) ?? postWithBlocks.status,
+      meta_title: (draft.meta.meta_title as string) ?? postWithBlocks.meta_title,
+      meta_description: (draft.meta.meta_description as string) ?? postWithBlocks.meta_description,
+      label: (draft.meta.label as string) ?? postWithBlocks.label,
+      excerpt: (draft.meta.excerpt as string) ?? postWithBlocks.excerpt,
+      subtitle: (draft.meta.subtitle as string) ?? postWithBlocks.subtitle,
+      published_at: (draft.meta.published_at as string) ?? postWithBlocks.published_at,
+      feature_image_id: (draft.meta.feature_image_id as any) ?? postWithBlocks.feature_image_id,
+      blocks: draft.blocks as any[],
+    };
+  }
+
+  return { post: postWithBlocks, hasDraft };
 }
 
 export default async function EditPostPage(props: { params: Promise<{ id: string }> }) {
@@ -74,24 +106,18 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
   }
 
   // Fetch post data and all site languages concurrently
-  const [postWithBlocks, allSiteLanguages] = await Promise.all([
-    getPostDataWithBlocks(postId),
-    getActiveLanguagesServerSide() // Fetch languages on the server
-  ]);
+  const postDataResult = await getPostDataWithBlocks(postId);
+  const allSiteLanguages = await getActiveLanguagesServerSide();
 
-  if (!postWithBlocks) {
+  if (!postDataResult) {
     return notFound();
   }
+
+  const { post: postWithBlocks, hasDraft } = postDataResult;
 
   let initialFeatureImageUrl: string | null = null;
   let initialFeatureImageIdProp: string | null = null;
 
-  // The PostType defines feature_image_id as number | null.
-  // However, Media.id is a string (uuid), and PostForm expects a string UUID.
-  // This assumes that postWithBlocks.feature_image_id, despite its 'number' typing,
-  // actually holds a value that can be used to identify a media item by its UUID,
-  // or that the type definition for Post.feature_image_id is outdated.
-  // Casting to `unknown` then `string` for the query.
   const featureImageIdFromDb = postWithBlocks.feature_image_id as unknown as (string | number | null);
 
   if (featureImageIdFromDb) {
@@ -103,7 +129,6 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
 
     if (mediaError) {
       console.error(`Error fetching media item for feature_image_id '${featureImageIdFromDb}':`, mediaError.message);
-      // Not critical enough to notFound(), form will just not have initial image.
     } else if (mediaItem) {
       initialFeatureImageIdProp = mediaItem.id; // string UUID from media table
       initialFeatureImageUrl = resolveMediaUrl(mediaItem.file_path || mediaItem.object_key);
@@ -112,94 +137,89 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
 
   const updatePostWithId = updatePost.bind(null, postId);
   const publicPostUrl = `/article/${postWithBlocks.slug}`;
-  const draft = await draftMode();
-  const draftModeUrl = `${
-    draft.isEnabled ? "/api/draft/disable" : "/api/draft/start"
-  }?path=${encodeURIComponent(publicPostUrl)}`;
+  const draftModeUrl = `/api/draft/start?path=${encodeURIComponent(publicPostUrl)}`;
   
   return (
     <UploadFolderProvider defaultFolder={`posts/${postWithBlocks.slug}/`}>
-    <CortexAiPageContextRegistrar
-      context={{
-        contentType: "post",
-        entityId: postWithBlocks.id,
-        languageId: postWithBlocks.language_id,
-        slug: postWithBlocks.slug,
-        title: postWithBlocks.title,
-        translationGroupId: postWithBlocks.translation_group_id,
-      }}
-    />
-    <div className="space-y-8 w-full mx-auto px-6">
-      <div className="flex justify-between items-center flex-wrap gap-4 w-full">
-        <div className="flex items-center gap-3">
-            <Button variant="outline" size="icon" aria-label="Back to posts" asChild>
-                <Link href="/cms/posts">
-                    <ArrowLeft className="h-4 w-4" />
-                </Link>
-            </Button>
-            <div>
-                <h1 className="text-2xl font-bold">Edit Post</h1>
-                <p className="text-sm text-muted-foreground truncate max-w-md" title={postWithBlocks.title}>{postWithBlocks.title}</p>
-            </div>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap"> {/* Added flex-wrap for responsiveness */}
-            {allSiteLanguages.length > 0 && (
-                 <ContentLanguageSwitcher
-                    currentItem={postWithBlocks}
-                    itemType="post"
-                    allSiteLanguages={allSiteLanguages}
-                  />
-            )}
-            {postWithBlocks.translation_group_id && allSiteLanguages.length > 1 && (
-              <CopyContentFromLanguage
-                parentId={postId}
-                parentType="post"
-                currentLanguageId={postWithBlocks.language_id}
-                translationGroupId={postWithBlocks.translation_group_id}
-                allSiteLanguages={allSiteLanguages}
-              />
-            )}
-            <Button variant="outline" asChild>
-              <Link href={publicPostUrl} target="_blank" rel="noopener noreferrer">
-                <Eye className="mr-2 h-4 w-4" /> View Live Post
-              </Link>
-            </Button>
-            <Button variant={draft.isEnabled ? "default" : "secondary"} asChild>
-              <a href={draftModeUrl} target="_blank" rel="noopener noreferrer">
-                {draft.isEnabled ? (
-                  <EyeOff className="mr-2 h-4 w-4" />
-                ) : (
-                  <FilePenLine className="mr-2 h-4 w-4" />
-                )}
-                {draft.isEnabled ? "Exit Draft" : "Preview Draft"}
-              </a>
-            </Button>
-            <RevisionHistoryButton parentType="post" parentId={postId} />
-        </div>
-      </div>
-
-      <PostForm
-        post={postWithBlocks as PostType & { feature_image_id?: string | null }} // Asserting feature_image_id might be string for PostForm
-        formAction={updatePostWithId}
-        actionButtonText="Update Post Metadata"
-        isEditing={true}
-        availableLanguagesProp={allSiteLanguages}
-        initialFeatureImageUrl={initialFeatureImageUrl}
-        initialFeatureImageId={initialFeatureImageIdProp}
+      <CortexAiPageContextRegistrar
+        context={{
+          contentType: "post",
+          entityId: postWithBlocks.id,
+          languageId: postWithBlocks.language_id,
+          slug: postWithBlocks.slug,
+          title: postWithBlocks.title,
+          translationGroupId: postWithBlocks.translation_group_id,
+        }}
       />
+      <div className="space-y-8 w-full mx-auto px-6">
+        <div className="flex justify-between items-center flex-wrap gap-4 w-full">
+          <div className="flex items-center gap-3">
+              <Button variant="outline" size="icon" aria-label="Back to posts" asChild>
+                  <Link href="/cms/posts">
+                      <ArrowLeft className="h-4 w-4" />
+                  </Link>
+              </Button>
+              <div>
+                  <h1 className="text-2xl font-bold">Edit Post</h1>
+                  <p className="text-sm text-muted-foreground truncate max-w-md" title={postWithBlocks.title}>{postWithBlocks.title}</p>
+              </div>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+              {allSiteLanguages.length > 0 && (
+                   <ContentLanguageSwitcher
+                      currentItem={postWithBlocks}
+                      itemType="post"
+                      allSiteLanguages={allSiteLanguages}
+                    />
+              )}
+              {postWithBlocks.translation_group_id && allSiteLanguages.length > 1 && (
+                <CopyContentFromLanguage
+                  parentId={postId}
+                  parentType="post"
+                  currentLanguageId={postWithBlocks.language_id}
+                  translationGroupId={postWithBlocks.translation_group_id}
+                  allSiteLanguages={allSiteLanguages}
+                />
+              )}
+              <Button variant="outline" asChild>
+                <Link href={publicPostUrl} target="_blank" rel="noopener noreferrer">
+                  <Eye className="mr-2 h-4 w-4" /> View Live Post
+                </Link>
+              </Button>
+              <Button variant="secondary" asChild>
+                <a href={draftModeUrl} target="_blank" rel="noopener noreferrer">
+                  <FilePenLine className="mr-2 h-4 w-4" />
+                  Preview
+                </a>
+              </Button>
+              <RevisionHistoryButton parentType="post" parentId={postId} />
+          </div>
+        </div>
 
-      <Separator className="my-8" />
+        <DraftStatusActions parentId={postId} parentType="post" hasDraft={hasDraft} />
 
-      <div className="w-full mx-auto px-6">
-        <h2 className="text-xl font-semibold mb-4">Post Content Blocks</h2>
-        <BlockEditorArea
-          parentId={postWithBlocks.id}
-          parentType="post"
-          initialBlocks={postWithBlocks.blocks}
-          languageId={postWithBlocks.language_id}
+        <PostForm
+          post={postWithBlocks as PostType & { feature_image_id?: string | null }}
+          formAction={updatePostWithId}
+          actionButtonText="Update Post Metadata"
+          isEditing={true}
+          availableLanguagesProp={allSiteLanguages}
+          initialFeatureImageUrl={initialFeatureImageUrl}
+          initialFeatureImageId={initialFeatureImageIdProp}
         />
+
+        <Separator className="my-8" />
+
+        <div className="w-full mx-auto px-6">
+          <h2 className="text-xl font-semibold mb-4">Post Content Blocks</h2>
+          <BlockEditorArea
+            parentId={postWithBlocks.id}
+            parentType="post"
+            initialBlocks={postWithBlocks.blocks}
+            languageId={postWithBlocks.language_id}
+          />
+        </div>
       </div>
-    </div>
     </UploadFolderProvider>
   );
 }

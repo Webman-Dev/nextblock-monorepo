@@ -1,11 +1,11 @@
 import React from 'react';
-import { z } from 'zod';
+import { z } from '../../lib/zod-config';
 import { BlockConfig, BlockProps, BlockEditorProps } from '@nextblock-cms/sdk';
-import { Avatar, AvatarFallback, AvatarImage } from '@nextblock-cms/ui/avatar';
-import { Card, CardContent } from '@nextblock-cms/ui/card';
-import { Input } from '@nextblock-cms/ui/input';
-import { Label } from '@nextblock-cms/ui/label';
-import { Textarea } from '@nextblock-cms/ui/textarea';
+import { Avatar, AvatarFallback, AvatarImage } from '@nextblock-cms/ui';
+import { Card, CardContent } from '@nextblock-cms/ui';
+import { Input } from '@nextblock-cms/ui';
+import { Label } from '@nextblock-cms/ui';
+import { Textarea } from '@nextblock-cms/ui';
 import { MessageSquareQuote } from 'lucide-react';
 
 // 1. Define the Schema

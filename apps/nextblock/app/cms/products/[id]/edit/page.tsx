@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@nextblock-cms/ui';
 import ProductFormClientShell from '../../ProductFormClientShell';
+import DraftStatusActions from '../../../components/DraftStatusActions';
 import {
   getCmsProduct,
   getEnabledPaymentProviders,
@@ -105,10 +106,25 @@ export default async function EditProductPage({
   const buildTranslationCreateHref = (languageId: number) =>
     `/cms/products/new?from_group=${product.translation_group_id}&target_lang_id=${languageId}`;
   const globalAttributes = buildGlobalAttributesForForm(globalAttributesRaw || []);
-  const normalizedInitialData = buildProductFormInitialData(product, languages);
+
+  const { data: draftData } = await supabase
+    .from('product_drafts')
+    .select('*')
+    .eq('product_id', product.id)
+    .maybeSingle();
+
+  const hasDraft = draftData !== null;
+  let normalizedInitialData = buildProductFormInitialData(product, languages);
+  if (draftData && draftData.meta && typeof draftData.meta === 'object') {
+    normalizedInitialData = {
+      ...(draftData.meta as any),
+      id: product.id,
+    };
+  }
 
   return (
     <div className="space-y-8 w-full max-w-[1400px] mx-auto px-6 py-8">
+      <DraftStatusActions parentId={product.id} parentType="product" hasDraft={hasDraft} />
       <CortexAiPageContextRegistrar
         context={{
           contentType: 'product',

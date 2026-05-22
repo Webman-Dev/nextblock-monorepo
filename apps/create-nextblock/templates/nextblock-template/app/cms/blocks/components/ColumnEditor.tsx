@@ -12,6 +12,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { BlockEditorModal } from './BlockEditorModal';
 import { ConfirmationDialog } from '@nextblock-cms/ui';
 import BlockTypeSelector from './BlockTypeSelector';
+import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
 
 type ColumnBlock = SectionBlockContent['column_blocks'][0][0];
 
@@ -51,9 +52,6 @@ function SortableColumnBlock({ block, index, columnIndex, onEdit, onDelete, bloc
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
-
-  const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
-
   // Helper to check for dark background
   const isDarkBackground = React.useMemo(() => {
     if (!sectionBackground) return false;
@@ -181,7 +179,7 @@ function SortableColumnBlock({ block, index, columnIndex, onEdit, onDelete, bloc
          );
       }
       case 'image': {
-        const imageUrl = block.content.object_key ? `${R2_BASE_URL}/${block.content.object_key}` : block.content.src;
+        const imageUrl = resolveMediaUrl(block.content.object_key) || block.content.src;
         return (
              <div className="flex gap-3">
                 <div className="flex-shrink-0 h-10 w-10 bg-muted/20 rounded overflow-hidden flex items-center justify-center border border-white/10">
@@ -374,7 +372,7 @@ export default function ColumnEditor({ columnIndex, blocks, onBlocksChange, bloc
     const initialContent = getInitialContent(selectedBlockType);
     const newBlock: ColumnBlock = {
       block_type: selectedBlockType,
-      content: initialContent || {},
+      content: (initialContent || {}) as Record<string, any>,
       temp_id: `temp-${Date.now()}-${Math.random()}`
     };
     onBlocksChange([...blocks, newBlock]);

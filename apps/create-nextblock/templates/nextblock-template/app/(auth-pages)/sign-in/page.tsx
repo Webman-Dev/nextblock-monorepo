@@ -32,6 +32,7 @@ export default function Login() {
   const { t } = useTranslations();
   const searchParams = useSearchParams();
   const formMessage = getMessage(searchParams);
+  const redirectParam = searchParams.get('redirect');
 
   return (
     <div className="flex-1 flex flex-col w-full max-w-160 mx-auto">
@@ -45,7 +46,7 @@ export default function Login() {
       </p>
 
       <div className="flex flex-col gap-2 mt-8">
-        <GitHubLoginButton t={t} />
+        <GitHubLoginButton t={t} redirectTo={redirectParam || undefined} />
 
         <div className="relative py-2">
           <div className="absolute inset-0 flex items-center">
@@ -57,16 +58,17 @@ export default function Login() {
         </div>
 
         <form className="flex flex-col gap-2 [&>input]:mb-3">
+          {redirectParam && <input type="hidden" name="redirect" value={redirectParam} />}
           <Label htmlFor="email">{t('email')}</Label>
           <Input name="email" placeholder={t('you_at_example_com')} required />
           <div className="flex justify-between items-center">
             <Label htmlFor="password">{t('password')}</Label>
-            <Link
+            {process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true' && <Link
               className="text-xs text-foreground underline"
               href="/forgot-password"
             >
               {t('forgot_password')}
-            </Link>
+            </Link>}
           </div>
           <Input
             type="password"

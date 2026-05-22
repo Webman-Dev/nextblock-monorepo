@@ -4,6 +4,8 @@ import { createClient } from '@nextblock-cms/db/server';
 import { ActivationForm } from './activation-form';
 import { PackageCard } from './package-card';
 
+export const dynamic = 'force-dynamic';
+
 export default async function PackagesPage() {
   const supabase = await createClient();
   

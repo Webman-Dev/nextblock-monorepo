@@ -1,4 +1,3 @@
-/* eslint-disable @nx/enforce-module-boundaries */
 import { Alert, AlertDescription } from '@nextblock-cms/ui';
 
 import { getLanguages } from '../languages/actions';

@@ -1,5 +1,6 @@
 // components/blocks/renderers/SectionBlockRenderer.tsx
 import React from "react";
+import Image from "next/image";
 import type { SectionBlockContent } from "../../../lib/blocks/blockRegistry";
 import { buildVisualEditAttributes } from "../../../lib/visual-editing/edit-info";
 import type {
@@ -7,6 +8,13 @@ import type {
   VisualEditingDocumentContext,
 } from "../../../lib/visual-editing/types";
 import { getPublicBlockRendererLoader } from "../publicRendererLoaders";
+import SectionSlider from "./SectionSlider";
+
+// Static imports for core block renderers for LCP/performance optimization
+import TextBlockRenderer from "./TextBlockRenderer";
+import HeadingBlockRenderer from "./HeadingBlockRenderer";
+import ImageBlockRenderer from "./ImageBlockRenderer";
+import ButtonBlockRenderer from "./ButtonBlockRenderer";
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 const ECOMMERCE_BLOCK_TYPES = new Set([
@@ -30,6 +38,7 @@ interface SectionBlockRendererProps {
   visualEditing?: VisualEditingDocumentContext;
   parentBlockId?: number;
   parentBlockIndex?: number;
+  blockType?: "section" | "hero";
 }
 
 // Container class mapping
@@ -75,7 +84,16 @@ const verticalAlignmentClasses = {
   stretch: 'items-stretch'
 };
 
-// Background style generator
+function formatMinHeight(value?: string) {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) {
+    return `${trimmed}px`;
+  }
+  return trimmed;
+}
+
+// Background style generator (handles solid, theme and gradients; image handled in JSX)
 function generateBackgroundStyles(background: SectionBlockContent['background']) {
   const styles: React.CSSProperties = {};
   let className = '';
@@ -107,30 +125,22 @@ function generateBackgroundStyles(background: SectionBlockContent['background'])
       break;
     
     case 'image':
-      if (background.image) {
-        const imageUrl = `${R2_BASE_URL}/${background.image.object_key}`;
-        styles.backgroundSize = background.image.size || 'cover';
-        styles.backgroundPosition = background.image.position || 'center';
-
-        let finalBackgroundImage = `url(${imageUrl})`;
-
-        if (background.image.overlay && background.image.overlay.gradient) {
-          const { type, direction, stops } = background.image.overlay.gradient;
-          const gradientStops = stops.map(stop => `${stop.color} ${stop.position}%`).join(', ');
-          const gradient = `${type}-gradient(${direction || 'to right'}, ${gradientStops})`;
-          finalBackgroundImage = `${gradient}, ${finalBackgroundImage}`;
-        }
-        
-        styles.backgroundImage = finalBackgroundImage;
-      }
+      // Handled via absolute next/image in the render tree for LCP & sizing optimization
       break;
     
     default:
-      // No background
       break;
   }
 
   return { styles, className };
+}
+
+function generateGradientOverlayStyle(gradient: any): React.CSSProperties {
+  const { type, direction, stops } = gradient;
+  const gradientStops = stops.map((stop: any) => `${stop.color} ${stop.position}%`).join(', ');
+  return {
+    background: `${type}-gradient(${direction || 'to right'}, ${gradientStops})`,
+  };
 }
 
 interface NestedBlockRendererProps {
@@ -140,6 +150,7 @@ interface NestedBlockRendererProps {
   parentBlockIndex?: number;
   visualEditing?: VisualEditingDocumentContext;
   visualEditAttributes?: VisualEditAttributes;
+  priority?: boolean;
 }
 
 async function renderNestedBlock({
@@ -149,7 +160,51 @@ async function renderNestedBlock({
   parentBlockIndex,
   visualEditing,
   visualEditAttributes,
+  priority = false,
 }: NestedBlockRendererProps) {
+  // Statically resolve core block types first to avoid dynamic imports overhead
+  if (block.block_type === 'text') {
+    return (
+      <TextBlockRenderer
+        content={block.content as any}
+        languageId={languageId}
+        visualEditAttributes={visualEditAttributes}
+      />
+    );
+  }
+
+  if (block.block_type === 'heading') {
+    return (
+      <HeadingBlockRenderer
+        content={block.content as any}
+        languageId={languageId}
+        visualEditAttributes={visualEditAttributes}
+      />
+    );
+  }
+
+  if (block.block_type === 'button') {
+    return (
+      <ButtonBlockRenderer
+        content={block.content as any}
+        languageId={languageId}
+        visualEditAttributes={visualEditAttributes}
+      />
+    );
+  }
+
+  if (block.block_type === 'image') {
+    return (
+      <ImageBlockRenderer
+        content={block.content as any}
+        languageId={languageId}
+        priority={priority}
+        visualEditAttributes={visualEditAttributes}
+      />
+    );
+  }
+
+  // Fallback to dynamic loader for custom/other block types
   const rendererLoader = getPublicBlockRendererLoader(block.block_type);
 
   if (!rendererLoader) {
@@ -210,8 +265,9 @@ export default async function SectionBlockRenderer({
   visualEditing,
   parentBlockId,
   parentBlockIndex,
+  blockType,
 }: SectionBlockRendererProps) {
-  const { styles, className: backgroundClassName } = generateBackgroundStyles(content.background);
+  const isHero = blockType === "hero" || content.is_hero === true;
 
   // Build CSS classes
   const containerClass = containerClasses[content.container_type] || containerClasses.container;
@@ -220,6 +276,132 @@ export default async function SectionBlockRenderer({
   const paddingTopClass = paddingClasses[content.padding.top] || paddingClasses.md;
   const paddingBottomClass = paddingClasses[content.padding.bottom] || paddingClasses.md;
   const alignmentClass = content.vertical_alignment ? verticalAlignmentClasses[content.vertical_alignment] : 'items-start';
+
+  // --- Render Slide-based Carousel Section ---
+  if (content.slider && content.slides && content.slides.length > 0) {
+    const renderedSlides = await Promise.all(
+      content.slides.map(async (slide, slideIndex) => {
+        const isFirstSlide = slideIndex === 0;
+        // Priority loading for the first slide of a hero carousel
+        const slidePriority = isHero && isFirstSlide;
+
+        const slideBackground = slide.background || { type: "none" };
+        const { styles: slideBgStyles, className: slideBgClassName } = generateBackgroundStyles(slideBackground);
+
+        const renderedColumns = await Promise.all(
+          slide.column_blocks.map(async (columnBlocks, columnIndex) => {
+            const blocks = Array.isArray(columnBlocks) ? columnBlocks : [];
+            const renderedBlocks = await Promise.all(
+              blocks.map(async (block, blockIndex) => ({
+                key: `${block.block_type}-${columnIndex}-${blockIndex}`,
+                node: await renderNestedBlock({
+                  block,
+                  languageId,
+                  parentBlockId,
+                  parentBlockIndex,
+                  visualEditing,
+                  priority: slidePriority, // Pass down priority
+                  visualEditAttributes:
+                    typeof parentBlockId === "number" && typeof parentBlockIndex === "number"
+                      ? buildVisualEditAttributes(visualEditing, {
+                          kind: "nested",
+                          parentBlockId,
+                          parentBlockIndex,
+                          parentBlockType: "section",
+                          columnIndex,
+                          blockIndex,
+                          blockType: block.block_type,
+                        })
+                      : undefined,
+                }),
+              }))
+            );
+
+            return { columnIndex, renderedBlocks };
+          })
+        );
+
+        return (
+          <div
+            key={`slide-${slideIndex}`}
+            className={`relative w-full flex items-center ${paddingTopClass} ${paddingBottomClass} ${slideBgClassName}`}
+            style={{
+              ...slideBgStyles,
+              minHeight: formatMinHeight(slideBackground.min_height) || '400px'
+            }}
+          >
+            {/* Background image Layer for slide */}
+            {slideBackground.type === 'image' && slideBackground.image && (
+              <div className="absolute inset-0 -z-10 pointer-events-none">
+                <Image
+                  src={`${R2_BASE_URL}/${slideBackground.image.object_key}`}
+                  alt={slideBackground.image.alt_text || ""}
+                  fill
+                  priority={slidePriority}
+                  fetchPriority={slidePriority ? "high" : "auto"}
+                  placeholder={slideBackground.image.blur_data_url ? "blur" : "empty"}
+                  blurDataURL={slideBackground.image.blur_data_url || undefined}
+                  quality={slideBackground.image.quality || 80}
+                  sizes="100vw"
+                  style={{
+                    objectFit: slideBackground.image.size === 'contain' ? 'contain' : 'cover',
+                    objectPosition: slideBackground.image.position || 'center',
+                  }}
+                />
+                {slideBackground.image.overlay && slideBackground.image.overlay.gradient && (
+                  <div 
+                    className="absolute inset-0"
+                    style={generateGradientOverlayStyle(slideBackground.image.overlay.gradient)}
+                  />
+                )}
+              </div>
+            )}
+
+            <div className={`${containerClass} w-full`}>
+              <div className={`grid ${gridClass} ${gapClass} ${alignmentClass}`}>
+                {renderedColumns.map(({ columnIndex, renderedBlocks }) => (
+                  <div key={`column-${columnIndex}`} className="min-h-0 space-y-4">
+                    {renderedBlocks.map(({ key, node }) => (
+                      <React.Fragment key={key}>{node}</React.Fragment>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })
+    );
+
+    // Determine the slider's container min-height from configured slides
+    let sliderMinHeight = '400px';
+    if (content.slides && content.slides.length > 0) {
+      const configuredHeight = content.slides
+        .map(s => s.background?.min_height)
+        .find(Boolean);
+      if (configuredHeight) {
+        sliderMinHeight = formatMinHeight(configuredHeight) || '400px';
+      }
+    }
+
+    return (
+      <section
+        className="relative w-full overflow-hidden"
+        {...visualEditAttributes}
+      >
+        <SectionSlider
+          autoplay={content.autoplay}
+          timeframe={content.timeframe}
+          minHeight={sliderMinHeight}
+        >
+          {renderedSlides}
+        </SectionSlider>
+      </section>
+    );
+  }
+
+  // --- Render Standard Single Layout Section ---
+  const { styles, className: backgroundClassName } = generateBackgroundStyles(content.background);
 
   const renderedColumns = await Promise.all(
     content.column_blocks.map(async (columnBlocks, columnIndex) => {
@@ -233,6 +415,7 @@ export default async function SectionBlockRenderer({
             parentBlockId,
             parentBlockIndex,
             visualEditing,
+            priority: isHero, // Pass priority down to nested image blocks
             visualEditAttributes:
               typeof parentBlockId === "number" && typeof parentBlockIndex === "number"
                 ? buildVisualEditAttributes(visualEditing, {
@@ -255,10 +438,40 @@ export default async function SectionBlockRenderer({
 
   return (
     <section
-      className={`w-full ${paddingTopClass} ${paddingBottomClass} ${backgroundClassName}`.trim()}
-      style={styles}
+      className={`relative w-full ${paddingTopClass} ${paddingBottomClass} ${backgroundClassName}`.trim()}
+      style={{
+        ...styles,
+        minHeight: formatMinHeight(content.background?.min_height)
+      }}
       {...visualEditAttributes}
     >
+      {/* Background image Layer */}
+      {content.background?.type === 'image' && content.background.image && (
+        <div className="absolute inset-0 -z-10 pointer-events-none">
+          <Image
+            src={`${R2_BASE_URL}/${content.background.image.object_key}`}
+            alt={content.background.image.alt_text || ""}
+            fill
+            priority={isHero}
+            fetchPriority={isHero ? "high" : "auto"}
+            placeholder={content.background.image.blur_data_url ? "blur" : "empty"}
+            blurDataURL={content.background.image.blur_data_url || undefined}
+            quality={content.background.image.quality || 80}
+            sizes="100vw"
+            style={{
+              objectFit: content.background.image.size === 'contain' ? 'contain' : 'cover',
+              objectPosition: content.background.image.position || 'center',
+            }}
+          />
+          {content.background.image.overlay && content.background.image.overlay.gradient && (
+            <div 
+              className="absolute inset-0"
+              style={generateGradientOverlayStyle(content.background.image.overlay.gradient)}
+            />
+          )}
+        </div>
+      )}
+
       <div className={containerClass}>
         <div className={`grid ${gridClass} ${gapClass} ${alignmentClass}`}>
           {renderedColumns.map(({ columnIndex, renderedBlocks }) => (

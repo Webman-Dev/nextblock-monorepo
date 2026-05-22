@@ -14,7 +14,9 @@ export interface PageMetaContent {
 }
 
 export interface PostMetaContent extends PageMetaContent {
+  label: string | null;
   excerpt: string | null;
+  subtitle: string | null;
   published_at: string | null;
   feature_image_id: string | null;
 }
@@ -86,7 +88,7 @@ export async function getFullPostContent(
   const supabase = createClient();
   const { data: post, error: postError } = await supabase
     .from('posts')
-    .select('id, title, slug, language_id, status, meta_title, meta_description, excerpt, published_at, feature_image_id')
+    .select('id, title, slug, language_id, status, meta_title, meta_description, label, excerpt, subtitle, published_at, feature_image_id')
     .eq('id', postId)
     .single();
   if (postError || !post) return null;
@@ -117,11 +119,12 @@ export async function getFullPostContent(
       status: post.status,
       meta_title: post.meta_title,
       meta_description: post.meta_description,
+      label: post.label,
       excerpt: post.excerpt,
+      subtitle: post.subtitle,
       published_at: post.published_at ? new Date(post.published_at).toISOString() : null,
       feature_image_id: post.feature_image_id ?? null,
     },
     blocks: processed,
   };
 }
-
