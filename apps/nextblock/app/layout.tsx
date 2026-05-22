@@ -29,6 +29,7 @@ const defaultUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
 
 const DEFAULT_LOCALE_FOR_LAYOUT = 'en';
 const PUBLIC_LAYOUT_REVALIDATE_SECONDS = 60;
+const PUBLIC_LAYOUT_LOGO_CACHE_TAG = 'public-layout-logo';
 const TRUSTED_TYPES_SCRIPT_STRATEGY =
   process.env.NODE_ENV === 'production' ? 'beforeInteractive' : 'afterInteractive';
 const TRUSTED_TYPES_BOOTSTRAP = `
@@ -299,7 +300,7 @@ const getCachedActiveLogo = unstable_cache(
     return data as HeaderLogo | null;
   },
   ['public-layout-logo'],
-  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
+  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS, tags: [PUBLIC_LAYOUT_LOGO_CACHE_TAG] }
 );
 
 async function loadLayoutData() {

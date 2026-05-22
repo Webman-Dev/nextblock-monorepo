@@ -3,7 +3,7 @@
 import type { Database } from '@nextblock-cms/db';
 import { cn } from '@nextblock-cms/utils';
 import { usePathname } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import Header from './Header';
 import FooterNavigation from './FooterNavigation';
 import { EnvVarWarning } from './env-var-warning';
@@ -15,6 +15,20 @@ type Logo =
   Database['public']['Tables']['logos']['Row'] & {
     media: (Database['public']['Tables']['media']['Row'] & { alt_text: string | null }) | null;
   };
+
+type AppBrandingContextValue = {
+  logo: Logo | null;
+  siteTitle: string;
+};
+
+const AppBrandingContext = createContext<AppBrandingContextValue>({
+  logo: null,
+  siteTitle: 'Nextblock',
+});
+
+export function useAppBranding() {
+  return useContext(AppBrandingContext);
+}
 
 type AppShellProps = {
   canAccessCms: boolean;
@@ -43,9 +57,10 @@ export function AppShell({
 }: AppShellProps) {
   const pathname = usePathname() || '';
   const isCmsRequest = pathname.startsWith('/cms');
+  const branding = useMemo(() => ({ logo, siteTitle }), [logo, siteTitle]);
 
   return (
-    <>
+    <AppBrandingContext.Provider value={branding}>
       {process.env.NEXT_PUBLIC_IS_SANDBOX === 'true' && !isCmsRequest && <SandboxBanner />}
       <div
         className={cn(
@@ -98,6 +113,6 @@ export function AppShell({
           )}
         </div>
       </div>
-    </>
+    </AppBrandingContext.Provider>
   );
 }
