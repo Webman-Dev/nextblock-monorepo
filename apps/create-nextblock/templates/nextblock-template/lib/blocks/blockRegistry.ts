@@ -156,6 +156,8 @@ export const FormBlockSchema = z.object({
   submit_button_text: z.string(),
   success_message: z.string(),
   fields: z.array(FormFieldSchema),
+  botProtectionProvider: z.enum(['none', 'turnstile', 'recaptcha']).optional().default('none'),
+  botProtectionSiteKey: z.string().optional(),
 });
 export type FormBlockContent = z.infer<typeof FormBlockSchema>;
 
@@ -461,6 +463,8 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
       submit_button_text: "Submit",
       success_message: "Thank you for your submission!",
       fields: [],
+      botProtectionProvider: "none",
+      botProtectionSiteKey: "",
     } as FormBlockContent,
     editorComponentFilename: "FormBlockEditor.tsx",
     rendererComponentFilename: "FormBlockRenderer.tsx",

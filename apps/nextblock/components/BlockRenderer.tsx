@@ -8,6 +8,8 @@ import type {
   VisualEditingDocumentContext,
 } from "../lib/visual-editing/types";
 import { getPublicBlockRendererLoader } from "./blocks/publicRendererLoaders";
+import { createClient as createSupabaseServerClient } from "@nextblock-cms/db/server";
+import { headers } from "next/headers";
 
 type Block = Database['public']['Tables']['blocks']['Row'];
 import SectionBlockRenderer from "./blocks/renderers/SectionBlockRenderer"; // Static import for LCP
@@ -45,6 +47,11 @@ interface BlockRenderContext {
   visualEditing?: VisualEditingDocumentContext;
   productVisualEditingEnabled?: boolean;
   visualEditAttributes?: VisualEditAttributes;
+  botProtectionPublic?: {
+    provider: 'none' | 'turnstile' | 'recaptcha';
+    siteKey: string;
+  };
+  scriptNonce?: string;
 }
 
 async function renderLoadedBlock({
@@ -56,6 +63,8 @@ async function renderLoadedBlock({
   visualEditing,
   productVisualEditingEnabled,
   visualEditAttributes,
+  botProtectionPublic,
+  scriptNonce,
 }: BlockRenderContext) {
   const rendererLoader = getPublicBlockRendererLoader(block.block_type);
 
@@ -130,6 +139,8 @@ async function renderLoadedBlock({
       visualEditing={visualEditing}
       parentBlockId={block.id}
       parentBlockIndex={blockIndex}
+      botProtectionPublic={botProtectionPublic}
+      scriptNonce={scriptNonce}
     />
   );
 }
@@ -147,6 +158,8 @@ async function renderBlock(context: BlockRenderContext) {
         parentBlockId={block.id}
         parentBlockIndex={blockIndex}
         blockType={block.block_type}
+        botProtectionPublic={context.botProtectionPublic}
+        scriptNonce={context.scriptNonce}
       />
     );
   }
@@ -166,6 +179,33 @@ export default async function BlockRenderer({
     return null;
   }
 
+  let botProtectionPublic: { provider: 'none' | 'turnstile' | 'recaptcha'; siteKey: string } | undefined;
+  let scriptNonce = '';
+
+  try {
+    scriptNonce = (await headers()).get('x-nonce') || '';
+  } catch (e) {
+    console.error("[Bot Protection] Error loading CSP nonce in BlockRenderer:", e);
+  }
+
+  try {
+    const supabase = createSupabaseServerClient();
+    const { data: publicSetting } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'bot_protection_public')
+      .maybeSingle();
+    if (publicSetting?.value) {
+      const publicVal = publicSetting.value as Record<string, any>;
+      botProtectionPublic = {
+        provider: publicVal.provider || 'none',
+        siteKey: publicVal.siteKey || '',
+      };
+    }
+  } catch (e) {
+    console.error("[Bot Protection] Error loading settings in BlockRenderer:", e);
+  }
+
   const renderedBlocks = await Promise.all(
     blocks.map(async (block, blockIndex) => ({
       id: block.id,
@@ -177,6 +217,8 @@ export default async function BlockRenderer({
         excludeTranslationGroupId,
         visualEditing,
         productVisualEditingEnabled,
+        botProtectionPublic,
+        scriptNonce,
         visualEditAttributes: buildVisualEditAttributes(visualEditing, {
           kind: "top-level",
           blockId: block.id,

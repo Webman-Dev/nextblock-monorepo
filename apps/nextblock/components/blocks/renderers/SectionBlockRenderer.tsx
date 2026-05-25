@@ -39,7 +39,14 @@ interface SectionBlockRendererProps {
   parentBlockId?: number;
   parentBlockIndex?: number;
   blockType?: "section" | "hero";
+  botProtectionPublic?: BotProtectionPublicSettings;
+  scriptNonce?: string;
 }
+
+type BotProtectionPublicSettings = {
+  provider: 'none' | 'turnstile' | 'recaptcha';
+  siteKey: string;
+};
 
 // Container class mapping
 const containerClasses = {
@@ -150,6 +157,8 @@ interface NestedBlockRendererProps {
   parentBlockIndex?: number;
   visualEditing?: VisualEditingDocumentContext;
   visualEditAttributes?: VisualEditAttributes;
+  botProtectionPublic?: BotProtectionPublicSettings;
+  scriptNonce?: string;
   priority?: boolean;
 }
 
@@ -160,6 +169,8 @@ async function renderNestedBlock({
   parentBlockIndex,
   visualEditing,
   visualEditAttributes,
+  botProtectionPublic,
+  scriptNonce,
   priority = false,
 }: NestedBlockRendererProps) {
   // Statically resolve core block types first to avoid dynamic imports overhead
@@ -254,6 +265,8 @@ async function renderNestedBlock({
       visualEditing={visualEditing}
       parentBlockId={parentBlockId}
       parentBlockIndex={parentBlockIndex}
+      botProtectionPublic={botProtectionPublic}
+      scriptNonce={scriptNonce}
     />
   );
 }
@@ -266,6 +279,8 @@ export default async function SectionBlockRenderer({
   parentBlockId,
   parentBlockIndex,
   blockType,
+  botProtectionPublic,
+  scriptNonce,
 }: SectionBlockRendererProps) {
   const isHero = blockType === "hero" || content.is_hero === true;
 
@@ -300,6 +315,8 @@ export default async function SectionBlockRenderer({
                   parentBlockId,
                   parentBlockIndex,
                   visualEditing,
+                  botProtectionPublic,
+                  scriptNonce,
                   priority: slidePriority, // Pass down priority
                   visualEditAttributes:
                     typeof parentBlockId === "number" && typeof parentBlockIndex === "number"
@@ -415,6 +432,8 @@ export default async function SectionBlockRenderer({
             parentBlockId,
             parentBlockIndex,
             visualEditing,
+            botProtectionPublic,
+            scriptNonce,
             priority: isHero, // Pass priority down to nested image blocks
             visualEditAttributes:
               typeof parentBlockId === "number" && typeof parentBlockIndex === "number"

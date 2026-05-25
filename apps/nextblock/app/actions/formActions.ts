@@ -2,23 +2,142 @@
 "use server";
 
 import { sendEmail } from './email';
+import { getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
 
 interface FormSubmissionResult {
   success: boolean;
   message: string;
 }
 
+type BotProtectionProvider = 'none' | 'turnstile' | 'recaptcha';
+
+type FormSubmissionConfig = {
+  recipient: string;
+  botProtectionProvider?: BotProtectionProvider;
+};
+
+function normalizeSubmissionConfig(config: string | FormSubmissionConfig) {
+  if (typeof config === 'string') {
+    return {
+      recipient: config,
+      botProtectionProvider: undefined,
+    };
+  }
+
+  return config;
+}
+
 export async function handleFormSubmission(
-  recipient: string,
+  config: string | FormSubmissionConfig,
   prevState: unknown,
   formData: FormData
 ): Promise<FormSubmissionResult> {
+  const { recipient, botProtectionProvider } = normalizeSubmissionConfig(config);
+
+  // Phase 1: Honeypot Validation
+  const honeypot = formData.get('verification_secondary_email');
+  if (honeypot && typeof honeypot === 'string' && honeypot.length > 0) {
+    console.warn("[Bot Protection] Honeypot triggered. Discarding submission from bot.");
+    // Fool the bot by returning a fake success response immediately
+    return { success: true, message: "Submission successful!" };
+  }
+
+  // Phase 2: Advanced Captcha Verification
+  try {
+    const supabase = getServiceRoleSupabaseClient();
+    
+    // Fetch global bot protection settings
+    const { data: publicSetting } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'bot_protection_public')
+      .maybeSingle();
+
+    const { data: secretSetting } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'bot_protection_secret')
+      .maybeSingle();
+
+    const publicVal = (publicSetting?.value || {}) as Record<string, any>;
+    const secretVal = (secretSetting?.value || {}) as Record<string, any>;
+
+    const blockProvider =
+      botProtectionProvider === 'turnstile' || botProtectionProvider === 'recaptcha'
+        ? botProtectionProvider
+        : undefined;
+    const provider = blockProvider || publicVal.provider || 'none';
+    const secretKey = secretVal.secretKey || 
+      (provider === 'turnstile' ? process.env.TURNSTILE_SECRET_KEY : process.env.RECAPTCHA_SECRET_KEY) || 
+      '';
+
+    if (provider === 'turnstile') {
+      const token = formData.get('cf-turnstile-response') as string;
+      if (!token) {
+        return { success: false, message: "Security verification token is missing. Please try again." };
+      }
+      if (!secretKey) {
+        console.error("[Bot Protection] Turnstile secret key is not configured.");
+        return { success: false, message: "Bot protection is misconfigured. Please contact support." };
+      }
+
+      const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `secret=${encodeURIComponent(secretKey)}&response=${encodeURIComponent(token)}`,
+      });
+
+      const outcome = await res.json();
+      if (!outcome.success) {
+        console.warn("[Bot Protection] Turnstile verification failed:", outcome);
+        return { success: false, message: "Security verification failed. Please try again." };
+      }
+    } else if (provider === 'recaptcha') {
+      const token = formData.get('g-recaptcha-response') as string;
+      if (!token) {
+        return { success: false, message: "Security verification token is missing. Please try again." };
+      }
+      if (!secretKey) {
+        console.error("[Bot Protection] reCAPTCHA secret key is not configured.");
+        return { success: false, message: "Bot protection is misconfigured. Please contact support." };
+      }
+
+      const res = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `secret=${encodeURIComponent(secretKey)}&response=${encodeURIComponent(token)}`,
+      });
+
+      const outcome = await res.json();
+      if (!outcome.success || outcome.score < 0.5) {
+        console.warn("[Bot Protection] reCAPTCHA verification failed:", outcome);
+        return { success: false, message: "Security verification failed. Please try again." };
+      }
+    }
+  } catch (error) {
+    console.error("[Bot Protection] Error during validation:", error);
+    // If database or fetch error occurs, we gracefully degrade or warn, but let's be secure and fail open/closed depending on preference.
+    // The requirement says: "If the API indicates a verification failure or falls below a threshold... reject the operation securely."
+    // Let's return error message.
+    return { success: false, message: "Sorry, security verification could not be completed at this time." };
+  }
 
   const data: Record<string, string | File> = {};
   let submitterEmail = 'a user'; // Default value
 
   formData.forEach((value, key) => {
-    if (typeof value === 'string' && !key.startsWith('$')) {
+    // Avoid sending internal bot protection tokens and honeypots in the notification email
+    if (
+      typeof value === 'string' && 
+      !key.startsWith('$') && 
+      key !== 'verification_secondary_email' && 
+      key !== 'g-recaptcha-response' && 
+      key !== 'cf-turnstile-response'
+    ) {
       data[key] = value;
       // Attempt to find a field that looks like an email address to use in the subject
       if (key.toLowerCase().includes('email')) {

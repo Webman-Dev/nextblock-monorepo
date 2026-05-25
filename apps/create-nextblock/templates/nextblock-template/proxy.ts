@@ -133,6 +133,7 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string): s
     'https://vitals.vercel-insights.com',
     'https://*.vercel-insights.com',
   ];
+  const turnstileSources = ['https://challenges.cloudflare.com'];
 
   const developmentHttpSources = isDev
     ? [
@@ -162,9 +163,10 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string): s
             "'unsafe-eval'",
             'blob:',
             'data:',
+            ...turnstileSources,
             ...developmentHttpSources,
           ]
-        : ["'self'", `'nonce-${nonceValue}'`, "'strict-dynamic'"],
+        : ["'self'", `'nonce-${nonceValue}'`, "'strict-dynamic'", ...turnstileSources],
     ),
     createDirective('script-src-attr', ["'none'"]),
     createDirective('style-src', [
@@ -197,6 +199,7 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string): s
       ...assetSources,
       ...googleSources,
       ...vercelSources,
+      ...turnstileSources,
       ...developmentConnectSources,
     ]),
     createDirective('frame-src', [
@@ -209,6 +212,7 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string): s
       'https://player.vimeo.com',
       'https://vercel.live',
       'https://vercel.com',
+      ...turnstileSources,
     ]),
     createDirective('media-src', ["'self'", 'data:', 'blob:', supabaseOrigin, ...assetSources]),
     createDirective('worker-src', ["'self'", 'blob:']),

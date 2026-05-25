@@ -8,7 +8,7 @@ import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
-  ExternalLink, Paintbrush, Brain, TicketPercent,
+  ExternalLink, Paintbrush, Brain, TicketPercent, ShieldAlert,
 } from "lucide-react"
 import { Button } from "@nextblock-cms/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar"
@@ -222,6 +222,7 @@ export default function CmsClientLayout({
   else if (pathname.startsWith("/cms/settings/currencies")) pageTitle = "Currency Settings";
   else if (pathname.startsWith("/cms/settings/taxes")) pageTitle = "Tax Settings";
   else if (pathname.startsWith("/cms/settings/cortex-ai")) pageTitle = "Cortex AI";
+  else if (pathname.startsWith("/cms/settings/bot-protection")) pageTitle = "Bot Protection";
   else if (pathname.startsWith("/cms/payments")) pageTitle = "Payment Settings";
 
   else if (pathname.startsWith("/cms/settings/packages")) pageTitle = "Packages";
@@ -373,6 +374,9 @@ export default function CmsClientLayout({
                     </NavItem>
                     <NavItem href="/cms/settings/global-css" icon={Paintbrush} isActive={pathname.startsWith("/cms/settings/global-css")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Global CSS
+                    </NavItem>
+                    <NavItem href="/cms/settings/bot-protection" icon={ShieldAlert} isActive={pathname.startsWith("/cms/settings/bot-protection")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Bot Protection
                     </NavItem>
                     <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Extra Translations
