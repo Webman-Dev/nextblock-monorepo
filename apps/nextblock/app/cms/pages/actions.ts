@@ -152,20 +152,16 @@ export async function updatePage(pageId: number, formData: FormData) {
       .update({ meta: updatedMeta as any })
       .eq("id", draft.id);
 
-  if (updateError) {
-    console.error("Error updating page:", updateError);
-     if (updateError.code === '23505' && updateError.message.includes('pages_language_id_slug_key')) {
-        return encodedRedirect("error", pageEditPath, `The slug "${pageUpdateData.slug}" already exists for the selected language. Please use a unique slug.`);
+    if (updateError) {
+      console.error("Error updating page draft:", updateError);
+      if (updateError.code === '23505' && updateError.message.includes('pages_language_id_slug_key')) {
+        return { error: `The slug "${pageUpdateData.slug}" already exists for the selected language. Please use a unique slug.` };
+      }
+      return { error: `Failed to update draft: ${updateError.message}` };
     }
-    return encodedRedirect("error", pageEditPath, `Failed to update page: ${updateError.message}`);
-  }
-
-  // create revision after update
-  if (previousContent && user) {
-    const newContent = await getFullPageContent(pageId);
-    if (newContent) {
-      await createPageRevision(pageId, user.id, previousContent, newContent);
-    }
+  } catch (err: any) {
+    console.error("Error loading/creating draft for page metadata update:", err);
+    return { error: `Failed to load draft: ${err.message || err}` };
   }
 
   revalidatePath("/cms/pages");

@@ -87,6 +87,9 @@ export default function PostForm({
   const [metaDescription, setMetaDescription] = useState(
     post?.meta_description || ""
   );
+  const [featureImageId, setFeatureImageId] = useState<string | null>(
+    initialFeatureImageId || post?.feature_image_id || null
+  );
 
   // Use the passed-in languages directly
   const [availableLanguages] = useState<Language[]>(availableLanguagesProp);
@@ -126,7 +129,9 @@ export default function PostForm({
     setPublishedAt(formatDateTimeLocal(post.published_at));
     setMetaTitle(post.meta_title || "");
     setMetaDescription(post.meta_description || "");
+    setFeatureImageId(initialFeatureImageId || post.feature_image_id || null);
   }, [
+    initialFeatureImageId,
     post?.excerpt,
     post?.id,
     post?.label,
@@ -167,8 +172,8 @@ export default function PostForm({
     setIsSaving(true);
     setSaveError(null);
 
-    const formData = customFormData || new FormData();
-    if (!customFormData) {
+    const formData = customFormData || (formRef.current ? new FormData(formRef.current) : new FormData());
+    if (!customFormData && !formRef.current) {
       formData.append("title", title);
       formData.append("slug", slug);
       formData.append("language_id", languageId);
@@ -179,7 +184,7 @@ export default function PostForm({
       formData.append("published_at", publishedAt);
       formData.append("meta_title", metaTitle);
       formData.append("meta_description", metaDescription);
-      formData.append("feature_image_id", selectedFeatureImage.id || "");
+      formData.append("feature_image_id", featureImageId || "");
     }
 
     try {
@@ -239,7 +244,7 @@ export default function PostForm({
       publishedAt !== dbPublishedAt ||
       metaTitle !== (post?.meta_title || "") ||
       metaDescription !== (post?.meta_description || "") ||
-      selectedFeatureImage.id !== (post?.feature_image_id || null);
+      featureImageId !== (post?.feature_image_id || null);
 
     if (!hasChanges) return;
 
@@ -259,7 +264,7 @@ export default function PostForm({
     publishedAt,
     metaTitle,
     metaDescription,
-    selectedFeatureImage.id,
+    featureImageId,
     post,
     isEditing,
   ]);
@@ -408,6 +413,7 @@ export default function PostForm({
       <FeatureImageField
         initialImageId={initialFeatureImageId || post?.feature_image_id || null}
         initialImageUrl={initialFeatureImageUrl || null}
+        onImageIdChange={setFeatureImageId}
         uploadFolder={`posts/${(slug || 'untitled').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '')}/`}
       />
     

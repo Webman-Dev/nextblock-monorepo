@@ -81,6 +81,9 @@ export default function PageForm({
   const [metaDescription, setMetaDescription] = useState(
     page?.meta_description || ""
   );
+  const [featureImageId, setFeatureImageId] = useState<string | null>(
+    initialFeatureImageId || page?.feature_image_id || null
+  );
 
   // Use the passed-in languages
   const [availableLanguages] = useState<Language[]>(availableLanguagesProp);
@@ -117,7 +120,9 @@ export default function PageForm({
     setStatus(page.status || "draft");
     setMetaTitle(page.meta_title || "");
     setMetaDescription(page.meta_description || "");
+    setFeatureImageId(initialFeatureImageId || page.feature_image_id || null);
   }, [
+    initialFeatureImageId,
     page?.id,
     page?.language_id,
     page?.meta_description,
@@ -143,14 +148,15 @@ export default function PageForm({
     setIsSaving(true);
     setSaveError(null);
 
-    const formData = customFormData || new FormData();
-    if (!customFormData) {
+    const formData = customFormData || (formRef.current ? new FormData(formRef.current) : new FormData());
+    if (!customFormData && !formRef.current) {
       formData.append("title", title);
       formData.append("slug", slug);
       formData.append("language_id", languageId);
       formData.append("status", status);
       formData.append("meta_title", metaTitle);
       formData.append("meta_description", metaDescription);
+      formData.append("feature_image_id", featureImageId || "");
       if (translationGroupId) {
         formData.append("translation_group_id", translationGroupId);
       }
@@ -206,7 +212,8 @@ export default function PageForm({
       languageId !== (page?.language_id?.toString() || "") ||
       status !== (page?.status || "draft") ||
       metaTitle !== (page?.meta_title || "") ||
-      metaDescription !== (page?.meta_description || "");
+      metaDescription !== (page?.meta_description || "") ||
+      featureImageId !== (page?.feature_image_id || null);
 
     if (!hasChanges) return;
 
@@ -215,7 +222,7 @@ export default function PageForm({
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [title, slug, languageId, status, metaTitle, metaDescription, page, isEditing]);
+  }, [title, slug, languageId, status, metaTitle, metaDescription, featureImageId, page, isEditing]);
 
   // Removed languagesLoading from this condition
   if (authLoading) {
@@ -372,6 +379,7 @@ export default function PageForm({
       <FeatureImageField
         initialImageId={initialFeatureImageId || page?.feature_image_id || null}
         initialImageUrl={initialFeatureImageUrl || null}
+        onImageIdChange={setFeatureImageId}
         uploadFolder={`pages/${(slug || 'untitled').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '')}/`}
       />
 

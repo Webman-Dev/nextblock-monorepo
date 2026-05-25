@@ -28,12 +28,14 @@ type Media = Database["public"]["Tables"]["media"]["Row"];
 interface FeatureImageFieldProps {
   initialImageId?: string | null;
   initialImageUrl?: string | null;
+  onImageIdChange?: (imageId: string | null) => void;
   uploadFolder: string;
 }
 
 export default function FeatureImageField({
   initialImageId,
   initialImageUrl,
+  onImageIdChange,
   uploadFolder,
 }: FeatureImageFieldProps) {
   const [selectedFeatureImage, setSelectedFeatureImage] = useState<{
@@ -101,7 +103,13 @@ export default function FeatureImageField({
     }
 
     setSelectedFeatureImage({ id: image.id, url: imageUrl });
+    onImageIdChange?.(image.id);
     setIsModalOpen(false);
+  };
+
+  const handleRemoveImage = () => {
+    setSelectedFeatureImage({ id: null, url: null });
+    onImageIdChange?.(null);
   };
 
   const handleImageSelectKeyDown = (event: KeyboardEvent<HTMLDivElement>, image: Media) => {
@@ -131,7 +139,7 @@ export default function FeatureImageField({
               type="button"
               variant="link"
               className="mt-2 px-0 text-red-600"
-              onClick={() => setSelectedFeatureImage({ id: null, url: null })}
+              onClick={handleRemoveImage}
             >
               Remove Image
             </Button>
