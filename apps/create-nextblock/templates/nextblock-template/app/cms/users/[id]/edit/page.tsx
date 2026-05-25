@@ -3,6 +3,7 @@ import UserForm from "../../components/UserForm";
 import { updateUserProfile } from "../../actions";
 import type { Database } from "@nextblock-cms/db";
 import { notFound } from "next/navigation";
+import { getDefaultUserAddresses } from "@nextblock-cms/ecommerce/server";
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type AuthUser = {
@@ -12,7 +13,11 @@ type AuthUser = {
     last_sign_in_at: string | undefined;
 };
 
-async function getUserAndProfileData(userId: string): Promise<{ authUser: AuthUser; profile: Profile | null } | null> {
+async function getUserAndProfileData(userId: string): Promise<{
+  authUser: AuthUser;
+  profile: Profile | null;
+  addresses: Awaited<ReturnType<typeof getDefaultUserAddresses>>;
+} | null> {
 
   // Fetch user from auth.users
   // For admin operations, you might need a service_role client to fetch any user.
@@ -57,7 +62,9 @@ async function getUserAndProfileData(userId: string): Promise<{ authUser: AuthUs
       last_sign_in_at: authUserData.last_sign_in_at,
   };
 
-  return { authUser: simplifiedAuthUser, profile: profileData as Profile | null };
+  const addresses = await getDefaultUserAddresses(userId, serviceSupabase as any);
+
+  return { authUser: simplifiedAuthUser, profile: profileData as Profile | null, addresses };
 }
 
 export default async function EditUserPage(props: { params: Promise<{ id: string }> }) {
@@ -81,8 +88,8 @@ export default async function EditUserPage(props: { params: Promise<{ id: string
       <UserForm
         userToEditAuth={userData.authUser}
         userToEditProfile={userData.profile}
+        userToEditAddresses={userData.addresses}
         formAction={updateUserActionWithId}
-        actionButtonText="Update User Profile"
       />
     </div>
   );

@@ -2,9 +2,9 @@
 
 import { hasPublicEnvVars } from "@nextblock-cms/utils";
 import Link from "next/link";
-import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar";
-import { Badge } from "@nextblock-cms/ui/badge";
-import { Button } from "@nextblock-cms/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui";
+import { Badge } from "@nextblock-cms/ui";
+import { Button } from "@nextblock-cms/ui";
 import { signOutAction } from "../app/actions";
 import { useAuth } from "../context/AuthContext";
 import { useTranslations } from "@nextblock-cms/utils";
@@ -16,7 +16,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@nextblock-cms/ui/dropdown-menu";
+} from "@nextblock-cms/ui";
 import { User, LogOut, LayoutDashboard } from "lucide-react";
 
 export default function AuthButton() {

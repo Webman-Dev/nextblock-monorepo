@@ -7,14 +7,18 @@ import { useRouter, usePathname } from "next/navigation" // Import usePathname
 import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
-  Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, TicketPercent,
+  Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
+  ExternalLink, Paintbrush, Brain, TicketPercent,
 } from "lucide-react"
-import { Button } from "@nextblock-cms/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar"
+import { Button } from "@nextblock-cms/ui"
+import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
 import { cn } from "@nextblock-cms/utils"
 import { signOutAction } from "../actions"
 import Image from "next/image";
 import { FeedbackModal } from "./components/FeedbackModal";
+import { CortexGlobalAgentChat } from "./components/CortexGlobalAgentChat";
+import { CortexAiPageContextProvider } from "./components/CortexAiPageContext";
+import { CortexAiActiveProvider } from "./components/CortexAiActiveContext";
 
 const LoadingSpinner = () => (
   <div className="flex justify-center items-center h-full w-full py-20">
@@ -102,7 +106,15 @@ const CollapsibleNavItem = ({ icon: Icon, title, children, isActive, adminOnly, 
 };
 
 
-export default function CmsClientLayout({ children, isEcommerceActive = false }: { children: ReactNode, isEcommerceActive?: boolean }) {
+export default function CmsClientLayout({
+  children,
+  isCortexAiActive = false,
+  isEcommerceActive = false,
+}: {
+  children: ReactNode,
+  isCortexAiActive?: boolean,
+  isEcommerceActive?: boolean,
+}) {
   const { user, profile, role, isLoading, isAdmin, isWriter } = useAuth();
   const router = useRouter();
   const pathname = usePathname(); // Use the usePathname hook
@@ -111,12 +123,12 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
   useEffect(() => {
     if (!isLoading) {
       if (!user) {
-        router.push("/sign-in?redirect=/cms/dashboard");
+        router.push(`/sign-in?redirect=${encodeURIComponent(pathname || "/cms/dashboard")}`);
       } else if (!isWriter && !isAdmin) {
         router.push("/unauthorized?reason=insufficient_role_in_layout");
       }
     }
-  }, [user, role, isLoading, router, isAdmin, isWriter]);
+  }, [user, role, isLoading, router, isAdmin, isWriter, pathname]);
 
   useEffect(() => {
     const mainLayoutElement = document.querySelector('body > div > main > div.flex-1.w-full.flex.flex-col.items-center');
@@ -196,13 +208,18 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
   else if (pathname.startsWith("/cms/settings/languages") && pathname.includes("/edit")) pageTitle = "Edit Language";
   else if (pathname.startsWith("/cms/settings/languages")) pageTitle = "Language Settings";
   // Fallback for general /cms/settings if no more specific language path matches
-  else if (pathname.startsWith("/cms/settings/logos")) pageTitle = "Logos";
+  else if (pathname.startsWith("/cms/settings/logos")) pageTitle = "Branding";
   else if (pathname.startsWith("/cms/settings/copyright")) pageTitle = "Copyright Settings";
+  else if (pathname.startsWith("/cms/settings/global-css")) pageTitle = "Global CSS Settings";
   else if (pathname.startsWith("/cms/settings/extra-translations")) pageTitle = "Extra Translations";
+  else if (pathname.startsWith("/cms/settings/currencies")) pageTitle = "Currency Settings";
+  else if (pathname.startsWith("/cms/settings/taxes")) pageTitle = "Tax Settings";
+  else if (pathname.startsWith("/cms/settings/cortex-ai")) pageTitle = "Cortex AI";
   else if (pathname.startsWith("/cms/payments")) pageTitle = "Payment Settings";
 
   else if (pathname.startsWith("/cms/settings/packages")) pageTitle = "Packages";
   else if (pathname.startsWith("/cms/settings")) pageTitle = "Settings";
+  else if (pathname.startsWith("/cms/products/inventory")) pageTitle = "Inventory";
   else if (pathname.startsWith("/cms/coupons/") && pathname.endsWith("/edit")) pageTitle = "Edit Coupon";
   else if (pathname.startsWith("/cms/coupons")) pageTitle = "Coupons";
   else if (pathname.startsWith("/cms/products/new")) pageTitle = "New Product";
@@ -213,7 +230,9 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
 
 
   return (
-    <div className="w-full flex flex-col md:flex-row bg-slate-50 dark:bg-slate-950 min-h-screen">
+    <CortexAiPageContextProvider>
+      <CortexAiActiveProvider isActive={isCortexAiActive}>
+    <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-slate-50 dark:bg-slate-950 md:flex-row">
       <div className="fixed bottom-4 right-4 z-[60] md:hidden">
         <Button
           variant="outline"
@@ -227,13 +246,13 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
 
       <aside
         className={cn(
-          "fixed md:sticky top-0 left-0 h-screen w-64 bg-white shadow-lg transition-transform duration-300 ease-in-out dark:bg-slate-900 dark:border-r dark:border-slate-700/60",
-          "md:translate-x-0",
+          "fixed left-0 top-16 bottom-0 w-64 bg-white shadow-lg transition-transform duration-300 ease-in-out dark:bg-slate-900 dark:border-r dark:border-slate-700/60",
+          "md:sticky md:top-0 md:bottom-auto md:h-full md:translate-x-0",
           cmsSidebarOpen ? "translate-x-0" : "-translate-x-full",
           "z-30"
         )}
       >
-        <div className="flex flex-col h-full">
+        <div className="flex h-full min-h-0 flex-col">
           <div className="p-4 border-b dark:border-slate-700/60 h-16 flex items-center shrink-0">
             <Link href="/cms/dashboard" className="flex items-center gap-2 px-2">
               <Image
@@ -250,11 +269,16 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
             </Link>
           </div>
 
-          <nav className="px-3 py-4 flex-1 overflow-y-auto">
+          <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4">
             <ul className="space-y-1.5">
               <NavItem href="/cms/dashboard" icon={LayoutDashboard} isActive={pathname === "/cms/dashboard"} isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Dashboard
               </NavItem>
+              {isCortexAiActive && (
+                <NavItem href="/cms/settings/cortex-ai" icon={Brain} isActive={pathname.startsWith("/cms/settings/cortex-ai")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                        Cortex AI
+                </NavItem>
+              )}
               <NavItem href="/cms/pages" icon={FileText} isActive={pathname.startsWith("/cms/pages")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Pages
               </NavItem>
@@ -264,6 +288,9 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
               <NavItem href="/cms/media" icon={ImageIconLucide} isActive={pathname.startsWith("/cms/media")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Media
               </NavItem>
+              <NavItem href="/cms/navigation" icon={ListTree} isActive={pathname.startsWith("/cms/navigation")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                    Navigation
+              </NavItem>
 
               {isEcommerceActive && (
                 <>
@@ -272,17 +299,38 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                       Store
                     </p>
                   </div>
-                  <NavItem href="/cms/products" icon={ShoppingBag} isActive={pathname.startsWith("/cms/products")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
-                    Products
-                  </NavItem>
+                  <CollapsibleNavItem
+                    icon={ShoppingBag}
+                    title="Products"
+                    isActive={pathname.startsWith("/cms/products")}
+                  >
+                    <NavItem href="/cms/products" icon={ShoppingBag} isActive={pathname === "/cms/products" || pathname.startsWith("/cms/products/") && !pathname.startsWith("/cms/products/attributes") && !pathname.startsWith("/cms/products/inventory")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                      All Products
+                    </NavItem>
+                    <NavItem href="/cms/products/inventory" icon={Package} isActive={pathname.startsWith("/cms/products/inventory")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                      Inventory
+                    </NavItem>
+                    <NavItem href="/cms/products/attributes" icon={ListTree} isActive={pathname.startsWith("/cms/products/attributes")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                      Attributes
+                    </NavItem>
+                  </CollapsibleNavItem>
                   <NavItem href="/cms/orders" icon={ListOrdered} isActive={pathname.startsWith("/cms/orders")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                     Orders
                   </NavItem>
                   <NavItem href="/cms/coupons" icon={TicketPercent} isActive={pathname.startsWith("/cms/coupons")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Coupons
                   </NavItem>
+                  <NavItem href="/cms/shipping" icon={Package} isActive={pathname.startsWith("/cms/shipping")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                    Shipping
+                  </NavItem>
                   <NavItem href="/cms/payments" icon={CreditCard} isActive={pathname.startsWith("/cms/payments")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Payments
+                  </NavItem>
+                  <NavItem href="/cms/settings/taxes" icon={Settings} isActive={pathname.startsWith("/cms/settings/taxes")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                    Taxes
+                  </NavItem>
+                  <NavItem href="/cms/settings/currencies" icon={Coins} isActive={pathname.startsWith("/cms/settings/currencies")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                    Currencies
                   </NavItem>
                 </>
               )}
@@ -294,16 +342,16 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                       Administration
                     </p>
                   </div>
-                  <NavItem href="/cms/navigation" icon={ListTree} isActive={pathname.startsWith("/cms/navigation")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                    Navigation
-                  </NavItem>
                   <NavItem href="/cms/users" icon={Users} isActive={pathname.startsWith("/cms/users")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Manage Users
+                  </NavItem>
+                  <NavItem href="/cms/settings/packages" icon={Package} isActive={pathname.startsWith("/cms/settings/packages")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                    Packages
                   </NavItem>
                   <CollapsibleNavItem
                     icon={Settings}
                     title="Settings"
-                    isActive={pathname.startsWith("/cms/settings")}
+                    isActive={pathname.startsWith("/cms/settings") && !pathname.startsWith("/cms/settings/taxes") && !pathname.startsWith("/cms/settings/currencies")}
                     adminOnly
                     isAdmin={isAdmin}
                   >
@@ -311,18 +359,17 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
                       Languages
                    </NavItem>
                    <NavItem href="/cms/settings/logos" icon={ImageIconLucide} isActive={pathname.startsWith("/cms/settings/logos")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                     Logos
+                     Branding
                    </NavItem>
                     <NavItem href="/cms/settings/copyright" icon={CopyrightIcon} isActive={pathname.startsWith("/cms/settings/copyright")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Copyright
                     </NavItem>
+                    <NavItem href="/cms/settings/global-css" icon={Paintbrush} isActive={pathname.startsWith("/cms/settings/global-css")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Global CSS
+                    </NavItem>
                     <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Extra Translations
                     </NavItem>
-                    <NavItem href="/cms/settings/packages" icon={Package} isActive={pathname.startsWith("/cms/settings/packages")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                      Packages
-                    </NavItem>
-
                  </CollapsibleNavItem>
                 </>
               )}
@@ -355,25 +402,34 @@ export default function CmsClientLayout({ children, isEcommerceActive = false }:
         </div>
       </aside>
 
-      <div className="flex-1 transition-all duration-300 ease-in-out w-full">
-        <header className="bg-background dark:bg-slate-800/30 border-b border-border h-16 flex items-center px-6 sticky top-0 z-20 w-full shrink-0">
+      <div className="flex min-w-0 flex-1 flex-col transition-all duration-300 ease-in-out w-full min-h-0">
+        <header className="bg-background dark:bg-slate-800/30 border-b border-border h-16 flex items-center gap-3 px-6 sticky top-0 z-20 w-full shrink-0">
             <Button variant="ghost" size="icon" className="md:hidden mr-3 -ml-2" onClick={() => setCmsSidebarOpen(!cmsSidebarOpen)}>
                 <Menu className="h-5 w-5" />
             </Button>
-           <h1 className="text-lg font-semibold text-foreground">
+           <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-foreground">
               {pageTitle}
             </h1>
+            <Button asChild variant="outline" size="sm" className="shrink-0">
+              <Link href="/">
+                <ExternalLink className="h-4 w-4" />
+                <span className="hidden sm:inline">View Site</span>
+              </Link>
+            </Button>
         </header>
-        <main className="p-6 w-full overflow-y-auto h-[calc(100vh-4rem)]">
+        <main className="flex-1 min-h-0 w-full overflow-y-auto overscroll-contain px-6 pt-6 pb-20 scroll-pb-24 md:pb-24">
             {children}
         </main>
       </div>
       {cmsSidebarOpen && ! (typeof window !== 'undefined' && window.innerWidth >= 768) && (
         <div
-            className="fixed inset-0 bg-black/30 z-20 md:hidden"
+            className="fixed inset-x-0 bottom-0 top-16 bg-black/30 z-20 md:hidden"
             onClick={() => setCmsSidebarOpen(false)}
         />
       )}
+      {isAdmin && isCortexAiActive && <CortexGlobalAgentChat />}
     </div>
+      </CortexAiActiveProvider>
+    </CortexAiPageContextProvider>
   )
 }

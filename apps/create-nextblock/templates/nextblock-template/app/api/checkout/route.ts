@@ -3,6 +3,10 @@ import { getPaymentProvider } from '@nextblock-cms/ecommerce/server';
 import { createClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 import { normalizeCustomerAddress } from '@nextblock-cms/ecommerce';
 
+function jsonError(errorKey: string, error: string, status: number) {
+  return NextResponse.json({ error, errorKey }, { status });
+}
+
 function resolveProviderFromItem(item: any): 'stripe' | 'freemius' | null {
   if (item?.provider === 'stripe' || item?.provider === 'freemius') {
     return item.provider;
@@ -31,7 +35,11 @@ export async function POST(req: Request) {
   try {
     const isOnline = await verifyPackageOnline('ecommerce');
     if (!isOnline) {
-      return NextResponse.json({ error: 'Ecommerce module license is inactive' }, { status: 403 });
+      return jsonError(
+        'ecommerce.checkout_license_inactive',
+        'Ecommerce module license is inactive',
+        403
+      );
     }
 
     const {
@@ -46,9 +54,13 @@ export async function POST(req: Request) {
       couponCode,
       couponContextItems,
     } = await req.json();
-
+    
     if (!items || !Array.isArray(items)) {
-      return NextResponse.json({ error: 'Invalid items data' }, { status: 400 });
+      return jsonError(
+        'ecommerce.checkout_invalid_items',
+        'Invalid items data',
+        400
+      );
     }
 
     const providerNames = Array.from(
@@ -56,30 +68,37 @@ export async function POST(req: Request) {
     ) as Array<'stripe' | 'freemius'>;
 
     if (providerNames.length === 0) {
-      return NextResponse.json(
-        { error: 'Each checkout request must include provider-aware cart items.' },
-        { status: 400 }
+      return jsonError(
+        'ecommerce.checkout_provider_items_required',
+        'Each checkout request must include provider-aware cart items.',
+        400
       );
     }
 
     if (providerNames.length > 1) {
-      return NextResponse.json(
-        { error: 'Mixed-provider carts must be checked out in separate steps.' },
-        { status: 400 }
+      return jsonError(
+        'ecommerce.checkout_mixed_provider_steps',
+        'Mixed-provider carts must be checked out in separate steps.',
+        400
       );
     }
 
     const providerName = providerNames[0];
 
     if (providerName === 'freemius' && items.length !== 1) {
-      return NextResponse.json(
-        { error: 'Freemius items must be checked out one at a time.' },
-        { status: 400 }
+      return jsonError(
+        'ecommerce.checkout_freemius_single_item',
+        'Freemius items must be checked out one at a time.',
+        400
       );
     }
 
     if (!billingAddress) {
-      return NextResponse.json({ error: 'Billing address is required' }, { status: 400 });
+      return jsonError(
+        'ecommerce.checkout_billing_address_required',
+        'Billing address is required',
+        400
+      );
     }
 
     const supabase = createClient();
@@ -91,21 +110,21 @@ export async function POST(req: Request) {
 
     const { url, error, errorKey, errorParams, errorStatus, customProps } =
       await provider.createCheckoutSession({
-        items,
-        customerEmail: resolvedCustomerEmail,
-        customerPhone,
-        userId,
-        billingAddress: normalizeCustomerAddress(billingAddress) ?? billingAddress,
-        shippingAddress:
-          providerName === 'stripe'
-            ? normalizeCustomerAddress(shippingAddress)
-            : null,
-        shippingMethodId: providerName === 'stripe' ? shippingMethodId : null,
-        currencyCode: typeof currencyCode === 'string' ? currencyCode : null,
-        locale: typeof locale === 'string' ? locale : null,
-        couponCode: typeof couponCode === 'string' ? couponCode : null,
-        couponContextItems: Array.isArray(couponContextItems) ? couponContextItems : items,
-      });
+      items,
+      customerEmail: resolvedCustomerEmail,
+      customerPhone,
+      userId,
+      billingAddress: normalizeCustomerAddress(billingAddress) ?? billingAddress,
+      shippingAddress:
+        providerName === 'stripe'
+          ? normalizeCustomerAddress(shippingAddress)
+          : null,
+      shippingMethodId: providerName === 'stripe' ? shippingMethodId : null,
+      currencyCode: typeof currencyCode === 'string' ? currencyCode : null,
+      locale: typeof locale === 'string' ? locale : null,
+      couponCode: typeof couponCode === 'string' ? couponCode : null,
+      couponContextItems: Array.isArray(couponContextItems) ? couponContextItems : items,
+    });
 
     if (error) {
       console.error('Checkout Error:', error);
@@ -118,6 +137,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ url, customProps });
   } catch (err: any) {
     console.error('Checkout API Error:', err);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return jsonError(
+      'ecommerce.checkout_internal_server_error',
+      'Internal Server Error',
+      500
+    );
   }
 }

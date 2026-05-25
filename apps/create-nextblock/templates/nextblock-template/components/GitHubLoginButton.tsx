@@ -5,15 +5,16 @@ import { Button } from "@nextblock-cms/ui";
 
 interface GitHubLoginButtonProps {
   t: (key: string) => string;
+  redirectTo?: string;
 }
 
-export function GitHubLoginButton({ t }: GitHubLoginButtonProps) {
+export function GitHubLoginButton({ t, redirectTo }: GitHubLoginButtonProps) {
   const handleGitHubLogin = async () => {
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
       provider: 'github',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback${redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : ''}`,
       },
     });
   };

@@ -1,9 +1,20 @@
 // app/[slug]/page.utils.ts
-import { getSsgSupabaseClient } from "@nextblock-cms/db/server";
+import { createClient, getSsgSupabaseClient } from "@nextblock-cms/db/server";
 import type { Database } from "@nextblock-cms/db";
+import { draftMode } from "next/headers";
+import { getContentDraft } from "../../lib/visual-editing/draft-content";
+import type { ContentDraftRow, DraftBlockSnapshot } from "../../lib/visual-editing/types";
 
 type PageType = Database['public']['Tables']['pages']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
+type PublicPageData = PageType & {
+  blocks: BlockType[];
+  language_code: string;
+  language_id: number;
+  translation_group_id: string | null;
+  draft_id?: number | null;
+};
+
 
 // Define a more specific type for the content of an Image Block
 export type ImageBlockContent = {
@@ -11,17 +22,6 @@ export type ImageBlockContent = {
   object_key?: string; // Optional because it's added later
   blur_data_url?: string | null; // Optional because it's added later
 };
-interface SectionOrHeroBlockContent {
-  [key: string]: unknown;
-  background?: {
-    type?: 'image' | 'color';
-    image?: {
-      media_id?: string;
-      object_key?: string;
-      blur_data_url?: string;
-    };
-  };
-}
 
 // Interface to represent a page object after the initial database query and selection
 interface SelectedPageType extends PageType { // Assumes PageType includes fields like id, slug, status, language_id, translation_group_id
@@ -29,11 +29,216 @@ interface SelectedPageType extends PageType { // Assumes PageType includes field
   blocks: BlockType[];
 }
 
+function hasMetaValue(draft: ContentDraftRow, key: string) {
+  return Object.prototype.hasOwnProperty.call(draft.meta, key);
+}
+
+function draftString(draft: ContentDraftRow, key: string, fallback: string): string {
+  const value = draft.meta[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function draftNullableString(
+  draft: ContentDraftRow,
+  key: string,
+  fallback: string | null
+): string | null {
+  if (!hasMetaValue(draft, key)) {
+    return fallback;
+  }
+
+  const value = draft.meta[key];
+  return typeof value === "string" ? value : null;
+}
+
+function draftNumber(draft: ContentDraftRow, key: string, fallback: number): number {
+  const value = draft.meta[key];
+  return typeof value === "number" ? value : fallback;
+}
+
+function draftBlockToPageBlock(
+  block: DraftBlockSnapshot,
+  pageId: number,
+  fallbackUpdatedAt: string
+): BlockType {
+  return {
+    id: block.id ?? -(block.order + 1),
+    page_id: pageId,
+    post_id: null,
+    language_id: block.language_id,
+    block_type: block.block_type,
+    content: block.content,
+    order: block.order,
+    created_at: block.created_at ?? fallbackUpdatedAt,
+    updated_at: block.updated_at ?? fallbackUpdatedAt,
+  };
+}
+
+function applyDraftToPage(page: SelectedPageType, draft: ContentDraftRow): SelectedPageType {
+  const languageId = draftNumber(draft, "language_id", page.language_id);
+
+  return {
+    ...page,
+    title: draftString(draft, "title", page.title),
+    slug: draftString(draft, "slug", page.slug),
+    language_id: languageId,
+    language_details: languageId === page.language_id ? page.language_details : null,
+    status: draftString(draft, "status", page.status) as PageType["status"],
+    meta_title: draftNullableString(draft, "meta_title", page.meta_title),
+    meta_description: draftNullableString(draft, "meta_description", page.meta_description),
+    translation_group_id: draftString(
+      draft,
+      "translation_group_id",
+      page.translation_group_id
+    ),
+    blocks: draft.blocks.map((block) =>
+      draftBlockToPageBlock(block, page.id, draft.updated_at || page.updated_at)
+    ),
+  };
+}
+
+function extractMediaIdsFromBlock(block: any): string[] {
+  const ids: string[] = [];
+  if (!block || !block.block_type) return ids;
+
+  if (block.block_type === 'image') {
+    const mediaId = block.content?.media_id;
+    if (mediaId && typeof mediaId === 'string') {
+      ids.push(mediaId);
+    }
+  } else if (block.block_type === 'section' || block.block_type === 'hero') {
+    const content = block.content;
+    if (content) {
+      if (content.background?.type === 'image' && content.background.image?.media_id) {
+        ids.push(content.background.image.media_id);
+      }
+      if (Array.isArray(content.column_blocks)) {
+        for (const col of content.column_blocks) {
+          if (Array.isArray(col)) {
+            for (const nestedBlock of col) {
+              ids.push(...extractMediaIdsFromBlock(nestedBlock));
+            }
+          }
+        }
+      }
+      if (Array.isArray(content.slides)) {
+        for (const slide of content.slides) {
+          if (slide.background?.type === 'image' && slide.background.image?.media_id) {
+            ids.push(slide.background.image.media_id);
+          }
+          if (Array.isArray(slide.column_blocks)) {
+            for (const col of slide.column_blocks) {
+              if (Array.isArray(col)) {
+                for (const nestedBlock of col) {
+                  ids.push(...extractMediaIdsFromBlock(nestedBlock));
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return ids;
+}
+
+function mapMediaDataToBlock(
+  block: any,
+  mediaMap: Map<string, { object_key: string; blur_data_url?: string | null }>
+): any {
+  if (!block || !block.block_type) return block;
+
+  if (block.block_type === 'image') {
+    const content = block.content;
+    if (content?.media_id) {
+      const mediaData = mediaMap.get(content.media_id);
+      if (mediaData) {
+        return {
+          ...block,
+          content: {
+            ...content,
+            object_key: mediaData.object_key,
+            blur_data_url: mediaData.blur_data_url,
+          },
+        };
+      }
+    }
+  } else if (block.block_type === 'section' || block.block_type === 'hero') {
+    const content = block.content;
+    if (!content) return block;
+
+    const updatedContent = { ...content };
+
+    if (content.background?.type === 'image' && content.background.image?.media_id) {
+      const mediaData = mediaMap.get(content.background.image.media_id);
+      if (mediaData) {
+        updatedContent.background = {
+          ...content.background,
+          image: {
+            ...content.background.image,
+            object_key: mediaData.object_key,
+            blur_data_url: mediaData.blur_data_url,
+          },
+        };
+      }
+    }
+
+    if (Array.isArray(content.column_blocks)) {
+      updatedContent.column_blocks = content.column_blocks.map((col: any) => {
+        if (Array.isArray(col)) {
+          return col.map((nestedBlock: any) => mapMediaDataToBlock(nestedBlock, mediaMap));
+        }
+        return col;
+      });
+    }
+
+    if (Array.isArray(content.slides)) {
+      updatedContent.slides = content.slides.map((slide: any) => {
+        const updatedSlide = { ...slide };
+
+        if (slide.background?.type === 'image' && slide.background.image?.media_id) {
+          const mediaData = mediaMap.get(slide.background.image.media_id);
+          if (mediaData) {
+            updatedSlide.background = {
+              ...slide.background,
+              image: {
+                ...slide.background.image,
+                object_key: mediaData.object_key,
+                blur_data_url: mediaData.blur_data_url,
+              },
+            };
+          }
+        }
+
+        if (Array.isArray(slide.column_blocks)) {
+          updatedSlide.column_blocks = slide.column_blocks.map((col: any) => {
+            if (Array.isArray(col)) {
+              return col.map((nestedBlock: any) => mapMediaDataToBlock(nestedBlock, mediaMap));
+            }
+            return col;
+          });
+        }
+
+        return updatedSlide;
+      });
+    }
+
+    return {
+      ...block,
+      content: updatedContent,
+    };
+  }
+
+  return block;
+}
+
 export async function getPageDataBySlug(
   slug: string,
   preferredLanguageCode?: string,
-): Promise<(PageType & { blocks: BlockType[]; language_code: string; language_id: number; translation_group_id: string | null; }) | null> {
-  const supabase = getSsgSupabaseClient();
+): Promise<PublicPageData | null> {
+  const draft = await draftMode();
+  const isDraftModeEnabled = draft.isEnabled;
+  const supabase = isDraftModeEnabled ? createClient() : getSsgSupabaseClient();
 
   const baseSelect = `
       id, slug, title, meta_title, meta_description, status, language_id, translation_group_id, author_id, created_at, updated_at,
@@ -51,14 +256,18 @@ export async function getPageDataBySlug(
 
   // First try to fetch the preferred language explicitly when provided
   if (preferredLanguageCode) {
-    const { data: preferredData, error: preferredError } = await supabase
+    let preferredQuery = supabase
       .from("pages")
       .select(baseSelect)
       .eq("slug", slug)
-      .eq("status", "published")
       .eq("languages.code", preferredLanguageCode)
-      .order('order', { foreignTable: 'blocks', ascending: true })
-      .maybeSingle();
+      .order('order', { foreignTable: 'blocks', ascending: true });
+
+    if (!isDraftModeEnabled) {
+      preferredQuery = preferredQuery.eq("status", "published");
+    }
+
+    const { data: preferredData, error: preferredError } = await preferredQuery.maybeSingle();
     if (!preferredError && preferredData) {
       candidatePages = toSelected([preferredData]);
     }
@@ -66,12 +275,17 @@ export async function getPageDataBySlug(
 
   // Fallback: fetch all published pages with this slug
   if (candidatePages.length === 0) {
-    const { data: candidatePagesData, error: pageError } = await supabase
+    let pageQuery = supabase
       .from("pages")
       .select(baseSelect)
       .eq("slug", slug)
-      .eq("status", "published")
       .order('order', { foreignTable: 'blocks', ascending: true });
+
+    if (!isDraftModeEnabled) {
+      pageQuery = pageQuery.eq("status", "published");
+    }
+
+    const { data: candidatePagesData, error: pageError } = await pageQuery;
 
     if (pageError) {
       return null;
@@ -120,6 +334,14 @@ export async function getPageDataBySlug(
   if (!selectedPage) {
     return null;
   }
+
+  const contentDraft = isDraftModeEnabled
+    ? await getContentDraft("page", selectedPage.id)
+    : null;
+
+  if (contentDraft) {
+    selectedPage = applyDraftToPage(selectedPage, contentDraft);
+  }
   
   let languageCode: string | undefined = selectedPage.language_details?.code;
   let languageId: number | undefined = selectedPage.language_details?.id;
@@ -148,6 +370,8 @@ export async function getPageDataBySlug(
     }
   }
 
+
+
   if (typeof languageCode !== 'string' || typeof languageId !== 'number') {
       return null;
   }
@@ -155,19 +379,8 @@ export async function getPageDataBySlug(
   let blocksWithMediaData: BlockType[] = selectedPage.blocks || [];
   if (blocksWithMediaData.length > 0) {
     const mediaIds = blocksWithMediaData
-      .map(block => {
-        if (block.block_type === 'image') {
-          return (block.content as ImageBlockContent)?.media_id;
-        }
-        if (block.block_type === 'section' || block.block_type === 'hero') {
-          const content = block.content as SectionOrHeroBlockContent;
-          if (content.background?.type === 'image' && content.background?.image?.media_id) {
-            return content.background.image.media_id;
-          }
-        }
-        return null;
-      })
-      .filter((id): id is string => id !== null && typeof id === 'string');
+      .flatMap(block => extractMediaIdsFromBlock(block))
+      .filter((id): id is string => id !== null && typeof id === 'string' && id !== '');
 
     if (mediaIds.length > 0) {
       // Optimized media query with specific fields only
@@ -180,38 +393,7 @@ export async function getPageDataBySlug(
         console.error('Error fetching media data:', mediaError);
       } else if (mediaItems) {
         const mediaMap = new Map(mediaItems.map(m => [m.id, { object_key: m.object_key, blur_data_url: m.blur_data_url }]));
-        blocksWithMediaData = blocksWithMediaData.map(block => {
-          if (block.block_type === 'image') {
-            const content = block.content as ImageBlockContent;
-            if (content.media_id) {
-              const mediaData = mediaMap.get(content.media_id);
-              if (mediaData) {
-                return { ...block, content: { ...content, object_key: mediaData.object_key, blur_data_url: mediaData.blur_data_url } };
-              }
-            }
-          }
-          if (block.block_type === 'section' || block.block_type === 'hero') {
-            const content = block.content as SectionOrHeroBlockContent;
-            if (content.background?.type === 'image' && content.background?.image?.media_id) {
-              const mediaData = mediaMap.get(content.background.image.media_id);
-              if (mediaData) {
-                const newContent = {
-                  ...content,
-                  background: {
-                    ...content.background,
-                    image: {
-                      ...content.background.image,
-                      object_key: mediaData.object_key,
-                      blur_data_url: mediaData.blur_data_url,
-                    },
-                  },
-                };
-                return { ...block, content: newContent };
-              }
-            }
-          }
-          return block;
-        });
+        blocksWithMediaData = blocksWithMediaData.map(block => mapMediaDataToBlock(block, mediaMap));
       }
     }
   }
@@ -219,12 +401,12 @@ export async function getPageDataBySlug(
   const { language_details, blocks, ...basePageData } = selectedPage;
   void language_details;
   void blocks;
-
   return {
     ...(basePageData as PageType),
     blocks: blocksWithMediaData,
     language_code: languageCode,
     language_id: languageId,
     translation_group_id: selectedPage.translation_group_id,
+    draft_id: contentDraft?.id ?? null,
   };
 }

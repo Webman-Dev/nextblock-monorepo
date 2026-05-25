@@ -10,7 +10,7 @@ import type {
 import { getPublicBlockRendererLoader } from "./blocks/publicRendererLoaders";
 
 type Block = Database['public']['Tables']['blocks']['Row'];
-import HeroBlockRenderer from "./blocks/renderers/HeroBlockRenderer"; // Static import for LCP
+import SectionBlockRenderer from "./blocks/renderers/SectionBlockRenderer"; // Static import for LCP
 import ClientTextBlockRenderer from "./blocks/renderers/ClientTextBlockRenderer"; // Static import for client component
 
 const ECOMMERCE_BLOCK_TYPES = new Set([
@@ -137,15 +137,16 @@ async function renderLoadedBlock({
 async function renderBlock(context: BlockRenderContext) {
   const { block, blockIndex, languageId, visualEditAttributes, visualEditing } = context;
 
-  if (block.block_type === 'hero') {
+  if (block.block_type === 'hero' || block.block_type === 'section') {
     return (
-      <HeroBlockRenderer
+      <SectionBlockRenderer
         content={block.content as unknown as SectionBlockContent}
         languageId={languageId}
         visualEditAttributes={visualEditAttributes}
         visualEditing={visualEditing}
         parentBlockId={block.id}
         parentBlockIndex={blockIndex}
+        blockType={block.block_type}
       />
     );
   }

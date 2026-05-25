@@ -4,7 +4,7 @@ import Link from "next/link";
 import React from "react";
 import { Separator } from "@nextblock-cms/ui";
 import { Button } from "@nextblock-cms/ui";
-import { ArrowLeft, Eye, EyeOff, FilePenLine } from "lucide-react";
+import { ArrowLeft, Eye, FilePenLine } from "lucide-react";
 import PageForm from "../../components/PageForm";
 import BlockEditorArea from "../../../blocks/components/BlockEditorArea";
 import ContentLanguageSwitcher from "../../../components/ContentLanguageSwitcher";
@@ -13,6 +13,7 @@ import RevisionHistoryButton from "../../../revisions/RevisionHistoryButton";
 import { UploadFolderProvider } from '../../../media/UploadFolderContext';
 import { CortexAiPageContextRegistrar } from "../../../components/CortexAiPageContext";
 import type { Database } from "@nextblock-cms/db";
+import DraftStatusActions from "../../../components/DraftStatusActions";
 
 type Page = Database["public"]["Tables"]["pages"]["Row"];
 type Block = Database["public"]["Tables"]["blocks"]["Row"];
@@ -33,6 +34,7 @@ interface EditPageClientProps {
   isDraftModeEnabled: boolean;
   initialFeatureImageUrl?: string | null;
   initialFeatureImageId?: string | null;
+  hasDraft: boolean;
 }
 
 export default function EditPageClient({
@@ -44,10 +46,9 @@ export default function EditPageClient({
   isDraftModeEnabled,
   initialFeatureImageUrl,
   initialFeatureImageId,
+  hasDraft,
 }: EditPageClientProps) {
-  const draftModeUrl = `${
-    isDraftModeEnabled ? "/api/draft/disable" : "/api/draft/start"
-  }?path=${encodeURIComponent(publicPageUrl)}`;
+  const draftModeUrl = `/api/draft/start?path=${encodeURIComponent(publicPageUrl)}`;
 
   return (
     <UploadFolderProvider defaultFolder={`pages/${page.slug}/`}>
@@ -71,7 +72,7 @@ export default function EditPageClient({
               asChild
             >
               <Link href="/cms/pages">
-                <ArrowLeft className="h-4 w-4" />
+                <ArrowLeft className="h-4 w-3.5" />
               </Link>
             </Button>
             <div>
@@ -113,23 +114,20 @@ export default function EditPageClient({
                 <Eye className="mr-2 h-4 w-4" /> View Live
               </Link>
             </Button>
-            <Button variant={isDraftModeEnabled ? "default" : "secondary"} asChild>
+            <Button variant="secondary" asChild>
               <a
                 href={draftModeUrl}
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {isDraftModeEnabled ? (
-                  <EyeOff className="mr-2 h-4 w-4" />
-                ) : (
-                  <FilePenLine className="mr-2 h-4 w-4" />
-                )}
-                {isDraftModeEnabled ? "Exit Draft" : "Preview Draft"}
+                <FilePenLine className="mr-2 h-4 w-4" /> Preview
               </a>
             </Button>
             <RevisionHistoryButton parentType="page" parentId={pageId} />
           </div>
         </div>
+
+        <DraftStatusActions parentId={pageId} parentType="page" hasDraft={hasDraft} />
 
         <PageForm
           page={page}

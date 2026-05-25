@@ -20,6 +20,7 @@ import {
 import MediaImage from "./MediaImage";
 import DeleteMediaButtonClient from "./DeleteMediaButtonClient"; // For single item deletion
 import { deleteMultipleMediaItems, moveSingleMediaItem } from "../actions"; // Server actions for bulk ops
+import { resolveMediaUrl } from "../../../../lib/media/resolveMediaUrl";
 
 interface MediaGridClientProps {
   initialMediaItems: Media[];
@@ -210,64 +211,68 @@ export default function MediaGridClient({ initialMediaItems, r2BaseUrl }: MediaG
          </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 mt-6">
-          {mediaItems.map((item) => (
-            <div
-              key={item.id}
-              className={`group relative border rounded-lg overflow-hidden shadow-sm aspect-square bg-muted/20 transition-all
-                ${isSelected(item.id) ? "ring-2 ring-primary ring-offset-2" : ""}`}
-            >
-              <div className="absolute top-2 left-2 z-10">
-                <Checkbox
-                  id={`select-${item.id}`}
-                  checked={isSelected(item.id)}
-                  onCheckedChange={(checked) => {
-                    handleSelectionChange(item.id, item.object_key, !!checked);
-                  }}
-                  aria-label={`Select ${item.file_name}`}
-                  className="bg-white/70 hover:bg-white border-slate-400 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
-                />
-              </div>
+          {mediaItems.map((item) => {
+            const imageUrl = resolveMediaUrl(item.file_path || item.object_key, r2BaseUrl);
 
-              {item.file_type?.startsWith("image/") ? (
-                <MediaImage
-                  src={`${r2BaseUrl}/${item.object_key}`}
-                  alt={item.description || item.file_name}
-                  width={item.width || 500} // Default width if null
-                  height={item.height || 500} // Default height if null
-                  blurDataURL={item.blur_data_url || undefined}
-                  className="h-full w-full object-contain transition-transform group-hover:scale-105"
-                />
-              ) : (
-                <div className="h-full w-full bg-muted flex flex-col items-center justify-center p-2">
-                  <FileText className="h-12 w-12 text-muted-foreground mb-2" />
-                  <p className="text-xs text-center text-muted-foreground truncate w-full" title={item.file_name}>
-                    {item.file_name}
-                  </p>
+            return (
+              <div
+                key={item.id}
+                className={`group relative border rounded-lg overflow-hidden shadow-sm aspect-square bg-muted/20 transition-all
+                  ${isSelected(item.id) ? "ring-2 ring-primary ring-offset-2" : ""}`}
+              >
+                <div className="absolute top-2 left-2 z-10">
+                  <Checkbox
+                    id={`select-${item.id}`}
+                    checked={isSelected(item.id)}
+                    onCheckedChange={(checked) => {
+                      handleSelectionChange(item.id, item.object_key, !!checked);
+                    }}
+                    aria-label={`Select ${item.file_name}`}
+                    className="bg-white/70 hover:bg-white border-slate-400 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                  />
                 </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
-                <div className="text-xs text-black truncate pt-1 ps-5" title={item.file_name}>{item.file_name}</div>
-                <div className="self-end">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="secondary" size="icon" className="text-white bg-black/40 hover:bg-black/60 h-7 w-7 rounded-full">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                            <Link href={`/cms/media/${item.id}/edit`} className="flex items-center cursor-pointer">
-                                <Edit3 className="mr-2 h-4 w-4" /> Edit Details
-                            </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DeleteMediaButtonClient mediaItem={item} />
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+
+                {item.file_type?.startsWith("image/") && imageUrl ? (
+                  <MediaImage
+                    src={imageUrl}
+                    alt={item.description || item.file_name}
+                    width={item.width || 500} // Default width if null
+                    height={item.height || 500} // Default height if null
+                    blurDataURL={item.blur_data_url || undefined}
+                    className="h-full w-full object-contain transition-transform group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="h-full w-full bg-muted flex flex-col items-center justify-center p-2">
+                    <FileText className="h-12 w-12 text-muted-foreground mb-2" />
+                    <p className="text-xs text-center text-muted-foreground truncate w-full" title={item.file_name}>
+                      {item.file_name}
+                    </p>
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
+                  <div className="text-xs text-black truncate pt-1 ps-5" title={item.file_name}>{item.file_name}</div>
+                  <div className="self-end">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="secondary" size="icon" className="text-white bg-black/40 hover:bg-black/60 h-7 w-7 rounded-full">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                              <Link href={`/cms/media/${item.id}/edit`} className="flex items-center cursor-pointer">
+                                  <Edit3 className="mr-2 h-4 w-4" /> Edit Details
+                              </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DeleteMediaButtonClient mediaItem={item} />
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

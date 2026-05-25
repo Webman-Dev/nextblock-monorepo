@@ -8,6 +8,7 @@ import {
   PopoverTrigger,
 } from "./popover";
 import { Label } from "./label";
+import { Input } from "./input";
 import { cn } from "@nextblock-cms/utils";
 
 interface ColorPickerProps {
@@ -32,21 +33,32 @@ const ColorPicker = React.forwardRef<HTMLDivElement, ColorPickerProps>(
     };
 
     return (
-      <div className={cn("space-y-2", className)} ref={ref}>
-        <Label>{label}</Label>
-        <Popover>
-          <PopoverTrigger asChild>
-            <div
-              className="w-full h-10 rounded-md border border-input cursor-pointer"
-              style={{ backgroundColor: color }}
-            />
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0">
-            <React.Suspense fallback={<div className="h-[276px] w-[220px]" />}>
-              <SketchPicker color={color} onChangeComplete={handleColorChange} />
-            </React.Suspense>
-          </PopoverContent>
-        </Popover>
+      <div className={cn("space-y-1.5", className)} ref={ref}>
+        <Label className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">
+          {label}
+        </Label>
+        <div className="flex items-center gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="w-9 h-9 rounded-md border border-input cursor-pointer flex-shrink-0 shadow-sm transition-all hover:scale-105"
+                style={{ backgroundColor: color }}
+              />
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <React.Suspense fallback={<div className="h-[276px] w-[220px]" />}>
+                <SketchPicker color={color} onChangeComplete={handleColorChange} />
+              </React.Suspense>
+            </PopoverContent>
+          </Popover>
+          <Input
+            value={color}
+            onChange={(e) => onChange(e.target.value)}
+            className="h-9 font-mono text-xs flex-1 min-w-[100px]"
+            placeholder="#000000"
+          />
+        </div>
       </div>
     );
   }

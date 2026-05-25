@@ -5,4 +5,5 @@ export type PostWithMediaDimensions = Database['public']['Tables']['posts']['Row
     feature_image_width: number | null;
     feature_image_height: number | null;
     blur_data_url: string | null;
+    estimated_read_time_minutes: number;
 };

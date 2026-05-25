@@ -1,4 +1,4 @@
-﻿// app/cms/media/page.tsx
+// app/cms/media/page.tsx
 import React from 'react';
 import { createClient } from "@nextblock-cms/db/server";
 // import Link from "next/link"; // Unused, MediaGridClient handles item links

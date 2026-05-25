@@ -93,6 +93,10 @@ export default function PostForm({
 
   const [formMessage, setFormMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const isFirstRender = useRef(true);
 
   useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
 
@@ -156,19 +160,109 @@ export default function PostForm({
     }
   };
 
+  const saveDraft = async (customFormData?: FormData) => {
+    if (!title.trim() || !slug.trim()) {
+      return;
+    }
+    setIsSaving(true);
+    setSaveError(null);
+
+    const formData = customFormData || new FormData();
+    if (!customFormData) {
+      formData.append("title", title);
+      formData.append("slug", slug);
+      formData.append("language_id", languageId);
+      formData.append("label", label);
+      formData.append("status", status);
+      formData.append("excerpt", excerpt);
+      formData.append("subtitle", subtitle);
+      formData.append("published_at", publishedAt);
+      formData.append("meta_title", metaTitle);
+      formData.append("meta_description", metaDescription);
+      formData.append("feature_image_id", selectedFeatureImage.id || "");
+    }
+
+    try {
+      const result = await formAction(formData);
+      if (result && 'error' in result && result.error) {
+        setSaveError(result.error);
+        setFormMessage({ type: 'error', text: result.error });
+      } else {
+        setLastSaved(new Date());
+        setFormMessage(null);
+        router.refresh();
+      }
+    } catch (err: any) {
+      const msg = err.message || "Failed to save draft";
+      setSaveError(msg);
+      setFormMessage({ type: 'error', text: msg });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setFormMessage(null);
-    const formData = new FormData(event.currentTarget);
+    if (!isEditing) {
+      setFormMessage(null);
+      const formData = new FormData(event.currentTarget);
 
-    startTransition(async () => {
-      const result = await formAction(formData);
-      if (result?.error) {
-        setFormMessage({ type: 'error', text: result.error });
-      }
-      // Success is handled by redirect with query param in server action
-    });
+      startTransition(async () => {
+        const result = await formAction(formData);
+        if (result?.error) {
+          setFormMessage({ type: 'error', text: result.error });
+        }
+      });
+    } else {
+      await saveDraft();
+    }
   };
+
+  useEffect(() => {
+    if (!isEditing) return;
+
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
+    const dbPublishedAt = formatDateTimeLocal(post?.published_at);
+
+    const hasChanges =
+      title !== (post?.title || "") ||
+      slug !== (post?.slug || "") ||
+      label !== (post?.label || "") ||
+      languageId !== (post?.language_id?.toString() || "") ||
+      status !== (post?.status || "draft") ||
+      excerpt !== (post?.excerpt || "") ||
+      subtitle !== (post?.subtitle || "") ||
+      publishedAt !== dbPublishedAt ||
+      metaTitle !== (post?.meta_title || "") ||
+      metaDescription !== (post?.meta_description || "") ||
+      selectedFeatureImage.id !== (post?.feature_image_id || null);
+
+    if (!hasChanges) return;
+
+    const timer = setTimeout(() => {
+      saveDraft();
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [
+    title,
+    slug,
+    label,
+    languageId,
+    status,
+    excerpt,
+    subtitle,
+    publishedAt,
+    metaTitle,
+    metaDescription,
+    selectedFeatureImage.id,
+    post,
+    isEditing,
+  ]);
 
   // Remove languagesLoading from this condition
   if (authLoading) {
@@ -180,6 +274,30 @@ export default function PostForm({
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6 w-full mx-auto px-6">
+      {isEditing && (
+        <div className="flex items-center justify-between text-xs text-muted-foreground pb-2 border-b border-border/40 mb-2">
+          <span className="font-semibold text-[11px] uppercase tracking-wider text-muted-foreground/80">Post Settings</span>
+          <div className="flex items-center gap-1.5 min-h-[16px]">
+            {isSaving ? (
+              <>
+                <div className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                </div>
+                <span className="text-amber-600 dark:text-amber-400 font-medium">Autosaving settings...</span>
+              </>
+            ) : saveError ? (
+              <span className="text-red-500 font-medium">Error saving settings: {saveError}</span>
+            ) : lastSaved ? (
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                Settings autosaved at {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/60">Settings autosave in draft mode</span>
+            )}
+          </div>
+        </div>
+      )}
       {formMessage && (
         <Alert variant={formMessage.type === 'success' ? 'success' : 'destructive'} className="mb-4">
            <AlertDescription>{formMessage.text}</AlertDescription>
@@ -293,18 +411,20 @@ export default function PostForm({
         uploadFolder={`posts/${(slug || 'untitled').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '')}/`}
       />
     
-      <div className="flex justify-end space-x-3 pt-6"> {/* Increased pt for spacing */}
-        <Button type="button" variant="outline" onClick={() => router.push("/cms/posts")} disabled={isPending}>Cancel</Button>
-        <Button type="submit" disabled={isPending || authLoading || availableLanguages.length === 0}>
-          {isPending ? (
-            <>
-              <Spinner className="mr-2 h-4 w-4" /> Saving...
-            </>
-          ) : (
-            actionButtonText
-          )}
-        </Button>
-      </div>
+      {!isEditing && (
+        <div className="flex justify-end space-x-3 pt-6"> {/* Increased pt for spacing */}
+          <Button type="button" variant="outline" onClick={() => router.push("/cms/posts")} disabled={isPending}>Cancel</Button>
+          <Button type="submit" disabled={isPending || authLoading || availableLanguages.length === 0}>
+            {isPending ? (
+              <>
+                <Spinner className="mr-2 h-4 w-4" /> Saving...
+              </>
+            ) : (
+              actionButtonText
+            )}
+          </Button>
+        </div>
+      )}
     </form>
   );
 }

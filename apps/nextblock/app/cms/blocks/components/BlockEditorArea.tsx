@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useTransition, useEffect, ComponentType, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from 'next/dynamic';
 import debounce from 'lodash.debounce';
 import type { Database, Json } from "@nextblock-cms/db";
@@ -76,6 +77,7 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
 
   const [blocks, setBlocks] = useState<Block[]>(() => initialBlocks.sort((a, b) => a.order - b.order));
   const lastSavedBlocks = useRef(blocks);
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isSavingNested, startSavingNestedTransition] = useTransition();
   const [isBlockSelectorOpen, setIsBlockSelectorOpen] = useState(false);
@@ -102,6 +104,7 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
     if (result.success && result.updatedBlock) {
       // On success, update the last saved state ref
       lastSavedBlocks.current = blocks;
+      router.refresh();
     } else {
       // On failure, revert the UI to the last known good state
       alert(`Failed to save changes: ${result.error}. Reverting.`);
@@ -257,6 +260,7 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
         if (result.success && result.updatedBlock) {
           lastSavedBlocks.current = blocks;
           setEditingNestedBlockInfo(null);
+          router.refresh();
         } else {
           alert(`Error saving nested block changes: ${result.error}`);
           setBlocks(lastSavedBlocks.current);
@@ -333,6 +337,7 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
 
         setBlocks(finalBlocks);
         lastSavedBlocks.current = finalBlocks;
+        router.refresh();
       } else {
         alert(`Error adding block: ${createResult?.error}`);
         // TODO: Revert order changes if creation fails
@@ -389,6 +394,7 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
           setBlocks(originalBlocks);
         } else {
           lastSavedBlocks.current = finalItemsWithUpdatedOrder;
+          router.refresh();
         }
       });
     }
@@ -473,6 +479,7 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
                         const newBlocks = blocks.filter((b) => b.id !== blockIdToDelete);
                         setBlocks(newBlocks);
                         lastSavedBlocks.current = newBlocks;
+                        router.refresh();
                       } else if (result?.error) {
                         alert(`Error deleting block: ${result.error}`);
                       }

@@ -12,8 +12,7 @@ import { getBlockDefinition, blockRegistry, BlockType } from '../../../../lib/bl
 import { BlockEditorModal } from './BlockEditorModal';
 import { DeleteBlockButtonClient } from './DeleteBlockButtonClient';
 import { cn } from '@nextblock-cms/utils';
-
-const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
+import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
 
 export interface EditableBlockProps {
   block: Block;
@@ -168,7 +167,7 @@ export default function EditableBlock({
        }
        case 'image': {
          const content = (block.content || {}) as any;
-         const imageUrl = content.object_key ? `${R2_BASE_URL}/${content.object_key}` : content.src;
+         const imageUrl = resolveMediaUrl(content.object_key) || content.src;
          return (
               <div className="flex gap-4 py-2">
                  <div className="flex-shrink-0 h-16 w-16 bg-muted rounded overflow-hidden flex items-center justify-center border">

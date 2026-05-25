@@ -6,11 +6,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Database } from "@nextblock-cms/db";
 import { v4 as uuidv4 } from 'uuid';
+import { getOrCreateContentDraft } from "../../../lib/visual-editing/draft-content";
 
 type PageStatus = Database['public']['Enums']['page_status'];
 import { encodedRedirect } from "@nextblock-cms/utils/server";
-import { getFullPageContent } from "../revisions/utils";
-import { createPageRevision } from "../revisions/service";
 
 // --- createPage and updatePage functions remain unchanged ---
 
@@ -90,7 +89,7 @@ export async function updatePage(pageId: number, formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   const pageEditPath = `/cms/pages/${pageId}/edit`;
 
-  if (!user) return encodedRedirect("error", pageEditPath, "User not authenticated.");
+  if (!user) return { error: "User not authenticated." };
 
   const { data: existingPage, error: fetchError } = await supabase
     .from("pages")
@@ -99,7 +98,7 @@ export async function updatePage(pageId: number, formData: FormData) {
     .single();
 
   if (fetchError || !existingPage) {
-    return encodedRedirect("error", "/cms/pages", "Original page not found or error fetching it.");
+    return { error: "Original page not found or error fetching it." };
   }
 
   const rawFormData = {
@@ -112,7 +111,7 @@ export async function updatePage(pageId: number, formData: FormData) {
   };
 
   if (!rawFormData.title || !rawFormData.slug || isNaN(rawFormData.language_id) || !rawFormData.status) {
-     return encodedRedirect("error", pageEditPath, "Missing required fields: title, slug, language, or status.");
+     return { error: "Missing required fields: title, slug, language, or status." };
   }
 
   const pageUpdateData: Partial<Omit<UpsertPagePayload, 'translation_group_id' | 'author_id'>> = {
@@ -124,37 +123,29 @@ export async function updatePage(pageId: number, formData: FormData) {
     meta_description: rawFormData.meta_description,
   };
 
-  // capture previous full content before update
-  const previousContent = await getFullPageContent(pageId);
+  try {
+    const draft = await getOrCreateContentDraft(supabase, "page", pageId, user.id);
+    const updatedMeta = {
+      ...draft.meta,
+      ...pageUpdateData,
+    };
 
-  const { error: updateError } = await supabase
-    .from("pages")
-    .update(pageUpdateData)
-    .eq("id", pageId);
+    const { error: updateError } = await supabase
+      .from("content_drafts")
+      .update({ meta: updatedMeta as any })
+      .eq("id", draft.id);
 
-  if (updateError) {
-    console.error("Error updating page:", updateError);
-     if (updateError.code === '23505' && updateError.message.includes('pages_language_id_slug_key')) {
-        return encodedRedirect("error", pageEditPath, `The slug "${pageUpdateData.slug}" already exists for the selected language. Please use a unique slug.`);
+    if (updateError) {
+      console.error("Error updating page draft:", updateError);
+      return { error: `Failed to update draft: ${updateError.message}` };
     }
-    return encodedRedirect("error", pageEditPath, `Failed to update page: ${updateError.message}`);
+  } catch (err: any) {
+    console.error("Error loading/creating draft for page metadata update:", err);
+    return { error: `Failed to load draft: ${err.message || err}` };
   }
 
-  // create revision after update
-  if (previousContent && user) {
-    const newContent = await getFullPageContent(pageId);
-    if (newContent) {
-      await createPageRevision(pageId, user.id, previousContent, newContent);
-    }
-  }
-
-  revalidatePath("/cms/pages");
-  if (existingPage.slug) revalidatePath(`/${existingPage.slug}`);
-  if (rawFormData.slug && rawFormData.slug !== existingPage.slug) {
-      revalidatePath(`/${rawFormData.slug}`);
-  }
   revalidatePath(pageEditPath);
-  redirect(`${pageEditPath}?success=Page updated successfully`);
+  return { success: true };
 }
 
 

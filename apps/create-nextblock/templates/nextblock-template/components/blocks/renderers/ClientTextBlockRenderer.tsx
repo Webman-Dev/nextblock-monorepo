@@ -1,5 +1,3 @@
-"use client";
-
 import React from "react";
 import Image from "next/image";
 import parse, {
@@ -10,10 +8,18 @@ import parse, {
 import AlertWidgetRenderer from "./inline/AlertWidgetRenderer";
 import CtaWidgetRenderer from "./inline/CtaWidgetRenderer";
 import type { TextBlockContent } from "./TextBlockRenderer";
+import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
 
 interface ClientTextBlockRendererProps {
   content: TextBlockContent;
   languageId: number;
+  visualEditAttributes?: VisualEditAttributes;
+}
+
+function normalizeHtmlEncodingArtifacts(html: string): string {
+  return html
+    .replaceAll("âœ“", "&#10003;")
+    .replaceAll("âœ”", "&#10003;");
 }
 
 function normalizeImageAttributes(attribs: Record<string, string>) {
@@ -54,6 +60,8 @@ type HtmlImageProps = {
 
 const inlineImageSizes =
   '(max-width: 768px) calc(100vw - 2rem), (max-width: 1280px) 42vw, 512px';
+const nbCoverImageSizes =
+  '(max-width: 768px) calc(100vw - 2rem), (max-width: 1280px) 38vw, 438px';
 const contentImageSizes =
   '(max-width: 768px) calc(100vw - 2rem), (max-width: 1280px) 75vw, 768px';
 
@@ -62,7 +70,7 @@ const knownCmsImages: Record<string, CmsImageMetadata> = {
     src: '/images/NBcover.webp',
     width: 1024,
     height: 572,
-    sizes: inlineImageSizes,
+    sizes: nbCoverImageSizes,
     priority: true,
   },
   'images/cap.webp': {
@@ -127,8 +135,8 @@ const knownCmsImages: Record<string, CmsImageMetadata> = {
   },
   'images/nx-graph.webp': {
     src: '/images/nx-graph.webp',
-    width: 587,
-    height: 713,
+    width: 541,
+    height: 670,
     sizes: contentImageSizes,
   },
   'images/pants.webp': {
@@ -209,8 +217,13 @@ function renderOptimizedCmsImage(attribs: Record<string, string>) {
   );
 }
 
-const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({ content, languageId }) => {
+const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({
+  content,
+  languageId,
+  visualEditAttributes,
+}) => {
   void languageId;
+  const normalizedHtml = normalizeHtmlEncodingArtifacts(content.html_content || "");
   const options: HTMLReactParserOptions = {
     replace: (domNode) => {
       if (domNode instanceof Element && domNode.attribs) {
@@ -272,8 +285,11 @@ const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({ conte
   };
 
   return (
-    <div className="my-4 prose dark:prose-invert container mx-auto">
-      {parse(content.html_content || "", options)}
+    <div
+      className="my-4 prose dark:prose-invert container mx-auto"
+      {...visualEditAttributes}
+    >
+      {parse(normalizedHtml, options)}
     </div>
   );
 };

@@ -55,60 +55,62 @@ export function CustomSelectWithInput({
   }, [isCustomValue])
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       <div className="flex items-center">
-      <Label>{label}</Label>
-      <TooltipProvider>
-        <Tooltip>
-        <TooltipTrigger asChild>
-          <button type="button" className="ml-2">
-          <Info className="h-4 w-4 text-muted-foreground" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{tooltipContent}</p>
-        </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+        <Label className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">
+          {label}
+        </Label>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" className="ml-2">
+                <Info className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{tooltipContent}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
       {showCustomInput ? (
-      <div className="flex gap-2">
-        <div className="flex-1">
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <Select onValueChange={handleSelectChange} value={selectValue}>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder="Select a value" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map(option => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Input
+            className="flex-1 h-9 text-sm"
+            value={isCustomValue ? value : ""}
+            onChange={e => onChange(e.target.value)}
+            placeholder="Enter custom value"
+          />
+        </div>
+      ) : (
         <Select onValueChange={handleSelectChange} value={selectValue}>
-          <SelectTrigger>
-          <SelectValue placeholder="Select a value" />
+          <SelectTrigger className="h-9 text-sm">
+            <SelectValue placeholder="Select a value" />
           </SelectTrigger>
           <SelectContent>
-          {options.map(option => (
-            <SelectItem key={option.value} value={option.value}>
-            {option.label}
-            </SelectItem>
-          ))}
-          <SelectItem value="custom">Custom</SelectItem>
+            {options.map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+            <SelectItem value="custom">Custom</SelectItem>
           </SelectContent>
         </Select>
-        </div>
-        <Input
-        className="flex-1"
-        value={isCustomValue ? value : ""}
-        onChange={e => onChange(e.target.value)}
-        placeholder="Enter custom value"
-        />
-      </div>
-      ) : (
-      <Select onValueChange={handleSelectChange} value={selectValue}>
-        <SelectTrigger>
-        <SelectValue placeholder="Select a value" />
-        </SelectTrigger>
-        <SelectContent>
-        {options.map(option => (
-          <SelectItem key={option.value} value={option.value}>
-          {option.label}
-          </SelectItem>
-        ))}
-        <SelectItem value="custom">Custom</SelectItem>
-        </SelectContent>
-      </Select>
       )}
     </div>
   )

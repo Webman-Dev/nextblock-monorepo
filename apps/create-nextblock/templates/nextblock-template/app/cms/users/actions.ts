@@ -5,6 +5,9 @@ import { createClient } from "@nextblock-cms/db/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Database } from "@nextblock-cms/db";
+import { normalizeCustomerAddress } from "@nextblock-cms/ecommerce";
+import { upsertDefaultUserAddresses } from "@nextblock-cms/ecommerce/server";
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 type UserRole = Database['public']['Enums']['user_role'];
 
@@ -36,8 +39,23 @@ type UpdateUserProfilePayload = {
   website?: string | null;
   github_username?: string | null;
   phone?: string | null;
-  billing_address?: any; // JSONB
 };
+
+function createServiceRoleClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error('Missing required environment variables');
+  }
+
+  return createSupabaseClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
 
 export async function updateUserProfile(userIdToUpdate: string, formData: FormData) {
   const supabase = createClient();
@@ -46,14 +64,31 @@ export async function updateUserProfile(userIdToUpdate: string, formData: FormDa
     return { error: adminCheck.error || "Unauthorized" };
   }
 
-  const billingAddressRaw = formData.get("billing_address") as string;
-  let billingAddressJSON = null;
-  if (billingAddressRaw) {
-    try {
-      billingAddressJSON = JSON.parse(billingAddressRaw);
-    } catch {
-      return { error: "Invalid JSON for billing address." };
+  const parseAddressField = (fieldName: string) => {
+    const rawValue = formData.get(fieldName) as string | null;
+    if (!rawValue) {
+      return null;
     }
+
+    try {
+      return normalizeCustomerAddress(JSON.parse(rawValue));
+    } catch {
+      throw new Error(`Invalid JSON for ${fieldName}.`);
+    }
+  };
+
+  let billingAddressJSON = null;
+  let shippingAddressJSON = null;
+
+  try {
+    billingAddressJSON = parseAddressField("billing_address");
+    shippingAddressJSON = parseAddressField("shipping_address");
+  } catch (error: any) {
+    return { error: error.message };
+  }
+
+  if (formData.get("use_billing_for_shipping") === "true") {
+    shippingAddressJSON = billingAddressJSON;
   }
 
   const rawFormData = {
@@ -63,7 +98,6 @@ export async function updateUserProfile(userIdToUpdate: string, formData: FormDa
     website: formData.get("website") as string || null,
     github_username: formData.get("github_username") as string || null,
     phone: formData.get("phone") as string || null,
-    billing_address: billingAddressJSON,
   };
 
   if (!rawFormData.role) {
@@ -93,10 +127,11 @@ export async function updateUserProfile(userIdToUpdate: string, formData: FormDa
     website: rawFormData.website,
     github_username: rawFormData.github_username,
     phone: rawFormData.phone,
-    billing_address: rawFormData.billing_address,
   };
 
-  const { error } = await supabase
+  const adminSupabase = createServiceRoleClient();
+
+  const { error } = await adminSupabase
     .from("profiles")
     .update(profileData)
     .eq("id", userIdToUpdate);
@@ -106,8 +141,17 @@ export async function updateUserProfile(userIdToUpdate: string, formData: FormDa
     return { error: `Failed to update profile: ${error.message}` };
   }
 
+  await upsertDefaultUserAddresses({
+    userId: userIdToUpdate,
+    billingAddress: billingAddressJSON,
+    shippingAddress: shippingAddressJSON,
+    client: adminSupabase,
+  });
+
   revalidatePath("/cms/users");
   revalidatePath(`/cms/users/${userIdToUpdate}/edit`);
+  revalidatePath("/profile");
+  revalidatePath("/checkout");
   redirect(`/cms/users/${userIdToUpdate}/edit?success=User profile updated successfully`);
 }
 

@@ -1,4 +1,3 @@
-/* eslint-disable @nx/enforce-module-boundaries */
 'use client';
 
 import {
@@ -308,13 +307,13 @@ function TranslationEditorCard({
 
           <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
             <div
-              className="min-w-0 xl:w-80 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
+              className="min-w-0 xl:w-80 rounded-md border bg-muted/30 px-3 py-2 text-xs center"
               title={sourcePreview}
             >
-              <span className="mr-1 font-medium text-foreground">
+              <span className="mr-1 text-foreground">
                 {language.code.toLowerCase() === 'en' ? 'Label:' : 'EN:'}
               </span>
-              <span className="truncate align-middle">{sourcePreview}</span>
+              <span className="truncate font-medium">{sourcePreview}</span>
             </div>
 
             <div className="flex min-w-0 flex-1 items-center gap-2">

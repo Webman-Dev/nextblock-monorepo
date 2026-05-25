@@ -1,6 +1,5 @@
 // app/cms/blocks/components/BlockTypeCard.tsx
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@nextblock-cms/ui";
 import {
   FileText,
   Heading,
@@ -12,6 +11,12 @@ import {
   LayoutTemplate,
   NotebookPen,
   Package,
+  ShoppingBag,
+  Star,
+  ShoppingCart,
+  CreditCard,
+  Tag,
+  MessageSquareQuote,
   type LucideProps,
 } from 'lucide-react';
 
@@ -25,33 +30,36 @@ const iconMap: { [key: string]: React.FC<LucideProps> } = {
   Columns3,
   LayoutTemplate,
   NotebookPen,
+  ShoppingBag,
+  Star,
+  ShoppingCart,
+  CreditCard,
+  Tag,
+  MessageSquareQuote,
 };
 
 interface BlockTypeCardProps {
-  icon?: string;
+  icon?: string | any;
   name: string;
-  description?: string;
   onClick: () => void;
 }
 
-const BlockTypeCard: React.FC<BlockTypeCardProps> = ({ icon, name, description, onClick }) => {
-  const IconComponent = icon && iconMap[icon] ? iconMap[icon] : Package;
+const BlockTypeCard: React.FC<BlockTypeCardProps> = ({ icon, name, onClick }) => {
+  const IconComponent = typeof icon === 'string'
+    ? (iconMap[icon] || Package)
+    : (icon || Package);
 
   return (
-    <Card
+    <button
+      type="button"
       onClick={onClick}
-      className="cursor-pointer hover:shadow-lg hover:border-primary transition-all duration-200 ease-in-out"
+      className="group w-full flex items-center justify-between p-4 rounded-lg border border-border bg-card text-card-foreground text-left transition-all duration-150 ease-in-out hover:border-primary/50 hover:bg-accent/40 hover:shadow-sm active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 outline-none"
     >
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{name}</CardTitle>
-        {IconComponent && <IconComponent className="h-4 w-4 text-muted-foreground" />}
-      </CardHeader>
-      <CardContent>
-        <p className="text-xs text-muted-foreground">
-          {description || 'No description available.'}
-        </p>
-      </CardContent>
-    </Card>
+      <span className="text-sm font-medium leading-none truncate pr-2 text-foreground/90 group-hover:text-foreground">
+        {name}
+      </span>
+      <IconComponent className="h-4 w-4 flex-shrink-0 text-muted-foreground group-hover:text-primary transition-colors duration-150" />
+    </button>
   );
 };
 

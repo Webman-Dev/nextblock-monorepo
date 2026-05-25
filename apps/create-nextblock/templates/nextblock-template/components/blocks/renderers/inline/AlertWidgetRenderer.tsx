@@ -1,5 +1,3 @@
-'use client';
-
 interface AlertWidgetRendererProps {
   type: 'info' | 'warning' | 'notification' | 'danger';
   title: string;

@@ -5,6 +5,8 @@ import { NEXTBLOCK_PACKAGES } from '@nextblock-cms/utils';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 
+// Freemius handles both Sandbox and Production keys on the same API domain.
+// The key itself determines the environment.
 const FM_API_URL = 'https://api.freemius.com/v1';
 
 // Helper to get service role client
@@ -31,6 +33,10 @@ const getServiceRoleClient = () => {
 };
 
 export async function activatePackage(key: string) {
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+    return { error: 'License activation is disabled in Sandbox mode. To purchase a real license, visit nextblock.ca' };
+  }
+
   if (!key) {
     return { error: 'License key is required.' };
   }
@@ -48,6 +54,8 @@ export async function activatePackage(key: string) {
     let data = null;
     let pkg = null;
     let fmProductId = null;
+    let hasLicenseError = false;
+    let specificErrorMsg: string | null = null;
 
     // We don't know the exact package just from the license key, so we try activating
     // against our known Freemius Product IDs from the NEXTBLOCK_PACKAGES registry.
@@ -56,7 +64,8 @@ export async function activatePackage(key: string) {
     for (const p of packages) {
       if (!p.fm_product_id) continue;
       
-      const response = await fetch(`${FM_API_URL}/products/${p.fm_product_id}/licenses/activate.json?uid=${uid}&license_key=${encodeURIComponent(key)}`, {
+      const siteUrl = encodeURIComponent(`http://${instanceName}`);
+      const response = await fetch(`${FM_API_URL}/products/${p.fm_product_id}/licenses/activate.json?uid=${uid}&license_key=${encodeURIComponent(key)}&url=${siteUrl}`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -73,10 +82,20 @@ export async function activatePackage(key: string) {
           fmProductId = p.fm_product_id;
           break;
       }
+      
+      const errorCode = responseData?.error?.code;
+      if (errorCode === 'not_found' || errorCode === 'invalid_license_key') {
+          hasLicenseError = true;
+      } else if (responseData?.error?.message) {
+          specificErrorMsg = responseData.error.message;
+      }
     }
 
     if (!data || !pkg) {
-        return { error: 'Activation failed. Invalid key, wrong product, or limit reached.' };
+        if (hasLicenseError && process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true' && !specificErrorMsg) {
+            return { error: 'Sorry, this is a sandbox key. Please purchase the real key at nextblock.ca' };
+        }
+        return { error: specificErrorMsg || 'Activation failed. Invalid key, wrong product, or limit reached.' };
     }
 
     // 3. Store in DB - USE SERVICE ROLE
@@ -113,6 +132,10 @@ export async function activatePackage(key: string) {
 }
 
 export async function deactivatePackage(packageId: string) {
+    if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+        return { error: 'License deactivation is disabled in Sandbox mode.' };
+    }
+
     const supabase = getServiceRoleClient();
     
     // 1. Get current activation

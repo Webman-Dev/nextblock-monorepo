@@ -3,7 +3,8 @@ const { join } = require('path');
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  presets: [require('@nextblock-cms/ui/tailwind.config.js')],
+  // eslint-disable-next-line @nx/enforce-module-boundaries
+  presets: [require('../../libs/ui/tailwind.config.js')],
   content: (() => {
     const projectGlobs = [
       join(

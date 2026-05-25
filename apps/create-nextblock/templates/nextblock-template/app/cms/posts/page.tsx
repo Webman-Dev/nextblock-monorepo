@@ -24,6 +24,7 @@ import {
 // deletePost server action is now used by DeletePostButtonClient
 import type { Database } from "@nextblock-cms/db";
 import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server";
+import { resolveMediaUrl } from "../../../lib/media/resolveMediaUrl";
 
 type Post = Database['public']['Tables']['posts']['Row'] & { feature_image_url?: string | null };
 import LanguageFilterSelect from "../components/LanguageFilterSelect";
@@ -54,7 +55,7 @@ async function getPostsWithDetails(filterLanguageId?: number): Promise<{ post: P
   return postsData.map(p => {
     const langInfo = p.languages as unknown as { code: string } | null;
     return {
-      post: { ...p, feature_image_url: p.media?.object_key ? `${process.env.NEXT_PUBLIC_R2_BASE_URL}/${p.media.object_key}` : null } as Post,
+      post: { ...p, feature_image_url: resolveMediaUrl(p.media?.object_key) } as Post,
       languageCode: langInfo?.code?.toUpperCase() || langMap.get(p.language_id)?.toUpperCase() || 'N/A',
     };
   });

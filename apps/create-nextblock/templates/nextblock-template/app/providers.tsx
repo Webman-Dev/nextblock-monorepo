@@ -2,15 +2,35 @@
 
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from '../context/AuthContext';
-import { LanguageProvider } from '../context/LanguageContext';
+import { LanguageProvider, useLanguage } from '../context/LanguageContext';
 import { CurrentContentProvider } from '../context/CurrentContentContext';
+import { DeferredCartTranslator } from '../components/DeferredCartTranslator';
+import { CurrencyProvider } from '@nextblock-cms/ecommerce/CurrencyProvider';
 import { TranslationsProvider } from '@nextblock-cms/utils';
+
+function TranslationBridge({
+  children,
+  translations,
+}: {
+  children: React.ReactNode;
+  translations: { key: string; translations: Record<string, string> }[];
+}) {
+  const { currentLocale } = useLanguage();
+
+  return (
+    <TranslationsProvider translations={translations} lang={currentLocale}>
+      {children}
+    </TranslationsProvider>
+  );
+}
 
 export function Providers({ children, ...props }: { children: React.ReactNode;[key: string]: any; }) {
   const {
     serverUser,
     serverProfile,
     serverLocale,
+    initialCurrencies,
+    initialCurrencyCode,
     initialAvailableLanguages,
     initialDefaultLanguage,
     translations,
@@ -24,20 +44,27 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
         initialAvailableLanguages={initialAvailableLanguages}
         initialDefaultLanguage={initialDefaultLanguage}
       >
-        <CurrentContentProvider>
-          <TranslationsProvider translations={translations} lang={serverLocale}>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-              nonce={nonce}
-              themes={['light', 'dark', 'vibrant']}
-            >
-              {children}
-            </ThemeProvider>
-          </TranslationsProvider>
-        </CurrentContentProvider>
+        <CurrencyProvider
+          initialCurrencies={initialCurrencies}
+          initialCurrencyCode={initialCurrencyCode}
+          locale={serverLocale}
+        >
+          <CurrentContentProvider>
+            <DeferredCartTranslator />
+            <TranslationBridge translations={translations}>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+                nonce={nonce}
+                themes={['light', 'dark', 'vibrant']}
+              >
+                {children}
+              </ThemeProvider>
+            </TranslationBridge>
+          </CurrentContentProvider>
+        </CurrencyProvider>
       </LanguageProvider>
     </AuthProvider>
   );

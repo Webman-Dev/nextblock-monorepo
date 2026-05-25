@@ -6,11 +6,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Database } from "@nextblock-cms/db";
 import { v4 as uuidv4 } from 'uuid';
+import { getOrCreateContentDraft } from "../../../lib/visual-editing/draft-content";
 
 type PageStatus = Database['public']['Enums']['page_status'];
 import { encodedRedirect } from "@nextblock-cms/utils/server";
-import { getFullPageContent } from "../revisions/utils";
-import { createPageRevision } from "../revisions/service";
 
 // --- createPage and updatePage functions remain unchanged ---
 
@@ -105,7 +104,7 @@ export async function updatePage(pageId: number, formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   const pageEditPath = `/cms/pages/${pageId}/edit`;
 
-  if (!user) return encodedRedirect("error", pageEditPath, "User not authenticated.");
+  if (!user) return { error: "User not authenticated." };
 
   const { data: existingPage, error: fetchError } = await supabase
     .from("pages")
@@ -114,7 +113,7 @@ export async function updatePage(pageId: number, formData: FormData) {
     .single();
 
   if (fetchError || !existingPage) {
-    return encodedRedirect("error", "/cms/pages", "Original page not found or error fetching it.");
+    return { error: "Original page not found or error fetching it." };
   }
 
   const rawFormData = {
@@ -128,7 +127,7 @@ export async function updatePage(pageId: number, formData: FormData) {
   };
 
   if (!rawFormData.title || !rawFormData.slug || isNaN(rawFormData.language_id) || !rawFormData.status) {
-     return encodedRedirect("error", pageEditPath, "Missing required fields: title, slug, language, or status.");
+     return { error: "Missing required fields: title, slug, language, or status." };
   }
 
   const pageUpdateData: Partial<Omit<UpsertPagePayload, 'translation_group_id' | 'author_id'>> = {
@@ -141,13 +140,17 @@ export async function updatePage(pageId: number, formData: FormData) {
     feature_image_id: rawFormData.feature_image_id,
   };
 
-  // capture previous full content before update
-  const previousContent = await getFullPageContent(pageId);
+  try {
+    const draft = await getOrCreateContentDraft(supabase, "page", pageId, user.id);
+    const updatedMeta = {
+      ...draft.meta,
+      ...pageUpdateData,
+    };
 
-  const { error: updateError } = await supabase
-    .from("pages")
-    .update(pageUpdateData)
-    .eq("id", pageId);
+    const { error: updateError } = await supabase
+      .from("content_drafts")
+      .update({ meta: updatedMeta as any })
+      .eq("id", draft.id);
 
   if (updateError) {
     console.error("Error updating page:", updateError);
@@ -170,8 +173,9 @@ export async function updatePage(pageId: number, formData: FormData) {
   if (rawFormData.slug && rawFormData.slug !== existingPage.slug) {
       revalidatePublicPageSlug(rawFormData.slug);
   }
+
   revalidatePath(pageEditPath);
-  redirect(`${pageEditPath}?success=Page updated successfully`);
+  return { success: true };
 }
 
 

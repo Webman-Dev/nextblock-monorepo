@@ -12,7 +12,7 @@ export default async function EditLogoPage(props: { params: Promise<{ id: string
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-6">Edit Logo</h1>
+      <h1 className="text-2xl font-semibold mb-6">Edit Brand Logo</h1>
       <LogoForm logo={logo} action={updateLogo as any} />
     </div>
   )

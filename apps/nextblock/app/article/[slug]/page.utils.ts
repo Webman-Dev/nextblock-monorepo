@@ -21,23 +21,13 @@ type PublicPostData = PostType & {
 };
 
 // Define a more specific type for the content of an Image Block
+
+// Define a more specific type for the content of an Image Block
 export type ImageBlockContent = {
   media_id: string | null;
   object_key?: string; // Optional because it's added later
   blur_data_url?: string | null;
 };
-
-interface SectionOrHeroBlockContent {
-  [key: string]: unknown;
-  background?: {
-    type?: 'image' | 'color';
-    image?: {
-      media_id?: string;
-      object_key?: string;
-      blur_data_url?: string;
-    };
-  };
-}
 
 function hasMetaValue(draft: ContentDraftRow, key: string) {
   return Object.prototype.hasOwnProperty.call(draft.meta, key);
@@ -112,6 +102,141 @@ function applyDraftToPost(post: any, draft: ContentDraftRow) {
   };
 }
 
+function extractMediaIdsFromBlock(block: any): string[] {
+  const ids: string[] = [];
+  if (!block || !block.block_type) return ids;
+
+  if (block.block_type === 'image') {
+    const mediaId = block.content?.media_id;
+    if (mediaId && typeof mediaId === 'string') {
+      ids.push(mediaId);
+    }
+  } else if (block.block_type === 'section' || block.block_type === 'hero') {
+    const content = block.content;
+    if (content) {
+      if (content.background?.type === 'image' && content.background.image?.media_id) {
+        ids.push(content.background.image.media_id);
+      }
+      if (Array.isArray(content.column_blocks)) {
+        for (const col of content.column_blocks) {
+          if (Array.isArray(col)) {
+            for (const nestedBlock of col) {
+              ids.push(...extractMediaIdsFromBlock(nestedBlock));
+            }
+          }
+        }
+      }
+      if (Array.isArray(content.slides)) {
+        for (const slide of content.slides) {
+          if (slide.background?.type === 'image' && slide.background.image?.media_id) {
+            ids.push(slide.background.image.media_id);
+          }
+          if (Array.isArray(slide.column_blocks)) {
+            for (const col of slide.column_blocks) {
+              if (Array.isArray(col)) {
+                for (const nestedBlock of col) {
+                  ids.push(...extractMediaIdsFromBlock(nestedBlock));
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return ids;
+}
+
+function mapMediaDataToBlock(
+  block: any,
+  mediaMap: Map<string, { object_key: string; blur_data_url?: string | null }>
+): any {
+  if (!block || !block.block_type) return block;
+
+  if (block.block_type === 'image') {
+    const content = block.content;
+    if (content?.media_id) {
+      const mediaData = mediaMap.get(content.media_id);
+      if (mediaData) {
+        return {
+          ...block,
+          content: {
+            ...content,
+            object_key: mediaData.object_key,
+            blur_data_url: mediaData.blur_data_url,
+          },
+        };
+      }
+    }
+  } else if (block.block_type === 'section' || block.block_type === 'hero') {
+    const content = block.content;
+    if (!content) return block;
+
+    const updatedContent = { ...content };
+
+    if (content.background?.type === 'image' && content.background.image?.media_id) {
+      const mediaData = mediaMap.get(content.background.image.media_id);
+      if (mediaData) {
+        updatedContent.background = {
+          ...content.background,
+          image: {
+            ...content.background.image,
+            object_key: mediaData.object_key,
+            blur_data_url: mediaData.blur_data_url,
+          },
+        };
+      }
+    }
+
+    if (Array.isArray(content.column_blocks)) {
+      updatedContent.column_blocks = content.column_blocks.map((col: any) => {
+        if (Array.isArray(col)) {
+          return col.map((nestedBlock: any) => mapMediaDataToBlock(nestedBlock, mediaMap));
+        }
+        return col;
+      });
+    }
+
+    if (Array.isArray(content.slides)) {
+      updatedContent.slides = content.slides.map((slide: any) => {
+        const updatedSlide = { ...slide };
+
+        if (slide.background?.type === 'image' && slide.background.image?.media_id) {
+          const mediaData = mediaMap.get(slide.background.image.media_id);
+          if (mediaData) {
+            updatedSlide.background = {
+              ...slide.background,
+              image: {
+                ...slide.background.image,
+                object_key: mediaData.object_key,
+                blur_data_url: mediaData.blur_data_url,
+              },
+            };
+          }
+        }
+
+        if (Array.isArray(slide.column_blocks)) {
+          updatedSlide.column_blocks = slide.column_blocks.map((col: any) => {
+            if (Array.isArray(col)) {
+              return col.map((nestedBlock: any) => mapMediaDataToBlock(nestedBlock, mediaMap));
+            }
+            return col;
+          });
+        }
+
+        return updatedSlide;
+      });
+    }
+
+    return {
+      ...block,
+      content: updatedContent,
+    };
+  }
+
+  return block;
+}
+
 export async function getPostDataBySlug(slug: string): Promise<PublicPostData | null> {
   const draft = await draftMode();
   const isDraftModeEnabled = draft.isEnabled;
@@ -160,6 +285,7 @@ export async function getPostDataBySlug(slug: string): Promise<PublicPostData | 
       langInfo = { id: postData.language_id, code: fallbackLang.code };
   }
   
+  
   if (!postData.translation_group_id) {
       console.error(`Post with slug '${slug}' is missing a translation_group_id.`);
       return null;
@@ -168,19 +294,8 @@ export async function getPostDataBySlug(slug: string): Promise<PublicPostData | 
   let blocksWithMediaData: BlockType[] = postData.blocks || [];
   if (blocksWithMediaData.length > 0) {
     const mediaIds = blocksWithMediaData
-      .map(block => {
-        if (block.block_type === 'image') {
-          return (block.content as ImageBlockContent)?.media_id;
-        }
-        if (block.block_type === 'section' || block.block_type === 'hero') {
-          const content = block.content as SectionOrHeroBlockContent;
-          if (content.background?.type === 'image' && content.background?.image?.media_id) {
-            return content.background.image.media_id;
-          }
-        }
-        return null;
-      })
-      .filter((id): id is string => id !== null && typeof id === 'string');
+      .flatMap(block => extractMediaIdsFromBlock(block))
+      .filter((id): id is string => id !== null && typeof id === 'string' && id !== '');
 
     if (mediaIds.length > 0) {
       const { data: mediaItems, error: mediaError } = await supabase
@@ -192,38 +307,7 @@ export async function getPostDataBySlug(slug: string): Promise<PublicPostData | 
         console.error("SSG (Posts): Error fetching media items for blocks:", mediaError);
       } else if (mediaItems) {
         const mediaMap = new Map(mediaItems.map(m => [m.id, { object_key: m.object_key, blur_data_url: m.blur_data_url }]));
-        blocksWithMediaData = blocksWithMediaData.map(block => {
-          if (block.block_type === 'image') {
-            const content = block.content as ImageBlockContent;
-            if (content.media_id) {
-              const mediaData = mediaMap.get(content.media_id);
-              if (mediaData) {
-                return { ...block, content: { ...content, object_key: mediaData.object_key, blur_data_url: mediaData.blur_data_url } };
-              }
-            }
-          }
-          if (block.block_type === 'section' || block.block_type === 'hero') {
-            const content = block.content as SectionOrHeroBlockContent;
-            if (content.background?.type === 'image' && content.background?.image?.media_id) {
-              const mediaData = mediaMap.get(content.background.image.media_id);
-              if (mediaData) {
-                const newContent = {
-                  ...content,
-                  background: {
-                    ...content.background,
-                    image: {
-                      ...content.background.image,
-                      object_key: mediaData.object_key,
-                      blur_data_url: mediaData.blur_data_url,
-                    },
-                  },
-                };
-                return { ...block, content: newContent };
-              }
-            }
-          }
-          return block;
-        });
+        blocksWithMediaData = blocksWithMediaData.map(block => mapMediaDataToBlock(block, mediaMap));
       }
     }
   }

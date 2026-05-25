@@ -1,9 +1,8 @@
-/* eslint-disable @nx/enforce-module-boundaries */
 'use server';
 
 import { createClient } from '@nextblock-cms/db/server';
 import { revalidatePath, updateTag } from 'next/cache';
-import { z } from 'zod';
+import { z } from '../../../../lib/zod-config';
 
 import {
   getOrderedTranslationLanguageCodes,
