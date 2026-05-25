@@ -2228,8 +2228,9 @@ Supabase PostgreSQL is the authoritative data store for all structured data in t
 | `00000000000006_setup_rls_and_grants.sql` | Row-Level Security policies |
 | `00000000000008_seed_platform_defaults.sql` | Default settings, USD currency, English language |
 | `00000000000009` — `00000000000010` | Additional platform seeds |
+| `00000000000011` through `00000000000016` | Cortex AI settings, coupons, audit, drafts, and page feature images |
 
-Per the maintenance constraint in Section 2.4.5, these eleven numbered files must remain applied in order; out-of-sequence application will violate referential integrity.
+Per the maintenance constraint in Section 2.4.5, these numbered files must remain applied in order; out-of-sequence application will violate referential integrity. Live/shared database changes must be appended as new non-destructive migrations rather than by rewriting existing files.
 
 #### 3.5.1.2 TypeScript Type Generation
 
@@ -2389,7 +2390,7 @@ The workspace does **not** use Terraform. Infrastructure configuration is declar
 | Source | Purpose |
 |:--|:--|
 | `vercel.json` | Cron schedules |
-| `libs/db/src/supabase/migrations/` | Database schema (eleven ordered files) |
+| `libs/db/src/supabase/migrations/` | Database schema (ordered append-only migration files) |
 | `libs/db/src/supabase/config.toml` | Supabase local development configuration |
 | `.env.exemple` | Environment variable template |
 | `nx.json` + per-project `project.json` | Workspace orchestration topology |
@@ -2398,7 +2399,7 @@ The workspace does **not** use Terraform. Infrastructure configuration is declar
 
 #### 3.6.7.1 Supabase Workflow Scripts
 
-- `db:backup`, `db:restore`, `db:types`, `db:link`, `db:repair`, `db:reset`, `db:push`
+- `db:backup`, `db:restore`, `db:types`, `db:link`, `db:migrate:check`, `db:migrate`, `db:migrate:repair-history`, `db:reset`, `db:push`
 - `configure:supabase-auth` — Synchronize auth templates with Supabase
 - `deploy:supabase` — End-to-end Supabase deployment
 
@@ -5977,8 +5978,14 @@ Migrations live in `libs/db/src/supabase/migrations/` and are managed via the Su
 | `00000000000008_seed_platform_defaults.sql` | Baseline platform state | English/French languages, USD as default currency, site_settings defaults |
 | `00000000000009_seed_translations.sql` | Internationalization content | Hundreds of en/es/fr i18n rows |
 | `00000000000010_seed_content_scaffold.sql` | Starter content | Default logos, home/articles pages, featured posts, navigation |
+| `00000000000011_setup_cortex_ai_settings.sql` | AI settings | Cortex AI configuration |
+| `00000000000012_setup_commerce_coupons.sql` | Commerce coupons | Coupon tables and constraints |
+| `00000000000013_setup_cortex_ai_db_mutation_audit.sql` | AI audit | Cortex AI database mutation audit support |
+| `00000000000014_setup_content_drafts.sql` | Content drafts | Visual-editing draft support |
+| `00000000000015_setup_product_drafts.sql` | Product drafts | Product draft workflow support |
+| `00000000000016_add_feature_image_to_pages.sql` | CMS page media | Optional page feature image relationship |
 
-Per Section 2.4.5, the **eleven numbered migration files in `libs/db/src/supabase/migrations/` must remain applied in order**; out-of-sequence application will violate referential integrity.
+Per Section 2.4.5, the **numbered migration files in `libs/db/src/supabase/migrations/` must remain applied in order**; out-of-sequence application will violate referential integrity. For live/shared databases, new changes must be appended as new non-destructive migrations. Do not rewrite, recycle, squash, reorder, or delete migrations that may already be recorded in production.
 
 ##### 6.2.3.1.1 Migration Command Surface
 
@@ -5986,7 +5993,11 @@ The root `package.json` exposes the following migration-related scripts:
 
 | Script | Command | Purpose |
 |--------|---------|---------|
-| `db:push` | `supabase db push --include-all` + config push + seed-sandbox-images | Apply migrations to remote |
+| `db:migrate:check` | `node tools/scripts/push-db-migrations.js --check` | Dry-run pending remote migrations |
+| `db:migrate` / `db:push` | `node tools/scripts/push-db-migrations.js --confirm` | Apply pending migration files only; no reset, sandbox seed, function deploy, or config push |
+| `db:migrate:repair-history:check` | `node tools/scripts/repair-db-migration-history.js --check` | Preview baseline migration-history repair |
+| `db:migrate:repair-history` | `node tools/scripts/repair-db-migration-history.js --confirm` | Mark existing baseline migrations as applied without running their SQL |
+| `db:migrate:fresh` | `node tools/scripts/push-db-migrations.js --confirm --allow-baseline-replay` | Apply the full baseline only to a brand-new empty database |
 | `db:reset` | `supabase db reset --workdir libs/db/src` | Full local reset and replay |
 | `db:link` | `dotenv + supabase-link` via `tools/scripts/supabase-link.js` | Link local workspace to remote project |
 | `db:types` | `supabase gen types typescript --schema public` via `tools/scripts/gen-db-types.js` | Regenerate `libs/db/src/lib/supabase/types.ts` |
@@ -5995,7 +6006,7 @@ The root `package.json` exposes the following migration-related scripts:
 | `db:restore` | `node apps/nextblock/scripts/restore.js` | Interactive psql restore |
 | `deploy:supabase` | `node tools/scripts/deploy-supabase.js` | CI/CD end-to-end deploy |
 
-The `deploy-supabase.js` script orchestrates the full release sequence: environment validation (`SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `NEXT_PUBLIC_URL`, database password), `supabase link`, `supabase db push --include-all`, `supabase config push`, and finally `configure-supabase-auth.js` to sync auth/SMTP/email settings.
+The `deploy-supabase.js` script orchestrates the release sequence through the migration-only helper: environment validation (`SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `NEXT_PUBLIC_URL`, database password), `supabase link`, migration push without `--include-all`, `supabase config push`, and finally `configure-supabase-auth.js` to sync auth/SMTP/email settings.
 
 #### 6.2.3.2 Versioning Strategy
 
@@ -10603,7 +10614,7 @@ Backup responsibility matrix:
 | Seed data | Git (migrations `00000000000008` through `00000000000010`) | Version-controlled |
 | Published npm packages | npm registry + GitHub Packages | Registry-managed |
 
-Manual operational backup utilities are surfaced as npm scripts: `db:backup`, `db:restore`, `db:reset`, `db:push`, `db:link`, `db:types`, `db:repair`.
+Manual operational backup and migration utilities are surfaced as npm scripts: `db:backup`, `db:restore`, `db:reset`, `db:migrate:check`, `db:migrate`, `db:migrate:repair-history`, `db:push`, `db:link`, `db:types`, `db:repair`.
 
 ---
 
@@ -11024,7 +11035,7 @@ Three Node.js scripts orchestrate package publication:
 1. Load `.env.local` / `.env`
 2. Validate env: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `NEXT_PUBLIC_URL`, `SUPABASE_DB_PASSWORD` (extract from `POSTGRES_URL` if absent)
 3. `npx supabase link --project-ref ${SUPABASE_PROJECT_ID} --password ${dbPassword} --workdir libs/db/src`
-4. `npx supabase db push --include-all --workdir libs/db/src`
+4. `node tools/scripts/push-db-migrations.js --confirm --skip-link`
 5. `npx supabase config push --workdir libs/db/src`
 6. `node apps/nextblock/tools/configure-supabase-auth.js`
 
@@ -11091,7 +11102,7 @@ flowchart TB
     subgraph DbPipeline["Database Deployment - Manual"]
         RunDeploy[tools/scripts/deploy-supabase.js]
         SupaLink[supabase link]
-        SupaPush[supabase db push --include-all]
+        SupaPush[migration-only db push]
         SupaConfig[supabase config push]
         SupaAuth[configure-supabase-auth.js]
     end
@@ -11436,7 +11447,7 @@ Selected from the 51 scripts declared in root `package.json`:
 | `npm run build:cli` | CLI release via `release-cli.js` |
 | `npm run nx:build:nextblock` | `nx build nextblock` |
 | `npm run lint` | ESLint across workspace |
-| `npm run db:link` / `db:push` / `db:reset` / `db:repair` / `db:types` / `db:backup` / `db:restore` | Supabase CLI workflows |
+| `npm run db:link` / `db:migrate:check` / `db:migrate` / `db:migrate:repair-history` / `db:push` / `db:reset` / `db:repair` / `db:types` / `db:backup` / `db:restore` | Supabase CLI workflows |
 | `npm run configure:supabase-auth` | Sync auth templates to Supabase |
 | `npm run deploy:supabase` | Full Supabase deployment (`deploy-supabase.js`) |
 | `npm run generate:sandbox` | Regenerate `SANDBOX_RESET_SQL` |

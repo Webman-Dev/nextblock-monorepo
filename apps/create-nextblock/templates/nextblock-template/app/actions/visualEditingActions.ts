@@ -160,6 +160,7 @@ async function publishPageDraft(draft: ContentDraftRow, authorId: string) {
   addStringMeta(pageUpdate, draft, "status");
   addNullableStringMeta(pageUpdate, draft, "meta_title");
   addNullableStringMeta(pageUpdate, draft, "meta_description");
+  addNullableStringMeta(pageUpdate, draft, "feature_image_id");
 
   const { error: pageError } = await supabase
     .from("pages")

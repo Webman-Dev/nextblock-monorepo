@@ -228,6 +228,7 @@ export const insertContentBlockInputSchema = cmsTargetInputSchema.extend({
 export const createCmsPageInputSchema = z.strictObject({
   blocks: z.array(createCmsBlockInputSchema).max(20).optional(),
   contactEmail: z.string().email().optional(),
+  feature_image_id: z.string().trim().min(1).max(120).nullable().optional(),
   languageCode: z.string().trim().min(2).max(80).optional(),
   meta_description: z.string().max(500).nullable().optional(),
   meta_title: z.string().max(160).nullable().optional(),
@@ -3093,6 +3094,7 @@ export async function executeReadCurrentCmsItem(
 }
 
 const PAGE_FIELD_NAMES = new Set([
+  'feature_image_id',
   'language_id',
   'meta_description',
   'meta_title',
@@ -3688,6 +3690,7 @@ export async function executeCreateCmsPage(input: CreateCmsPageInput, context?: 
   const payload = {
     blocks,
     item: {
+      feature_image_id: parsed.feature_image_id ?? null,
       language_id: language.id,
       meta_description: parsed.meta_description ?? null,
       meta_title: parsed.meta_title ?? null,

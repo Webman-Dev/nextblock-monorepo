@@ -116,7 +116,7 @@ async function readPageSnapshot(
   const client = supabase as any;
   const { data: page, error: pageError } = await client
     .from("pages")
-    .select("id, title, slug, language_id, status, meta_title, meta_description, version, translation_group_id")
+    .select("id, title, slug, language_id, status, meta_title, meta_description, feature_image_id, version, translation_group_id")
     .eq("id", pageId)
     .single();
 
@@ -143,6 +143,7 @@ async function readPageSnapshot(
       status: page.status,
       meta_title: page.meta_title,
       meta_description: page.meta_description,
+      feature_image_id: page.feature_image_id,
       translation_group_id: page.translation_group_id,
     } as Record<string, Json>,
     blocks: normalizeDraftBlocks(blocks),

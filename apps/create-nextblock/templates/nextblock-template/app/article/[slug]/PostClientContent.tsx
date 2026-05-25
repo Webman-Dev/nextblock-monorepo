@@ -3,12 +3,12 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import type { Database } from "@nextblock-cms/db";
 import { useLanguage } from '../../../context/LanguageContext';
 import { useCurrentContent } from '../../../context/CurrentContentContext';
 import Link from 'next/link';
 import { estimateReadTimeMinutesFromBlocks } from '../../../lib/posts/readTime';
+import FeatureImageHero from '../../../components/FeatureImageHero';
 
 type PostType = Database['public']['Tables']['posts']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
@@ -390,22 +390,16 @@ export default function PostClientContent({ initialPostData, currentSlug, childr
         </div>
 
         {currentPostData?.feature_image_url ? (
-          <div className={`overflow-hidden rounded-[2rem] border border-slate-200/80 shadow-[0_28px_80px_-32px_rgba(15,23,42,0.45)] dark:border-white/10 ${postPresentation.featureFrameClassName}`}>
-            <div className="relative aspect-[16/10] md:aspect-[2.35/1]">
-              <Image
-                src={currentPostData.feature_image_url}
-                alt={`Hero image for ${currentPostData.title}`}
-                width={currentPostData.feature_image_width && currentPostData.feature_image_width > 0 ? currentPostData.feature_image_width : 1600}
-                height={currentPostData.feature_image_height && currentPostData.feature_image_height > 0 ? currentPostData.feature_image_height : 900}
-                placeholder={currentPostData.feature_image_blur_data_url ? 'blur' : 'empty'}
-                blurDataURL={currentPostData.feature_image_blur_data_url ?? undefined}
-                sizes="(max-width: 768px) 100vw, 1200px"
-                className={postPresentation.featureImageClassName}
-                priority
-              />
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/10 to-transparent" />
-            </div>
-          </div>
+          <FeatureImageHero
+            imageUrl={currentPostData.feature_image_url}
+            alt={`Hero image for ${currentPostData.title}`}
+            width={currentPostData.feature_image_width}
+            height={currentPostData.feature_image_height}
+            blurDataURL={currentPostData.feature_image_blur_data_url}
+            frameClassName={postPresentation.featureFrameClassName}
+            imageClassName={postPresentation.featureImageClassName}
+            priority
+          />
         ) : null}
 
         <header className={`mx-auto max-w-4xl rounded-[1.75rem] border border-slate-200/80 bg-background/95 px-6 py-8 shadow-[0_24px_70px_-36px_rgba(15,23,42,0.4)] backdrop-blur dark:border-white/10 dark:bg-slate-950/90 ${currentPostData?.feature_image_url ? '-mt-12 md:-mt-16' : 'mt-6'}`}>

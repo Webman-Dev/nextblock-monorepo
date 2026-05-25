@@ -383,26 +383,28 @@ export default function PageForm({
         uploadFolder={`pages/${(slug || 'untitled').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '')}/`}
       />
 
-      <div className="flex justify-end space-x-3">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => router.push("/cms/pages")}
-          disabled={isPending}
-        >
-          Cancel
-        </Button>
-        {/* Ensure button is not disabled due to removed languagesLoading */}
-        <Button type="submit" disabled={isPending || authLoading || availableLanguages.length === 0}>
-          {isPending ? (
-            <>
-              <Spinner className="mr-2 h-4 w-4" /> Saving...
-            </>
-          ) : (
-            actionButtonText
-          )}
-        </Button>
-      </div>
+      {!isEditing && (
+        <div className="flex justify-end space-x-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.push("/cms/pages")}
+            disabled={isPending}
+          >
+            Cancel
+          </Button>
+          {/* Ensure button is not disabled due to removed languagesLoading */}
+          <Button type="submit" disabled={isPending || authLoading || availableLanguages.length === 0}>
+            {isPending ? (
+              <>
+                <Spinner className="mr-2 h-4 w-4" /> Saving...
+              </>
+            ) : (
+              actionButtonText
+            )}
+          </Button>
+        </div>
+      )}
     </form>
   );
 }

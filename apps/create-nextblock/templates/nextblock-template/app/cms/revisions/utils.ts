@@ -11,6 +11,7 @@ export interface PageMetaContent {
   status: Database['public']['Enums']['page_status'];
   meta_title: string | null;
   meta_description: string | null;
+  feature_image_id: string | null;
 }
 
 export interface PostMetaContent extends PageMetaContent {
@@ -45,7 +46,7 @@ export async function getFullPageContent(
   const supabase = createClient();
   const { data: page, error: pageError } = await supabase
     .from('pages')
-    .select('id, title, slug, language_id, status, meta_title, meta_description')
+    .select('id, title, slug, language_id, status, meta_title, meta_description, feature_image_id')
     .eq('id', pageId)
     .single();
   if (pageError || !page) return null;
@@ -76,6 +77,7 @@ export async function getFullPageContent(
       status: page.status,
       meta_title: page.meta_title,
       meta_description: page.meta_description,
+      feature_image_id: page.feature_image_id ?? null,
     },
     blocks: processed,
   };

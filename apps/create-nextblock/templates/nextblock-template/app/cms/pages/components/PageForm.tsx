@@ -1,7 +1,7 @@
 // app/cms/pages/components/PageForm.tsx
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@nextblock-cms/ui";
 import { Spinner, Alert, AlertDescription } from "@nextblock-cms/ui";
@@ -17,8 +17,8 @@ import {
 import { Textarea } from "@nextblock-cms/ui";
 import type { Database } from "@nextblock-cms/db";
 import { useAuth } from '../../../../context/AuthContext';
-import { useRef } from "react";
 import { useHotkeys } from '../../../../hooks/use-hotkeys';
+import FeatureImageField from "../../components/FeatureImageField";
 
 type Page = Database['public']['Tables']['pages']['Row'];
 type PageStatus = Database['public']['Enums']['page_status'];
@@ -26,13 +26,15 @@ type Language = Database['public']['Tables']['languages']['Row'];
 // Remove: import { getActiveLanguagesClientSide } from "@nextblock-cms/db";
 
 interface PageFormProps {
-  page?: Page | null;
+  page?: (Page & { feature_image_id?: string | null }) | null;
   formAction: (formData: FormData) => Promise<{ error?: string } | void>;
   actionButtonText?: string;
   isEditing?: boolean;
   availableLanguagesProp: Language[]; // New prop
   translationGroupId?: string;
   target_lang_id?: string;
+  initialFeatureImageUrl?: string | null;
+  initialFeatureImageId?: string | null;
 }
 
 export default function PageForm({
@@ -43,6 +45,8 @@ export default function PageForm({
   availableLanguagesProp, // Use the new prop
   translationGroupId,
   target_lang_id,
+  initialFeatureImageUrl,
+  initialFeatureImageId,
 }: PageFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -76,6 +80,9 @@ export default function PageForm({
   const [metaTitle, setMetaTitle] = useState(page?.meta_title || "");
   const [metaDescription, setMetaDescription] = useState(
     page?.meta_description || ""
+  );
+  const [featureImageId, setFeatureImageId] = useState<string | null>(
+    initialFeatureImageId || page?.feature_image_id || null
   );
 
   // Use the passed-in languages
@@ -113,7 +120,9 @@ export default function PageForm({
     setStatus(page.status || "draft");
     setMetaTitle(page.meta_title || "");
     setMetaDescription(page.meta_description || "");
+    setFeatureImageId(initialFeatureImageId || page.feature_image_id || null);
   }, [
+    initialFeatureImageId,
     page?.id,
     page?.language_id,
     page?.meta_description,
@@ -139,14 +148,15 @@ export default function PageForm({
     setIsSaving(true);
     setSaveError(null);
 
-    const formData = customFormData || new FormData();
-    if (!customFormData) {
+    const formData = customFormData || (formRef.current ? new FormData(formRef.current) : new FormData());
+    if (!customFormData && !formRef.current) {
       formData.append("title", title);
       formData.append("slug", slug);
       formData.append("language_id", languageId);
       formData.append("status", status);
       formData.append("meta_title", metaTitle);
       formData.append("meta_description", metaDescription);
+      formData.append("feature_image_id", featureImageId || "");
       if (translationGroupId) {
         formData.append("translation_group_id", translationGroupId);
       }
@@ -202,7 +212,8 @@ export default function PageForm({
       languageId !== (page?.language_id?.toString() || "") ||
       status !== (page?.status || "draft") ||
       metaTitle !== (page?.meta_title || "") ||
-      metaDescription !== (page?.meta_description || "");
+      metaDescription !== (page?.meta_description || "") ||
+      featureImageId !== (page?.feature_image_id || null);
 
     if (!hasChanges) return;
 
@@ -211,7 +222,7 @@ export default function PageForm({
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [title, slug, languageId, status, metaTitle, metaDescription, page, isEditing]);
+  }, [title, slug, languageId, status, metaTitle, metaDescription, featureImageId, page, isEditing]);
 
   // Removed languagesLoading from this condition
   if (authLoading) {
@@ -365,18 +376,25 @@ export default function PageForm({
         </div>
       </div>
 
+      <FeatureImageField
+        initialImageId={initialFeatureImageId || page?.feature_image_id || null}
+        initialImageUrl={initialFeatureImageUrl || null}
+        onImageIdChange={setFeatureImageId}
+        uploadFolder={`pages/${(slug || 'untitled').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '')}/`}
+      />
+
       {!isEditing && (
-        <div className="flex justify-end space-x-3 pt-2">
+        <div className="flex justify-end space-x-3">
           <Button
             type="button"
             variant="outline"
             onClick={() => router.push("/cms/pages")}
             disabled={isPending}
-            className="h-9"
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={isPending || authLoading || availableLanguages.length === 0} className="h-9">
+          {/* Ensure button is not disabled due to removed languagesLoading */}
+          <Button type="submit" disabled={isPending || authLoading || availableLanguages.length === 0}>
             {isPending ? (
               <>
                 <Spinner className="mr-2 h-4 w-4" /> Saving...

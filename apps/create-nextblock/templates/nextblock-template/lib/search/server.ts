@@ -341,6 +341,7 @@ async function fetchPages(languageId: number | null): Promise<SearchCandidate[]>
       updated_at,
       language_id,
       languages!inner(code),
+      media:feature_image_id(object_key, blur_data_url, width, height),
       blocks(content, block_type, order)
     `
     )
@@ -363,6 +364,7 @@ async function fetchPages(languageId: number | null): Promise<SearchCandidate[]>
     const bodyText = buildBodyFromBlocks(page.blocks);
     const description = page.meta_description || null;
     const href = page.slug === 'home' || page.slug === 'accueil' ? '/' : `/${page.slug}`;
+    const media = getFirstRelation(page.media as { object_key?: string | null } | { object_key?: string | null }[] | null);
 
     return {
       id: String(page.id),
@@ -371,7 +373,7 @@ async function fetchPages(languageId: number | null): Promise<SearchCandidate[]>
       description,
       href,
       locale: getLanguageCode(page),
-      imageUrl: null,
+      imageUrl: resolveMediaUrl(media?.object_key || null),
       bodyText,
       searchableText: compactText([page.title, page.meta_title, description, page.slug, bodyText]),
       sortDate: page.updated_at ?? null,

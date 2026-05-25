@@ -19,6 +19,10 @@ import { FeedbackModal } from "./components/FeedbackModal";
 import { CortexGlobalAgentChat } from "./components/CortexGlobalAgentChat";
 import { CortexAiPageContextProvider } from "./components/CortexAiPageContext";
 import { CortexAiActiveProvider } from "./components/CortexAiActiveContext";
+import { useAppBranding } from "../../components/AppShell";
+import { resolveMediaUrl } from "../../lib/media/resolveMediaUrl";
+
+const FALLBACK_LOGO_PATH = "/images/nextblock-logo-small.webp";
 
 const LoadingSpinner = () => (
   <div className="flex justify-center items-center h-full w-full py-20">
@@ -116,6 +120,7 @@ export default function CmsClientLayout({
   isEcommerceActive?: boolean,
 }) {
   const { user, profile, role, isLoading, isAdmin, isWriter } = useAuth();
+  const { logo, siteTitle } = useAppBranding();
   const router = useRouter();
   const pathname = usePathname(); // Use the usePathname hook
   const [cmsSidebarOpen, setCmsSidebarOpen] = React.useState(false);
@@ -187,6 +192,8 @@ export default function CmsClientLayout({
     if (isWriter) return "bg-emerald-500";
     return "bg-sky-500"; // Default color
   }
+  const cmsLogoSrc = resolveMediaUrl(logo?.media?.object_key) || FALLBACK_LOGO_PATH;
+  const cmsLogoAlt = logo?.media?.alt_text || siteTitle || "Nextblock";
 
   // pageTitle logic should now work reliably with usePathname
   let pageTitle = "CMS"; // Default title
@@ -256,10 +263,10 @@ export default function CmsClientLayout({
           <div className="p-4 border-b dark:border-slate-700/60 h-16 flex items-center shrink-0">
             <Link href="/cms/dashboard" className="flex items-center gap-2 px-2">
               <Image
-                src="/images/nextblock-logo-small.webp"
-                alt="Nextblock logo"
-                width={32}
-                height={32}
+                src={cmsLogoSrc}
+                alt={cmsLogoAlt}
+                width={logo?.media?.width || 32}
+                height={logo?.media?.height || 32}
                 className="h-8 w-auto"
                 priority
               />

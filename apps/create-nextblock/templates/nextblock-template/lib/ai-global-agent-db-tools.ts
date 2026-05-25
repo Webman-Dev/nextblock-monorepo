@@ -272,6 +272,7 @@ const tableConfigs = {
       'status',
       'meta_title',
       'meta_description',
+      'feature_image_id',
       'version',
       'translation_group_id',
       'created_at',

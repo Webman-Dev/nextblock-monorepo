@@ -88,9 +88,24 @@ export async function generateMetadata(): Promise<Metadata> {
     });
   }
 
+  const description = resolveMetaDescription(pageData.meta_description);
+
   return {
     title: pageData.meta_title || pageData.title,
-    description: resolveMetaDescription(pageData.meta_description),
+    description,
+    openGraph: {
+      title: pageData.meta_title || pageData.title,
+      description,
+      type: 'website',
+      url: `${siteUrl}/`,
+      images: pageData.feature_image_url
+        ? [
+            {
+              url: pageData.feature_image_url,
+            },
+          ]
+        : undefined,
+    },
     alternates: {
       canonical: `${siteUrl}/`,
       languages: Object.keys(alternates).length > 0 ? alternates : undefined,

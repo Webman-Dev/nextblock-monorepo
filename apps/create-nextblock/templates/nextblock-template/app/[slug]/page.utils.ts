@@ -2,6 +2,7 @@
 import { createClient, getSsgSupabaseClient } from "@nextblock-cms/db/server";
 import type { Database } from "@nextblock-cms/db";
 import { draftMode } from "next/headers";
+import { resolveMediaUrl } from "../../lib/media/resolveMediaUrl";
 import { getContentDraft } from "../../lib/visual-editing/draft-content";
 import type { ContentDraftRow, DraftBlockSnapshot } from "../../lib/visual-editing/types";
 
@@ -12,6 +13,10 @@ type PublicPageData = PageType & {
   language_code: string;
   language_id: number;
   translation_group_id: string | null;
+  feature_image_url?: string | null;
+  feature_image_blur_data_url?: string | null;
+  feature_image_width?: number | null;
+  feature_image_height?: number | null;
   draft_id?: number | null;
 };
 
@@ -27,6 +32,13 @@ export type ImageBlockContent = {
 interface SelectedPageType extends PageType { // Assumes PageType includes fields like id, slug, status, language_id, translation_group_id
   language_details: { id: number; code: string } | null; // From the join; kept nullable due to original code's caution
   blocks: BlockType[];
+  feature_media_object?: {
+    object_key?: string | null;
+    file_path?: string | null;
+    blur_data_url?: string | null;
+    width?: number | null;
+    height?: number | null;
+  } | null;
 }
 
 function hasMetaValue(draft: ContentDraftRow, key: string) {
@@ -86,6 +98,7 @@ function applyDraftToPage(page: SelectedPageType, draft: ContentDraftRow): Selec
     status: draftString(draft, "status", page.status) as PageType["status"],
     meta_title: draftNullableString(draft, "meta_title", page.meta_title),
     meta_description: draftNullableString(draft, "meta_description", page.meta_description),
+    feature_image_id: draftNullableString(draft, "feature_image_id", page.feature_image_id),
     translation_group_id: draftString(
       draft,
       "translation_group_id",
@@ -241,8 +254,9 @@ export async function getPageDataBySlug(
   const supabase = isDraftModeEnabled ? createClient() : getSsgSupabaseClient();
 
   const baseSelect = `
-      id, slug, title, meta_title, meta_description, status, language_id, translation_group_id, author_id, created_at, updated_at,
+      id, slug, title, meta_title, meta_description, feature_image_id, status, language_id, translation_group_id, author_id, created_at, updated_at,
       language_details:languages!inner(id, code),
+      feature_media_object:media!pages_feature_image_id_fkey(object_key, file_path, blur_data_url, width, height),
       blocks (id, page_id, block_type, content, order)
     `;
 
@@ -397,16 +411,36 @@ export async function getPageDataBySlug(
       }
     }
   }
+
+  let featureMedia = selectedPage.feature_media_object ?? null;
+  if (selectedPage.feature_image_id && (!featureMedia || contentDraft)) {
+    const { data: mediaItem, error: mediaError } = await supabase
+      .from("media")
+      .select("object_key, file_path, blur_data_url, width, height")
+      .eq("id", selectedPage.feature_image_id)
+      .maybeSingle();
+
+    if (mediaError) {
+      console.error("Error fetching page feature image data:", mediaError);
+    } else if (mediaItem) {
+      featureMedia = mediaItem;
+    }
+  }
   
-  const { language_details, blocks, ...basePageData } = selectedPage;
+  const { language_details, blocks, feature_media_object, ...basePageData } = selectedPage;
   void language_details;
   void blocks;
+  void feature_media_object;
   return {
     ...(basePageData as PageType),
     blocks: blocksWithMediaData,
     language_code: languageCode,
     language_id: languageId,
     translation_group_id: selectedPage.translation_group_id,
+    feature_image_url: resolveMediaUrl(featureMedia?.object_key || featureMedia?.file_path || null),
+    feature_image_blur_data_url: featureMedia?.blur_data_url ?? null,
+    feature_image_width: featureMedia?.width ?? null,
+    feature_image_height: featureMedia?.height ?? null,
     draft_id: contentDraft?.id ?? null,
   };
 }

@@ -120,17 +120,19 @@ Normal contributor workflow:
 
 Production rule:
 
+- NextBlock now has live data. New production/shared database changes must be
+  append-only, forward-only, and non-destructive by default.
 - Do not edit migration files that have already been applied to production.
 - Add a new forward-only `.sql` file under
   `libs/db/src/supabase/migrations` for each production schema/data change.
 - Use `npm run db:migrate:check` before `npm run db:migrate`.
 - If `db:migrate:check` lists historical baseline migrations such as
-  `00000000000001_setup_cms_core.sql` on an existing production database, do
+  `00000000000000_setup_foundation_and_enums.sql` on an existing production database, do
   not run `db:migrate` yet. Run `npm run db:migrate:repair-history:check`,
   then `npm run db:migrate:repair-history`, then check again. The expected
   result after repair is that only new unapplied migrations remain.
-- Do not use `npm run db:reset`, `npm run sandbox:reset`, or
-  `npm run db:push:sandbox` against production.
+- Do not use `npm run db:reset`, `npm run sandbox:reset`,
+  `npm run db:migrate:fresh`, or `npm run db:push:sandbox` against production.
 
 Fresh local and sandbox rebuilds may still use the reset/bootstrap flow when
 the target database is disposable.
