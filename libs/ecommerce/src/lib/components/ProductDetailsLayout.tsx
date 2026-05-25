@@ -35,6 +35,7 @@ type ProductVisualEditAttributes = {
 
 interface ProductDetailsLayoutProps {
   visualEditingEnabled?: boolean;
+  descriptionNode?: React.ReactNode;
 }
 
 function buildProductVisualEditAttributes(
@@ -70,6 +71,7 @@ function buildProductVisualEditAttributes(
 
 export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
   visualEditingEnabled = false,
+  descriptionNode,
 }) => {
   const product = useProduct();
   const { t } = useTranslations();
@@ -427,7 +429,9 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
         className="prose prose-neutral dark:prose-invert max-w-none leading-relaxed mt-12"
         {...descriptionVisualEditAttributes}
       >
-        {product.description_json ? (
+        {descriptionNode ? (
+          descriptionNode
+        ) : product.description_json ? (
           <SimpleTiptapRenderer content={product.description_json} />
         ) : (
           <p className="italic text-sm">{t('ecommerce.no_description')}</p>

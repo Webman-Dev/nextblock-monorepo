@@ -9,6 +9,7 @@ import AlertWidgetRenderer from "./inline/AlertWidgetRenderer";
 import CtaWidgetRenderer from "./inline/CtaWidgetRenderer";
 import type { TextBlockContent } from "./TextBlockRenderer";
 import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
+import { SimpleTiptapRenderer } from "@nextblock-cms/ecommerce";
 
 interface ClientTextBlockRendererProps {
   content: TextBlockContent;
@@ -283,6 +284,24 @@ const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({
       }
     },
   };
+
+  const isJson = normalizedHtml.trim().startsWith('{') || normalizedHtml.trim().startsWith('[');
+
+  if (isJson) {
+    try {
+      JSON.parse(normalizedHtml);
+      return (
+        <div
+          className="my-4 prose dark:prose-invert container mx-auto"
+          {...visualEditAttributes}
+        >
+          <SimpleTiptapRenderer content={normalizedHtml} />
+        </div>
+      );
+    } catch {
+      // Fallback to parse as HTML
+    }
+  }
 
   return (
     <div

@@ -65,6 +65,7 @@ function draftBlockToPostBlock(
     id: block.id ?? -(block.order + 1),
     page_id: null,
     post_id: postId,
+    product_id: null,
     language_id: block.language_id,
     block_type: block.block_type,
     content: block.content,

@@ -475,6 +475,16 @@ export async function copyProductFromLanguage(
     throw new Error(fetchError?.message || 'Source product not found');
   }
 
+  const { data: targetProduct, error: targetFetchError } = await supabase
+    .from('products')
+    .select('language_id')
+    .eq('id', targetProductId)
+    .single();
+
+  if (targetFetchError || !targetProduct) {
+    throw new Error(targetFetchError?.message || 'Target product not found');
+  }
+
   const { error: updateError } = await supabase
     .from('products')
     .update({
@@ -485,6 +495,33 @@ export async function copyProductFromLanguage(
     .eq('id', targetProductId);
 
   if (updateError) throw updateError;
+
+  // Copy product description blocks
+  const { data: sourceBlocks, error: blocksError } = await supabase
+    .from('blocks')
+    .select('*')
+    .eq('product_id', sourceProductId)
+    .order('order', { ascending: true });
+
+  if (blocksError) throw blocksError;
+
+  await supabase.from('blocks').delete().eq('product_id', targetProductId);
+
+  if (sourceBlocks && sourceBlocks.length > 0) {
+    const blocksInserts = sourceBlocks.map(block => {
+      const { id, created_at, updated_at, ...rest } = block;
+      return {
+        ...rest,
+        product_id: targetProductId,
+        language_id: targetProduct.language_id,
+      };
+    });
+    const { error: insertError } = await supabase.from('blocks').insert(blocksInserts);
+    if (insertError) throw insertError;
+  }
+
+  // Clear target draft so that a fresh copy is generated from the newly copied blocks
+  await supabase.from('product_drafts').delete().eq('product_id', targetProductId);
 
   await supabase.from('product_media').delete().eq('product_id', targetProductId);
 

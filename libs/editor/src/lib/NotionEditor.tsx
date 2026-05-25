@@ -51,9 +51,26 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiError, setAiError] = useState<string | null>(null);
   const [isGeneratingAiContent, setIsGeneratingAiContent] = useState(false);
+
+  const getParsedContent = (val: string | JSONContent | undefined) => {
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          return JSON.parse(trimmed) as JSONContent;
+        } catch {
+          // ignore, fallback to string
+        }
+      }
+    }
+    return val;
+  };
+
+  const initialParsedContent = getParsedContent(content || initialContent);
+
   const editor = useEditor({
     extensions: editorExtensions,
-    content: (content || initialContent),
+    content: initialParsedContent,
     editable,
     immediatelyRender: false, // Next.js hydration safety
     editorProps: {
@@ -144,15 +161,17 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
     if (content === lastContentRef.current) return;
 
     const currentHTML = editor.getHTML();
-
-    if (typeof content === 'string') {
-       if (content === currentHTML) return;
-       if (editor.isEmpty && (content === '' || content === '<p></p>')) {
+    const parsed = getParsedContent(content);
+    if (parsed === undefined) return;
+ 
+    if (typeof parsed === 'string') {
+       if (parsed === currentHTML) return;
+       if (editor.isEmpty && (parsed === '' || parsed === '<p></p>')) {
           lastContentRef.current = content;
           return;
        }
        const { from, to } = editor.state.selection;
-       editor.commands.setContent(content, { emitUpdate: false });
+       editor.commands.setContent(parsed, { emitUpdate: false });
        editor.commands.setTextSelection({ from, to });
        lastContentRef.current = content;
     } else {
@@ -164,7 +183,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
        // But let's basic check.
        // Simplify: just set content.
        const { from, to } = editor.state.selection;
-       editor.commands.setContent(content, { emitUpdate: false });
+       editor.commands.setContent(parsed, { emitUpdate: false });
        editor.commands.setTextSelection({ from, to });
        lastContentRef.current = content;
     }

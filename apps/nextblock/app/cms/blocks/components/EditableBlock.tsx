@@ -13,6 +13,7 @@ import { BlockEditorModal } from './BlockEditorModal';
 import { DeleteBlockButtonClient } from './DeleteBlockButtonClient';
 import { cn } from '@nextblock-cms/utils';
 import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
+import { SimpleTiptapRenderer } from '@nextblock-cms/ecommerce';
 
 export interface EditableBlockProps {
   block: Block;
@@ -108,19 +109,24 @@ export default function EditableBlock({
          const isCentered = htmlContent.includes('text-align: center') || htmlContent.includes('class="text-center"');
          const isRight = htmlContent.includes('text-align: right') || htmlContent.includes('class="text-right"');
          const alignmentClass = isCentered ? 'text-center' : isRight ? 'text-right' : 'text-left';
+         const isJson = htmlContent.trim().startsWith('{') || htmlContent.trim().startsWith('[');
 
          return (
              <div className="py-2">
                  <div className={cn("text-xs w-full", alignmentClass)}>
                      {htmlContent ? (
-                          <div 
-                            dangerouslySetInnerHTML={{ __html: htmlContent }} 
-                            className={cn(
-                              "prose prose-sm max-w-none [&>p]:my-0 [&>h1]:my-0 [&>h2]:my-0 [&>h3]:my-0 dark:prose-invert",
-                              isCentered && "[&_*]:text-center",
-                              isRight && "[&_*]:text-right"
-                            )} 
-                          />
+                       isJson ? (
+                         <SimpleTiptapRenderer content={htmlContent} className="prose prose-sm max-w-none [&>p]:my-0 [&>h1]:my-0 [&>h2]:my-0 [&>h3]:my-0 dark:prose-invert" />
+                       ) : (
+                         <div 
+                           dangerouslySetInnerHTML={{ __html: htmlContent }} 
+                           className={cn(
+                             "prose prose-sm max-w-none [&>p]:my-0 [&>h1]:my-0 [&>h2]:my-0 [&>h3]:my-0 dark:prose-invert",
+                             isCentered && "[&_*]:text-center",
+                             isRight && "[&_*]:text-right"
+                           )} 
+                         />
+                       )
                      ) : <span className="text-muted-foreground italic">Empty text block</span>}
                  </div>
              </div>

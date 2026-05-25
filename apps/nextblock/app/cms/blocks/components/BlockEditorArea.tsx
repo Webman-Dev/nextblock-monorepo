@@ -24,6 +24,7 @@ import BlockTypeSelector from "./BlockTypeSelector";
 import {
   createBlockForPage,
   createBlockForPost,
+  createBlockForProduct,
   updateBlock,
   updateMultipleBlockOrders,
 } from "../actions";
@@ -48,8 +49,8 @@ import { SortableBlockItem } from "./SortableBlockItem";
 import EditableBlock from "./EditableBlock";
 
 interface BlockEditorAreaProps {
-  parentId: number;
-  parentType: "page" | "post";
+  parentId: number | string;
+  parentType: "page" | "post" | "product";
   initialBlocks: Block[];
   languageId: number;
 }
@@ -97,8 +98,9 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
     const result = await updateBlock(
       blockToSave.id,
       blockToSave.content,
-      parentType === "page" ? parentId : null,
-      parentType === "post" ? parentId : null
+      parentType === "page" ? parentId as number : null,
+      parentType === "post" ? parentId as number : null,
+      parentType === "product" ? parentId as string : null
     );
 
     if (result.success && result.updatedBlock) {
@@ -253,8 +255,9 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
         const result = await updateBlock(
           parentSectionBlock.id,
           parentSectionBlock.content,
-          parentType === "page" ? parentId : null,
-          parentType === "post" ? parentId : null
+          parentType === "page" ? parentId as number : null,
+          parentType === "post" ? parentId as number : null,
+          parentType === "product" ? parentId as string : null
         );
 
         if (result.success && result.updatedBlock) {
@@ -297,8 +300,9 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
       if (blocksToUpdate.length > 0) {
         const updateResult = await updateMultipleBlockOrders(
           blocksToUpdate,
-          parentType === "page" ? parentId : null,
-          parentType === "post" ? parentId : null
+          parentType === "page" ? parentId as number : null,
+          parentType === "post" ? parentId as number : null,
+          parentType === "product" ? parentId as string : null
         );
 
         if (updateResult?.error) {
@@ -310,14 +314,21 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
       let createResult;
       if (parentType === "page") {
         createResult = await createBlockForPage(
-          parentId,
+          parentId as number,
+          languageId,
+          blockType,
+          newOrder
+        );
+      } else if (parentType === "post") {
+        createResult = await createBlockForPost(
+          parentId as number,
           languageId,
           blockType,
           newOrder
         );
       } else {
-        createResult = await createBlockForPost(
-          parentId,
+        createResult = await createBlockForProduct(
+          parentId as string,
           languageId,
           blockType,
           newOrder
@@ -385,8 +396,9 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
       startTransition(async () => {
         const result = await updateMultipleBlockOrders(
           itemsToUpdateDb,
-          parentType === "page" ? parentId : null,
-          parentType === "post" ? parentId : null
+          parentType === "page" ? parentId as number : null,
+          parentType === "post" ? parentId as number : null,
+          parentType === "product" ? parentId as string : null
         );
 
         if (result?.error) {
@@ -471,8 +483,9 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
                       const result = await import("../actions").then(({ deleteBlock }) =>
                         deleteBlock(
                           blockIdToDelete,
-                          parentType === "page" ? parentId : null,
-                          parentType === "post" ? parentId : null
+                          parentType === "page" ? parentId as number : null,
+                          parentType === "post" ? parentId as number : null,
+                          parentType === "product" ? parentId as string : null
                         )
                       );
                       if (result && result.success) {
@@ -553,8 +566,9 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
                       order: 0, // Temporary order for nested blocks
                       created_at: new Date().toISOString(),
                       updated_at: new Date().toISOString(),
-                      page_id: parentType === 'page' ? parentId : null,
-                      post_id: parentType === 'post' ? parentId : null,
+                      page_id: parentType === 'page' ? parentId as number : null,
+                      post_id: parentType === 'post' ? parentId as number : null,
+                      product_id: parentType === 'product' ? parentId as string : null,
                     };
                     return <NestedBlockEditorComponent
                               block={fullBlockForEditor}

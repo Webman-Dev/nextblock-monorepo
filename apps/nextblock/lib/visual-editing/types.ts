@@ -18,6 +18,7 @@ export interface DraftBlockSnapshot {
   id?: number;
   page_id?: number | null;
   post_id?: number | null;
+  product_id?: string | null;
   language_id: number;
   block_type: string;
   content: Json;

@@ -29,6 +29,7 @@ import {
   buildProductFormInitialData,
 } from '../../productFormData';
 import { CortexAiPageContextRegistrar } from '../../../components/CortexAiPageContext';
+import BlockEditorArea from '../../../blocks/components/BlockEditorArea';
 
 export default async function EditProductPage({
   params,
@@ -120,6 +121,18 @@ export default async function EditProductPage({
       ...(draftData.meta as any),
       id: product.id,
     };
+  }
+
+  let descriptionBlocks: any[] = [];
+  if (draftData && draftData.blocks && Array.isArray(draftData.blocks)) {
+    descriptionBlocks = draftData.blocks;
+  } else {
+    const { data: liveBlocks } = await supabase
+      .from('blocks')
+      .select('*')
+      .eq('product_id', product.id)
+      .order('order', { ascending: true });
+    descriptionBlocks = liveBlocks || [];
   }
 
   return (
@@ -221,6 +234,16 @@ export default async function EditProductPage({
         configStatus={configStatus}
         updateAction={updateProductAction.bind(null, product.id)}
       />
+
+      <div className="border-t pt-8">
+        <h2 className="text-xl font-bold mb-4">Product Description Blocks</h2>
+        <BlockEditorArea
+          parentId={product.id}
+          parentType="product"
+          initialBlocks={descriptionBlocks}
+          languageId={product.language_id}
+        />
+      </div>
     </div>
   );
 }

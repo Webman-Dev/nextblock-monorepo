@@ -24,6 +24,7 @@ export type Database = {
           order: number
           page_id: number | null
           post_id: number | null
+          product_id: string | null
           updated_at: string
         }
         Insert: {
@@ -35,6 +36,7 @@ export type Database = {
           order?: number
           page_id?: number | null
           post_id?: number | null
+          product_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -46,6 +48,7 @@ export type Database = {
           order?: number
           page_id?: number | null
           post_id?: number | null
+          product_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -68,6 +71,13 @@ export type Database = {
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blocks_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]
@@ -1226,6 +1236,7 @@ export type Database = {
       product_drafts: {
         Row: {
           author_id: string | null
+          blocks: Json
           created_at: string
           id: number
           meta: Json
@@ -1234,6 +1245,7 @@ export type Database = {
         }
         Insert: {
           author_id?: string | null
+          blocks?: Json
           created_at?: string
           id?: number
           meta?: Json
@@ -1242,6 +1254,7 @@ export type Database = {
         }
         Update: {
           author_id?: string | null
+          blocks?: Json
           created_at?: string
           id?: number
           meta?: Json

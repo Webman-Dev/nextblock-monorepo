@@ -100,7 +100,6 @@ function buildBlockInsertPayload(
   index: number
 ) {
   return {
-    ...(block.id && block.id > 0 ? { id: block.id } : {}),
     page_id: parentType === "page" ? parentId : null,
     post_id: parentType === "post" ? parentId : null,
     language_id: block.language_id,

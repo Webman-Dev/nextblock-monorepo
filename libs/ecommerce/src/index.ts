@@ -16,6 +16,7 @@ export * from './lib/components/SubscriptionSelector';
 export * from './lib/components/InvoiceDocument';
 export * from './lib/components/InvoiceViewerShell';
 export * from './lib/components/AccountNavigationMenu';
+export * from './lib/components/SimpleTiptapRenderer';
 export { ProductForm } from './lib/pages/cms/products/components/ProductForm';
 
 export * from './lib/cart-store';

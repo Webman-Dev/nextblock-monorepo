@@ -12,7 +12,6 @@ import { normalizeCurrencyRecord } from '../../../../currency';
 
 interface NewProductPageProps {
   mediaPickerNode?: React.ReactNode;
-  editorNode?: React.ReactNode;
   availableLanguagesProp: any[];
   translationGroupId?: string;
   targetLanguageId?: string;
@@ -21,7 +20,6 @@ interface NewProductPageProps {
 
 export async function NewProductPage({ 
   mediaPickerNode, 
-  editorNode,
   availableLanguagesProp,
   translationGroupId,
   targetLanguageId,
@@ -105,7 +103,6 @@ export async function NewProductPage({
     <div className="p-8">
       <ProductForm 
          mediaPickerNode={mediaPickerNode} 
-         editorNode={editorNode}
          availableLanguagesProp={availableLanguagesProp}
          globalAttributesProp={globalAttributes}
          currenciesProp={currencies}

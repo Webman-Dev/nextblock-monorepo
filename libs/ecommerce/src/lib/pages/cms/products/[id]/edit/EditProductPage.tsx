@@ -23,7 +23,6 @@ interface EditProductPageProps {
     id: string;
   }>;
   mediaPickerNode?: React.ReactNode;
-  editorNode?: React.ReactNode;
   availableLanguagesProp: any[];
   languageSwitcherNode?: React.ReactNode;
   copyContentNode?: React.ReactNode;
@@ -33,7 +32,6 @@ interface EditProductPageProps {
 export async function EditProductPage({ 
   params, 
   mediaPickerNode, 
-  editorNode, 
   availableLanguagesProp,
   languageSwitcherNode,
   copyContentNode,
@@ -204,7 +202,6 @@ export async function EditProductPage({
          }} 
         isEdit 
         mediaPickerNode={mediaPickerNode}
-        editorNode={editorNode}
         availableLanguagesProp={availableLanguagesProp}
         globalAttributesProp={globalAttributes}
         currenciesProp={currencies}

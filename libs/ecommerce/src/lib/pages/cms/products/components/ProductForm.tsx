@@ -86,7 +86,6 @@ interface ProductFormProps {
   initialData?: ProductFormInitialData;
   isEdit?: boolean;
   mediaPickerNode?: React.ReactNode;
-  editorNode?: React.ReactNode;
   availableLanguagesProp: ProductLanguageOption[];
   globalAttributesProp: ProductAttribute[];
   currenciesProp: CurrencyRecord[];
@@ -279,7 +278,6 @@ export function ProductForm({
   initialData, 
   isEdit = false, 
   mediaPickerNode, 
-  editorNode,
   availableLanguagesProp,
   globalAttributesProp,
   currenciesProp,
@@ -1082,21 +1080,9 @@ export function ProductForm({
 
         <FormSection title="Product Description" hideHeader>
           <div className="space-y-2">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label htmlFor="short_description" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Short Description</Label>
-                <Input id="short_description" {...register('short_description')} placeholder="Brief summary for product cards..." className="h-8 text-sm" />
-              </div>
-            </div>
-            <div className="min-h-[250px] border rounded overflow-hidden text-block-editor bg-muted/5">
-              {editorNode ? (
-                React.cloneElement(editorNode as React.ReactElement<any>, {
-                  initialContent: watch('description_json') || {},
-                  onUpdate: (content: any) => setValue('description_json', content, { shouldDirty: true })
-                })
-              ) : (
-                <div className="p-3 text-[10px] text-muted-foreground italic text-center mt-8">Editor disabled.</div>
-              )}
+            <div className="space-y-1">
+              <Label htmlFor="short_description" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Short Description</Label>
+              <Input id="short_description" {...register('short_description')} placeholder="Brief summary for product cards..." className="h-8 text-sm" />
             </div>
           </div>
         </FormSection>

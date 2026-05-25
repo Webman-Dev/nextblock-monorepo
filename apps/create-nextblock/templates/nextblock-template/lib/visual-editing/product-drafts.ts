@@ -3,7 +3,7 @@ import "server-only";
 import type { Json } from "@nextblock-cms/db";
 import { createClient } from "@nextblock-cms/db/server";
 import { updateProduct } from "@nextblock-cms/ecommerce/server";
-import { getCurrentUserCanEdit } from "./draft-content";
+import { getCurrentUserCanEdit, normalizeDraftBlocks } from "./draft-content";
 import {
   formatVisualEditingError,
   requireVisualEditingEditableUser,
@@ -13,6 +13,7 @@ import {
 import type {
   ProductVisualEditingField,
   VisualEditingProductFieldRequest,
+  DraftBlockSnapshot,
 } from "./types";
 
 type SupabaseAny = ReturnType<typeof createClient>;
@@ -22,12 +23,14 @@ export interface ProductDraftRow {
   product_id: string;
   author_id: string | null;
   meta: Record<string, Json>;
+  blocks: DraftBlockSnapshot[];
   created_at: string;
   updated_at: string;
 }
 
 type ProductSnapshot = {
   meta: Record<string, Json>;
+  blocks: DraftBlockSnapshot[];
 };
 
 const PRODUCT_ID_PATTERN =
@@ -80,6 +83,7 @@ function normalizeProductDraftRow(row: Record<string, unknown>): ProductDraftRow
     product_id: String(row.product_id ?? ""),
     author_id: typeof row.author_id === "string" ? row.author_id : null,
     meta: isRecord(row.meta) ? (row.meta as Record<string, Json>) : {},
+    blocks: normalizeDraftBlocks(row.blocks),
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
   };
@@ -156,8 +160,19 @@ async function readProductSnapshot(
     throw new Error(`Product not found: ${error?.message ?? "unknown error"}`);
   }
 
+  const { data: blocks, error: blocksError } = await (supabase as any)
+    .from("blocks")
+    .select("id, page_id, post_id, product_id, language_id, block_type, content, order, created_at, updated_at")
+    .eq("product_id", productId)
+    .order("order", { ascending: true });
+
+  if (blocksError) {
+    throw new Error(`Failed to read product blocks: ${blocksError.message}`);
+  }
+
   return {
     meta: data as Record<string, Json>,
+    blocks: normalizeDraftBlocks(blocks),
   };
 }
 
@@ -202,6 +217,7 @@ export async function getOrCreateProductDraft(
       product_id: productId,
       author_id: authorId,
       meta: snapshot.meta,
+      blocks: snapshot.blocks,
     })
     .select("*")
     .single();
@@ -383,6 +399,36 @@ export async function publishProductVisualEditingDraft(
         if (updateError) {
           throw new Error(`Failed to update product: ${updateError.message}`);
         }
+      }
+    }
+
+    // Publish blocks
+    const { error: deleteBlocksError } = await (auth.supabase as any)
+      .from("blocks")
+      .delete()
+      .eq("product_id", productId);
+
+    if (deleteBlocksError) {
+      throw new Error(`Failed to clear product blocks: ${deleteBlocksError.message}`);
+    }
+
+    const blocksToInsert = draft.blocks.map((block, index) => ({
+      page_id: null,
+      post_id: null,
+      product_id: productId,
+      language_id: block.language_id,
+      block_type: block.block_type,
+      content: block.content,
+      order: Number.isFinite(block.order) ? block.order : index,
+    }));
+
+    if (blocksToInsert.length > 0) {
+      const { error: insertBlocksError } = await (auth.supabase as any)
+        .from("blocks")
+        .insert(blocksToInsert as any);
+
+      if (insertBlocksError) {
+        throw new Error(`Failed to insert product blocks: ${insertBlocksError.message}`);
       }
     }
 

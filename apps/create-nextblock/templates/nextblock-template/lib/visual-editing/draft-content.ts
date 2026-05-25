@@ -56,6 +56,7 @@ export function normalizeDraftBlocks(value: unknown): DraftBlockSnapshot[] {
         id: toNumber(item.id) ?? undefined,
         page_id: toNumber(item.page_id),
         post_id: toNumber(item.post_id),
+        product_id: typeof item.product_id === "string" ? item.product_id : null,
         language_id: languageId,
         block_type: blockType,
         content: normalizeJson(item.content),
