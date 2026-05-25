@@ -16,6 +16,7 @@ const repoRoot = path.resolve(__dirname, '../..');
 const workdir = path.join(repoRoot, 'libs/db/src');
 const npxBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const args = new Set(process.argv.slice(2));
+const baselineRepairFirstVersion = '00000000000000';
 const baselineRepairLastVersion = '00000000000012';
 
 function log(message, color = colors.reset) {
@@ -135,7 +136,7 @@ function getMigrationVersion(fileName) {
 
 function isHistoricalBaselineMigration(fileName) {
   const version = getMigrationVersion(fileName);
-  return version >= '00000000000001' && version <= baselineRepairLastVersion;
+  return version >= baselineRepairFirstVersion && version <= baselineRepairLastVersion;
 }
 
 function main() {
@@ -206,7 +207,7 @@ function main() {
   if (pendingHistoricalBaseline.length > 0 && !allowBaselineReplay) {
     log('Refusing to replay historical baseline migrations on this database.', colors.red);
     log(
-      `The dry run includes ${pendingHistoricalBaseline.length} baseline migration(s) through ${baselineRepairLastVersion}.`,
+      `The dry run includes ${pendingHistoricalBaseline.length} baseline migration(s) from ${baselineRepairFirstVersion} through ${baselineRepairLastVersion}.`,
       colors.yellow,
     );
     log(

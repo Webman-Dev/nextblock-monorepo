@@ -24,3 +24,6 @@ library surfaces rather than historical planning notes.
   matches the task. Treat `apps/nextblock`, `libs/*`, and
   `libs/db/src/supabase/migrations` as the final authority if a doc and code ever
   disagree.
+- AI agents touching migrations must also read the root `AGENTS.md` note:
+  production/shared database changes are append-only and non-destructive by
+  default.

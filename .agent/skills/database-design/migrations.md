@@ -26,6 +26,16 @@ For zero-downtime changes:
 - Test migrations on data copy first
 - Have rollback plan
 - Run in transaction when possible
+- For NextBlock production/shared databases, treat migrations as append-only:
+  create a new migration file for each change and do not rewrite, squash,
+  reorder, delete, or recycle existing migrations.
+- Do not recommend reset/fresh/sandbox replay commands for any database that
+  may contain orders, users, payments, or customer data.
+- If Supabase reports old baseline migrations as pending on an existing
+  database, repair the migration ledger instead of replaying baseline SQL:
+  `npm run db:migrate:repair-history:check`, then
+  `npm run db:migrate:repair-history`, then rerun
+  `npm run db:migrate:check`.
 
 ## Serverless Databases
 

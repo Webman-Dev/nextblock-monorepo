@@ -615,6 +615,7 @@ export declare const getServiceRoleSupabaseClient: () => import("@supabase/supab
             Row: {
                 author_id: string | null;
                 created_at: string;
+                feature_image_id: string | null;
                 id: number;
                 language_id: number;
                 meta_description: string | null;
@@ -629,6 +630,7 @@ export declare const getServiceRoleSupabaseClient: () => import("@supabase/supab
             Insert: {
                 author_id?: string | null;
                 created_at?: string;
+                feature_image_id?: string | null;
                 id?: number;
                 language_id: number;
                 meta_description?: string | null;
@@ -643,6 +645,7 @@ export declare const getServiceRoleSupabaseClient: () => import("@supabase/supab
             Update: {
                 author_id?: string | null;
                 created_at?: string;
+                feature_image_id?: string | null;
                 id?: number;
                 language_id?: number;
                 meta_description?: string | null;
@@ -659,6 +662,12 @@ export declare const getServiceRoleSupabaseClient: () => import("@supabase/supab
                 columns: ["author_id"];
                 isOneToOne: false;
                 referencedRelation: "profiles";
+                referencedColumns: ["id"];
+            }, {
+                foreignKeyName: "pages_feature_image_id_fkey";
+                columns: ["feature_image_id"];
+                isOneToOne: false;
+                referencedRelation: "media";
                 referencedColumns: ["id"];
             }, {
                 foreignKeyName: "pages_language_id_fkey";

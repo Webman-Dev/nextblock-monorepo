@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -68,6 +68,50 @@ export type Database = {
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_drafts: {
+        Row: {
+          author_id: string | null
+          base_version: number
+          blocks: Json
+          created_at: string
+          id: number
+          meta: Json
+          parent_id: number
+          parent_type: string
+          updated_at: string
+        }
+        Insert: {
+          author_id?: string | null
+          base_version?: number
+          blocks?: Json
+          created_at?: string
+          id?: number
+          meta?: Json
+          parent_id: number
+          parent_type: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string | null
+          base_version?: number
+          blocks?: Json
+          created_at?: string
+          id?: number
+          meta?: Json
+          parent_id?: number
+          parent_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_drafts_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -918,6 +962,7 @@ export type Database = {
         Row: {
           author_id: string | null
           created_at: string
+          feature_image_id: string | null
           id: number
           language_id: number
           meta_description: string | null
@@ -932,6 +977,7 @@ export type Database = {
         Insert: {
           author_id?: string | null
           created_at?: string
+          feature_image_id?: string | null
           id?: number
           language_id: number
           meta_description?: string | null
@@ -946,6 +992,7 @@ export type Database = {
         Update: {
           author_id?: string | null
           created_at?: string
+          feature_image_id?: string | null
           id?: number
           language_id?: number
           meta_description?: string | null
@@ -963,6 +1010,13 @@ export type Database = {
             columns: ["author_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pages_feature_image_id_fkey"
+            columns: ["feature_image_id"]
+            isOneToOne: false
+            referencedRelation: "media"
             referencedColumns: ["id"]
           },
           {
@@ -1168,6 +1222,48 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      product_drafts: {
+        Row: {
+          author_id: string | null
+          created_at: string
+          id: number
+          meta: Json
+          product_id: string
+          updated_at: string
+        }
+        Insert: {
+          author_id?: string | null
+          created_at?: string
+          id?: number
+          meta?: Json
+          product_id: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string | null
+          created_at?: string
+          id?: number
+          meta?: Json
+          product_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_drafts_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_drafts_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: true
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       product_media: {
         Row: {

@@ -21,6 +21,7 @@ description: When you need to understand the project's core mandate, operational
 
 - **Context First:** Before answering complex questions, always check `docs/` (start with `docs/README.md`) and the relevant linked docs.
 - **Maintain the Docs:** When you implement a new feature or make significant changes, **update the relevant doc files in `docs/`**. These are the maintained reference set for both contributors and AI agents. Keep them accurate and current.
+- **Production Migrations:** NextBlock has live data. Never rewrite existing migrations for production/shared database changes. Add a new non-destructive migration, run/check `npm run db:migrate:check`, and never use reset/fresh/sandbox replay commands against databases containing orders, users, payments, or customer data.
 - **Strict Types:** Always use `strict: true` TypeScript. No `any` unless absolutely unavoidable and documented.
 - **Target the App, Not the Template:** NEVER edit files in `apps/create-nextblock/templates/nextblock-template` directly. Always make changes in `apps/nextblock` (the core app). The template is synced from the core app via scripts.
 - **Never Edit Generated Sandbox SQL:** NEVER manually edit `apps/nextblock/app/api/cron/reset-sandbox/sandboxResetSql.ts`. This file is auto-generated from the migration folder. Run `npm run generate:sandbox` to regenerate it.

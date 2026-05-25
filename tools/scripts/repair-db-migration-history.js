@@ -17,6 +17,7 @@ const workdir = path.join(repoRoot, 'libs/db/src');
 const migrationsDir = path.join(workdir, 'supabase/migrations');
 const npxBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const args = new Set(process.argv.slice(2));
+const baselineRepairFirstVersion = '00000000000000';
 const baselineRepairLastVersion = '00000000000012';
 
 function log(message, color = colors.reset) {
@@ -115,7 +116,7 @@ function getBaselineVersions() {
     .readdirSync(migrationsDir)
     .filter((fileName) => /^\d{14}_.*\.sql$/.test(fileName))
     .map((fileName) => fileName.split('_')[0])
-    .filter((version) => version >= '00000000000001' && version <= baselineRepairLastVersion)
+    .filter((version) => version >= baselineRepairFirstVersion && version <= baselineRepairLastVersion)
     .sort();
 }
 
@@ -133,7 +134,7 @@ function main() {
   log('Supabase migration history repair', colors.green);
   log(`Target project: ${process.env.SUPABASE_PROJECT_ID}`, colors.dim);
   log(
-    `This marks existing baseline migrations through ${baselineRepairLastVersion} as applied. It does not run migration SQL.`,
+    `This marks existing baseline migrations from ${baselineRepairFirstVersion} through ${baselineRepairLastVersion} as applied. It does not run migration SQL.`,
     colors.dim,
   );
   log(`Versions: ${baselineVersions.join(', ')}`, colors.dim);

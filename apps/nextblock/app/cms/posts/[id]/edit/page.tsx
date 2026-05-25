@@ -86,12 +86,6 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
   let initialFeatureImageUrl: string | null = null;
   let initialFeatureImageIdProp: string | null = null;
 
-  // The PostType defines feature_image_id as number | null.
-  // However, Media.id is a string (uuid), and PostForm expects a string UUID.
-  // This assumes that postWithBlocks.feature_image_id, despite its 'number' typing,
-  // actually holds a value that can be used to identify a media item by its UUID,
-  // or that the type definition for Post.feature_image_id is outdated.
-  // Casting to `unknown` then `string` for the query.
   const featureImageIdFromDb = postWithBlocks.feature_image_id as unknown as (string | number | null);
 
   if (featureImageIdFromDb) {

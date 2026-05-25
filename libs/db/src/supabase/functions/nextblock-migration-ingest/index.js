@@ -371,13 +371,13 @@ Deno.serve(async (req) => {
             author_id,
             meta_title: item.seo?.meta_title || null,
             meta_description: item.seo?.meta_description || null,
+            feature_image_id,
             created_at: item.created_at,
             updated_at: item.updated_at
           };
           if (entity_type === "post") {
             baseData.excerpt = item.excerpt;
             baseData.published_at = item.published_at;
-            baseData.feature_image_id = feature_image_id;
           }
           processedEntities.push(baseData);
         } else if (entity_type === "product" || entity_type === "product_variation") {

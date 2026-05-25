@@ -462,6 +462,7 @@ Deno.serve(async (req: Request) => {
               author_id: author_id,
               meta_title: item.seo?.meta_title || null,
               meta_description: item.seo?.meta_description || null,
+              feature_image_id,
               created_at: item.created_at,
               updated_at: item.updated_at,
             };
@@ -470,7 +471,6 @@ Deno.serve(async (req: Request) => {
             if (entity_type === 'post') {
                 baseData.excerpt = item.excerpt;
                 baseData.published_at = item.published_at;
-                baseData.feature_image_id = feature_image_id;
             }
 
             processedEntities.push(baseData);

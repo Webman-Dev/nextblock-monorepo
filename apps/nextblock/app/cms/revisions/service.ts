@@ -150,7 +150,7 @@ export async function restorePageToVersion(pageId: number, targetVersion: number
     // Fallback for missing Version 1: use empty content with current meta
     const { data: pageMeta } = await supabase
       .from('pages')
-      .select('title, slug, language_id, status, meta_title, meta_description')
+      .select('title, slug, language_id, status, meta_title, meta_description, feature_image_id')
       .eq('id', pageId)
       .single();
     if (!pageMeta) return { error: 'Page not found.' } as const;
@@ -204,6 +204,7 @@ export async function restorePageToVersion(pageId: number, targetVersion: number
       status: content.meta.status,
       meta_title: content.meta.meta_title,
       meta_description: content.meta.meta_description,
+      feature_image_id: content.meta.feature_image_id,
       version: newVersion,
     })
     .eq('id', pageId);
@@ -373,7 +374,7 @@ export async function reconstructPageVersionContent(pageId: number, targetVersio
   } else if (targetVersion === 1) {
     const { data: pageMeta } = await supabase
       .from('pages')
-      .select('title, slug, language_id, status, meta_title, meta_description')
+      .select('title, slug, language_id, status, meta_title, meta_description, feature_image_id')
       .eq('id', pageId)
       .single();
     if (!pageMeta) return { error: 'Page not found.' } as const;

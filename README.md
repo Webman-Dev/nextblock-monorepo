@@ -102,7 +102,9 @@ The interactive `setup` wizard will help you automatically configure your `.env.
 - `npx nx serve nextblock` - Start the local development server for the CMS
 - `npm run lint` - Lint the monorepo
 - `npm run db:types` - Generate Supabase types
-- `npm run db:push` - Push database changes to Supabase
+- `npm run db:migrate:check` - Preview pending Supabase migrations safely
+- `npm run db:migrate` / `npm run db:push` - Apply pending migration files only, without resets or sandbox seeding
+- `npm run db:migrate:repair-history:check` - Preview baseline migration-history repair for existing live databases
 - `npm run generate:sandbox` - Generate sandbox data
 - `npm run sandbox:reset` - Reset the sandbox environment
 

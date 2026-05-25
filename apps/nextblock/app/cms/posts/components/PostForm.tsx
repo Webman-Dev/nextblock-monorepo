@@ -1,9 +1,8 @@
 // app/cms/posts/components/PostForm.tsx
 "use client";
 
-import { useEffect, useState, useTransition, useCallback } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Image from "next/image";
 import { Button } from "@nextblock-cms/ui";
 import { Input } from "@nextblock-cms/ui";
 import { Label } from "@nextblock-cms/ui";
@@ -16,40 +15,24 @@ import {
 } from "@nextblock-cms/ui";
 import { Spinner, Alert, AlertDescription } from "@nextblock-cms/ui";
 import { Textarea } from "@nextblock-cms/ui";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogClose,
-} from "@nextblock-cms/ui";
 import type { Database } from "@nextblock-cms/db";
 import { useAuth } from '../../../../context/AuthContext';
+import FeatureImageField from "../../components/FeatureImageField";
 
 type Post = Database['public']['Tables']['posts']['Row'];
 type PageStatus = Database['public']['Enums']['page_status'];
 type Language = Database['public']['Tables']['languages']['Row'];
-type Media = Database['public']['Tables']['media']['Row'];
-// import MediaGridClient from "@/app/cms/media/components/MediaGridClient"; // Will render a custom grid instead
-import MediaImage from "../../media/components/MediaImage"; // For displaying images in the modal
-import { getMediaItems } from '../../media/actions';
-import MediaUploadForm from "../../media/components/MediaUploadForm";
-import { Separator } from "@nextblock-cms/ui";
-import { useRef } from "react";
 import { useHotkeys } from '../../../../hooks/use-hotkeys';
-import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
 
 
 interface PostFormProps {
-  post?: Post & { feature_image_id?: string | null }; // Assuming feature_image_id can be string
+  post?: Post & { feature_image_id?: string | null };
   formAction: (formData: FormData) => Promise<{ error?: string } | void>;
   actionButtonText?: string;
   isEditing?: boolean;
   availableLanguagesProp?: Language[]; // Make optional
   initialFeatureImageUrl?: string | null;
-  initialFeatureImageId?: string | null; // Pass initial ID as string
+  initialFeatureImageId?: string | null;
 }
 
 function formatDateTimeLocal(value: string | null | undefined) {
@@ -108,76 +91,10 @@ export default function PostForm({
   // Use the passed-in languages directly
   const [availableLanguages] = useState<Language[]>(availableLanguagesProp);
 
-  const [selectedFeatureImage, setSelectedFeatureImage] = useState<{ id: string | null; url: string | null }>({
-    id: initialFeatureImageId || post?.feature_image_id || null, // Prioritize prop, then post data
-    url: initialFeatureImageUrl || null,
-  });
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [mediaItems, setMediaItems] = useState<Media[]>([]);
-  const [mediaLoading, setMediaLoading] = useState(false);
-  const [mediaError, setMediaError] = useState<string | null>(null);
-  const [mediaPage, setMediaPage] = useState(1);
-  const [hasMoreMedia, setHasMoreMedia] = useState(true);
-
   const [formMessage, setFormMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   useHotkeys('ctrl+s', () => formRef.current?.requestSubmit());
-
-  useEffect(() => {
-    // Update selectedFeatureImage if initial props change
-    setSelectedFeatureImage({
-        id: initialFeatureImageId || post?.feature_image_id || null,
-        url: initialFeatureImageUrl || null,
-    });
-  }, [initialFeatureImageId, initialFeatureImageUrl, post?.feature_image_id]);
-
-  const loadMedia = useCallback(async (pageToLoad = 1, append = false) => {
-    if (!hasMoreMedia && append && pageToLoad > mediaPage) return;
-    setMediaLoading(true);
-    setMediaError(null);
-    try {
-      const result = await getMediaItems(pageToLoad, 20); // Fetch 20 items per page
-      if (result.error) {
-        setMediaError(result.error);
-        if (!append) setMediaItems([]); // Clear if not appending on error
-      } else if (result.data) {
-        setMediaItems(prev => append ? [...prev, ...(result.data || [])] : (result.data || []));
-        setHasMoreMedia(result.hasMore !== undefined ? result.hasMore : false);
-        setMediaPage(pageToLoad);
-      }
-    } catch {
-      setMediaError("An unexpected error occurred while fetching media.");
-      if (!append) setMediaItems([]);
-    } finally {
-      setMediaLoading(false);
-    }
-  }, [hasMoreMedia, mediaPage]);
-
-  // Load initial media when modal is opened
-  useEffect(() => {
-    if (isModalOpen) {
-        // Reset and load fresh if opening modal, or if mediaItems is empty
-        if (mediaItems.length === 0 || !hasMoreMedia || mediaPage !==1) {
-            setMediaPage(1);
-            setHasMoreMedia(true); // Assume there might be more media on fresh open
-            loadMedia(1, false);
-        }
-    }
-  }, [isModalOpen, hasMoreMedia, loadMedia, mediaItems.length, mediaPage]);
-
-  const handleImageSelectInModal = (image: Media) => {
-    const imageUrl = resolveMediaUrl(image.file_path || image.object_key);
-
-    if (!imageUrl) {
-        console.error("Selected image does not have a usable path:", image);
-        setMediaError("Selected image is missing a valid path.");
-        return;
-    }
-
-    setSelectedFeatureImage({ id: image.id, url: imageUrl }); // image.id is already string (uuid)
-    setIsModalOpen(false);
-  };
 
 
   useEffect(() => {
@@ -370,109 +287,11 @@ export default function PostForm({
         <Textarea id="meta_description" name="meta_description" value={metaDescription} onChange={(e) => setMetaDescription(e.target.value)} className="mt-1" rows={3} />
       </div>
     
-      {/* Feature Image Selection */}
-      <div>
-        <Label htmlFor="feature_image">Feature Image</Label>
-        <Input type="hidden" name="feature_image_id" value={selectedFeatureImage.id || ""} />
-        <div className="mt-2">
-          {selectedFeatureImage.url && (
-            <div className="mb-4">
-              <Image
-                src={selectedFeatureImage.url}
-                alt="Selected feature image"
-                width={200}
-                height={200}
-                className="rounded-md object-cover"
-              />
-              <Button
-                type="button"
-                variant="link"
-                className="mt-2 text-red-600 px-0"
-                onClick={() => setSelectedFeatureImage({ id: null, url: null })}
-              >
-                Remove Image
-              </Button>
-            </div>
-          )}
-          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-            <DialogTrigger asChild>
-              <Button type="button" variant="outline">
-                {selectedFeatureImage.id ? "Change Feature Image" : "Select Feature Image"}
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[90vw] max-h-[90vh] flex flex-col">
-              <DialogHeader>
-                <DialogTitle>Select Feature Image</DialogTitle>
-              </DialogHeader>
-              <div className="p-1">
-                <MediaUploadForm
-                  returnJustData={true}
-                  defaultFolder={`posts/${(slug || 'untitled').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '')}/`}
-                  onUploadSuccess={(newlyUploadedMedia) => {
-                    setMediaItems(prevItems => [newlyUploadedMedia, ...prevItems.filter(item => item.id !== newlyUploadedMedia.id)]);
-                    handleImageSelectInModal(newlyUploadedMedia);
-                  }}
-                />
-              </div>
-              <Separator className="my-4" />
-              <div className="py-4 flex-grow overflow-y-auto" id="media-modal-scroll-area">
-                {mediaLoading && mediaItems.length === 0 && <p className="text-center text-muted-foreground">Loading media...</p>}
-                {mediaError && <p className="text-red-600 text-center">{mediaError}</p>}
-                {!mediaLoading && !mediaError && mediaItems.length === 0 && <p className="text-center text-muted-foreground">No media items found. Try uploading some first.</p>}
-                
-                {mediaItems.length > 0 && (
-                  <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(0,150px))]">
-                    {mediaItems.map((item) => {
-                      const imageUrl = resolveMediaUrl(item.file_path || item.object_key);
-
-                      // Only render image-type media for selection
-                      if (!item.file_type?.startsWith("image/") || !imageUrl) {
-                        return null;
-                      }
-
-                      return (
-                        <div
-                          key={item.id}
-                          className="group relative border rounded-lg overflow-hidden shadow-sm aspect-square bg-muted/20 transition-all cursor-pointer hover:ring-2 hover:ring-primary"
-                          onClick={() => handleImageSelectInModal(item)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleImageSelectInModal(item)}
-                          tabIndex={0}
-                          role="button"
-                          aria-label={`Select ${item.file_name}`}
-                        >
-                          <MediaImage
-                            src={imageUrl}
-                            alt={item.description || item.file_name}
-                            width={item.width || 300} // Provide a fallback or ensure width is always present
-                            height={item.height || 300} // Provide a fallback or ensure height is always present
-                            blurDataURL={item.blur_data_url}
-                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                          />
-                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
-                            <p className="text-xs text-white truncate" title={item.file_name}>{item.file_name}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {!mediaLoading && hasMoreMedia && mediaItems.length > 0 && (
-                  <div className="text-center mt-6">
-                    <Button onClick={() => loadMedia(mediaPage + 1, true)} variant="outline" disabled={mediaLoading}>
-                      {mediaLoading ? <><Spinner className="mr-2 h-4 w-4" /> Loading...</> : "Load More"}
-                    </Button>
-                  </div>
-                )}
-              </div>
-              <DialogFooter className="mt-auto pt-4 border-t">
-                <DialogClose asChild>
-                  <Button type="button" variant="outline" onClick={() => { setMediaError(null); }}>Cancel</Button>
-                </DialogClose>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
+      <FeatureImageField
+        initialImageId={initialFeatureImageId || post?.feature_image_id || null}
+        initialImageUrl={initialFeatureImageUrl || null}
+        uploadFolder={`posts/${(slug || 'untitled').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '')}/`}
+      />
     
       <div className="flex justify-end space-x-3 pt-6"> {/* Increased pt for spacing */}
         <Button type="button" variant="outline" onClick={() => router.push("/cms/posts")} disabled={isPending}>Cancel</Button>

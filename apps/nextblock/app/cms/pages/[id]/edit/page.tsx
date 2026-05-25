@@ -5,6 +5,7 @@ import { updatePage } from "../../actions";
 import type { Database } from "@nextblock-cms/db";
 import { notFound, redirect } from "next/navigation";
 import { draftMode } from "next/headers";
+import { resolveMediaUrl } from "../../../../../lib/media/resolveMediaUrl";
 
 type Page = Database['public']['Tables']['pages']['Row'];
 type Block = Database['public']['Tables']['blocks']['Row'];
@@ -68,6 +69,24 @@ export default async function EditPage(props: { params: Promise<{ id: string }> 
   const draft = await draftMode();
   const updatePageWithId = updatePage.bind(null, pageId);
   const publicPageUrl = `/${pageWithBlocks.slug}`;
+  let initialFeatureImageUrl: string | null = null;
+  let initialFeatureImageId: string | null = null;
+
+  const featureImageIdFromDb = pageWithBlocks.feature_image_id as unknown as string | null;
+  if (featureImageIdFromDb) {
+    const { data: mediaItem, error: mediaError } = await supabase
+      .from("media")
+      .select("id, object_key, file_path")
+      .eq("id", featureImageIdFromDb)
+      .single();
+
+    if (mediaError) {
+      console.error(`Error fetching page feature image '${featureImageIdFromDb}':`, mediaError.message);
+    } else if (mediaItem) {
+      initialFeatureImageId = mediaItem.id;
+      initialFeatureImageUrl = resolveMediaUrl(mediaItem.file_path || mediaItem.object_key);
+    }
+  }
 
   return (
     <EditPageClient
@@ -77,6 +96,8 @@ export default async function EditPage(props: { params: Promise<{ id: string }> 
       updatePageAction={updatePageWithId}
       publicPageUrl={publicPageUrl}
       isDraftModeEnabled={draft.isEnabled}
+      initialFeatureImageUrl={initialFeatureImageUrl}
+      initialFeatureImageId={initialFeatureImageId}
     />
   );
 }

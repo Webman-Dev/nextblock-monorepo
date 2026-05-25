@@ -14,6 +14,20 @@ import { createPageRevision } from "../revisions/service";
 
 // --- createPage and updatePage functions remain unchanged ---
 
+function getOptionalFeatureImageId(formData: FormData) {
+  const value = formData.get("feature_image_id");
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+function revalidatePublicPageSlug(slug: string | null | undefined) {
+  if (!slug) return;
+
+  revalidatePath(`/${slug}`);
+  if (slug === "home" || slug === "accueil") {
+    revalidatePath("/");
+  }
+}
+
 export async function createPage(formData: FormData) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -27,6 +41,7 @@ export async function createPage(formData: FormData) {
     status: formData.get("status") as PageStatus,
     meta_title: formData.get("meta_title") as string || null,
     meta_description: formData.get("meta_description") as string || null,
+    feature_image_id: getOptionalFeatureImageId(formData),
   };
 
   if (!rawFormData.title || !rawFormData.slug || isNaN(rawFormData.language_id) || !rawFormData.status) {
@@ -64,7 +79,7 @@ export async function createPage(formData: FormData) {
    const { data: newPage, error: createError } = await supabase
      .from("pages")
      .insert(pageData)
-     .select("id, title, slug, language_id, translation_group_id")
+     .select("id, title, slug, language_id, translation_group_id, feature_image_id")
      .single();
 
   if (createError) {
@@ -76,7 +91,7 @@ export async function createPage(formData: FormData) {
   }
 
   revalidatePath("/cms/pages");
-  if (newPage?.slug) revalidatePath(`/${newPage.slug}`);
+  revalidatePublicPageSlug(newPage?.slug);
 
   if (newPage?.id) {
     redirect(`/cms/pages/${newPage.id}/edit?success=${encodeURIComponent("Page created successfully.")}`);
@@ -109,6 +124,7 @@ export async function updatePage(pageId: number, formData: FormData) {
     status: formData.get("status") as PageStatus,
     meta_title: formData.get("meta_title") as string || null,
     meta_description: formData.get("meta_description") as string || null,
+    feature_image_id: getOptionalFeatureImageId(formData),
   };
 
   if (!rawFormData.title || !rawFormData.slug || isNaN(rawFormData.language_id) || !rawFormData.status) {
@@ -122,6 +138,7 @@ export async function updatePage(pageId: number, formData: FormData) {
     status: rawFormData.status,
     meta_title: rawFormData.meta_title,
     meta_description: rawFormData.meta_description,
+    feature_image_id: rawFormData.feature_image_id,
   };
 
   // capture previous full content before update
@@ -149,9 +166,9 @@ export async function updatePage(pageId: number, formData: FormData) {
   }
 
   revalidatePath("/cms/pages");
-  if (existingPage.slug) revalidatePath(`/${existingPage.slug}`);
+  revalidatePublicPageSlug(existingPage.slug);
   if (rawFormData.slug && rawFormData.slug !== existingPage.slug) {
-      revalidatePath(`/${rawFormData.slug}`);
+      revalidatePublicPageSlug(rawFormData.slug);
   }
   revalidatePath(pageEditPath);
   redirect(`${pageEditPath}?success=Page updated successfully`);
@@ -219,9 +236,7 @@ export async function deletePage(pageId: number) {
   revalidatePath("/cms/navigation");
   if (relatedPages) {
     relatedPages.forEach(p => {
-      if (p.slug) {
-        revalidatePath(`/${p.slug}`);
-      }
+      revalidatePublicPageSlug(p.slug);
     });
   }
 
@@ -237,5 +252,6 @@ type UpsertPagePayload = {
   status: PageStatus;
   meta_title?: string | null;
   meta_description?: string | null;
+  feature_image_id?: string | null;
   translation_group_id: string; // UUID
 };

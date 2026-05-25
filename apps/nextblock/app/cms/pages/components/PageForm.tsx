@@ -1,7 +1,7 @@
 // app/cms/pages/components/PageForm.tsx
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@nextblock-cms/ui";
 import { Spinner, Alert, AlertDescription } from "@nextblock-cms/ui";
@@ -17,8 +17,8 @@ import {
 import { Textarea } from "@nextblock-cms/ui";
 import type { Database } from "@nextblock-cms/db";
 import { useAuth } from '../../../../context/AuthContext';
-import { useRef } from "react";
 import { useHotkeys } from '../../../../hooks/use-hotkeys';
+import FeatureImageField from "../../components/FeatureImageField";
 
 type Page = Database['public']['Tables']['pages']['Row'];
 type PageStatus = Database['public']['Enums']['page_status'];
@@ -26,13 +26,15 @@ type Language = Database['public']['Tables']['languages']['Row'];
 // Remove: import { getActiveLanguagesClientSide } from "@nextblock-cms/db";
 
 interface PageFormProps {
-  page?: Page | null;
+  page?: (Page & { feature_image_id?: string | null }) | null;
   formAction: (formData: FormData) => Promise<{ error?: string } | void>;
   actionButtonText?: string;
   isEditing?: boolean;
   availableLanguagesProp: Language[]; // New prop
   translationGroupId?: string;
   target_lang_id?: string;
+  initialFeatureImageUrl?: string | null;
+  initialFeatureImageId?: string | null;
 }
 
 export default function PageForm({
@@ -43,6 +45,8 @@ export default function PageForm({
   availableLanguagesProp, // Use the new prop
   translationGroupId,
   target_lang_id,
+  initialFeatureImageUrl,
+  initialFeatureImageId,
 }: PageFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -253,6 +257,12 @@ export default function PageForm({
           rows={3}
         />
       </div>
+
+      <FeatureImageField
+        initialImageId={initialFeatureImageId || page?.feature_image_id || null}
+        initialImageUrl={initialFeatureImageUrl || null}
+        uploadFolder={`pages/${(slug || 'untitled').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '')}/`}
+      />
 
       <div className="flex justify-end space-x-3">
         <Button

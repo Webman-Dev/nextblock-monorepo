@@ -31,6 +31,8 @@ interface EditPageClientProps {
   updatePageAction: (formData: FormData) => Promise<{ error?: string } | void>;
   publicPageUrl: string;
   isDraftModeEnabled: boolean;
+  initialFeatureImageUrl?: string | null;
+  initialFeatureImageId?: string | null;
 }
 
 export default function EditPageClient({
@@ -40,6 +42,8 @@ export default function EditPageClient({
   updatePageAction,
   publicPageUrl,
   isDraftModeEnabled,
+  initialFeatureImageUrl,
+  initialFeatureImageId,
 }: EditPageClientProps) {
   const draftModeUrl = `${
     isDraftModeEnabled ? "/api/draft/disable" : "/api/draft/start"
@@ -130,10 +134,12 @@ export default function EditPageClient({
         <PageForm
           page={page}
           formAction={updatePageAction}
-          actionButtonText="Update Page Metadata"
-          isEditing={true}
-          availableLanguagesProp={allSiteLanguages}
-        />
+        actionButtonText="Update Page Metadata"
+        isEditing={true}
+        availableLanguagesProp={allSiteLanguages}
+        initialFeatureImageUrl={initialFeatureImageUrl}
+        initialFeatureImageId={initialFeatureImageId}
+      />
 
         <Separator className="my-8" />
 

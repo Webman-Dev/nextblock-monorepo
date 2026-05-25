@@ -634,6 +634,7 @@ export type Database = {
                 Row: {
                     author_id: string | null;
                     created_at: string;
+                    feature_image_id: string | null;
                     id: number;
                     language_id: number;
                     meta_description: string | null;
@@ -648,6 +649,7 @@ export type Database = {
                 Insert: {
                     author_id?: string | null;
                     created_at?: string;
+                    feature_image_id?: string | null;
                     id?: number;
                     language_id: number;
                     meta_description?: string | null;
@@ -662,6 +664,7 @@ export type Database = {
                 Update: {
                     author_id?: string | null;
                     created_at?: string;
+                    feature_image_id?: string | null;
                     id?: number;
                     language_id?: number;
                     meta_description?: string | null;
@@ -679,6 +682,13 @@ export type Database = {
                         columns: ["author_id"];
                         isOneToOne: false;
                         referencedRelation: "profiles";
+                        referencedColumns: ["id"];
+                    },
+                    {
+                        foreignKeyName: "pages_feature_image_id_fkey";
+                        columns: ["feature_image_id"];
+                        isOneToOne: false;
+                        referencedRelation: "media";
                         referencedColumns: ["id"];
                     },
                     {

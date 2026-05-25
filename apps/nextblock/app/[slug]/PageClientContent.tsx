@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation'; // For navigation on lang switch
 import type { Database } from "@nextblock-cms/db";
 import { useLanguage } from '../../context/LanguageContext';
@@ -13,7 +14,16 @@ type PageType = Database['public']['Tables']['pages']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
 
 interface PageClientContentProps {
-  initialPageData: (PageType & { blocks: BlockType[]; language_code: string; language_id: number; translation_group_id: string; }) | null;
+  initialPageData: (PageType & {
+    blocks: BlockType[];
+    language_code: string;
+    language_id: number;
+    translation_group_id: string | null;
+    feature_image_url?: string | null;
+    feature_image_blur_data_url?: string | null;
+    feature_image_width?: number | null;
+    feature_image_height?: number | null;
+  }) | null;
   currentSlug: string; // The slug of the currently viewed page
   children: React.ReactNode;
   translatedSlugs?: { [key: string]: string };
@@ -155,6 +165,27 @@ export default function PageClientContent({ initialPageData, currentSlug, childr
   return (
     <article className="w-full mx-auto">
       {isLoadingTargetLang && <div className="text-center py-2 text-sm text-muted-foreground">Switching language...</div>}
+
+      {currentPageData.feature_image_url ? (
+        <div className="relative h-48 w-full overflow-hidden bg-slate-950 sm:h-56 md:h-64 lg:h-72">
+          <Image
+            src={currentPageData.feature_image_url}
+            alt={`Feature image for ${currentPageData.title}`}
+            fill
+            sizes="100vw"
+            className="object-cover"
+            placeholder={currentPageData.feature_image_blur_data_url ? "blur" : "empty"}
+            blurDataURL={currentPageData.feature_image_blur_data_url ?? undefined}
+            priority
+          />
+          <div className="absolute inset-0 bg-slate-950/45" />
+          <div className="absolute inset-0 flex items-center justify-center px-4 text-center">
+            <div className="max-w-5xl break-words text-3xl font-semibold leading-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.65)] sm:text-4xl md:text-5xl">
+              {currentPageData.title}
+            </div>
+          </div>
+        </div>
+      ) : null}
       
       {/* Render blocks passed as children */}
       {children}

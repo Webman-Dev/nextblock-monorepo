@@ -153,13 +153,32 @@ The current padded migration sequence in
 `libs/db/src/supabase/migrations` runs from:
 
 - `00000000000000`
-- through `00000000000010`
+- through `00000000000016`
 
 It does **not** currently run through `...23+`.
 
 These files are already squashed and grouped. Several of them preserve older
 logical migration boundaries through embedded comment headers, so you will see
 historical section numbers inside a smaller set of physical files.
+
+### Production migration policy
+
+NextBlock has live Supabase data. Treat migrations as append-only for any
+production or shared database change.
+
+- Do not edit, recycle, squash, reorder, or delete migration files that may
+  already be recorded in a shared or production Supabase project.
+- Add a new forward-only `.sql` file under
+  `libs/db/src/supabase/migrations` for each new schema/data change.
+- Keep migrations non-destructive by default. Avoid dropping or rewriting data
+  that may include orders, users, payments, or customer records.
+- Run `npm run db:migrate:check` before `npm run db:migrate`.
+- If an existing database lists old baseline files such as
+  `00000000000000_setup_foundation_and_enums.sql` as pending, do not replay
+  them. Use `npm run db:migrate:repair-history:check`, then
+  `npm run db:migrate:repair-history`, then rerun
+  `npm run db:migrate:check`.
+- Use `npm run db:migrate:fresh` only for a brand-new empty database.
 
 ### Category map
 
@@ -176,6 +195,12 @@ historical section numbers inside a smaller set of physical files.
 | `00000000000008_seed_platform_defaults.sql` | Seeds | baseline site settings, default languages, default currencies |
 | `00000000000009_seed_translations.sql` | Seeds | translation catalog |
 | `00000000000010_seed_content_scaffold.sql` | Seeds, CMS | starter content, scaffold pages, seeded copy |
+| `00000000000011_setup_cortex_ai_settings.sql` | AI, Settings | Cortex AI settings and provider defaults |
+| `00000000000012_setup_commerce_coupons.sql` | Commerce | coupon tables and related commerce constraints |
+| `00000000000013_setup_cortex_ai_db_mutation_audit.sql` | AI, Audit | Cortex AI database mutation audit support |
+| `00000000000014_setup_content_drafts.sql` | CMS, Editor | visual-editing content draft tables |
+| `00000000000015_setup_product_drafts.sql` | Commerce, Editor | product draft workflow support |
+| `00000000000016_add_feature_image_to_pages.sql` | CMS | optional page feature image media relationship |
 
 ### How to read the folder
 
