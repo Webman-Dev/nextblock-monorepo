@@ -66,3 +66,34 @@ export async function fetchAllPublishedPosts(): Promise<SitemapEntry[]> {
     return [];
   }
 }
+
+/**
+ * Fetches all active storefront products from Supabase and formats them for the sitemap.
+ * @returns {Promise<Array<SitemapEntry>>} A promise that resolves to sitemap entries for product pages.
+ */
+export async function fetchAllActiveProducts(): Promise<SitemapEntry[]> {
+  const supabase = createClient();
+  try {
+    const { data: products, error } = await supabase
+      .from('products')
+      .select('slug, updated_at')
+      .eq('status', 'active');
+
+    if (error) {
+      console.error('Error fetching active products:', error);
+      return [];
+    }
+
+    if (!products) {
+      return [];
+    }
+
+    return products.map((product) => ({
+      path: `/product/${product.slug}`,
+      lastModified: new Date(product.updated_at).toISOString(),
+    }));
+  } catch (err) {
+    console.error('An unexpected error occurred while fetching products:', err);
+    return [];
+  }
+}

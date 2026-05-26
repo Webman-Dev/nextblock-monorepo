@@ -1,15 +1,32 @@
 import { Checkout } from '@nextblock-cms/ecommerce';
 import { createClient } from '@nextblock-cms/db/server';
 import { getDefaultUserAddresses } from '@nextblock-cms/ecommerce/server';
+import { getUcpCartCheckoutItems } from '../lib/ucp/server';
+import { UcpCartHydrator } from './UcpCartHydrator';
 
-export default async function CheckoutPage() {
+interface CheckoutPageProps {
+  searchParams?: Promise<{
+    ucp_cart?: string;
+    cart?: string;
+  }>;
+}
+
+export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
+  const resolvedSearchParams = await searchParams;
+  const ucpCartId = resolvedSearchParams?.ucp_cart || resolvedSearchParams?.cart || null;
+  const ucpCartItems = await getUcpCartCheckoutItems(ucpCartId);
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return <Checkout initialCustomer={{ isAuthenticated: false }} />;
+    return (
+      <>
+        <UcpCartHydrator items={ucpCartItems} />
+        <Checkout initialCustomer={{ isAuthenticated: false }} />
+      </>
+    );
   }
 
   const [{ data: profile }, { billingAddress, shippingAddress }] = await Promise.all([
@@ -18,15 +35,18 @@ export default async function CheckoutPage() {
   ]);
 
   return (
-    <Checkout
-      initialCustomer={{
-        isAuthenticated: true,
-        email: user.email,
-        fullName: profile?.full_name || null,
-        phone: profile?.phone || null,
-        billingAddress,
-        shippingAddress,
-      }}
-    />
+    <>
+      <UcpCartHydrator items={ucpCartItems} />
+      <Checkout
+        initialCustomer={{
+          isAuthenticated: true,
+          email: user.email,
+          fullName: profile?.full_name || null,
+          phone: profile?.phone || null,
+          billingAddress,
+          shippingAddress,
+        }}
+      />
+    </>
   );
 }
