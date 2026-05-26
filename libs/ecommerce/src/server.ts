@@ -26,11 +26,18 @@ export {
   getProducts as getCmsProducts,
   getGlobalProductAttributes,
   getProductTranslations,
+  getCategoriesWithCount,
+  getProductCategories,
+  getCategoryBySlug,
 } from './lib/pages/cms/products/actions';
 export {
   createProductAction,
   updateProductAction,
   deleteProductAction,
+  createCategoryAction,
+  updateCategoryAction,
+  deleteCategoryAction,
+  syncProductCategoriesAction,
 } from './lib/pages/cms/products/server-actions';
 export {
   getEnabledPaymentProviders,

@@ -18,6 +18,7 @@ export * from './lib/components/InvoiceViewerShell';
 export * from './lib/components/AccountNavigationMenu';
 export * from './lib/components/SimpleTiptapRenderer';
 export { ProductForm } from './lib/pages/cms/products/components/ProductForm';
+export { ProductCategorySelector } from './lib/pages/cms/products/components/ProductCategorySelector';
 
 export * from './lib/cart-store';
 export * from './lib/coupons';

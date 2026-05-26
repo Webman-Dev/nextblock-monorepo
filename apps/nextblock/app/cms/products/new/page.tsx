@@ -10,6 +10,7 @@ import {
   getProduct,
   getStoreConfigStatus,
   normalizeCurrencyRecord,
+  getCategoriesWithCount,
 } from '@nextblock-cms/ecommerce/server';
 import { ArrowLeft } from 'lucide-react';
 import { Badge, Button } from '@nextblock-cms/ui';
@@ -32,6 +33,7 @@ export default async function NewProductPage({
     configStatus,
     globalAttributesRaw,
     currenciesResult,
+    categories,
     { from_group, target_lang_id },
   ] = await Promise.all([
     verifyPackageOnline('ecommerce'),
@@ -46,6 +48,7 @@ export default async function NewProductPage({
       )
       .eq('is_active', true)
       .order('code', { ascending: true }),
+    getCategoriesWithCount(),
     searchParams,
   ]);
 
@@ -132,6 +135,7 @@ export default async function NewProductPage({
         enabledProviders={enabledProviders}
         configStatus={configStatus}
         createAction={createProductAction}
+        availableCategoriesProp={categories}
       />
     </div>
   );

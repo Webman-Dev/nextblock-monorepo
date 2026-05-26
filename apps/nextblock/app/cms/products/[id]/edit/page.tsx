@@ -22,6 +22,8 @@ import {
   getStoreConfigStatus,
   normalizeCurrencyRecord,
   updateProductAction,
+  getCategoriesWithCount,
+  getProductCategories,
 } from '@nextblock-cms/ecommerce/server';
 import { createClient } from '@nextblock-cms/db/server';
 import {
@@ -65,9 +67,11 @@ export default async function EditProductPage({
     notFound();
   }
 
-  const [globalAttributesRaw, translations] = await Promise.all([
+  const [globalAttributesRaw, translations, allCategories, assignedCategories] = await Promise.all([
     getGlobalProductAttributes(),
     product.translation_group_id ? getProductTranslations(product.translation_group_id) : Promise.resolve([]),
+    getCategoriesWithCount(),
+    getProductCategories(product.id),
   ]);
   const supabase = createClient();
   const { data: currenciesResult } = await supabase
@@ -115,11 +119,15 @@ export default async function EditProductPage({
     .maybeSingle();
 
   const hasDraft = draftData !== null;
-  let normalizedInitialData = buildProductFormInitialData(product, languages);
+  let normalizedInitialData = {
+    ...buildProductFormInitialData(product, languages),
+    category_ids: assignedCategories.map((c: any) => c.id),
+  };
   if (draftData && draftData.meta && typeof draftData.meta === 'object') {
     normalizedInitialData = {
       ...(draftData.meta as any),
       id: product.id,
+      category_ids: (draftData.meta as any).category_ids ?? assignedCategories.map((c: any) => c.id),
     };
   }
 
@@ -233,6 +241,7 @@ export default async function EditProductPage({
         enabledProviders={enabledProviders}
         configStatus={configStatus}
         updateAction={updateProductAction.bind(null, product.id)}
+        availableCategoriesProp={allCategories}
       />
 
       <div className="border-t pt-8">

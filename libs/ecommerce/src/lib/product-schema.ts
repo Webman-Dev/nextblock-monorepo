@@ -96,6 +96,7 @@ export const productSchema = z.object({
       media_id: z.string(),
       // We can sort based on index in this array, or explicit sort_order from UI
   })).optional(),
+  category_ids: z.array(z.string().uuid()).optional(),
   is_taxable: z.boolean(),
   status: z.enum(['draft', 'active', 'archived']),
   language_id: z.coerce.number().int().min(1, 'Language is required'),

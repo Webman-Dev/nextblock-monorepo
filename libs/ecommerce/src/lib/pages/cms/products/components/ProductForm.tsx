@@ -22,6 +22,7 @@ import { ProductMediaManager } from './ProductMediaManager';
 import { SyncFreemiusPricingButton } from './SyncFreemiusPricingButton';
 import { VariationsEditor } from './VariationsEditor';
 import { CurrencyPriceFields } from './CurrencyPriceFields';
+import { ProductCategorySelector } from './ProductCategorySelector';
 import {
   getStoreManagedPriceCurrencyCodes,
   resolveEditorCurrencyPriceMaps,
@@ -69,6 +70,7 @@ type ProductFormInitialData = Omit<z.infer<typeof productSchema>, 'product_media
   product_media?: ProductMediaRelation[];
   language_id?: number;
   translation_group_id?: string;
+  category_ids?: string[];
 };
 
 type PaymentConfigStatus = {
@@ -96,6 +98,7 @@ interface ProductFormProps {
   configStatus: PaymentConfigStatus;
   createAction?: (data: ProductFormValues) => Promise<void>;
   updateAction?: (data: ProductFormValues) => Promise<{ success: boolean } | void>;
+  availableCategoriesProp?: Array<{ id: string; name: string; slug: string }>;
 }
 
 interface FormSectionProps {
@@ -215,6 +218,7 @@ function buildProductFormDefaults(
       initialData?.product_media?.map((productMedia) => ({
         media_id: productMedia.media_id,
       })) || [],
+    category_ids: initialData?.category_ids || [],
     variation_attributes: initialData?.variation_attributes || [],
     variants:
       initialData?.variants?.map((variant) => ({
@@ -287,7 +291,8 @@ export function ProductForm({
   enabledProviders,
   configStatus,
   createAction,
-  updateAction
+  updateAction,
+  availableCategoriesProp = []
 }: ProductFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showVariations, setShowVariations] = useState(() => Boolean(initialData?.variants?.length));
@@ -924,6 +929,17 @@ export function ProductForm({
               </div>
             )}
           </div>
+        </FormSection>
+
+        <FormSection
+          title="Product Categories"
+          description="Assign this product to one or more categories."
+        >
+          <ProductCategorySelector
+            categories={availableCategoriesProp}
+            selectedIds={watch('category_ids') || []}
+            onChange={(ids) => setValue('category_ids', ids, { shouldDirty: true, shouldValidate: true })}
+          />
         </FormSection>
 
         <section className="rounded-lg border bg-card p-3 shadow-sm space-y-3">

@@ -1682,6 +1682,121 @@ async function ensureShopPagesAndNavigation(params: {
   console.log('[Sandbox Reset] Successfully created Shop pages and navigation.');
 }
 
+async function seedCategoriesAndMappings(sql: SqlClient) {
+  console.log('[Sandbox Reset] Seeding categories and product mappings...');
+
+  const categoriesToSeed = [
+    { 
+      name: 'Software', 
+      slug: 'software', 
+      description: 'Developer software products and licenses.',
+      name_translations: { fr: 'Logiciel' },
+      description_translations: { fr: 'Logiciels et licences de développement.' }
+    },
+    { 
+      name: 'AI', 
+      slug: 'ai', 
+      description: 'Artificial Intelligence tools and neural components.',
+      name_translations: { fr: 'IA' },
+      description_translations: { fr: 'Outils d\'intelligence artificielle.' }
+    },
+    { 
+      name: 'Apparel', 
+      slug: 'apparel', 
+      description: 'Premium garments and studio uniforms built for developers.',
+      name_translations: { fr: 'Vêtements' },
+      description_translations: { fr: 'Vêtements de qualité et uniformes conçus pour les développeurs.' }
+    },
+    { 
+      name: 'Featured', 
+      slug: 'featured', 
+      description: 'Highlights and featured collection items.',
+      name_translations: { fr: 'En vedette' },
+      description_translations: { fr: 'Articles en vedette et nouveautés.' }
+    },
+  ];
+
+  const categoryMap = new Map<string, string>(); // slug -> id
+
+  for (const cat of categoriesToSeed) {
+    const [inserted] = await sql`
+      INSERT INTO public.categories (name, slug, description, name_translations, description_translations)
+      VALUES (
+        ${cat.name}, 
+        ${cat.slug}, 
+        ${cat.description}, 
+        ${sql.json(cat.name_translations)}, 
+        ${sql.json(cat.description_translations)}
+      )
+      ON CONFLICT (slug) DO UPDATE
+      SET name = EXCLUDED.name, 
+          description = EXCLUDED.description,
+          name_translations = EXCLUDED.name_translations,
+          description_translations = EXCLUDED.description_translations
+      RETURNING id
+    `;
+    if (inserted?.id) {
+      categoryMap.set(cat.slug, inserted.id as string);
+    }
+  }
+
+  // Fetch all seeded products across both languages to ensure all translations are mapped.
+  const products = await sql`
+    SELECT id, sku, freemius_product_id
+    FROM public.products
+    WHERE freemius_product_id IN ('24851', '28609')
+       OR sku IN ('NB-STUDIO-TEE', 'NB-SIGNAL-CAP', 'NB-UTILITY-PANTS')
+  `;
+
+  const productIds = products.map((p) => p.id);
+  if (productIds.length > 0) {
+    await sql`
+      DELETE FROM public.product_categories
+      WHERE product_id = ANY(${productIds})
+    `;
+  }
+
+  const mappings: Array<{ product_id: string; category_id: string }> = [];
+
+  for (const prod of products) {
+    const slugs: string[] = [];
+    if (prod.freemius_product_id === '24851') {
+      slugs.push('software', 'featured');
+    } else if (prod.freemius_product_id === '28609') {
+      slugs.push('software', 'ai');
+    } else if (prod.sku === 'NB-STUDIO-TEE') {
+      slugs.push('apparel', 'featured');
+    } else if (prod.sku === 'NB-SIGNAL-CAP') {
+      slugs.push('apparel');
+    } else if (prod.sku === 'NB-UTILITY-PANTS') {
+      slugs.push('apparel');
+    }
+
+    for (const slug of slugs) {
+      const catId = categoryMap.get(slug);
+      if (catId) {
+        mappings.push({
+          product_id: prod.id as string,
+          category_id: catId,
+        });
+      }
+    }
+  }
+
+  if (mappings.length > 0) {
+    for (const mapping of mappings) {
+      await sql`
+        INSERT INTO public.product_categories (product_id, category_id)
+        VALUES (${mapping.product_id}, ${mapping.category_id})
+        ON CONFLICT DO NOTHING
+      `;
+    }
+    console.log(`[Sandbox Reset] Seeded ${mappings.length} product-category associations.`);
+  }
+
+  console.log('[Sandbox Reset] Successfully completed categories seeding.');
+}
+
 async function seedFakeStoreData(sql: SqlClient, supabaseAdmin: any) {
   console.log('[Sandbox Reset] Starting fake store data seeding...');
   
@@ -2003,6 +2118,8 @@ export async function GET(request: NextRequest) {
                 enLangId,
                 frLangId,
               });
+
+              await seedCategoriesAndMappings(db);
             } catch (enrichErr: any) {
               console.error('[Sandbox Reset] Product enrichment failed:', enrichErr.message || enrichErr);
               throw enrichErr;

@@ -86,10 +86,20 @@ export interface ProductVariant {
   image_url?: string | null;
 }
 
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  name_translations?: Record<string, string> | null;
+  description_translations?: Record<string, string> | null;
+}
+
 export interface Product {
   id: string;
   title: string;
   slug: string;
+  categories?: Category[];
   sku: string;
   upc?: string | null;
   price: number;

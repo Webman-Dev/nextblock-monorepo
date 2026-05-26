@@ -18,6 +18,7 @@ import {
   findMatchingVariant,
   getAvailableTermIdsForAttribute,
   normalizeSelectionsToAvailableVariants,
+  resolveTranslatedText,
 } from '../variation-utils';
 import { useCurrency } from '../CurrencyProvider';
 import { resolvePriceForCurrency } from '../currency';
@@ -74,7 +75,7 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
   descriptionNode,
 }) => {
   const product = useProduct();
-  const { t } = useTranslations();
+  const { t, lang } = useTranslations();
   const { activeCurrencyCode, currencies } = useCurrency();
   const titleVisualEditAttributes = visualEditingEnabled
     ? buildProductVisualEditAttributes(product, 'title', 'plain-text', 'Product title')
@@ -279,6 +280,20 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
                   </Badge>
                 )}
               </div>
+
+              {product.categories && product.categories.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
+                  {product.categories.map((cat, idx) => {
+                    const resolvedName = resolveTranslatedText(cat.name, cat.name_translations, lang);
+                    return (
+                      <React.Fragment key={cat.id}>
+                        {idx > 0 && <span className="text-muted-foreground/30">•</span>}
+                        <span>{resolvedName}</span>
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              )}
 
               <h1
                 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-foreground leading-[1.1]"

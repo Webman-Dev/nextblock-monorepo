@@ -8,7 +8,7 @@ import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
-  ExternalLink, Paintbrush, Brain, TicketPercent, ShieldAlert,
+  ExternalLink, Paintbrush, Brain, TicketPercent, ShieldAlert, Folder,
 } from "lucide-react"
 import { Button } from "@nextblock-cms/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar"
@@ -312,8 +312,11 @@ export default function CmsClientLayout({
                     title="Products"
                     isActive={pathname.startsWith("/cms/products")}
                   >
-                    <NavItem href="/cms/products" icon={ShoppingBag} isActive={pathname === "/cms/products" || pathname.startsWith("/cms/products/") && !pathname.startsWith("/cms/products/attributes") && !pathname.startsWith("/cms/products/inventory")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                    <NavItem href="/cms/products" icon={ShoppingBag} isActive={pathname === "/cms/products" || (pathname.startsWith("/cms/products/") && !pathname.startsWith("/cms/products/categories") && !pathname.startsWith("/cms/products/attributes") && !pathname.startsWith("/cms/products/inventory"))} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                       All Products
+                    </NavItem>
+                    <NavItem href="/cms/products/categories" icon={Folder} isActive={pathname.startsWith("/cms/products/categories")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                      Categories
                     </NavItem>
                     <NavItem href="/cms/products/inventory" icon={Package} isActive={pathname.startsWith("/cms/products/inventory")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                       Inventory
