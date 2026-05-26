@@ -226,12 +226,13 @@ export default async function DynamicPostPage({ params: paramsPromise }: PostPag
       {lcpImageUrl && (
         <link rel="preload" as="image" href={lcpImageUrl} />
       )}
+      <script
+        type="application/ld+json"
+        nonce={nonce}
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: stringifyJsonLd(articleJsonLd) }}
+      />
       <PostClientContent initialPostData={initialPostData} currentSlug={params.slug} translatedSlugs={translatedSlugs}>
-        <script
-          type="application/ld+json"
-          nonce={nonce}
-          dangerouslySetInnerHTML={{ __html: stringifyJsonLd(articleJsonLd) }}
-        />
         {postBlocks}
       </PostClientContent>
     </>

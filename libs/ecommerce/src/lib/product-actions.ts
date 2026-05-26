@@ -100,7 +100,19 @@ async function persistProductTaxability(
 
 export async function getProducts(
   supabase: SupabaseClient<Database>,
-  { page = 1, limit = 10, search = '', languageId }: { page?: number; limit?: number; search?: string; languageId?: number } = {}
+  {
+    page = 1,
+    limit = 10,
+    search = '',
+    languageId,
+    categoryId,
+  }: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    languageId?: number;
+    categoryId?: string;
+  } = {}
 ) {
   const start = (page - 1) * limit;
   const end = start + limit - 1;
@@ -116,6 +128,27 @@ export async function getProducts(
 
   if (languageId) {
     query = query.eq('language_id', languageId);
+  }
+
+  if (categoryId) {
+    const { data: productCategoryRows, error: categoryError } = await supabase
+      .from('product_categories' as any)
+      .select('product_id')
+      .eq('category_id', categoryId);
+
+    if (categoryError) {
+      return { data: [], error: categoryError, count: 0 };
+    }
+
+    const productIds = (productCategoryRows || [])
+      .map((row: any) => row.product_id)
+      .filter(Boolean);
+
+    if (productIds.length === 0) {
+      return { data: [], error: null, count: 0 };
+    }
+
+    query = query.in('id', productIds);
   }
 
   if (search) {

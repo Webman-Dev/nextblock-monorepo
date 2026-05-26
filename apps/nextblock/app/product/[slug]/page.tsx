@@ -5,6 +5,7 @@ import {
   getVariantEffectivePriceRange,
   normalizePriceMap,
   normalizeSalePriceMap,
+  resolveTranslatedText,
 } from '@nextblock-cms/ecommerce';
 import { getSsgSupabaseClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 import { notFound } from 'next/navigation';
@@ -54,6 +55,18 @@ function resolveOfferAvailability(productRecord: any) {
   return typeof productRecord.stock === 'number' && productRecord.stock <= 0
     ? 'https://schema.org/OutOfStock'
     : 'https://schema.org/InStock';
+}
+
+function resolveCategoryName(category: any, languageCode?: string | null) {
+  if (!category || typeof category.name !== 'string') {
+    return null;
+  }
+
+  return resolveTranslatedText(
+    category.name,
+    category.name_translations,
+    languageCode
+  );
 }
 
 export async function generateStaticParams() {
@@ -279,6 +292,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
     languageCode
   );
   const variantPriceRange = getVariantEffectivePriceRange(variants);
+  const productCategories = (productRecord.product_categories || [])
+    .map((pc: any) => pc.category)
+    .filter(Boolean);
+  const productCategoryNames = productCategories
+    .map((category: any) => resolveCategoryName(category, languageCode))
+    .filter((name: string | null): name is string => Boolean(name));
 
   const contextProduct = {
     id: productRecord.id,
@@ -313,7 +332,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     has_variants: variants.length > 0,
     attributes,
     variants,
-    categories: (productRecord.product_categories || []).map((pc: any) => pc.category).filter(Boolean),
+    categories: productCategories,
     product_variants: (productRecord.product_variants || []).map((variant: any) => ({
       id: variant.id,
       price: variant.price,
@@ -341,6 +360,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
     name: title,
     description,
     image: images.map((image) => image.url),
+    category:
+      productCategoryNames.length > 1
+        ? productCategoryNames
+        : productCategoryNames[0] ?? undefined,
     sku: productRecord.sku || undefined,
     gtin: productRecord.upc || undefined,
     url: `${siteUrl}/product/${productRecord.slug}`,
@@ -361,6 +384,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <script
           type="application/ld+json"
           nonce={nonce}
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{ __html: stringifyJsonLd(productJsonLd) }}
         />
         <ProductProvider product={contextProduct}>

@@ -50,6 +50,16 @@ const PRODUCT_SELECT = `
       height
     )
   ),
+  product_categories (
+    category:categories (
+      id,
+      name,
+      slug,
+      description,
+      name_translations,
+      description_translations
+    )
+  ),
   product_variants (
     id,
     sku,
@@ -185,6 +195,72 @@ function getLanguageCode(product: any) {
     : product?.languages;
 
   return typeof language?.code === 'string' ? language.code : null;
+}
+
+function normalizeTranslationMap(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, string>>(
+    (accumulator, [key, entry]) => {
+      if (typeof entry === 'string' && entry.trim()) {
+        accumulator[key] = entry.trim();
+      }
+
+      return accumulator;
+    },
+    {}
+  );
+}
+
+function resolveTranslatedCategoryText(
+  baseValue: unknown,
+  translations: unknown,
+  languageCode?: string | null
+) {
+  const fallback = typeof baseValue === 'string' ? baseValue.trim() : '';
+  const normalizedTranslations = normalizeTranslationMap(translations);
+
+  if (!languageCode || !normalizedTranslations) {
+    return fallback;
+  }
+
+  return normalizedTranslations[languageCode]?.trim() || fallback;
+}
+
+function getProductCategoryRecords(product: any) {
+  const categoryRows = Array.isArray(product?.product_categories)
+    ? product.product_categories
+    : [];
+
+  return categoryRows
+    .map((row: any) => row?.category)
+    .filter((category: any) => category?.id && category?.slug && category?.name);
+}
+
+function getProductCategories(product: any, languageCode?: string | null) {
+  return getProductCategoryRecords(product).map((category: any) => ({
+    id: category.id,
+    value: category.slug,
+    label: resolveTranslatedCategoryText(
+      category.name,
+      category.name_translations,
+      languageCode
+    ),
+    name: resolveTranslatedCategoryText(
+      category.name,
+      category.name_translations,
+      languageCode
+    ),
+    slug: category.slug,
+    description:
+      resolveTranslatedCategoryText(
+        category.description,
+        category.description_translations,
+        languageCode
+      ) || undefined,
+  }));
 }
 
 function encodeCursor(offset: number) {
@@ -713,6 +789,7 @@ function mapVariantToUcp(
 
 export function productToUcpProduct(product: any, options: ProductMapOptions) {
   const languageCode = getLanguageCode(product);
+  const categories = getProductCategories(product, languageCode);
   const { attributes, variants: mappedVariants } = mapRawVariantRelations(
     product?.product_variants || [],
     languageCode
@@ -772,6 +849,7 @@ export function productToUcpProduct(product: any, options: ProductMapOptions) {
     url: buildProductUrl(options.baseUrl, product),
     language: languageCode || undefined,
     status: product.status,
+    categories,
     price_range: getProductPriceRange(product, variants, options),
     media: getProductImages(product),
     options: buildUcpOptions(attributes, variants, options.selected),
@@ -783,6 +861,8 @@ export function productToUcpProduct(product: any, options: ProductMapOptions) {
     metadata: {
       product_type: product.product_type ?? null,
       payment_provider: product.payment_provider ?? null,
+      category_ids: categories.map((category: any) => category.id),
+      category_slugs: categories.map((category: any) => category.slug),
       translation_group_id: product.translation_group_id ?? null,
       short_description: stripHtmlToText(product.short_description || ''),
     },
@@ -800,6 +880,131 @@ function getPriceFilter(body: unknown) {
   return {
     min: toMoneyAmount(asRecord(price.min).amount ?? price.min),
     max: toMoneyAmount(asRecord(price.max).amount ?? price.max),
+  };
+}
+
+function normalizeCategoryFilterValues(body: unknown) {
+  const filters = asRecord(asRecord(body).filters);
+  const rawCategories = filters.categories;
+  const values = Array.isArray(rawCategories)
+    ? rawCategories
+    : rawCategories
+      ? [rawCategories]
+      : [];
+
+  return [
+    ...new Set(
+      values
+        .map((value) =>
+          typeof value === 'string' || typeof value === 'number'
+            ? String(value).trim()
+            : ''
+        )
+        .filter(Boolean)
+    ),
+  ];
+}
+
+function normalizeCategoryToken(value: unknown) {
+  return typeof value === 'string' || typeof value === 'number'
+    ? String(value).trim().toLowerCase()
+    : '';
+}
+
+function categoryMatchesFilterValue(
+  category: any,
+  filterTokens: Set<string>,
+  languageCode?: string | null
+) {
+  const translatedName = resolveTranslatedCategoryText(
+    category.name,
+    category.name_translations,
+    languageCode
+  );
+  const translatedDescription = resolveTranslatedCategoryText(
+    category.description,
+    category.description_translations,
+    languageCode
+  );
+  const translationValues = [
+    ...Object.values(normalizeTranslationMap(category.name_translations) ?? {}),
+    ...Object.values(normalizeTranslationMap(category.description_translations) ?? {}),
+  ];
+  const candidates = [
+    category.id,
+    category.slug,
+    category.name,
+    category.description,
+    translatedName,
+    translatedDescription,
+    ...translationValues,
+  ]
+    .map(normalizeCategoryToken)
+    .filter(Boolean);
+
+  return candidates.some((candidate) => filterTokens.has(candidate));
+}
+
+async function resolveCategoryFilterProductIds(params: {
+  client: SupabaseAnyClient;
+  values: string[];
+  languageCode?: string | null;
+}) {
+  const filterTokens = new Set(params.values.map(normalizeCategoryToken).filter(Boolean));
+  if (filterTokens.size === 0) {
+    return {
+      productIds: null as string[] | null,
+      matchedCategoryIds: [] as string[],
+      messages: [] as JsonRecord[],
+    };
+  }
+
+  const { data: categories, error: categoryError } = await params.client
+    .from('categories')
+    .select('id, name, slug, description, name_translations, description_translations');
+
+  if (categoryError) {
+    throw categoryError;
+  }
+
+  const matchedCategories = (categories || []).filter((category: any) =>
+    categoryMatchesFilterValue(category, filterTokens, params.languageCode)
+  );
+
+  if (matchedCategories.length === 0) {
+    return {
+      productIds: [],
+      matchedCategoryIds: [],
+      messages: [
+        {
+          type: 'info',
+          code: 'category_filter_no_match',
+          content: `No categories matched: ${params.values.join(', ')}`,
+        },
+      ],
+    };
+  }
+
+  const matchedCategoryIds = matchedCategories.map((category: any) => category.id);
+  const { data: productCategoryRows, error: productCategoryError } = await params.client
+    .from('product_categories')
+    .select('product_id')
+    .in('category_id', matchedCategoryIds);
+
+  if (productCategoryError) {
+    throw productCategoryError;
+  }
+
+  return {
+    productIds: [
+      ...new Set(
+        (productCategoryRows || [])
+          .map((row: any) => row.product_id)
+          .filter(Boolean)
+      ),
+    ],
+    matchedCategoryIds,
+    messages: [] as JsonRecord[],
   };
 }
 
@@ -830,6 +1035,25 @@ export async function searchCatalogProducts(body: unknown, request: Request) {
   const pagination = normalizeUcpPagination(body);
   const queryText = normalizeSearchText(asRecord(body).query ?? asRecord(body).q);
   const priceFilter = getPriceFilter(body);
+  const categoryFilterValues = normalizeCategoryFilterValues(body);
+  const categoryFilter = await resolveCategoryFilterProductIds({
+    client,
+    values: categoryFilterValues,
+    languageCode: resolveRequestedLocale(body),
+  });
+
+  if (categoryFilter.productIds && categoryFilter.productIds.length === 0) {
+    return {
+      ucp: buildUcpMetadata([UCP_CAPABILITIES.catalogSearch]),
+      products: [],
+      pagination: buildPaginationResponse({
+        ...pagination,
+        count: 0,
+        totalCount: 0,
+      }),
+      messages: categoryFilter.messages,
+    };
+  }
 
   let query = client
     .from('products')
@@ -842,6 +1066,10 @@ export async function searchCatalogProducts(body: unknown, request: Request) {
     query = query.or(
       `title.ilike.%${queryText}%,sku.ilike.%${queryText}%,slug.ilike.%${queryText}%`
     );
+  }
+
+  if (categoryFilter.productIds) {
+    query = query.in('id', categoryFilter.productIds);
   }
 
   const { data, error, count } = await query;
@@ -870,7 +1098,7 @@ export async function searchCatalogProducts(body: unknown, request: Request) {
     }),
     messages:
       queryText || Object.keys(asRecord(asRecord(body).filters)).length > 0
-        ? []
+        ? categoryFilter.messages
         : [
             {
               type: 'info',

@@ -179,17 +179,20 @@ export default async function RootPage() {
   );
 
   return (
-    <PageClientContent
-      initialPageData={pageData}
-      currentSlug={homepageSlug}
-      translatedSlugs={translatedSlugs}
-    >
+    <>
       <script
         type="application/ld+json"
         nonce={nonce}
+        suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: stringifyJsonLd(pageJsonLd) }}
       />
-      {pageBlocks}
-    </PageClientContent>
+      <PageClientContent
+        initialPageData={pageData}
+        currentSlug={homepageSlug}
+        translatedSlugs={translatedSlugs}
+      >
+        {pageBlocks}
+      </PageClientContent>
+    </>
   );
 }

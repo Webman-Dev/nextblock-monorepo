@@ -201,13 +201,13 @@ export default async function DynamicPage({ params: paramsPromise }: PageProps) 
 
   return (
     <>
-
+      <script
+        type="application/ld+json"
+        nonce={nonce}
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: stringifyJsonLd(pageJsonLd) }}
+      />
       <PageClientContent initialPageData={pageData} currentSlug={params.slug} translatedSlugs={translatedSlugs}>
-        <script
-          type="application/ld+json"
-          nonce={nonce}
-          dangerouslySetInnerHTML={{ __html: stringifyJsonLd(pageJsonLd) }}
-        />
         {pageBlocks}
       </PageClientContent>
     </>
