@@ -4,7 +4,8 @@ import { createClient, getServiceRoleSupabaseClient } from '@nextblock-cms/db/se
 import { ProductFormValues } from '../../../product-schema';
 import { 
   createProduct as createProductLib, 
-  deleteProduct as deleteProductLib 
+  deleteProduct as deleteProductLib,
+  syncCategoriesForTranslationGroup
 } from '../../../product-actions';
 import { normalizeCurrencyRecord } from '../../../currency';
 import { sanitizeProductFormValuesForStoreManagedCurrencies } from './product-price-sync';
@@ -299,3 +300,107 @@ export async function deleteProductAttributeTermAction(termId: string) {
   revalidatePath('/cms/products');
   return { success: true };
 }
+
+export async function createCategoryAction(input: {
+  name: string;
+  slug?: string;
+  description?: string;
+  nameTranslations?: Record<string, string>;
+  descriptionTranslations?: Record<string, string>;
+}) {
+  const supabase = getServiceRoleSupabaseClient();
+  const name = input.name.trim();
+  const slug = slugify(input.slug?.trim() || input.name);
+
+  if (!name || !slug) {
+    return { success: false, error: 'Category name is required.' };
+  }
+
+  const { data, error } = await supabase
+    .from('categories' as any)
+    .insert({
+      name,
+      slug,
+      description: input.description?.trim() || null,
+      name_translations: input.nameTranslations || {},
+      description_translations: input.descriptionTranslations || {},
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath('/cms/products/categories');
+  revalidatePath('/cms/products/new');
+  revalidatePath('/cms/products');
+  return { success: true, category: data as any };
+}
+
+export async function updateCategoryAction(
+  id: string,
+  input: {
+    name: string;
+    slug?: string;
+    description?: string;
+    nameTranslations?: Record<string, string>;
+    descriptionTranslations?: Record<string, string>;
+  }
+) {
+  const supabase = getServiceRoleSupabaseClient();
+  const name = input.name.trim();
+  const slug = slugify(input.slug?.trim() || input.name);
+
+  if (!name || !slug) {
+    return { success: false, error: 'Category name is required.' };
+  }
+
+  const { error } = await supabase
+    .from('categories' as any)
+    .update({
+      name,
+      slug,
+      description: input.description?.trim() || null,
+      name_translations: input.nameTranslations || {},
+      description_translations: input.descriptionTranslations || {},
+    })
+    .eq('id', id);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath('/cms/products/categories');
+  revalidatePath('/cms/products/new');
+  revalidatePath('/cms/products');
+  return { success: true };
+}
+
+export async function deleteCategoryAction(id: string) {
+  const supabase = getServiceRoleSupabaseClient();
+  const { error } = await supabase.from('categories' as any).delete().eq('id', id);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath('/cms/products/categories');
+  revalidatePath('/cms/products/new');
+  revalidatePath('/cms/products');
+  return { success: true };
+}
+
+export async function syncProductCategoriesAction(productId: string, categoryIds: string[]) {
+  const supabase = getServiceRoleSupabaseClient();
+  
+  try {
+    await syncCategoriesForTranslationGroup(supabase, productId, categoryIds);
+    revalidatePath('/cms/products');
+    revalidatePath(`/cms/products/${productId}/edit`);
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+

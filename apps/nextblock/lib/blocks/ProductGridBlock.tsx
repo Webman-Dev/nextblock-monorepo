@@ -89,6 +89,7 @@ export const ProductGridBlock = async ({
         price_range_max: variantPriceRange?.max ?? null,
         image_url: imageUrl,
         short_description: p.short_description || undefined,
+        categories: (p.product_categories || []).map((pc: any) => pc.category).filter(Boolean),
         language_id: p.language_id as number,
         translation_group_id: p.translation_group_id || "",
         freemius_product_id: productRecord.freemius_product_id || undefined,

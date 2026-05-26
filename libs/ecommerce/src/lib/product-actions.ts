@@ -108,7 +108,7 @@ export async function getProducts(
   let query = supabase
     .from('products')
     .select(
-      'id, title, sku, upc, price, prices, sale_price, sale_prices, is_taxable, product_type, payment_provider, short_description, stock, status, slug, language_id, translation_group_id, freemius_product_id, freemius_plan_id, trial_period_days, trial_requires_payment_method, product_media(media(file_path, object_key)), product_variants(id, price, prices, sale_price, sale_prices), freemius_plans(id, name, title, freemius_pricing(id, license_quota, api_monthly_price, api_annual_price, api_lifetime_price, override_monthly_price, override_annual_price, override_lifetime_price, is_active))',
+      'id, title, sku, upc, price, prices, sale_price, sale_prices, is_taxable, product_type, payment_provider, short_description, stock, status, slug, language_id, translation_group_id, freemius_product_id, freemius_plan_id, trial_period_days, trial_requires_payment_method, product_media(media(file_path, object_key)), product_variants(id, price, prices, sale_price, sale_prices), freemius_plans(id, name, title, freemius_pricing(id, license_quota, api_monthly_price, api_annual_price, api_lifetime_price, override_monthly_price, override_annual_price, override_lifetime_price, is_active)), product_categories(category:categories(id, name, slug, description, name_translations, description_translations))',
       { count: 'exact' }
     )
     .range(start, end)
@@ -196,6 +196,16 @@ export async function getProduct(supabase: SupabaseClient<Database>, id: string)
           override_lifetime_price,
           is_active
         )
+      ),
+      product_categories (
+        category:categories (
+          id,
+          name,
+          slug,
+          description,
+          name_translations,
+          description_translations
+        )
       )
     `
     )
@@ -280,6 +290,16 @@ export async function getProductBySlug(
           override_lifetime_price,
           is_active
         )
+      ),
+      product_categories (
+        category:categories (
+          id,
+          name,
+          slug,
+          description,
+          name_translations,
+          description_translations
+        )
       )
     `
     )
@@ -351,6 +371,10 @@ export async function createProduct(supabase: SupabaseClient<Database>, data: Pr
   await persistProductTaxability(supabase, productId, data.is_taxable);
 
   await syncSharedInventoryForSavedProduct(productId, data);
+
+  if (data.category_ids !== undefined) {
+    await syncCategoriesForTranslationGroup(supabase, productId, data.category_ids);
+  }
 
   const { data: product } = await supabase.from('products').select('*').eq('id', productId).single();
   return product;
@@ -449,6 +473,10 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
   }
 
   await syncSharedInventoryForSavedProduct(productId, data);
+
+  if (data.category_ids !== undefined) {
+    await syncCategoriesForTranslationGroup(supabase, id, data.category_ids);
+  }
 
   const { data: product } = await supabase.from('products').select('*').eq('id', productId).single();
   return product;
@@ -642,4 +670,55 @@ export async function fetchTranslatedProductsForCartInternal(
   const result = await query.order('id');
   
   return result;
+}
+
+export async function syncCategoriesForTranslationGroup(
+  supabase: SupabaseClient<Database>,
+  productId: string,
+  categoryIds: string[]
+) {
+  const { data: product } = await supabase
+    .from('products')
+    .select('translation_group_id')
+    .eq('id', productId)
+    .single();
+
+  if (!product || !product.translation_group_id) {
+    await supabase.from('product_categories' as any).delete().eq('product_id', productId);
+    if (categoryIds.length > 0) {
+      const categoryInserts = categoryIds.map(catId => ({
+        product_id: productId,
+        category_id: catId,
+      }));
+      await supabase.from('product_categories' as any).insert(categoryInserts);
+    }
+    return;
+  }
+
+  const { data: siblingProducts } = await supabase
+    .from('products')
+    .select('id')
+    .eq('translation_group_id', product.translation_group_id);
+
+  const siblingIds = siblingProducts && siblingProducts.length > 0
+    ? siblingProducts.map((p) => p.id)
+    : [productId];
+
+  await supabase
+    .from('product_categories' as any)
+    .delete()
+    .in('product_id', siblingIds);
+
+  if (categoryIds.length > 0) {
+    const categoryInserts: any[] = [];
+    for (const siblingId of siblingIds) {
+      for (const catId of categoryIds) {
+        categoryInserts.push({
+          product_id: siblingId,
+          category_id: catId,
+        });
+      }
+    }
+    await supabase.from('product_categories' as any).insert(categoryInserts);
+  }
 }

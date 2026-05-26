@@ -156,9 +156,28 @@ export async function updateFreemiusOverride(pricingId: string, overrides: {
   return { success: true };
 }
 
-export async function getPublicFreemiusPricing(freemiusProductId: string) {
+export async function getPublicFreemiusPricing(productId: string) {
   // Queries freemius_plans/freemius_pricing and falls back gracefully.
   const supabase = createClient() as any;
+
+  // Resolve all sibling product IDs belonging to the same translation group
+  const { data: product } = await supabase
+    .from('products')
+    .select('translation_group_id')
+    .eq('id', productId)
+    .maybeSingle();
+
+  let productIds = [productId];
+  if (product?.translation_group_id) {
+    const { data: siblings } = await supabase
+      .from('products')
+      .select('id')
+      .eq('translation_group_id', product.translation_group_id);
+    if (siblings && siblings.length > 0) {
+      productIds = siblings.map((p: any) => p.id);
+    }
+  }
+
   const { data, error } = await supabase
     .from('freemius_plans')
     .select(`
@@ -177,7 +196,7 @@ export async function getPublicFreemiusPricing(freemiusProductId: string) {
         is_active
       )
     `)
-    .eq('product_id', freemiusProductId);
+    .in('product_id', productIds);
 
   if (error) throw new Error(error.message);
 
@@ -204,3 +223,54 @@ export async function getPublicFreemiusPricing(freemiusProductId: string) {
 
   return resolvedPlans;
 }
+
+export async function getCategoriesWithCount() {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('categories' as any)
+    .select('id, name, slug, description, created_at, name_translations, description_translations, product_categories(count)')
+    .order('name', { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return (data || []).map((cat: any) => {
+    const countVal = cat.product_categories?.[0]?.count ?? cat.product_categories?.count ?? 0;
+    return {
+      id: cat.id,
+      name: cat.name,
+      slug: cat.slug,
+      description: cat.description ?? '',
+      created_at: cat.created_at,
+      productCount: Number(countVal),
+      name_translations: cat.name_translations || {},
+      description_translations: cat.description_translations || {},
+    };
+  });
+}
+
+export async function getCategoryBySlug(slug: string) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('categories' as any)
+    .select('id, name, slug, description, created_at')
+    .eq('slug', slug)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function getProductCategories(productId: string) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('product_categories' as any)
+    .select('category:categories(id, name, slug, description, name_translations, description_translations, created_at)')
+    .eq('product_id', productId);
+
+  if (error) throw new Error(error.message);
+
+  return (data || [])
+    .map((pc: any) => pc.category)
+    .filter(Boolean);
+}
+

@@ -82,6 +82,36 @@ export type Database = {
           },
         ]
       }
+      categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          description_translations: Json
+          id: string
+          name: string
+          name_translations: Json
+          slug: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          description_translations?: Json
+          id?: string
+          name: string
+          name_translations?: Json
+          slug: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          description_translations?: Json
+          id?: string
+          name?: string
+          name_translations?: Json
+          slug?: string
+        }
+        Relationships: []
+      }
       content_drafts: {
         Row: {
           author_id: string | null
@@ -1232,6 +1262,36 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      product_categories: {
+        Row: {
+          category_id: string
+          product_id: string
+        }
+        Insert: {
+          category_id: string
+          product_id: string
+        }
+        Update: {
+          category_id?: string
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_categories_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       product_drafts: {
         Row: {

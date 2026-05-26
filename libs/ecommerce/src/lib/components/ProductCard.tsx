@@ -11,6 +11,8 @@ import {
 } from '../currency';
 import { getTrialSummary } from '../trials';
 
+import { resolveTranslatedText } from '../variation-utils';
+
 interface ProductCardProps {
   product: Product;
   className?: string;
@@ -47,7 +49,7 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
           )}`
       : formatPrice(resolvedPrice.sale_price ?? resolvedPrice.price, activeCurrencyCode);
 
-  const { t } = useTranslations();
+  const { t, lang } = useTranslations();
   const trialSummary = getTrialSummary(product);
 
   // Freemius pricing resolution
@@ -106,6 +108,13 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
       </Link>
 
       <div className="flex flex-1 flex-col p-4">
+        {product.categories && product.categories.length > 0 && (
+          <div className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-1">
+            {product.categories
+              .map((cat) => resolveTranslatedText(cat.name, cat.name_translations, lang))
+              .join(' • ')}
+          </div>
+        )}
         <Link href={`/product/${product.slug}`} className="mb-2">
            <h3 className="line-clamp-1 text-lg font-medium text-foreground group-hover:underline">
              {product.title}
