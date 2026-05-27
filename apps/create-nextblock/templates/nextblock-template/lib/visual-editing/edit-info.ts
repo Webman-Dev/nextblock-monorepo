@@ -30,13 +30,9 @@ export function buildVisualEditAttributes(
 
   const deploymentUrl = process.env.VERCEL_URL 
     ? `https://${process.env.VERCEL_URL}` 
-    : (process.env.NEXT_PUBLIC_URL || "http://localhost:3000");
+    : (process.env.NEXT_PUBLIC_URL || process.env.TARGET_URL || "http://localhost:3000");
 
-  const origin = (
-    process.env.NEXT_PUBLIC_URL?.trim() ||
-    process.env.TARGET_URL?.trim() ||
-    "https://nextblock.dev"
-  ).replace(/\/+$/, "");
+  const origin = deploymentUrl.replace(/\/+$/, "");
 
   const payload: NextblockVisualEditInfo = {
     origin,
