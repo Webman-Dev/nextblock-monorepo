@@ -8,6 +8,8 @@ describe("buildVisualEditAttributes", () => {
   beforeEach(() => {
     delete process.env.NEXTBLOCK_VERCEL_PROJECT_ID;
     delete process.env.NEXTBLOCK_VERCEL_WORKSPACE_ID;
+    delete process.env.NEXT_PUBLIC_URL;
+    delete process.env.TARGET_URL;
   });
 
   it("returns no attributes when visual editing is disabled", () => {
@@ -56,7 +58,7 @@ describe("buildVisualEditAttributes", () => {
     const target = JSON.parse(attrs?.["data-vercel-edit-target"] ?? "{}");
 
     expect(payload).toMatchObject({
-      origin: "https://nextblock-editor",
+      origin: "https://nextblock.dev",
       projectId: "prj_123",
       workspaceId: "team_123",
       editUrl: "http://localhost:3000/cms/posts/42/edit",
@@ -74,5 +76,47 @@ describe("buildVisualEditAttributes", () => {
       blockIndex: 0,
       blockType: "heading",
     });
+  });
+
+  it("dynamically overrides origin with NEXT_PUBLIC_URL and TARGET_URL", () => {
+    process.env.NEXT_PUBLIC_URL = "https://custom-domain.com/";
+    const attrs = buildVisualEditAttributes(
+      {
+        enabled: true,
+        documentType: "page",
+        documentId: 10,
+        slug: "home",
+        languageId: 1,
+      },
+      {
+        kind: "top-level",
+        blockId: 1,
+        blockIndex: 0,
+        blockType: "text",
+      }
+    );
+    const payload = JSON.parse(attrs?.["data-vercel-edit-info"] ?? "{}");
+    expect(payload.origin).toBe("https://custom-domain.com");
+
+    // Test TARGET_URL fallback if NEXT_PUBLIC_URL is empty
+    delete process.env.NEXT_PUBLIC_URL;
+    process.env.TARGET_URL = "https://another-domain.xyz/subpath/";
+    const attrsTarget = buildVisualEditAttributes(
+      {
+        enabled: true,
+        documentType: "page",
+        documentId: 10,
+        slug: "home",
+        languageId: 1,
+      },
+      {
+        kind: "top-level",
+        blockId: 1,
+        blockIndex: 0,
+        blockType: "text",
+      }
+    );
+    const payloadTarget = JSON.parse(attrsTarget?.["data-vercel-edit-info"] ?? "{}");
+    expect(payloadTarget.origin).toBe("https://another-domain.xyz/subpath");
   });
 });

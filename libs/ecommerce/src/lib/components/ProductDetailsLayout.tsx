@@ -64,8 +64,15 @@ function buildProductVisualEditAttributes(
   const projectId = process.env.NEXTBLOCK_VERCEL_PROJECT_ID || process.env.VERCEL_PROJECT_ID;
   const workspaceId = process.env.NEXTBLOCK_VERCEL_WORKSPACE_ID || process.env.VERCEL_ORG_ID;
 
+  const origin = (
+    process.env.NEXT_PUBLIC_URL?.trim() ||
+    process.env.TARGET_URL?.trim() ||
+    (typeof window !== 'undefined' ? window.location.origin : '') ||
+    'https://nextblock.dev'
+  ).replace(/\/+$/, "");
+
   const payload: any = {
-    origin: 'https://nextblock-editor',
+    origin,
     editUrl: `${deploymentUrl}/cms/products/${product.id}/edit`,
     data: {
       parentType: 'product',
