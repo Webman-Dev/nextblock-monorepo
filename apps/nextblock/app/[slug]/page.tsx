@@ -7,7 +7,11 @@ import PageClientContent from "./PageClientContent";
 import { getPageDataBySlug } from "./page.utils";
 import BlockRenderer from "../../components/BlockRenderer";
 import { cookies, draftMode, headers } from "next/headers";
-import { resolveMetaDescription } from "../lib/seo";
+import {
+  resolveMetaTitle,
+  resolvePageMetaDescription,
+  stringifyJsonLd,
+} from "../lib/seo";
 
 export const dynamicParams = true;
 export const revalidate = 360;
@@ -95,13 +99,14 @@ export async function generateMetadata(
     });
   }
 
-  const description = resolveMetaDescription(pageData.meta_description);
+  const title = resolveMetaTitle(pageData.meta_title, pageData.title);
+  const description = resolvePageMetaDescription(pageData.meta_description, pageData.blocks);
 
   return {
-    title: pageData.meta_title || pageData.title,
+    title,
     description,
     openGraph: {
-      title: pageData.meta_title || pageData.title,
+      title,
       description,
       type: 'website',
       url: `${siteUrl}/${params.slug}`,
@@ -167,6 +172,18 @@ export default async function DynamicPage({ params: paramsPromise }: PageProps) 
   const draft = await draftMode();
   const visualEditingEnabled =
     draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
+  const siteUrl = process.env.NEXT_PUBLIC_URL || "";
+  const nonce = (await headers()).get('x-nonce') || undefined;
+  const title = resolveMetaTitle(pageData.meta_title, pageData.title);
+  const description = resolvePageMetaDescription(pageData.meta_description, pageData.blocks);
+  const pageJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: title,
+    description,
+    url: `${siteUrl}/${params.slug}`,
+    inLanguage: pageData.language_code,
+  };
   const pageBlocks = pageData ? (
     <BlockRenderer
       blocks={pageData.blocks}
@@ -184,7 +201,12 @@ export default async function DynamicPage({ params: paramsPromise }: PageProps) 
 
   return (
     <>
-
+      <script
+        type="application/ld+json"
+        nonce={nonce}
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: stringifyJsonLd(pageJsonLd) }}
+      />
       <PageClientContent initialPageData={pageData} currentSlug={params.slug} translatedSlugs={translatedSlugs}>
         {pageBlocks}
       </PageClientContent>

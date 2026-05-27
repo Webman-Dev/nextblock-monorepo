@@ -483,7 +483,6 @@ export default async function RootLayout({
   return (
     <html lang={serverDeterminedLocale} suppressHydrationWarning>
       <head>
-        <meta name="description" content={DEFAULT_SITE_DESCRIPTION} />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         {globalCss && <style dangerouslySetInnerHTML={{ __html: globalCss }} />}
       </head>
