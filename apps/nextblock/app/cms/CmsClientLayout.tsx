@@ -8,7 +8,7 @@ import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
-  ExternalLink, Paintbrush, Brain, TicketPercent, ShieldAlert, Folder,
+  ExternalLink, Paintbrush, Brain, TicketPercent, ShieldAlert, Folder, DatabaseBackup,
 } from "lucide-react"
 import { Button } from "@nextblock-cms/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar"
@@ -219,6 +219,7 @@ export default function CmsClientLayout({
   else if (pathname.startsWith("/cms/settings/copyright")) pageTitle = "Copyright Settings";
   else if (pathname.startsWith("/cms/settings/global-css")) pageTitle = "Global CSS Settings";
   else if (pathname.startsWith("/cms/settings/extra-translations")) pageTitle = "Extra Translations";
+  else if (pathname.startsWith("/cms/settings/backup-restore")) pageTitle = "Backup And Restore";
   else if (pathname.startsWith("/cms/settings/currencies")) pageTitle = "Currency Settings";
   else if (pathname.startsWith("/cms/settings/taxes")) pageTitle = "Tax Settings";
   else if (pathname.startsWith("/cms/settings/cortex-ai")) pageTitle = "Cortex AI";
@@ -383,6 +384,9 @@ export default function CmsClientLayout({
                     </NavItem>
                     <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Extra Translations
+                    </NavItem>
+                    <NavItem href="/cms/settings/backup-restore" icon={DatabaseBackup} isActive={pathname.startsWith("/cms/settings/backup-restore")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Backup / Restore
                     </NavItem>
                  </CollapsibleNavItem>
                 </>

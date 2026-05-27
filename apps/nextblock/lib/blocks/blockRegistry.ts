@@ -1,6 +1,8 @@
 import { z } from '../zod-config';
 import { TestimonialBlockConfig, TestimonialBlockContent } from '../../components/blocks/TestimonialBlock';
 import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSchema, FeaturedProductBlockContent, CartBlockSchema, CartBlockContent, CheckoutBlockSchema, CheckoutBlockContent, ProductDetailsBlockSchema, ProductDetailsBlockContent } from './ecommerce-block-schemas';
+import { availableBlockTypes, type BlockType } from './blockTypes';
+export { availableBlockTypes, type BlockType } from './blockTypes';
 
 /**
  * Block Registry System
@@ -9,12 +11,6 @@ import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSc
  * It serves as the single source of truth for block definitions, including
  * their initial content, editor components, renderer components, and Zod schemas.
  */
-
-/**
- * Available block types - defined here as the source of truth
- */
-export const availableBlockTypes = ["text", "heading", "image", "button", "posts_grid", "video_embed", "section", "form", "testimonial", "product_grid", "featured_product", "cart", "checkout", "product_details"] as const;
-export type BlockType = (typeof availableBlockTypes)[number];
 
 // --- Zod Schemas & Inferred Types ---
 

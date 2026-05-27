@@ -12,10 +12,12 @@ import { getActiveLanguagesServerSide, getServiceRoleSupabaseClient } from '@nex
 
 export async function ProductsPage({ 
   searchParams, 
-  languageFilterNode 
+  languageFilterNode,
+  transferControlsNode,
 }: { 
   searchParams?: { lang?: string }, 
-  languageFilterNode?: React.ReactNode 
+  languageFilterNode?: React.ReactNode,
+  transferControlsNode?: React.ReactNode,
 }) {
   const supabase = getServiceRoleSupabaseClient();
   const [allLanguages, { data: currencies }] = await Promise.all([
@@ -43,6 +45,7 @@ export async function ProductsPage({
         <h1 className="text-3xl font-bold">Products</h1>
         <div className="flex flex-wrap items-center gap-4">
           <div className="h-10 w-[1px] bg-slate-200 dark:bg-slate-800 mx-2 hidden sm:block"></div>
+          {transferControlsNode}
           {languageFilterNode}
           <SyncFreemiusButton title="Sync Full Store" />
           <Link href="/cms/products/new">

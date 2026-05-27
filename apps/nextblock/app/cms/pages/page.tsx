@@ -33,6 +33,7 @@ import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server";
 type Page = Database["public"]["Tables"]["pages"]["Row"];
 import LanguageFilterSelect from "../components/LanguageFilterSelect";
 import DeletePageButtonClient from "./components/DeletePageButtonClient"; // Import the client component
+import { ContentTransferControls } from "../import-export/ContentTransferControls";
 
 async function getPagesWithDetails(
   filterLanguageId?: number
@@ -97,6 +98,11 @@ export default async function CmsPagesListPage(props: CmsPagesListPageProps) {
       <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
         <h1 className="text-2xl font-semibold">Manage Pages</h1>
         <div className="flex items-center gap-3">
+          <ContentTransferControls
+            contentType="pages"
+            label="Pages"
+            languageId={filterLangId}
+          />
           <LanguageFilterSelect
             allLanguages={allLanguages}
             currentFilterLangId={filterLangId}

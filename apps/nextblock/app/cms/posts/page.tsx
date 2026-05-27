@@ -29,6 +29,7 @@ import { resolveMediaUrl } from "../../../lib/media/resolveMediaUrl";
 type Post = Database['public']['Tables']['posts']['Row'] & { feature_image_url?: string | null };
 import LanguageFilterSelect from "../components/LanguageFilterSelect";
 import DeletePostButtonClient from "./components/DeletePostButtonClient"; // Import the new client component
+import { ContentTransferControls } from "../import-export/ContentTransferControls";
 
 async function getPostsWithDetails(filterLanguageId?: number): Promise<{ post: Post; languageCode: string }[]> {
   const supabase = createClient();
@@ -83,6 +84,11 @@ export default async function CmsPostsListPage(props: CmsPostsListPageProps) {
       <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
         <h1 className="text-2xl font-semibold">Manage Posts</h1>
         <div className="flex items-center gap-3">
+          <ContentTransferControls
+            contentType="posts"
+            label="Posts"
+            languageId={filterLangId}
+          />
           <LanguageFilterSelect
             allLanguages={allLanguages}
             currentFilterLangId={filterLangId}
