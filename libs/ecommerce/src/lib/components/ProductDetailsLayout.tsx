@@ -555,7 +555,7 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
         </div>
       </div>
 
-      <div className="min-w-0 w-full" {...descriptionVisualEditAttributes}>
+      <div className="min-w-0 w-full" {...(!descriptionNode ? descriptionVisualEditAttributes : undefined)}>
         {descriptionNode ? (
           descriptionNode
         ) : product.description_json ? (

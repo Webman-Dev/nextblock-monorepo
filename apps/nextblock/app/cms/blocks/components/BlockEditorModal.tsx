@@ -166,7 +166,7 @@ export function BlockEditorModal({
   const blockInfo = blockRegistry[block.type];
   const displayText = blockInfo?.label || "Block";
   const shouldUseContextualSurface =
-    useContextualSurface ?? (block.type === 'text' || block.type === 'heading');
+    (useContextualSurface ?? true) && block.type === 'text';
   const contextualSurfaceStyle = shouldUseContextualSurface ? editorSurfaceContext?.style : undefined;
   const editorClassName = cn(
     "bg-transparent text-foreground border-none shadow-none focus-within:ring-0 min-h-[60vh]",

@@ -7,7 +7,10 @@ import type {
   VisualEditingDocumentContext,
 } from "./types";
 
-function getEditUrl(documentType: VisualEditingDocumentContext["documentType"], documentId: number) {
+function getEditUrl(documentType: VisualEditingDocumentContext["documentType"], documentId: number | string) {
+  if (documentType === "product") {
+    return `/cms/products/${documentId}/edit`;
+  }
   return documentType === "page"
     ? `/cms/pages/${documentId}/edit`
     : `/cms/posts/${documentId}/edit`;

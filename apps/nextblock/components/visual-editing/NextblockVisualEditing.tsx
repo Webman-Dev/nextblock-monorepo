@@ -168,7 +168,7 @@ function isProductFieldInfo(info: NextblockVisualEditInfo): info is ProductField
 }
 
 function blockRequestFromInfo(info: NextblockVisualEditInfo): VisualEditingBlockRequest {
-  if (info.data.parentType !== "page" && info.data.parentType !== "post") {
+  if (info.data.parentType !== "page" && info.data.parentType !== "post" && info.data.parentType !== "product") {
     throw new Error("Invalid block draft document.");
   }
 
@@ -178,7 +178,7 @@ function blockRequestFromInfo(info: NextblockVisualEditInfo): VisualEditingBlock
 
   return {
     parentType: info.data.parentType,
-    parentId: Number(info.data.parentId),
+    parentId: info.data.parentType === "product" ? String(info.data.parentId) : Number(info.data.parentId),
     target: info.data.target as VisualEditingBlockRequest["target"],
   };
 }

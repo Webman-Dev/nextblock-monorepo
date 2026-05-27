@@ -41,20 +41,36 @@ export async function loadVisualEditingBlockContent(request: VisualEditingBlockR
     assertValidVisualEditingRequest(request);
     const auth = await requireVisualEditingEditableUser();
 
-    let draft: ContentDraftRow | null = null;
-    const { data } = await (auth.supabase as any)
-      .from("content_drafts")
-      .select("*")
-      .eq("parent_type", request.parentType)
-      .eq("parent_id", request.parentId)
-      .maybeSingle();
+    let snapshot: { blocks: DraftBlockSnapshot[]; meta?: Record<string, Json> } | null = null;
+    let draftId: number | null = null;
 
-    if (data) {
-      draft = normalizeContentDraftRow(data);
+    if (request.parentType === "product") {
+      const { getProductDraft, readProductSnapshot } = await import("../../lib/visual-editing/product-drafts");
+      const draft = await getProductDraft(request.parentId as string);
+      if (draft) {
+        snapshot = draft;
+        draftId = draft.id;
+      } else {
+        snapshot = await readProductSnapshot(auth.supabase, request.parentId as string);
+      }
+    } else {
+      let draft: ContentDraftRow | null = null;
+      const { data } = await (auth.supabase as any)
+        .from("content_drafts")
+        .select("*")
+        .eq("parent_type", request.parentType)
+        .eq("parent_id", request.parentId)
+        .maybeSingle();
+
+      if (data) {
+        draft = normalizeContentDraftRow(data);
+        draftId = draft.id;
+      }
+
+      snapshot = draft ?? (await readPublishedSnapshot(auth.supabase, request.parentType as NextblockDocumentType, request.parentId as number));
     }
 
-    const snapshot = draft ?? (await readPublishedSnapshot(auth.supabase, request.parentType, request.parentId));
-    const block = findDraftBlock(snapshot, request);
+    const block = findDraftBlock(snapshot as any, request);
 
     if (!block) {
       return { error: "Block not found." };
@@ -64,14 +80,14 @@ export async function loadVisualEditingBlockContent(request: VisualEditingBlockR
       return {
         success: true,
         content: (block as { content?: Json }).content ?? null,
-        draftId: draft?.id ?? null,
+        draftId,
       };
     }
 
     return {
       success: true,
       content: (block as DraftBlockSnapshot).content,
-      draftId: draft?.id ?? null,
+      draftId,
     };
   } catch (error) {
     return {

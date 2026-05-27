@@ -140,7 +140,7 @@ function normalizeProductFieldContent(
   return content;
 }
 
-async function readProductSnapshot(
+export async function readProductSnapshot(
   supabase: SupabaseAny,
   productId: string
 ): Promise<ProductSnapshot> {
