@@ -148,7 +148,10 @@ function parseEditInfo(element: Element | null): NextblockVisualEditInfo | null 
 
   try {
     const parsed = JSON.parse(raw) as NextblockVisualEditInfo;
-    return parsed?.origin === "nextblock" ? parsed : null;
+    const isNextblock = 
+      parsed?.origin === "nextblock" || 
+      (parsed && typeof parsed === "object" && parsed.data && "parentType" in parsed.data);
+    return isNextblock ? parsed : null;
   } catch {
     return null;
   }

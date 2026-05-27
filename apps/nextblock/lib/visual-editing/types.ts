@@ -77,7 +77,7 @@ export type VisualEditingTarget =
   | VisualEditingProductFieldTarget;
 
 export interface NextblockVisualEditInfo {
-  origin: "nextblock";
+  origin: string;
   projectId?: string;
   workspaceId?: string;
   editUrl: string;

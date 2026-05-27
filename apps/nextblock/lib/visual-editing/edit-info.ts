@@ -24,8 +24,12 @@ export function buildVisualEditAttributes(
     return undefined;
   }
 
+  const deploymentUrl = process.env.VERCEL_URL 
+    ? `https://${process.env.VERCEL_URL}` 
+    : (process.env.NEXT_PUBLIC_URL || "http://localhost:3000");
+
   const payload: NextblockVisualEditInfo = {
-    origin: "nextblock",
+    origin: deploymentUrl,
     editUrl: getEditUrl(context.documentType, context.documentId),
     data: {
       parentType: context.documentType,
