@@ -55,19 +55,37 @@ function buildProductVisualEditAttributes(
     label,
   };
 
+  const deploymentUrl = typeof window !== 'undefined'
+    ? window.location.origin
+    : (process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}` 
+        : (process.env.NEXT_PUBLIC_URL || "http://localhost:3000"));
+
+  const projectId = process.env.NEXTBLOCK_VERCEL_PROJECT_ID || process.env.VERCEL_PROJECT_ID;
+  const workspaceId = process.env.NEXTBLOCK_VERCEL_WORKSPACE_ID || process.env.VERCEL_ORG_ID;
+
+  const payload: any = {
+    origin: 'https://nextblock-editor',
+    editUrl: `${deploymentUrl}/cms/products/${product.id}/edit`,
+    data: {
+      parentType: 'product',
+      parentId: product.id,
+      slug: product.slug,
+      languageId: product.language_id,
+      draftId: null,
+      target,
+    },
+  };
+
+  if (projectId) {
+    payload.projectId = projectId;
+  }
+  if (workspaceId) {
+    payload.workspaceId = workspaceId;
+  }
+
   return {
-    'data-vercel-edit-info': JSON.stringify({
-      origin: 'nextblock',
-      editUrl: `/cms/products/${product.id}/edit`,
-      data: {
-        parentType: 'product',
-        parentId: product.id,
-        slug: product.slug,
-        languageId: product.language_id,
-        draftId: null,
-        target,
-      },
-    }),
+    'data-vercel-edit-info': JSON.stringify(payload),
     'data-vercel-edit-target': JSON.stringify(target),
     'data-nextblock-visual-edit': `product:${field}`,
   };

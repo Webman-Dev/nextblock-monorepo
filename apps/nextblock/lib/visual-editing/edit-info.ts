@@ -7,13 +7,17 @@ import type {
   VisualEditingDocumentContext,
 } from "./types";
 
-function getEditUrl(documentType: VisualEditingDocumentContext["documentType"], documentId: number | string) {
-  if (documentType === "product") {
-    return `/cms/products/${documentId}/edit`;
-  }
-  return documentType === "page"
-    ? `/cms/pages/${documentId}/edit`
-    : `/cms/posts/${documentId}/edit`;
+function getEditUrl(
+  documentType: VisualEditingDocumentContext["documentType"],
+  documentId: number | string,
+  baseUrl: string
+) {
+  const path = documentType === "product"
+    ? `/cms/products/${documentId}/edit`
+    : documentType === "page"
+      ? `/cms/pages/${documentId}/edit`
+      : `/cms/posts/${documentId}/edit`;
+  return `${baseUrl}${path}`;
 }
 
 export function buildVisualEditAttributes(
@@ -29,9 +33,9 @@ export function buildVisualEditAttributes(
     : (process.env.NEXT_PUBLIC_URL || "http://localhost:3000");
 
   const payload: NextblockVisualEditInfo = {
-    origin: "nextblock",
+    origin: "https://nextblock-editor",
     baseUrl: deploymentUrl,
-    editUrl: getEditUrl(context.documentType, context.documentId),
+    editUrl: getEditUrl(context.documentType, context.documentId, deploymentUrl),
     data: {
       parentType: context.documentType,
       parentId: context.documentId,
@@ -42,12 +46,14 @@ export function buildVisualEditAttributes(
     },
   };
 
-  if (process.env.NEXTBLOCK_VERCEL_PROJECT_ID) {
-    payload.projectId = process.env.NEXTBLOCK_VERCEL_PROJECT_ID;
+  const projectId = process.env.NEXTBLOCK_VERCEL_PROJECT_ID || process.env.VERCEL_PROJECT_ID;
+  if (projectId) {
+    payload.projectId = projectId;
   }
 
-  if (process.env.NEXTBLOCK_VERCEL_WORKSPACE_ID) {
-    payload.workspaceId = process.env.NEXTBLOCK_VERCEL_WORKSPACE_ID;
+  const workspaceId = process.env.NEXTBLOCK_VERCEL_WORKSPACE_ID || process.env.VERCEL_ORG_ID;
+  if (workspaceId) {
+    payload.workspaceId = workspaceId;
   }
 
   return {

@@ -56,10 +56,10 @@ describe("buildVisualEditAttributes", () => {
     const target = JSON.parse(attrs?.["data-vercel-edit-target"] ?? "{}");
 
     expect(payload).toMatchObject({
-      origin: "nextblock",
+      origin: "https://nextblock-editor",
       projectId: "prj_123",
       workspaceId: "team_123",
-      editUrl: "/cms/posts/42/edit",
+      editUrl: "http://localhost:3000/cms/posts/42/edit",
       data: {
         parentType: "post",
         parentId: 42,

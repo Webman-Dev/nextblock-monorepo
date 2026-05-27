@@ -150,6 +150,7 @@ function parseEditInfo(element: Element | null): NextblockVisualEditInfo | null 
     const parsed = JSON.parse(raw) as NextblockVisualEditInfo;
     const isNextblock = 
       parsed?.origin === "nextblock" || 
+      parsed?.origin === "https://nextblock-editor" || 
       (parsed && typeof parsed === "object" && parsed.data && "parentType" in parsed.data);
     return isNextblock ? parsed : null;
   } catch {
@@ -756,7 +757,10 @@ export function NextblockVisualEditing() {
           }
         | undefined;
 
-      if (detail?.editInfo?.origin === "nextblock") {
+      if (
+        detail?.editInfo?.origin === "nextblock" ||
+        detail?.editInfo?.origin === "https://nextblock-editor"
+      ) {
           void openEditor(detail.editInfo, detail.element);
         return;
       }
