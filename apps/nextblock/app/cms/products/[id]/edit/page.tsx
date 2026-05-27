@@ -199,7 +199,7 @@ export default async function EditProductPage({
           {additionalCreateLanguages.length > 0 && product.translation_group_id ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
+                <Button id={`create-translation-trigger-${product.id}`} variant="outline" size="sm">
                   Create Translation
                   <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-[10px]">
                     {additionalCreateLanguages.length}

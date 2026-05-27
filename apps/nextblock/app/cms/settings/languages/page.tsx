@@ -122,7 +122,7 @@ export default async function CmsLanguagesListPage() {
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button id={`lang-trigger-${lang.id}`} variant="ghost" size="icon">
                           <MoreHorizontal className="h-4 w-4" />
                           <span className="sr-only">Language actions</span>
                         </Button>

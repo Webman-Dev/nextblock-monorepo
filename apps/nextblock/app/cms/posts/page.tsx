@@ -169,7 +169,7 @@ export default async function CmsPostsListPage(props: CmsPostsListPageProps) {
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button id={`post-trigger-${post.id}`} variant="ghost" size="icon">
                           <MoreHorizontal className="h-4 w-4" />
                            <span className="sr-only">Post actions for {post.title}</span>
                         </Button>
