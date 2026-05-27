@@ -133,6 +133,7 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string): s
     'https://vitals.vercel-insights.com',
     'https://*.vercel-insights.com',
   ];
+  const vercelToolbarConnectSources = ['wss://ws-us3.pusher.com'];
   const turnstileSources = ['https://challenges.cloudflare.com'];
 
   const developmentHttpSources = isDev
@@ -163,10 +164,18 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string): s
             "'unsafe-eval'",
             'blob:',
             'data:',
+            ...vercelSources,
             ...turnstileSources,
             ...developmentHttpSources,
           ]
-        : ["'self'", `'nonce-${nonceValue}'`, "'strict-dynamic'", ...turnstileSources],
+        : [
+            "'self'",
+            `'nonce-${nonceValue}'`,
+            'blob:',
+            ...googleSources,
+            ...vercelSources,
+            ...turnstileSources,
+          ],
     ),
     createDirective('script-src-attr', ["'none'"]),
     createDirective('style-src', [
@@ -199,6 +208,7 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string): s
       ...assetSources,
       ...googleSources,
       ...vercelSources,
+      ...vercelToolbarConnectSources,
       ...turnstileSources,
       ...developmentConnectSources,
     ]),
