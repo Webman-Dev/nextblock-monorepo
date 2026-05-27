@@ -466,14 +466,14 @@ async function fetchProducts(languageId: number | null): Promise<SearchCandidate
       slug,
       sku,
       short_description,
-      description_json,
       meta_title,
       meta_description,
       updated_at,
       created_at,
       language_id,
       languages!inner(code),
-      product_media(sort_order, media(object_key, file_path, blur_data_url, width, height))
+      product_media(sort_order, media(object_key, file_path, blur_data_url, width, height)),
+      blocks(content, block_type, order)
     `
     )
     .eq('status', 'active')
@@ -492,7 +492,7 @@ async function fetchProducts(languageId: number | null): Promise<SearchCandidate
   }
 
   return data.map((product: any) => {
-    const bodyText = compactText(collectHumanText(product.description_json)).slice(0, 5000);
+    const bodyText = buildBodyFromBlocks(product.blocks);
     const description = product.meta_description || product.short_description || null;
 
     return {

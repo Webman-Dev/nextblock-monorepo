@@ -120,7 +120,7 @@ function extractMediaIdsFromBlock(block: any): string[] {
     if (mediaId && typeof mediaId === 'string') {
       ids.push(mediaId);
     }
-  } else if (block.block_type === 'section' || block.block_type === 'hero') {
+  } else if (block.block_type === 'section') {
     const content = block.content;
     if (content) {
       if (content.background?.type === 'image' && content.background.image?.media_id) {
@@ -177,7 +177,7 @@ function mapMediaDataToBlock(
         };
       }
     }
-  } else if (block.block_type === 'section' || block.block_type === 'hero') {
+  } else if (block.block_type === 'section') {
     const content = block.content;
     if (!content) return block;
 

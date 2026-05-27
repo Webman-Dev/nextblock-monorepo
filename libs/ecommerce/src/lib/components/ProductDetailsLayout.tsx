@@ -25,7 +25,10 @@ import { resolvePriceForCurrency } from '../currency';
 import { isDigitalProduct } from '../types';
 import { getTrialSummary } from '../trials';
 
-type ProductVisualEditingField = 'title' | 'short_description' | 'description_json';
+type ProductVisualEditingField =
+  | 'title'
+  | 'short_description'
+  | 'description_json';
 type ProductVisualEditingInput = 'plain-text' | 'tiptap';
 
 type ProductVisualEditAttributes = {
@@ -43,7 +46,7 @@ function buildProductVisualEditAttributes(
   product: ReturnType<typeof useProduct>,
   field: ProductVisualEditingField,
   input: ProductVisualEditingInput,
-  label: string
+  label: string,
 ): ProductVisualEditAttributes | undefined {
   const target = {
     kind: 'product-field' as const,
@@ -78,19 +81,34 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
   const { t, lang } = useTranslations();
   const { activeCurrencyCode, currencies } = useCurrency();
   const titleVisualEditAttributes = visualEditingEnabled
-    ? buildProductVisualEditAttributes(product, 'title', 'plain-text', 'Product title')
+    ? buildProductVisualEditAttributes(
+        product,
+        'title',
+        'plain-text',
+        'Product title',
+      )
     : undefined;
   const shortDescriptionVisualEditAttributes = visualEditingEnabled
-    ? buildProductVisualEditAttributes(product, 'short_description', 'plain-text', 'Short description')
+    ? buildProductVisualEditAttributes(
+        product,
+        'short_description',
+        'plain-text',
+        'Short description',
+      )
     : undefined;
   const descriptionVisualEditAttributes = visualEditingEnabled
-    ? buildProductVisualEditAttributes(product, 'description_json', 'tiptap', 'Product description')
+    ? buildProductVisualEditAttributes(
+        product,
+        'description_json',
+        'tiptap',
+        'Product description',
+      )
     : undefined;
 
   const translateOrFallback = (
     key: string,
     fallback: string,
-    params?: Record<string, string | number>
+    params?: Record<string, string | number>,
   ) => {
     const translated = t(key, params);
     return translated === key ? fallback : translated;
@@ -104,16 +122,26 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
         : [];
 
   const isFreemius =
-    (product as any).custom_props?.provider === 'freemius' || isDigitalProduct(product);
+    (product as any).custom_props?.provider === 'freemius' ||
+    isDigitalProduct(product);
   const trialSummary = getTrialSummary(product);
   const hasVariants =
     !isFreemius &&
-    Boolean(product.has_variants && product.attributes?.length && product.variants?.length);
+    Boolean(
+      product.has_variants &&
+      product.attributes?.length &&
+      product.variants?.length,
+    );
   const attributes = product.attributes || [];
   const variants = product.variants || [];
-  const [selectedTerms, setSelectedTerms] = useState<Record<string, string | undefined>>(() =>
-    chooseInitialVariantSelections(attributes, variants)
-  );
+  const [selectedTerms, setSelectedTerms] = useState<
+    Record<string, string | undefined>
+  >(() => chooseInitialVariantSelections(attributes, variants));
+  const [quantity, setQuantity] = useState(1);
+
+  useEffect(() => {
+    setQuantity(1);
+  }, [product.id]);
 
   useEffect(() => {
     if (!hasVariants) {
@@ -128,11 +156,17 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
       return selectedTerms;
     }
 
-    return normalizeSelectionsToAvailableVariants(attributes, variants, selectedTerms);
+    return normalizeSelectionsToAvailableVariants(
+      attributes,
+      variants,
+      selectedTerms,
+    );
   }, [attributes, hasVariants, selectedTerms, variants]);
 
   useEffect(() => {
-    if (JSON.stringify(normalizedSelections) !== JSON.stringify(selectedTerms)) {
+    if (
+      JSON.stringify(normalizedSelections) !== JSON.stringify(selectedTerms)
+    ) {
       setSelectedTerms(normalizedSelections);
     }
   }, [normalizedSelections, selectedTerms]);
@@ -167,7 +201,9 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
   const effectivePrice = resolvedVariantPrice?.price ?? resolvedBasePrice.price;
   const effectiveSalePrice =
     resolvedVariantPrice?.sale_price ?? resolvedBasePrice.sale_price;
-  const effectiveStock = hasVariants ? selectedVariant?.stock_quantity ?? 0 : product.stock ?? 0;
+  const effectiveStock = hasVariants
+    ? (selectedVariant?.stock_quantity ?? 0)
+    : (product.stock ?? 0);
 
   const displayImages = useMemo(() => {
     if (!selectedVariant?.image_url) {
@@ -178,13 +214,17 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
       url: selectedVariant.image_url,
       alt: `${product.title} ${selectedVariant.label}`,
     };
-    const dedupedImages = images.filter((image) => image.url !== selectedVariant.image_url);
+    const dedupedImages = images.filter(
+      (image) => image.url !== selectedVariant.image_url,
+    );
     return [variantImage, ...dedupedImages];
   }, [images, product.title, selectedVariant]);
 
   const discountPercentage =
     typeof effectiveSalePrice === 'number' && effectivePrice > 0
-      ? Math.round(((effectivePrice - effectiveSalePrice) / effectivePrice) * 100)
+      ? Math.round(
+          ((effectivePrice - effectiveSalePrice) / effectivePrice) * 100,
+        )
       : 0;
 
   const addToCartProduct =
@@ -195,7 +235,9 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
           price: selectedVariant.price,
           prices: selectedVariant.prices,
           sale_price:
-            typeof selectedVariant.sale_price === 'number' ? selectedVariant.sale_price : null,
+            typeof selectedVariant.sale_price === 'number'
+              ? selectedVariant.sale_price
+              : null,
           sale_prices: selectedVariant.sale_prices,
           image_url: selectedVariant.image_url || product.image_url,
           stock: selectedVariant.stock_quantity,
@@ -214,223 +256,296 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
       normalizeSelectionsToAvailableVariants(attributes, variants, {
         ...current,
         [attributeId]: termId,
-      })
+      }),
     );
   };
 
-  const chooseOptionsLabel = translateOrFallback(
-    'ecommerce.choose_your_options',
-    'Choose Your Options'
-  );
-  const variantAvailabilityHelp = translateOrFallback(
-    'ecommerce.variant_availability_help',
-    'Select a combination to resolve the exact variant price and availability.'
-  );
   const inStockLabel = translateOrFallback(
     'ecommerce.in_stock',
     `${effectiveStock} in stock`,
-    { count: String(effectiveStock) }
+    { count: String(effectiveStock) },
   );
   const outOfStockLabel = translateOrFallback(
     'ecommerce.out_of_stock',
-    'Out of stock'
+    'Out of stock',
   );
   const selectOptionsLabel = translateOrFallback(
     'ecommerce.select_options',
-    'Select Options'
+    'Select Options',
   );
   const variantSelectionRequiredLabel = translateOrFallback(
     'ecommerce.variant_selection_required',
-    'Select one term from every dropdown to resolve a variation.'
+    'Select one term from every dropdown to resolve a variation.',
   );
 
   return (
-    <div className="container mx-auto px-4 md:px-6 py-12 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
-      <div className="grid gap-12 lg:grid-cols-[2fr_3fr] items-start">
-        <div className="w-full max-w-2xl mx-auto lg:max-w-none">
-          <ProductGallery images={displayImages} className="w-full" />
-        </div>
+    <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
+      <div className="container mx-auto px-4 md:px-6 py-12">
+        <div className="grid gap-12 lg:grid-cols-[2fr_3fr] items-start">
+          <div className="w-full max-w-2xl mx-auto lg:max-w-none">
+            <ProductGallery images={displayImages} className="w-full" />
+          </div>
 
-        <div className="flex flex-col gap-8 pt-2 max-w-xl mx-auto lg:mx-0 lg:max-w-none lg:top-24">
-          <div className="space-y-6">
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                {typeof effectiveSalePrice === 'number' && (
-                  <Badge
-                    variant="destructive"
-                    className="px-2.5 py-1 text-xs font-bold uppercase tracking-wide animate-pulse shadow-sm"
-                  >
-                    {t('ecommerce.sale_badge', { percent: String(discountPercentage) })}
-                  </Badge>
-                )}
-                {!isFreemius && effectiveStock > 0 && effectiveStock < 10 && (
-                  <Badge
-                    variant="outline"
-                    className="text-amber-600 border-amber-200 bg-amber-50"
-                  >
-                    {t('ecommerce.low_stock', { count: String(effectiveStock) })}
-                  </Badge>
-                )}
-                {trialSummary && (
-                  <Badge
-                    variant="secondary"
-                    className="border border-emerald-200 bg-emerald-50 text-emerald-800"
-                  >
-                    {trialSummary.label}
-                  </Badge>
-                )}
-              </div>
+          <div className="flex flex-col gap-4 pb-2 max-w-xl mx-auto lg:mx-0 lg:max-w-none">
+            <div className="space-y-6">
+              <div className="space-y-4">
+                
 
-              {product.categories && product.categories.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
-                  {product.categories.map((cat, idx) => {
-                    const resolvedName = resolveTranslatedText(cat.name, cat.name_translations, lang);
-                    return (
-                      <React.Fragment key={cat.id}>
-                        {idx > 0 && <span className="text-muted-foreground/30">•</span>}
-                        <span>{resolvedName}</span>
-                      </React.Fragment>
-                    );
-                  })}
+                <h1
+                  className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-foreground leading-[1.1] lg:mt-0"
+                  {...titleVisualEditAttributes}
+                >
+                  {product.title}
+                </h1>
+
+                {product.categories && product.categories.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
+                    {product.categories.map((cat, idx) => {
+                      const resolvedName = resolveTranslatedText(
+                        cat.name,
+                        cat.name_translations,
+                        lang,
+                      );
+                      return (
+                        <React.Fragment key={cat.id}>
+                          {idx > 0 && (
+                            <span className="text-muted-foreground/30">•</span>
+                          )}
+                          <span>{resolvedName}</span>
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div
+                  className="prose prose-neutral dark:prose-invert max-w-none text-muted-foreground leading-relaxed text-left"
+                  {...shortDescriptionVisualEditAttributes}
+                >
+                  {product.short_description ? (
+                    <div
+                      className="text-lg mb-4 leading-relaxed"
+                      dangerouslySetInnerHTML={{
+                        __html: product.short_description,
+                      }}
+                    />
+                  ) : visualEditingEnabled ? (
+                    <p className="text-lg mb-4 italic text-muted-foreground">
+                      Add a short product description.
+                    </p>
+                  ) : null}
                 </div>
-              )}
-
-              <h1
-                className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-foreground leading-[1.1]"
-                {...titleVisualEditAttributes}
-              >
-                {product.title}
-              </h1>
-
-              <div
-                className="prose prose-neutral dark:prose-invert max-w-none text-muted-foreground leading-relaxed text-left"
-                {...shortDescriptionVisualEditAttributes}
-              >
-                {product.short_description ? (
-                  <div
-                    className="text-lg mb-6 leading-relaxed"
-                    dangerouslySetInnerHTML={{ __html: product.short_description }}
-                  />
-                ) : visualEditingEnabled ? (
-                  <p className="text-lg mb-6 italic text-muted-foreground">
-                    Add a short product description.
-                  </p>
-                ) : null}
+                
+                <div className="flex items-center gap-3">
+                  {typeof effectiveSalePrice === 'number' && (
+                    <Badge
+                      variant="destructive"
+                      className="px-2.5 py-1 text-xs font-bold uppercase tracking-wide animate-pulse shadow-sm"
+                    >
+                      {t('ecommerce.sale_badge', {
+                        percent: String(discountPercentage),
+                      })}
+                    </Badge>
+                  )}
+                  {!isFreemius && effectiveStock > 0 && effectiveStock < 10 && (
+                    <Badge
+                      variant="outline"
+                      className="text-amber-600 border-amber-200 bg-amber-50"
+                    >
+                      {t('ecommerce.low_stock', {
+                        count: String(effectiveStock),
+                      })}
+                    </Badge>
+                  )}
+                  {trialSummary && (
+                    <Badge
+                      variant="secondary"
+                      className="border border-emerald-200 bg-emerald-50 text-emerald-800"
+                    >
+                      {trialSummary.label}
+                    </Badge>
+                  )}
+                </div>
               </div>
+            </div>
 
-              {!isFreemius && (
-                <div className="flex items-baseline gap-4">
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-4xl font-bold text-primary">
-                      {formatPrice(effectiveSalePrice ?? effectivePrice, activeCurrencyCode)}
-                    </span>
-                    {typeof effectiveSalePrice === 'number' && (
-                      <span className="text-2xl text-muted-foreground line-through decoration-destructive/30 decoration-2">
-                        {formatPrice(effectivePrice, activeCurrencyCode)}
+            {/* Unified Purchase Card */}
+            <div className="p-5 rounded-2xl bg-card/60 border border-border/80 shadow-md backdrop-blur-md space-y-4">
+              {isFreemius ? (
+                <SubscriptionSelector product={product} />
+              ) : (
+                <div className="space-y-3.5">
+                  {/* Price & Status display inside the card */}
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                        {translateOrFallback('ecommerce.price', 'Price')}
                       </span>
+                      <div className="flex items-baseline gap-2.5">
+                        <span className="text-3xl font-extrabold text-foreground">
+                          {formatPrice(
+                            effectiveSalePrice ?? effectivePrice,
+                            activeCurrencyCode,
+                          )}
+                        </span>
+                        {typeof effectiveSalePrice === 'number' && (
+                          <span className="text-lg text-muted-foreground line-through decoration-destructive/20 decoration-1">
+                            {formatPrice(effectivePrice, activeCurrencyCode)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {!isFreemius && (selectedVariant || !hasVariants) && (
+                      <div className="text-right space-y-1">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
+                          {!hasVariants && product.sku && (
+                            <span className="mr-2 font-normal lowercase normal-case text-muted-foreground/70">
+                              SKU: {product.sku}
+                            </span>
+                          )}
+                          {translateOrFallback('ecommerce.status', 'Status')}
+                        </span>
+                        <div className={(effectiveStock ?? 0) > 0 ? 'text-emerald-600 dark:text-emerald-400 font-semibold text-sm' : 'text-destructive font-semibold text-sm'}>
+                          {(effectiveStock ?? 0) > 0 ? inStockLabel : outOfStockLabel}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Variant Selector inside the card */}
+                  {hasVariants && (
+                    <div className="space-y-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {attributes.map((attribute) => {
+                          const availableTermIds =
+                            getAvailableTermIdsForAttribute(
+                              variants,
+                              attribute.id,
+                              normalizedSelections,
+                            );
+
+                          return (
+                            <div key={attribute.id} className="space-y-1">
+                              <div className="flex items-center justify-between">
+                                <Label
+                                  htmlFor={`attribute-${attribute.id}`}
+                                  className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider"
+                                >
+                                  {attribute.name}
+                                </Label>
+                                {selectedVariant?.sku && (
+                                  <span className="text-[10px] text-muted-foreground font-mono">
+                                    {selectedVariant.sku}
+                                  </span>
+                                )}
+                              </div>
+                              <select
+                                id={`attribute-${attribute.id}`}
+                                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                value={normalizedSelections[attribute.id] || ''}
+                                onChange={(event) =>
+                                  handleSelectionChange(
+                                    attribute.id,
+                                    event.target.value,
+                                  )
+                                }
+                              >
+                                {attribute.terms.map((term) => (
+                                  <option
+                                    key={term.id}
+                                    value={term.id}
+                                    disabled={!availableTermIds.has(term.id)}
+                                  >
+                                    {term.value}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {hasVariants && !selectedVariant && (
+                    <p className="text-xs text-muted-foreground italic pt-1">
+                      {variantSelectionRequiredLabel}
+                    </p>
+                  )}
+
+                  {/* Qty Selector & Add to Cart button */}
+                  <div className="flex items-center gap-3 pt-1">
+                    {!isFreemius && (effectiveStock ?? 0) > 0 && (
+                      <div className="flex items-center border rounded-lg h-12 bg-background border-input select-none">
+                        <button
+                          type="button"
+                          onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                          className="px-3 h-full flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all text-lg font-medium"
+                          disabled={quantity <= 1}
+                        >
+                          -
+                        </button>
+                        <span className="w-8 text-center text-sm font-semibold">
+                          {quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setQuantity((q) =>
+                              effectiveStock !== null && q >= effectiveStock
+                                ? q
+                                : q + 1,
+                            )
+                          }
+                          className="px-3 h-full flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all text-lg font-medium"
+                          disabled={
+                            effectiveStock !== null &&
+                            quantity >= effectiveStock
+                          }
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
+                    {hasVariants &&
+                    (!selectedVariant || (effectiveStock ?? 0) <= 0) ? (
+                      <Button
+                        disabled
+                        className="flex-1 h-12 text-md font-bold shadow-md"
+                      >
+                        {selectedVariant ? outOfStockLabel : selectOptionsLabel}
+                      </Button>
+                    ) : (
+                      <AddToCartButton
+                        product={addToCartProduct}
+                        quantity={quantity}
+                        className="flex-1 h-12 text-md font-bold shadow-md transition-all hover:shadow-lg active:scale-[0.98]"
+                      />
                     )}
                   </div>
                 </div>
               )}
-              {trialSummary && (
-                <p className="text-sm font-medium text-muted-foreground">
-                  {trialSummary.paymentRequirementLabel}
-                </p>
-              )}
-            </div>
 
-            {hasVariants && (
-              <div className="rounded-2xl border bg-muted/20 p-5 space-y-4">
-                <div>
-                  <h2 className="text-lg font-semibold">{chooseOptionsLabel}</h2>
-                  <p className="text-sm text-muted-foreground">{variantAvailabilityHelp}</p>
-                </div>
+              <Separator className="opacity-60 my-0.5" />
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {attributes.map((attribute) => {
-                    const availableTermIds = getAvailableTermIdsForAttribute(
-                      variants,
-                      attribute.id,
-                      normalizedSelections
-                    );
-
-                    return (
-                      <div key={attribute.id} className="space-y-2">
-                        <Label htmlFor={`attribute-${attribute.id}`}>{attribute.name}</Label>
-                        <select
-                          id={`attribute-${attribute.id}`}
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                          value={normalizedSelections[attribute.id] || ''}
-                          onChange={(event) =>
-                            handleSelectionChange(attribute.id, event.target.value)
-                          }
-                        >
-                          {attribute.terms.map((term) => (
-                            <option
-                              key={term.id}
-                              value={term.id}
-                              disabled={!availableTermIds.has(term.id)}
-                            >
-                              {term.value}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {selectedVariant ? (
-                  <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                    <div className="text-muted-foreground">
-                      <span className="font-medium text-foreground">SKU:</span> {selectedVariant.sku}
-                    </div>
-                    <div className={effectiveStock > 0 ? 'text-emerald-600' : 'text-destructive'}>
-                      {effectiveStock > 0 ? inStockLabel : outOfStockLabel}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">{variantSelectionRequiredLabel}</p>
-                )}
-              </div>
-            )}
-
-            <Separator className="my-2" />
-          </div>
-
-          <div className="p-8 rounded-2xl bg-secondary/10 border border-secondary/20 shadow-sm backdrop-blur-sm mt-auto">
-            <div className="flex flex-col gap-4">
-              {isFreemius ? (
-                <SubscriptionSelector product={product} />
-              ) : hasVariants && (!selectedVariant || effectiveStock <= 0) ? (
-                <Button disabled className="w-full h-14 text-lg font-bold shadow-md">
-                  {selectedVariant ? outOfStockLabel : selectOptionsLabel}
-                </Button>
-              ) : (
-                <AddToCartButton
-                  product={addToCartProduct}
-                  className="w-full h-14 text-lg font-bold shadow-md transition-all hover:shadow-lg active:scale-[0.98]"
-                />
-              )}
-
-              <div className="grid grid-cols-2 gap-4 text-center text-xs text-muted-foreground pt-2">
+              <div className="grid grid-cols-2 gap-4 text-center text-[11px] font-medium text-muted-foreground pt-1">
                 <div className="flex items-center justify-center gap-2">
-                  {(product as any).custom_props?.provider === 'freemius' ||
-                  isDigitalProduct(product) ? (
-                    <span className="inline-flex items-center gap-2">
-                      <Download className="h-4 w-4" />
+                  {isFreemius ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Download className="h-3.5 w-3.5" />
                       {t('ecommerce.instant_digital_delivery')}
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-2">
-                      <Package className="h-4 w-4" />
+                    <span className="inline-flex items-center gap-1.5">
+                      <Package className="h-3.5 w-3.5" />
                       {t('ecommerce.free_shipping')}
                     </span>
                   )}
                 </div>
                 <div className="flex items-center justify-center gap-2">
-                  <span className="inline-flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4" />
+                  <span className="inline-flex items-center gap-1.5">
+                    <ShieldCheck className="h-3.5 w-3.5" />
                     {t('ecommerce.secure_checkout')}
                   </span>
                 </div>
@@ -440,16 +555,19 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
         </div>
       </div>
 
-      <div
-        className="prose prose-neutral dark:prose-invert max-w-none leading-relaxed mt-12"
-        {...descriptionVisualEditAttributes}
-      >
+      <div className="min-w-0 w-full" {...descriptionVisualEditAttributes}>
         {descriptionNode ? (
           descriptionNode
         ) : product.description_json ? (
-          <SimpleTiptapRenderer content={product.description_json} />
+          <div className="container mx-auto px-4 md:px-6 pb-12 prose prose-neutral dark:prose-invert max-w-none leading-relaxed">
+            <SimpleTiptapRenderer content={product.description_json} />
+          </div>
         ) : (
-          <p className="italic text-sm">{t('ecommerce.no_description')}</p>
+          <div className="container mx-auto px-4 md:px-6 pb-12">
+            <p className="italic text-sm text-muted-foreground">
+              {t('ecommerce.no_description')}
+            </p>
+          </div>
         )}
       </div>
     </div>

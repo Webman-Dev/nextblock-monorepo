@@ -216,43 +216,19 @@ function getFolderFromObjectKey(objectKey: string) {
   return objectKey.includes('/') ? objectKey.slice(0, objectKey.lastIndexOf('/')) : null;
 }
 
-function buildStructuredDescription(content: DescriptionContent) {
-  return {
-    type: 'doc',
-    content: [
-      {
-        type: 'heading',
-        attrs: { level: 2 },
-        content: [{ type: 'text', text: content.headline }],
-      },
-      {
-        type: 'paragraph',
-        content: [{ type: 'text', text: content.lead }],
-      },
-      {
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: content.whyHeading }],
-      },
-      {
-        type: 'paragraph',
-        content: [{ type: 'text', text: content.whyParagraph }],
-      },
-      {
-        type: 'bulletList',
-        content: content.bullets.map((bullet) => ({
-          type: 'listItem',
-          content: [
-            {
-              type: 'paragraph',
-              content: [{ type: 'text', text: bullet }],
-            },
-          ],
-        })),
-      },
-    ],
-  };
+
+
+function buildHtmlDescription(content: DescriptionContent): string {
+  const bulletsHtml = content.bullets.map((bullet) => `  <li>${bullet}</li>`).join('\n');
+  return `<h2>${content.headline}</h2>
+<p>${content.lead}</p>
+<h3>${content.whyHeading}</h3>
+<p>${content.whyParagraph}</p>
+<ul>
+${bulletsHtml}
+</ul>`;
 }
+
 
 const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
   {
@@ -662,112 +638,24 @@ async function enrichCommerceProducts(params: {
   }
 
   const shortDescEn =
-    'NextBlock™ Ecommerce is an AI-native, block-based storefront engine for Next.js with a premium developer-first aesthetic and high-performance edge rendering.';
+    'NextBlock™ Commerce Pro is the ultimate AI-native, block-based headless e-commerce engine for Next.js. Deploy fast global storefronts with native multi-currency pricing, Stripe/Freemius checkouts, automatic tax calculations, and flexible shipping zones.';
 
-  const htmlDescriptionEn = {
-    type: 'doc',
-    content: [
-      {
-        type: 'heading',
-        attrs: { level: 2 },
-        content: [{ type: 'text', text: 'The Future of Digital Commerce' }],
-      },
-      {
-        type: 'paragraph',
-        content: [
-          {
-            type: 'text',
-            text: 'NextBlock™ Ecommerce bridges high-performance headless architecture and intuitive visual editing. Built on the NextBlock™ Performance Stack, it combines Next.js, Supabase, and Tailwind CSS for fast storefront delivery and a smooth AI-assisted workflow.',
-          },
-        ],
-      },
-      {
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: 'Notion-style product authoring' }],
-      },
-      {
-        type: 'paragraph',
-        content: [
-          {
-            type: 'text',
-            text: 'The Tiptap-powered editor gives teams a familiar block-based surface for shaping storefront content without fighting a bulky backend.',
-          },
-        ],
-      },
-      {
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: 'Secure by design' }],
-      },
-      {
-        type: 'paragraph',
-        content: [
-          {
-            type: 'text',
-            text: 'Freemius licensing, recurring billing support, and a dual-provider payment strategy keep the commercial side reliable while the storefront stays flexible.',
-          },
-        ],
-      },
-      {
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: 'Key technical specs' }],
-      },
-      {
-        type: 'bulletList',
-        content: [
-          {
-            type: 'listItem',
-            content: [
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: 'Edge-friendly rendering for fast global storefront responses.' }],
-              },
-            ],
-          },
-          {
-            type: 'listItem',
-            content: [
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: 'Nx monorepo architecture for scalable package boundaries and clean code sharing.' }],
-              },
-            ],
-          },
-          {
-            type: 'listItem',
-            content: [
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: 'Modern image optimization and typed extension points for AI-driven customization.' }],
-              },
-            ],
-          },
-        ],
-      },
-      {
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: 'Built for the vibe-coding era' }],
-      },
-      {
-        type: 'paragraph',
-        content: [
-          {
-            type: 'text',
-            text: 'NextBlock™ is structured so typed block APIs, schema validation, and agent-friendly workflows stay aligned as the store grows.',
-          },
-        ],
-      },
-    ],
-  };
+  const htmlDescriptionEn = `<h2>Build Ultra-Fast Composable Storefronts with NextBlock™ Commerce</h2>
+<p>NextBlock™ Commerce Pro turns your Next.js CMS into a high-conversion e-commerce storefront. Designed to deliver 100% Lighthouse scores out of the box, it connects seamlessly with Stripe and Freemius to process physical and digital products globally.</p>
+<h3>Enterprise-Grade E-Commerce Features</h3>
+<ul>
+  <li><strong>Multi-Currency Pricing:</strong> Native support for global currencies with real-time FX sync, custom rounding, and charm pricing.</li>
+  <li><strong>Tax Automation:</strong> Seamless manual tax tiers or fully automated sales tax calculation via Stripe Tax.</li>
+  <li><strong>Resilient Inventory:</strong> Multi-variant stock tracking with automatic reservation and payment deduction.</li>
+  <li><strong>Shipping Zones:</strong> Country and state-level shipping resolution with per-currency thresholds.</li>
+</ul>`;
 
   await params.sql`
     UPDATE public.products
     SET
+      title = 'NextBlock™ Commerce Pro - Commerce License',
       short_description = ${shortDescEn},
-      description_json = ${params.sql.json(htmlDescriptionEn)},
+      description_json = NULL,
       product_type = 'digital',
       payment_provider = 'freemius'
     WHERE id = ${product.id}
@@ -775,93 +663,25 @@ async function enrichCommerceProducts(params: {
 
   await attachProductMedia(params.sql, product.id as string, commerceMediaId);
 
-  const shortDescFr =
-    "NextBlock™ Ecommerce est un moteur de boutique base sur des blocs et natif de l IA pour Next.js, avec une esthetique premium et un rendu edge haute performance.";
+  // Set description blocks for English product
+  await params.sql`DELETE FROM public.blocks WHERE product_id = ${product.id}`;
+  await params.sql`
+    INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
+    VALUES (${product.id}, ${params.enLangId}, 'text', ${params.sql.json({ html_content: htmlDescriptionEn })}, 0)
+  `;
 
-  const htmlDescriptionFr = {
-    type: 'doc',
-    content: [
-      {
-        type: 'heading',
-        attrs: { level: 2 },
-        content: [{ type: 'text', text: 'Le futur du commerce numerique' }],
-      },
-      {
-        type: 'paragraph',
-        content: [
-          {
-            type: 'text',
-            text: 'NextBlock™ Ecommerce relie une architecture headless tres rapide a une edition visuelle intuitive. Construit sur la NextBlock™ Performance Stack, il combine Next.js, Supabase et Tailwind CSS pour offrir une boutique fluide et moderne.',
-          },
-        ],
-      },
-      {
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: 'Edition produit style Notion' }],
-      },
-      {
-        type: 'paragraph',
-        content: [
-          {
-            type: 'text',
-            text: 'L editeur base sur Tiptap donne une experience en blocs familiere pour construire les pages produits sans se battre avec un back office lourd.',
-          },
-        ],
-      },
-      {
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: 'Securise par conception' }],
-      },
-      {
-        type: 'paragraph',
-        content: [
-          {
-            type: 'text',
-            text: 'Licences Freemius, support de la facturation recurrente et strategie de paiement multi-fournisseur gardent la partie commerciale solide sans sacrifier la souplesse.',
-          },
-        ],
-      },
-      {
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: 'Points techniques cles' }],
-      },
-      {
-        type: 'bulletList',
-        content: [
-          {
-            type: 'listItem',
-            content: [
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: 'Rendu optimise pour une boutique rapide a l echelle globale.' }],
-              },
-            ],
-          },
-          {
-            type: 'listItem',
-            content: [
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: 'Architecture monorepo Nx pour separer proprement les domaines et partager le code.' }],
-              },
-            ],
-          },
-          {
-            type: 'listItem',
-            content: [
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: 'Optimisation media moderne et points d extension types pour les workflows IA.' }],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  };
+  const shortDescFr =
+    "NextBlock™ Commerce Pro est le moteur e-commerce headless et orienté IA ultime pour Next.js. Déployez des boutiques mondiales ultra-rapides avec support multi-devises, Stripe/Freemius, taxes automatisées et zones d'expédition.";
+
+  const htmlDescriptionFr = `<h2>Créez des boutiques composables ultra-rapides avec NextBlock™ Commerce</h2>
+<p>NextBlock™ Commerce Pro transforme votre CMS Next.js en une boutique e-commerce à fort taux de conversion. Pensé pour offrir des scores Lighthouse de 100%, il s'intègre parfaitement avec Stripe et Freemius pour vendre des produits physiques et numériques à l'échelle internationale.</p>
+<h3>Fonctionnalités e-commerce de niveau entreprise</h3>
+<ul>
+  <li><strong>Multi-Devises :</strong> Support natif des devises mondiales avec taux de change en temps réel et arrondis personnalisés.</li>
+  <li><strong>Taxes Automatisées :</strong> Configuration manuelle ou calcul automatique des taxes de vente via Stripe Tax.</li>
+  <li><strong>Gestion des Stocks :</strong> Suivi précis des stocks par variante avec réservation automatique.</li>
+  <li><strong>Zones de Livraison :</strong> Tarification flexible selon le pays et l'état de destination.</li>
+</ul>`;
 
   const [frProduct] = await params.sql`
     INSERT INTO public.products (
@@ -885,14 +705,14 @@ async function enrichCommerceProducts(params: {
     )
     VALUES (
       ${product.sku},
-      'NextBlock™ Commerce Pro - Licence Commerce',
+      'Licence NextBlock™ Commerce Pro',
       ${String(product.slug) + '-fr'},
       ${product.price},
       ${product.sale_price},
       ${product.stock || 99},
       ${product.status},
       ${shortDescFr},
-      ${params.sql.json(htmlDescriptionFr)},
+      NULL,
       'digital',
       'freemius',
       ${params.frLangId},
@@ -906,21 +726,28 @@ async function enrichCommerceProducts(params: {
     SET
       title = EXCLUDED.title,
       short_description = EXCLUDED.short_description,
-        description_json = EXCLUDED.description_json,
-        price = EXCLUDED.price,
-        sale_price = EXCLUDED.sale_price,
-        stock = EXCLUDED.stock,
-        status = EXCLUDED.status,
-        product_type = EXCLUDED.product_type,
-        payment_provider = EXCLUDED.payment_provider,
-        trial_period_days = EXCLUDED.trial_period_days,
-        trial_requires_payment_method = EXCLUDED.trial_requires_payment_method
+      description_json = NULL,
+      price = EXCLUDED.price,
+      sale_price = EXCLUDED.sale_price,
+      stock = EXCLUDED.stock,
+      status = EXCLUDED.status,
+      product_type = EXCLUDED.product_type,
+      payment_provider = EXCLUDED.payment_provider,
+      trial_period_days = EXCLUDED.trial_period_days,
+      trial_requires_payment_method = EXCLUDED.trial_requires_payment_method
     RETURNING id
   `;
 
   if (frProduct?.id) {
     await attachProductMedia(params.sql, frProduct.id as string, commerceMediaId);
+    // Set description blocks for French product
+    await params.sql`DELETE FROM public.blocks WHERE product_id = ${frProduct.id}`;
+    await params.sql`
+      INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
+      VALUES (${frProduct.id}, ${params.frLangId}, 'text', ${params.sql.json({ html_content: htmlDescriptionFr })}, 0)
+    `;
   }
+
 
   console.log('[Sandbox Reset] Successfully enriched commerce products (EN & FR).');
 }
@@ -953,84 +780,23 @@ async function enrichCortexAiProducts(params: {
   }
 
   const shortDescEn =
-    'NextBlock Cortex AI brings native block-level intelligence to your Next.js application, enabling automated content generation and intelligent structural refactoring.';
+    'NextBlock™ Cortex AI License brings block-level machine intelligence to your Next.js block editor. Generate copy, refactor structures, and automate translations in one click, built on an open, BYOK cost-controlled architecture.';
 
-  const htmlDescriptionEn = {
-    type: 'doc',
-    content: [
-      {
-        type: 'heading',
-        attrs: { level: 2 },
-        content: [{ type: 'text', text: 'The Intelligence Layer for Modern Content' }],
-      },
-      {
-        type: 'paragraph',
-        content: [
-          {
-            type: 'text',
-            text: 'NextBlock Cortex AI integrates directly into your block editor, allowing teams to generate high-fidelity content, refactor existing structures, and build AI-assisted workflows without leaving the CMS.',
-          },
-        ],
-      },
-      {
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: 'Native block refactoring' }],
-      },
-      {
-        type: 'paragraph',
-        content: [
-          {
-            type: 'text',
-            text: 'Unlike generic AI wrappers, Cortex AI understands your block schemas. It doesn\'t just generate text; it generates structured JSONB data that maps perfectly to your NextBlock™ components.',
-          },
-        ],
-      },
-      {
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: 'Key technical specs' }],
-      },
-      {
-        type: 'bulletList',
-        content: [
-          {
-            type: 'listItem',
-            content: [
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: 'Native OpenRouter integration for access to the world\'s best models.' }],
-              },
-            ],
-          },
-          {
-            type: 'listItem',
-            content: [
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: 'Context-aware block generation that respects your design system.' }],
-              },
-            ],
-          },
-          {
-            type: 'listItem',
-            content: [
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: 'Streamlined BYOK (Bring Your Own Key) workflow for complete cost control.' }],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  };
+  const htmlDescriptionEn = `<h2>Native Block-Level AI Intelligence for Your Editor</h2>
+<p>NextBlock™ Cortex AI brings next-generation AI copilot capabilities directly to the Notion-style block editor. Generate high-fidelity marketing copy, restructure layouts, and translate entire pages with one click, preserving all Tailwind classes and block JSONB schemas.</p>
+<h3>Open AI Gateway &amp; BYOK Cost Control</h3>
+<ul>
+  <li><strong>Bring Your Own Key (BYOK):</strong> Connect your own OpenRouter credentials for direct API access with zero platform markup.</li>
+  <li><strong>Block-Aware Generation:</strong> Cortex AI understands structured nested block components rather than just raw text.</li>
+  <li><strong>Tailored Prompting:</strong> Fine-tune responses to fit your design system, tone of voice, and Tailwind utilities.</li>
+</ul>`;
 
   await params.sql`
     UPDATE public.products
     SET
+      title = 'NextBlock™ Cortex AI - Cortex AI License',
       short_description = ${shortDescEn},
-      description_json = ${params.sql.json(htmlDescriptionEn)},
+      description_json = NULL,
       product_type = 'digital',
       payment_provider = 'freemius'
     WHERE id = ${product.id}
@@ -1038,79 +804,24 @@ async function enrichCortexAiProducts(params: {
 
   await attachProductMedia(params.sql, product.id as string, cortexMediaId);
 
-  const shortDescFr =
-    'NextBlock Cortex AI apporte une intelligence native au niveau des blocs à votre application Next.js, permettant la génération automatique de contenu.';
+  // Set description blocks for English Cortex AI product
+  await params.sql`DELETE FROM public.blocks WHERE product_id = ${product.id}`;
+  await params.sql`
+    INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
+    VALUES (${product.id}, ${params.enLangId}, 'text', ${params.sql.json({ html_content: htmlDescriptionEn })}, 0)
+  `;
 
-  const htmlDescriptionFr = {
-    type: 'doc',
-    content: [
-      {
-        type: 'heading',
-        attrs: { level: 2 },
-        content: [{ type: 'text', text: 'La couche d’intelligence pour le contenu moderne' }],
-      },
-      {
-        type: 'paragraph',
-        content: [
-          {
-            type: 'text',
-            text: 'NextBlock Cortex AI s’intègre directement dans votre éditeur de blocs, permettant aux équipes de générer du contenu de haute fidélité et de construire des workflows assistés par l’IA.',
-          },
-        ],
-      },
-      {
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: 'Refactorisation native de blocs' }],
-      },
-      {
-        type: 'paragraph',
-        content: [
-          {
-            type: 'text',
-            text: 'Cortex AI comprend vos schémas de blocs. Il ne se contente pas de générer du texte ; il génère des données JSONB structurées qui correspondent parfaitement à vos composants NextBlock™.',
-          },
-        ],
-      },
-      {
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: 'Points techniques clés' }],
-      },
-      {
-        type: 'bulletList',
-        content: [
-          {
-            type: 'listItem',
-            content: [
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: 'Intégration native OpenRouter pour un accès aux meilleurs modèles mondiaux.' }],
-              },
-            ],
-          },
-          {
-            type: 'listItem',
-            content: [
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: 'Génération de blocs consciente du contexte respectant votre design system.' }],
-              },
-            ],
-          },
-          {
-            type: 'listItem',
-            content: [
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: 'Workflow BYOK pour un contrôle total des coûts.' }],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  };
+  const shortDescFr =
+    "La licence NextBlock™ Cortex AI apporte l'intelligence artificielle au niveau des blocs directement dans votre éditeur de contenu Next.js. Génération, refactorisation et traduction de pages en un clic.";
+
+  const htmlDescriptionFr = `<h2>Une intelligence artificielle native au niveau des blocs</h2>
+<p>NextBlock™ Cortex AI apporte un copilote IA directement dans votre éditeur de blocs façon Notion. Générez du texte marketing de qualité, restructurez des mises en page et traduisez des pages complètes en un clic, tout en conservant vos classes Tailwind et schémas JSONB.</p>
+<h3>Contrôle des coûts avec BYOK (Bring Your Own Key)</h3>
+<ul>
+  <li><strong>BYOK :</strong> Connectez vos propres identifiants OpenRouter pour un accès direct aux meilleurs modèles sans frais supplémentaires.</li>
+  <li><strong>Génération consciente des blocs :</strong> Cortex AI comprend les composants structurés plutôt que le texte brut.</li>
+  <li><strong>Adaptation au design system :</strong> Réponses optimisées pour respecter vos composants et classes CSS.</li>
+</ul>`;
 
   const [frProduct] = await params.sql`
     INSERT INTO public.products (
@@ -1122,9 +833,9 @@ async function enrichCortexAiProducts(params: {
       trial_period_days, trial_requires_payment_method
     )
     VALUES (
-      ${product.sku}, 'NextBlock Cortex AI - Licence AI', ${String(product.slug) + '-fr'},
+      ${product.sku}, 'Licence NextBlock™ Cortex AI', ${String(product.slug) + '-fr'},
       ${product.price}, ${product.sale_price}, ${product.stock || 99}, ${product.status},
-      ${shortDescFr}, ${params.sql.json(htmlDescriptionFr)},
+      ${shortDescFr}, NULL,
       'digital', 'freemius',
       ${params.frLangId}, ${product.translation_group_id},
       ${product.freemius_product_id}, ${product.freemius_plan_id},
@@ -1134,7 +845,7 @@ async function enrichCortexAiProducts(params: {
     SET
       title = EXCLUDED.title,
       short_description = EXCLUDED.short_description,
-      description_json = EXCLUDED.description_json,
+      description_json = NULL,
       product_type = EXCLUDED.product_type,
       payment_provider = EXCLUDED.payment_provider,
       trial_period_days = EXCLUDED.trial_period_days,
@@ -1144,6 +855,12 @@ async function enrichCortexAiProducts(params: {
 
   if (frProduct?.id) {
     await attachProductMedia(params.sql, frProduct.id as string, cortexMediaId);
+    // Set description blocks for French Cortex AI product
+    await params.sql`DELETE FROM public.blocks WHERE product_id = ${frProduct.id}`;
+    await params.sql`
+      INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
+      VALUES (${frProduct.id}, ${params.frLangId}, 'text', ${params.sql.json({ html_content: htmlDescriptionFr })}, 0)
+    `;
   }
 
   console.log('[Sandbox Reset] Successfully enriched Cortex AI products (EN & FR).');
@@ -1218,7 +935,7 @@ async function upsertSeededCatalogProduct(params: {
     seed_source: 'sandbox-reset',
     seed_type: 'physical-apparel',
   };
-  const descriptionJson = buildStructuredDescription(params.locale.description);
+  const htmlContent = buildHtmlDescription(params.locale.description);
 
   let seededProductId = params.productId;
 
@@ -1236,7 +953,7 @@ async function upsertSeededCatalogProduct(params: {
         stock = ${totalStock},
         status = 'active',
         short_description = ${params.locale.shortDescription},
-        description_json = ${params.sql.json(descriptionJson)},
+        description_json = NULL,
         metadata = ${params.sql.json(metadata)},
         is_taxable = true,
         product_type = 'physical',
@@ -1283,7 +1000,7 @@ async function upsertSeededCatalogProduct(params: {
         ${totalStock},
         'active',
         ${params.locale.shortDescription},
-        ${params.sql.json(descriptionJson)},
+        NULL,
         ${params.sql.json(metadata)},
         true,
         'physical',
@@ -1301,7 +1018,7 @@ async function upsertSeededCatalogProduct(params: {
         stock = EXCLUDED.stock,
         status = EXCLUDED.status,
         short_description = EXCLUDED.short_description,
-        description_json = EXCLUDED.description_json,
+        description_json = NULL,
         metadata = EXCLUDED.metadata,
         is_taxable = EXCLUDED.is_taxable,
         product_type = EXCLUDED.product_type,
@@ -1320,6 +1037,13 @@ async function upsertSeededCatalogProduct(params: {
   }
 
   await attachProductMedia(params.sql, seededProductId, params.mediaId);
+
+  // Set description blocks
+  await params.sql`DELETE FROM public.blocks WHERE product_id = ${seededProductId}`;
+  await params.sql`
+    INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
+    VALUES (${seededProductId}, ${params.languageId}, 'text', ${params.sql.json({ html_content: htmlContent })}, 0)
+  `;
 
   await params.sql`
     DELETE FROM public.variant_attribute_mapping
@@ -1487,6 +1211,7 @@ async function ensureShopPagesAndNavigation(params: {
       globalShopGroupId = newPage?.translation_group_id as string | undefined;
 
       const heroContent = {
+        is_hero: true,
         container_type: 'full-width',
         background: {
           type: 'theme',
@@ -1548,7 +1273,7 @@ async function ensureShopPagesAndNavigation(params: {
       await params.sql`
         INSERT INTO public.blocks (page_id, language_id, block_type, content, "order")
         VALUES
-          (${pageId}, ${langId}, 'hero', ${params.sql.json(heroContent as any)}, 0),
+          (${pageId}, ${langId}, 'section', ${params.sql.json(heroContent as any)}, 0),
           (${pageId}, ${langId}, 'section', ${params.sql.json(sectionContent as any)}, 1)
       `;
     }
@@ -1600,6 +1325,7 @@ async function ensureShopPagesAndNavigation(params: {
       pageId = newPage.id as number;
 
       const heroContent = {
+        is_hero: true,
         container_type: 'full-width',
         background: {
           type: 'theme',
@@ -1661,7 +1387,7 @@ async function ensureShopPagesAndNavigation(params: {
       await params.sql`
         INSERT INTO public.blocks (page_id, language_id, block_type, content, "order")
         VALUES
-          (${pageId}, ${langId}, 'hero', ${params.sql.json(heroContent as any)}, 0),
+          (${pageId}, ${langId}, 'section', ${params.sql.json(heroContent as any)}, 0),
           (${pageId}, ${langId}, 'section', ${params.sql.json(sectionContent as any)}, 1)
       `;
     }
@@ -1680,6 +1406,121 @@ async function ensureShopPagesAndNavigation(params: {
   }
 
   console.log('[Sandbox Reset] Successfully created Shop pages and navigation.');
+}
+
+async function seedCategoriesAndMappings(sql: SqlClient) {
+  console.log('[Sandbox Reset] Seeding categories and product mappings...');
+
+  const categoriesToSeed = [
+    { 
+      name: 'Software', 
+      slug: 'software', 
+      description: 'Developer software products and licenses.',
+      name_translations: { fr: 'Logiciel' },
+      description_translations: { fr: 'Logiciels et licences de développement.' }
+    },
+    { 
+      name: 'AI', 
+      slug: 'ai', 
+      description: 'Artificial Intelligence tools and neural components.',
+      name_translations: { fr: 'IA' },
+      description_translations: { fr: 'Outils d\'intelligence artificielle.' }
+    },
+    { 
+      name: 'Apparel', 
+      slug: 'apparel', 
+      description: 'Premium garments and studio uniforms built for developers.',
+      name_translations: { fr: 'Vêtements' },
+      description_translations: { fr: 'Vêtements de qualité et uniformes conçus pour les développeurs.' }
+    },
+    { 
+      name: 'Featured', 
+      slug: 'featured', 
+      description: 'Highlights and featured collection items.',
+      name_translations: { fr: 'En vedette' },
+      description_translations: { fr: 'Articles en vedette et nouveautés.' }
+    },
+  ];
+
+  const categoryMap = new Map<string, string>(); // slug -> id
+
+  for (const cat of categoriesToSeed) {
+    const [inserted] = await sql`
+      INSERT INTO public.categories (name, slug, description, name_translations, description_translations)
+      VALUES (
+        ${cat.name}, 
+        ${cat.slug}, 
+        ${cat.description}, 
+        ${sql.json(cat.name_translations)}, 
+        ${sql.json(cat.description_translations)}
+      )
+      ON CONFLICT (slug) DO UPDATE
+      SET name = EXCLUDED.name, 
+          description = EXCLUDED.description,
+          name_translations = EXCLUDED.name_translations,
+          description_translations = EXCLUDED.description_translations
+      RETURNING id
+    `;
+    if (inserted?.id) {
+      categoryMap.set(cat.slug, inserted.id as string);
+    }
+  }
+
+  // Fetch all seeded products across both languages to ensure all translations are mapped.
+  const products = await sql`
+    SELECT id, sku, freemius_product_id
+    FROM public.products
+    WHERE freemius_product_id IN ('24851', '28609')
+       OR sku IN ('NB-STUDIO-TEE', 'NB-SIGNAL-CAP', 'NB-UTILITY-PANTS')
+  `;
+
+  const productIds = products.map((p) => p.id);
+  if (productIds.length > 0) {
+    await sql`
+      DELETE FROM public.product_categories
+      WHERE product_id = ANY(${productIds})
+    `;
+  }
+
+  const mappings: Array<{ product_id: string; category_id: string }> = [];
+
+  for (const prod of products) {
+    const slugs: string[] = [];
+    if (prod.freemius_product_id === '24851') {
+      slugs.push('software', 'featured');
+    } else if (prod.freemius_product_id === '28609') {
+      slugs.push('software', 'ai');
+    } else if (prod.sku === 'NB-STUDIO-TEE') {
+      slugs.push('apparel', 'featured');
+    } else if (prod.sku === 'NB-SIGNAL-CAP') {
+      slugs.push('apparel');
+    } else if (prod.sku === 'NB-UTILITY-PANTS') {
+      slugs.push('apparel');
+    }
+
+    for (const slug of slugs) {
+      const catId = categoryMap.get(slug);
+      if (catId) {
+        mappings.push({
+          product_id: prod.id as string,
+          category_id: catId,
+        });
+      }
+    }
+  }
+
+  if (mappings.length > 0) {
+    for (const mapping of mappings) {
+      await sql`
+        INSERT INTO public.product_categories (product_id, category_id)
+        VALUES (${mapping.product_id}, ${mapping.category_id})
+        ON CONFLICT DO NOTHING
+      `;
+    }
+    console.log(`[Sandbox Reset] Seeded ${mappings.length} product-category associations.`);
+  }
+
+  console.log('[Sandbox Reset] Successfully completed categories seeding.');
 }
 
 async function seedFakeStoreData(sql: SqlClient, supabaseAdmin: any) {
@@ -2003,6 +1844,8 @@ export async function GET(request: NextRequest) {
                 enLangId,
                 frLangId,
               });
+
+              await seedCategoriesAndMappings(db);
             } catch (enrichErr: any) {
               console.error('[Sandbox Reset] Product enrichment failed:', enrichErr.message || enrichErr);
               throw enrichErr;
@@ -2309,6 +2152,7 @@ export async function GET(request: NextRequest) {
                 globalShopGroupId = newPage?.translation_group_id;
 
                 const heroContent = {
+                  is_hero: true,
                   container_type: "full-width",
                   background: {
                     type: "theme",
@@ -2369,7 +2213,7 @@ export async function GET(request: NextRequest) {
                 await db`
                   INSERT INTO public.blocks (page_id, language_id, block_type, content, "order")
                   VALUES 
-                  (${pageId}, ${langId}, 'hero', ${db.json(heroContent as any)}, 0),
+                  (${pageId}, ${langId}, 'section', ${db.json(heroContent as any)}, 0),
                   (${pageId}, ${langId}, 'section', ${db.json(sectionContent as any)}, 1)
                 `;
               }
@@ -2399,6 +2243,7 @@ export async function GET(request: NextRequest) {
                 pageId = newPage.id;
 
                 const heroContent = {
+                  is_hero: true,
                   container_type: "full-width",
                   background: {
                     type: "theme",
@@ -2459,7 +2304,7 @@ export async function GET(request: NextRequest) {
                 await db`
                   INSERT INTO public.blocks (page_id, language_id, block_type, content, "order")
                   VALUES 
-                  (${pageId}, ${langId}, 'hero', ${db.json(heroContent as any)}, 0),
+                  (${pageId}, ${langId}, 'section', ${db.json(heroContent as any)}, 0),
                   (${pageId}, ${langId}, 'section', ${db.json(sectionContent as any)}, 1)
                 `;
               }

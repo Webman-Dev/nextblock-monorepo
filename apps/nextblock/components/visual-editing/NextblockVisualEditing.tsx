@@ -95,28 +95,7 @@ const ProductGridBlockEditor = dynamic(
   () => import("../../app/cms/blocks/editors/ProductGridBlockEditor"),
   { ssr: false }
 ) as EditorComponent;
-const ProductDescriptionEditor = dynamic(
-  () =>
-    import("../../app/cms/products/ClientNotionEditor").then((module) => {
-      const ClientNotionEditor = module.default;
 
-      return function VisualProductDescriptionEditor({
-        content,
-        onChange,
-      }: BlockEditorProps<unknown>) {
-        return (
-          <div className="rounded-md border bg-background text-foreground">
-            <ClientNotionEditor
-              initialContent={content ?? { type: "doc", content: [] }}
-              onUpdate={onChange}
-              showAiPrompt={false}
-            />
-          </div>
-        );
-      };
-    }),
-  { ssr: false }
-) as EditorComponent;
 const FeaturedProductBlockEditor = dynamic(
   () => import("../../app/cms/blocks/editors/FeaturedProductBlockEditor"),
   { ssr: false }
@@ -138,7 +117,7 @@ const SectionBlockEditor = dynamic(
             content={props.content as any}
             onChange={props.onChange as any}
             isConfigPanelOpen={true}
-            blockType={props.block.type === "hero" ? "hero" : "section"}
+            blockType="section"
           />
         );
       };
@@ -154,7 +133,7 @@ const editorComponents: Partial<Record<BlockType, EditorComponent>> = {
   posts_grid: PostsGridBlockEditor,
   video_embed: VideoEmbedBlockEditor,
   section: SectionBlockEditor,
-  hero: SectionBlockEditor,
+
   form: FormBlockEditor,
   testimonial: TestimonialBlockEditor,
   product_grid: ProductGridBlockEditor,
@@ -492,9 +471,7 @@ function getEditorComponent(blockType: string) {
 }
 
 function getProductFieldEditorComponent(target: VisualEditingProductFieldTarget) {
-  return target.field === "description_json"
-    ? ProductDescriptionEditor
-    : ProductPlainTextFieldEditor;
+  return ProductPlainTextFieldEditor;
 }
 
 export function NextblockVisualEditing() {

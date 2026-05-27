@@ -174,13 +174,13 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {/* Billing Cycle Toggle */}
-      <div className="flex bg-secondary/30 p-1 rounded-lg w-full max-w-sm mx-auto shadow-inner">
+      <div className="flex bg-secondary/35 p-1 rounded-lg w-full max-w-sm mx-auto shadow-inner">
         {hasMonthly && (
             <button
             onClick={() => setSelectedCycle('monthly')}
-            className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${
                 selectedCycle === 'monthly'
                 ? 'bg-background shadow-sm text-foreground'
                 : 'text-muted-foreground hover:text-foreground'
@@ -192,7 +192,7 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
         {hasAnnual && (
             <button
             onClick={() => setSelectedCycle('annual')}
-            className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${
                 selectedCycle === 'annual'
                 ? 'bg-background shadow-sm text-foreground'
                 : 'text-muted-foreground hover:text-foreground'
@@ -204,7 +204,7 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
          {hasLifetime && (
             <button
             onClick={() => setSelectedCycle('lifetime')}
-            className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${
                 selectedCycle === 'lifetime'
                 ? 'bg-background shadow-sm text-foreground'
                 : 'text-muted-foreground hover:text-foreground'
@@ -216,16 +216,16 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
       </div>
 
       <div className="text-center">
-          <span className="text-4xl font-bold text-primary">
+          <span className="text-3xl font-extrabold text-foreground">
             {formatPrice(displayPriceMinor, activeCurrencyCode)}
           </span>
           {selectedCycle !== 'lifetime' && (
-              <span className="text-muted-foreground ml-2">/ {selectedCycle === 'annual' ? t('ecommerce.year') : t('ecommerce.month')}</span>
+              <span className="text-muted-foreground text-sm ml-1.5">/ {selectedCycle === 'annual' ? t('ecommerce.year') : t('ecommerce.month')}</span>
           )}
           {trialSummary && (
-            <div className="mt-3 text-sm font-medium text-emerald-700">
+            <div className="mt-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
               {trialSummary.label}
-              <span className="mx-2 text-muted-foreground">|</span>
+              <span className="mx-2 text-muted-foreground/50">|</span>
               <span className="text-muted-foreground">
                 {trialSummary.paymentRequirementLabel}
               </span>
@@ -233,8 +233,8 @@ export const SubscriptionSelector = ({ product }: SubscriptionSelectorProps) => 
           )}
       </div>
 
-      <Button onClick={handleAddToCart} className="w-full h-14 text-lg font-bold shadow-md transition-all hover:shadow-lg active:scale-[0.98]">
-        <ShoppingCart className="mr-2 h-5 w-5" />
+      <Button onClick={handleAddToCart} className="w-full h-12 text-md font-bold shadow-md transition-all hover:shadow-lg active:scale-[0.98]">
+        <ShoppingCart className="mr-2 h-4 w-4" />
         {trialSummary?.label ? `Start ${trialSummary.label}` : t('ecommerce.get_license')}
       </Button>
     </div>

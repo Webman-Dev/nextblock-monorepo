@@ -92,6 +92,12 @@ const knownCmsImages: Record<string, CmsImageMetadata> = {
     height: 2048,
     sizes: inlineImageSizes,
   },
+  'images/cortex-ai-square.webp': {
+    src: '/images/cortex-ai-square.webp',
+    width: 2048,
+    height: 2048,
+    sizes: inlineImageSizes,
+  },
   'images/commerce-wide.webp': {
     src: '/images/commerce-wide.webp',
     width: 1024,

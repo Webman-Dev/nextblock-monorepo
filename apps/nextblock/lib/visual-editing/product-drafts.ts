@@ -39,7 +39,6 @@ const PRODUCT_ID_PATTERN =
 const productEditableFields = new Set<ProductVisualEditingField>([
   "title",
   "short_description",
-  "description_json",
 ]);
 
 const productSnapshotFields = [
@@ -56,7 +55,6 @@ const productSnapshotFields = [
   "product_type",
   "payment_provider",
   "short_description",
-  "description_json",
   "stock",
   "status",
   "language_id",
@@ -110,11 +108,7 @@ export function assertValidProductFieldRequest(request: VisualEditingProductFiel
     throw new Error("Invalid product field target.");
   }
 
-  if (request.target.field === "description_json" && request.target.input !== "tiptap") {
-    throw new Error("Invalid product field editor.");
-  }
-
-  if (request.target.field !== "description_json" && request.target.input !== "plain-text") {
+  if (request.target.input !== "plain-text") {
     throw new Error("Invalid product field editor.");
   }
 }
@@ -343,16 +337,6 @@ function addNullableStringUpdate(
   payload[key] = typeof value === "string" ? value : null;
 }
 
-function addJsonUpdate(
-  payload: Record<string, unknown>,
-  draft: ProductDraftRow,
-  key: ProductVisualEditingField
-) {
-  if (hasOwn(draft.meta, key)) {
-    payload[key] = draft.meta[key];
-  }
-}
-
 export async function publishProductVisualEditingDraft(
   productId: string
 ): Promise<VisualEditingMutationResult> {
@@ -388,7 +372,7 @@ export async function publishProductVisualEditingDraft(
       const productUpdate: Record<string, unknown> = {};
       addStringUpdate(productUpdate, draft, "title");
       addNullableStringUpdate(productUpdate, draft, "short_description");
-      addJsonUpdate(productUpdate, draft, "description_json");
+
 
       if (Object.keys(productUpdate).length > 0) {
         const { error: updateError } = await (auth.supabase as any)

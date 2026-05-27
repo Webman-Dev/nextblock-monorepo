@@ -23,7 +23,7 @@ interface SortableColumnBlockProps {
   columnIndex: number;
   onEdit: () => void;
   onDelete: () => void;
-  blockType: 'section' | 'hero';
+  blockType: 'section';
   onClick: (e: React.MouseEvent<HTMLDivElement>) => void;
   sectionBackground?: SectionBlockContent['background'];
 }
@@ -299,7 +299,7 @@ export interface ColumnEditorProps {
   columnIndex: number;
   blocks: ColumnBlock[];
   onBlocksChange: (newBlocks: ColumnBlock[]) => void;
-  blockType: 'section' | 'hero';
+  blockType: 'section';
   sectionBackground?: SectionBlockContent['background'];
 }
 
@@ -532,7 +532,7 @@ export default function ColumnEditor({ columnIndex, blocks, onBlocksChange, bloc
         onOpenChange={setIsBlockSelectorOpen}
         onSelectBlockType={handleSelectBlockType}
         allowedBlockTypes={availableBlockTypes.filter(
-          (type) => type !== 'section' && type !== 'hero'
+          (type) => type !== 'section'
         )}
       />
     </div>

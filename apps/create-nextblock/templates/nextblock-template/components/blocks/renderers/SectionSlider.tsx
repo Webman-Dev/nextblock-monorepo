@@ -80,10 +80,10 @@ export default function SectionSlider({
           return (
             <div
               key={index}
-              className={`absolute inset-0 w-full h-full transition-opacity duration-700 ease-in-out ${
+              className={`w-full transition-opacity duration-700 ease-in-out ${
                 isActive
-                  ? "opacity-100 z-10 pointer-events-auto"
-                  : "opacity-0 z-0 pointer-events-none"
+                  ? "relative opacity-100 z-10 pointer-events-auto"
+                  : "absolute inset-x-0 top-0 opacity-0 z-0 pointer-events-none"
               }`}
             >
               {child}

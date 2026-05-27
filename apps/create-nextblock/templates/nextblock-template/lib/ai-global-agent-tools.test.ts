@@ -1352,8 +1352,8 @@ describe('Cortex AI global agent tool executors', () => {
     });
   });
 
-  it('appends button-shaped content to a hero block while preserving required layout fields', async () => {
-    const heroContent = {
+  it('appends button-shaped content to a section block while preserving required layout fields', async () => {
+    const sectionContent = {
       background: { type: 'none' },
       column_blocks: [
         [
@@ -1371,8 +1371,8 @@ describe('Cortex AI global agent tool executors', () => {
     const { database, supabase } = createMockSupabase({
       blocks: [
         {
-          block_type: 'hero',
-          content: heroContent,
+          block_type: 'section',
+          content: sectionContent,
           id: 8,
           language_id: 1,
           order: 0,
@@ -1386,7 +1386,7 @@ describe('Cortex AI global agent tool executors', () => {
       executeUpdateContentBlock,
       {
         blockId: 8,
-        blockType: 'hero',
+        blockType: 'section',
         content: { text: 'Contact Us', url: '/contact', variant: 'default' },
       },
       {
@@ -1398,7 +1398,7 @@ describe('Cortex AI global agent tool executors', () => {
 
     expect(result).toMatchObject({
       blockId: 8,
-      blockType: 'hero',
+      blockType: 'section',
       contentUpdated: true,
       mutationExecuted: true,
       success: true,
@@ -1727,7 +1727,7 @@ describe('Cortex AI global agent tool executors', () => {
       status: 'draft',
       title: 'Contact Us',
     });
-    expect(database.blocks.map((block) => block.block_type)).toEqual(['hero', 'form']);
+    expect(database.blocks.map((block) => block.block_type)).toEqual(['section', 'form']);
     expect(database.blocks[1].content).toMatchObject({
       recipient_email: 'info@nextblock.dev',
       submit_button_text: 'Send Message',

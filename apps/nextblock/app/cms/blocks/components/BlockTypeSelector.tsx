@@ -75,12 +75,10 @@ const BlockTypeSelector: React.FC<BlockTypeSelectorProps> = ({
     onOpenChange(false);
   };
 
-  // Exclude 'hero' section block as requested (memoized for performance)
   const blockDefs = React.useMemo(() => {
     return Object.values(blockRegistry).filter(
       (blockDef) =>
-        blockDef.type !== 'hero' &&
-        (!allowedBlockTypes || allowedBlockTypes.includes(blockDef.type))
+        !allowedBlockTypes || allowedBlockTypes.includes(blockDef.type)
     );
   }, [allowedBlockTypes]);
 

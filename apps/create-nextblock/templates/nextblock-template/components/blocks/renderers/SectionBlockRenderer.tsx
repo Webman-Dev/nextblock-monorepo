@@ -38,7 +38,7 @@ interface SectionBlockRendererProps {
   visualEditing?: VisualEditingDocumentContext;
   parentBlockId?: number;
   parentBlockIndex?: number;
-  blockType?: "section" | "hero";
+  blockType?: "section";
   botProtectionPublic?: BotProtectionPublicSettings;
   scriptNonce?: string;
 }
@@ -282,7 +282,7 @@ export default async function SectionBlockRenderer({
   botProtectionPublic,
   scriptNonce,
 }: SectionBlockRendererProps) {
-  const isHero = blockType === "hero" || content.is_hero === true;
+  const isHero = content.is_hero === true;
 
   // Build CSS classes
   const containerClass = containerClasses[content.container_type] || containerClasses.container;

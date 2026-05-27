@@ -148,7 +148,7 @@ async function renderLoadedBlock({
 async function renderBlock(context: BlockRenderContext) {
   const { block, blockIndex, languageId, visualEditAttributes, visualEditing } = context;
 
-  if (block.block_type === 'hero' || block.block_type === 'section') {
+  if (block.block_type === 'section') {
     return (
       <SectionBlockRenderer
         content={block.content as unknown as SectionBlockContent}

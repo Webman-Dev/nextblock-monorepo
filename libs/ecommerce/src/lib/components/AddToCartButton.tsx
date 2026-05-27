@@ -14,9 +14,10 @@ import { useCurrency } from '../CurrencyProvider';
 interface AddToCartButtonProps {
   product: Product;
   className?: string;
+  quantity?: number;
 }
 
-export const AddToCartButton = ({ product, className }: AddToCartButtonProps) => {
+export const AddToCartButton = ({ product, className, quantity }: AddToCartButtonProps) => {
   // Use useCart to get safe hydration version of addItem, 
   // or use store directly since this action is client-side interaction anyway.
   const store = useCart((state) => state);
@@ -74,6 +75,7 @@ export const AddToCartButton = ({ product, className }: AddToCartButtonProps) =>
       variant_label: product.variant_label,
       selected_options: product.selected_options,
       currency_code: activeCurrencyCode,
+      quantity,
     });
 
     if (success) {

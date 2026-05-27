@@ -4,6 +4,8 @@ const BUNDLED_PUBLIC_MEDIA_KEYS = new Set([
   'images/commerce-plan.webp',
   'images/commerce-square.webp',
   'images/commerce-wide.webp',
+  'images/cortex-ai-square.webp',
+  'images/cortex-ai.webp',
   'images/developer.webp',
   'images/extensibility.webp',
   'images/goals.webp',

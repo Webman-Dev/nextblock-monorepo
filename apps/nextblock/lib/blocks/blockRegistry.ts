@@ -13,7 +13,7 @@ import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSc
 /**
  * Available block types - defined here as the source of truth
  */
-export const availableBlockTypes = ["text", "heading", "image", "button", "posts_grid", "video_embed", "section", "hero", "form", "testimonial", "product_grid", "featured_product", "cart", "checkout", "product_details"] as const;
+export const availableBlockTypes = ["text", "heading", "image", "button", "posts_grid", "video_embed", "section", "form", "testimonial", "product_grid", "featured_product", "cart", "checkout", "product_details"] as const;
 export type BlockType = (typeof availableBlockTypes)[number];
 
 // --- Zod Schemas & Inferred Types ---
@@ -131,8 +131,7 @@ export const SectionBlockSchema = z.object({
 });
 export type SectionBlockContent = z.infer<typeof SectionBlockSchema>;
 
-export const HeroBlockSchema = SectionBlockSchema;
-export type HeroBlockContent = z.infer<typeof HeroBlockSchema>;
+
 
 // Form helpers
 export const FormFieldOptionSchema = z.object({
@@ -425,34 +424,6 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
     },
   },
 
-  hero: {
-    type: "hero",
-    label: "Hero Section",
-    icon: "LayoutTemplate",
-    initialContent: {
-      container_type: 'container',
-      background: { type: "none" },
-      responsive_columns: { mobile: 1, tablet: 1, desktop: 2 },
-      column_gap: 'lg',
-      padding: { top: 'xl', bottom: 'xl' },
-      column_blocks: [
-        [
-          { block_type: "heading", content: { level: 1, text_content: "Hero Title" }, temp_id: `block-${Date.now()}-1` },
-          { block_type: "text", content: { html_content: "<p>Hero description goes here. Explain the value proposition.</p>" }, temp_id: `block-${Date.now()}-2` },
-          { block_type: "button", content: { text: "Call to Action", url: "#" }, temp_id: `block-${Date.now()}-3` },
-        ],
-        [],
-      ],
-    } as HeroBlockContent,
-    editorComponentFilename: "SectionBlockEditor.tsx", // Reusing section editor
-    rendererComponentFilename: "SectionBlockRenderer.tsx", // Unified Section renderer
-    schema: HeroBlockSchema,
-    documentation: {
-      description: 'A specialized hero section for the top of a page, with prioritized images and pre-populated content.',
-      useCases: ['Main page hero/banner', 'Introductory section with a strong call to action'],
-      notes: ['This block reuses the Section editor but has a different renderer for optimized image loading.'],
-    },
-  },
   
   form: {
     type: "form",
@@ -639,7 +610,7 @@ export type AllBlockContent =
   | ({ type: "button" } & ButtonBlockContent)
   | ({ type: "posts_grid" } & PostsGridBlockContent)
   | ({ type: "section" } & SectionBlockContent)
-  | ({ type: "hero" } & HeroBlockContent)
+
   | ({ type: "video_embed" } & VideoEmbedBlockContent)
   | ({ type: "form" } & FormBlockContent)
   | ({ type: "testimonial" } & TestimonialBlockContent)

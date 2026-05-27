@@ -281,6 +281,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     has_variants: variants.length > 0,
     attributes,
     variants,
+    categories: (productRecord.product_categories || []).map((pc: any) => pc.category).filter(Boolean),
     product_variants: (productRecord.product_variants || []).map((variant: any) => ({
       id: variant.id,
       price: variant.price,

@@ -10,7 +10,6 @@ export const availableCortexAiBlockTypes = [
   'posts_grid',
   'video_embed',
   'section',
-  'hero',
   'form',
   'testimonial',
   'product_grid',
@@ -770,7 +769,6 @@ const fallbackBlockSchemas: Record<BlockType, z.ZodTypeAny> = {
     textColor: z.enum(['primary', 'secondary', 'accent', 'muted', 'destructive', 'background']).optional(),
     text_content: z.string(),
   }),
-  hero: sectionBlockFallbackSchema,
   image: z.object({
     alt_text: z.string().optional(),
     caption: z.string().optional(),
@@ -1335,7 +1333,7 @@ function assertValidBlockContent(blockType: BlockType, content: Record<string, u
 }
 
 function isSectionLikeBlock(blockType: BlockType) {
-  return blockType === 'section' || blockType === 'hero';
+  return blockType === 'section';
 }
 
 function inferNestedBlockTypeFromContent(content: Record<string, unknown>): BlockType | null {
@@ -2280,8 +2278,9 @@ function buildContactPageBlocks(contactEmail: string, title = 'Contact Us') {
   return [
     normalizeCreateBlock(
       {
-        blockType: 'hero',
+        blockType: 'section',
         content: {
+          is_hero: true,
           background: { type: 'none' },
           column_blocks: [
             [
@@ -3116,7 +3115,6 @@ const POST_FIELD_NAMES = new Set([
   'title',
 ]);
 const PRODUCT_FIELD_NAMES = new Set([
-  'description_json',
   'language_id',
   'meta_description',
   'meta_title',
@@ -3198,24 +3196,7 @@ function buildCurrentCmsFieldUpdate(
       assertValidStatusForContentType(pageContext.contentType, rawValue);
     }
 
-    if (fieldName === 'description_json') {
-      if (pageContext.contentType !== 'product') {
-        throw new Error('description_json can only be updated for products.');
-      }
 
-      const descriptionValidation = getEditorBlockDocumentSchema().safeParse(rawValue);
-
-      if (!descriptionValidation.success) {
-        throw new Error(
-          `Product description_json failed editor document validation: ${descriptionValidation.error.issues
-            .map((issue) => issue.message)
-            .join('; ')}`
-        );
-      }
-
-      updatePayload.description_json = descriptionValidation.data;
-      continue;
-    }
 
     updatePayload[fieldName] = normalizeCmsFieldValue(fieldName, rawValue);
   }
@@ -3545,9 +3526,9 @@ export async function executeUpdateSectionColumnBlock(
     `Parent block ${parsed.parentBlockId}`
   );
 
-  if (parentBlockType !== 'section' && parentBlockType !== 'hero') {
+  if (parentBlockType !== 'section') {
     throw new Error(
-      `Parent block ${parsed.parentBlockId} must be a section or hero block, not "${parentBlockType}".`
+      `Parent block ${parsed.parentBlockId} must be a section block, not "${parentBlockType}".`
     );
   }
 
@@ -4770,7 +4751,7 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
     }),
     update_content_block: tool({
       description:
-        'Update the JSON content of an existing top-level page/post block that belongs to the current CMS edit context. Content is merged with the existing block before validation. For section/hero blocks, add nested blocks with content.append_block or content.append_blocks using objects like { block_type: "button", content: { text: "Contact Us", url: "/contact" } }; existing column_blocks and layout fields are preserved. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
+        'Update the JSON content of an existing top-level page/post block that belongs to the current CMS edit context. Content is merged with the existing block before validation. For section blocks, add nested blocks with content.append_block or content.append_blocks using objects like { block_type: "button", content: { text: "Contact Us", url: "/contact" } }; existing column_blocks and layout fields are preserved. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
       execute: (input) => executeUpdateContentBlock(input, context),
       inputSchema: updateContentBlockInputSchema,
       strict: true,
@@ -4805,7 +4786,7 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
     }),
     update_section_column_block: tool({
       description:
-        'Update the content of one existing nested block inside a section or hero block that belongs to the current CMS edit context. This tool must not change the nested block type. To add a new nested block, update the parent section/hero with update_content_block and preserve existing column_blocks. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
+        'Update the content of one existing nested block inside a section block that belongs to the current CMS edit context. This tool must not change the nested block type. To add a new nested block, update the parent section with update_content_block and preserve existing column_blocks. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
       execute: (input) => executeUpdateSectionColumnBlock(input, context),
       inputSchema: updateSectionColumnBlockInputSchema,
       strict: true,

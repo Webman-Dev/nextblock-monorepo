@@ -53,7 +53,7 @@ export type VisualEditingBlockTarget =
       kind: "nested";
       parentBlockId: number;
       parentBlockIndex: number;
-      parentBlockType: "section" | "hero";
+      parentBlockType: "section";
       columnIndex: number;
       blockIndex: number;
       blockType: string;
@@ -61,8 +61,7 @@ export type VisualEditingBlockTarget =
 
 export type ProductVisualEditingField =
   | "title"
-  | "short_description"
-  | "description_json";
+  | "short_description";
 
 export type ProductVisualEditingInput = "plain-text" | "html" | "tiptap";
 

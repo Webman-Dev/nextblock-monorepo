@@ -4531,13 +4531,16 @@ BEGIN
   (v_home_page_id, v_en_lang_id, 'section',
   '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"180deg","stops":[{"color":"#0f172a","position":0},{"color":"#020817","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<h2 class=''text-3xl md:text-4xl font-bold text-white text-center mb-6''>Built with the Best.</h2>"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-400 text-center max-w-2xl mx-auto''>Every layer of NextBlock™ leans on proven developer-first technology so the platform feels familiar, performant, and trustworthy from day one.</p><div class=''grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 mt-10 text-sm font-semibold text-center text-white''><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Next.js</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>React</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Supabase</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Stripe</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Tailwind</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Tiptap</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Vercel</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Nx</div></div>"}},{"block_type":"text","content":{"html_content":"<h2 class=''text-3xl md:text-4xl font-bold text-white text-center mb-6 mt-16''>Powerful for Developers. Intuitive for Editors.</h2>"}},{"block_type":"text","content":{"html_content":"<div class=''grid md:grid-cols-2 gap-8 mt-10 text-white''><div class=''p-8 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm''><h3 class=''text-xl font-bold mb-6 text-blue-400''>For Content Creators</h3><ul class=''space-y-4 text-sm text-slate-300''><li><strong class=''text-white block mb-1''>Intuitive Block Editor</strong>Drag-and-drop layouts with a Notion-like interface.</li><li><strong class=''text-white block mb-1''>Rich Content Blocks</strong>Deploy heroes, galleries, testimonials, and more in one click.</li><li><strong class=''text-white block mb-1''>Effortless Media Management</strong>Organize assets with folders, tags, and bulk actions.</li><li><strong class=''text-white block mb-1''>Worry-Free Revisions</strong>Automatic version history with instant restore.</li></ul></div><div class=''p-8 rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-sm''><h3 class=''text-xl font-bold mb-6 text-purple-400''>For Developers</h3><ul class=''space-y-4 text-sm text-slate-300''><li><strong class=''text-white block mb-1''>Next.js 16 Core</strong>Server Components, ISR, and Edge Functions ready out of the box.</li><li><strong class=''text-white block mb-1''>Supabase Integration</strong>Postgres, auth, storage, and real-time APIs without glue code.</li><li><strong class=''text-white block mb-1''>Monorepo Ready</strong>Nx-powered dev experience for scalable architectures.</li><li><strong class=''text-white block mb-1''>Extensible Block SDK</strong>Ship fully typed custom blocks and widgets.</li></ul></div></div>"}}]]}'::jsonb, 2),
   (v_home_page_id, v_en_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#022c22","position":0},{"color":"#0f172a","position":50},{"color":"#020817","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"xl","vertical_alignment":"center","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<p class=''text-xs uppercase tracking-[0.25em] text-emerald-400 font-bold mb-4''>Now Available — Premium Module</p><h2 class=''text-4xl md:text-5xl font-bold text-white mb-6 leading-tight''>Turn Your CMS Into<br/>a Full Storefront.</h2><p class=''text-lg text-slate-300 max-w-2xl leading-relaxed mb-8''>NextBlock™ Commerce transforms your content platform into a complete e-commerce engine. Products, checkout, multi-currency, taxes, shipping, invoices — all natively integrated into the block editor you already know.</p>"}},{"block_type":"button","content":{"text":"Explore Commerce Features →","url":"/article/nextblock-commerce-guide","variant":"default","size":"lg"}},{"block_type":"button","content":{"text":"Get a License","url":"/product/nextblock-commerce-pro-commerce-license","variant":"outline","size":"lg"}}],[{"block_type":"text","content":{"html_content":"<div class=''rounded-3xl overflow-hidden border border-emerald-500/20 bg-gradient-to-br from-white/5 to-emerald-500/5 shadow-2xl p-6 backdrop-blur-sm''><img src=''/images/commerce-square.webp'' alt=''NextBlock™ Commerce dashboard showing product management'' class=''w-full h-auto rounded-2xl shadow-lg'' /><div class=''mt-4 grid grid-cols-3 gap-3 text-center''><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>∞</p><p class=''text-xs text-slate-400''>Currencies</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>2</p><p class=''text-xs text-slate-400''>Providers</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>Auto</p><p class=''text-xs text-slate-400''>Tax Sync</p></div></div></div>"}}]]}'::jsonb, 3),
+  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#022c22","position":0},{"color":"#0f172a","position":50},{"color":"#020817","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"xl","vertical_alignment":"center","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<p class=''text-xs uppercase tracking-[0.25em] text-emerald-400 font-bold mb-4''>Now Available — Premium Module</p><h2 class=''text-4xl md:text-5xl font-bold text-white mb-6 leading-tight''>Turn Your CMS Into<br/>a Full Storefront.</h2><p class=''text-lg text-slate-300 max-w-2xl leading-relaxed mb-8''>NextBlock™ Commerce transforms your content platform into a complete e-commerce engine. Products, checkout, multi-currency, taxes, shipping, invoices — all natively integrated into the block editor you already know.</p>"}},{"block_type":"button","content":{"text":"Explore Commerce Features →","url":"/article/nextblock-commerce-guide","variant":"default","size":"lg"}},{"block_type":"button","content":{"text":"Get a License","url":"https://nextblock.dev/product/nextblock-commerce-pro-commerce-license","variant":"outline","size":"lg"}}],[{"block_type":"text","content":{"html_content":"<div class=''rounded-3xl overflow-hidden border border-emerald-500/20 bg-gradient-to-br from-white/5 to-emerald-500/5 shadow-2xl p-6 backdrop-blur-sm''><img src=''/images/commerce-square.webp'' alt=''NextBlock™ Commerce dashboard showing product management'' class=''w-full h-auto rounded-2xl shadow-lg'' /><div class=''mt-4 grid grid-cols-3 gap-3 text-center''><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>∞</p><p class=''text-xs text-slate-400''>Currencies</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>2</p><p class=''text-xs text-slate-400''>Providers</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>Auto</p><p class=''text-xs text-slate-400''>Tax Sync</p></div></div></div>"}}]]}'::jsonb, 3),
 
   (v_home_page_id, v_en_lang_id, 'section',
   '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":2,"text_content":"Everything You Need to Sell Online","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-lg text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto mb-12''>NextBlock™ Commerce ships a complete e-commerce toolkit so you can go from catalog to checkout without third-party plugins.</p><div class=''grid gap-6 md:grid-cols-2 lg:grid-cols-3''><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Multi-Currency</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Real-time FX rates, rounding modes, charm pricing, and automatic product price sync across unlimited currencies.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Tax Automation</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Manual stacked tax rates (GST + PST) or fully automatic calculation via Stripe Tax — you choose.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Shipping Zones</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Zone-based rate resolution with country and state matching, per-currency pricing, and free-shipping thresholds.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Stripe &amp; Freemius Checkout</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Stripe for physical products, Freemius for digital licensing — provider-aware checkout with inventory validation.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Inventory Tracking</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Automatic quantity deduction on payment with resilient fallback paths and variant-level stock management.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Orders &amp; Invoices</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Full order lifecycle management, stable invoice numbering, printable documents, and exportable order reports.</p></div></div>"}}]]}'::jsonb, 4),
 
   (v_home_page_id, v_en_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":2,"text_content":"More Than a CMS. An Ecosystem.","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ is building a sustainable open-core roadmap so the platform grows with your business.</p>"}},{"block_type":"text","content":{"html_content":"<div class=''grid gap-6 lg:grid-cols-[0.75fr_1.25fr] mt-10 items-stretch''><div class=''overflow-hidden rounded-[2rem] border border-slate-200 dark:border-white/10 bg-slate-950 shadow-2xl''><img src=''/images/goals.webp'' alt=''Roadmap board outlining the NextBlock™ ecosystem and premium module direction'' class=''h-full w-full object-cover'' /><div class=''border-t border-white/10 bg-slate-950/95 px-6 py-5''><p class=''text-xs uppercase tracking-[0.24em] text-emerald-300 mb-2 font-bold''>Roadmap in motion</p><p class=''text-sm text-slate-300 mb-0''>Commerce ships first, then the broader ecosystem grows around plugins, blocks, and partner-built modules.</p></div></div><div class=''grid gap-6''><div class=''p-10 rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-500/5 dark:to-white/5 hover:border-emerald-500/40 transition-colors''><p class=''text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-2 font-bold''>Available now</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>NextBlock™ Commerce</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Transform your site into a composable storefront with products, checkout, multi-currency pricing, tax automation, and commerce blocks that live beside your editorial content.</p></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-violet-500/30 transition-colors''><p class=''text-xs uppercase tracking-wide text-violet-700 dark:text-violet-300 mb-2 font-bold''>Build the future</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Plugin and block marketplace</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>A community marketplace gives developers room to publish, sell, and distribute custom blocks, themes, integrations, and partner modules.</p></div></div></div>"}},{"block_type":"heading","content":{"level":2,"text_content":"Join Our Community.","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-600 dark:text-slate-400 text-center mx-auto''>NextBlock™ is being built in the open. Star the repo, share feedback, and help define the future of performance-first content management.</p>"}},{"block_type":"text","content":{"html_content":"<div class=''grid gap-4 md:grid-cols-3 mt-10 text-sm''><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://github.com/nextblock-cms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>GitHub</strong><span class=''text-slate-600 dark:text-slate-400''>Star the repo &amp; contribute</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://x.com/NextBlockCMS'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>X (Twitter)</strong><span class=''text-slate-600 dark:text-slate-400''>Follow updates &amp; announcements</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://dev.to/nextblockcms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>Dev.to</strong><span class=''text-slate-600 dark:text-slate-400''>Read technical deep dives</span></a></div>"}}]]}'::jsonb, 5),
+  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#1e1b4b","position":0},{"color":"#0f172a","position":50},{"color":"#020817","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"xl","vertical_alignment":"center","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<div class=''rounded-3xl overflow-hidden border border-violet-500/20 bg-gradient-to-br from-white/5 to-violet-500/5 shadow-2xl p-6 backdrop-blur-sm''><img src=''/images/cortex-ai-square.webp'' alt=''NextBlock™ Cortex AI dashboard showing block generator'' class=''w-full h-auto rounded-2xl shadow-lg'' /><div class=''mt-4 grid grid-cols-3 gap-3 text-center''><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>OpenRouter</p><p class=''text-xs text-slate-400''>AI Gateway</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>BYOK</p><p class=''text-xs text-slate-400''>Cost Control</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>Zod</p><p class=''text-xs text-slate-400''>Typed Blocks</p></div></div></div>"}}],[{"block_type":"text","content":{"html_content":"<p class=''text-xs uppercase tracking-[0.25em] text-violet-400 font-bold mb-4''>Now Available — AI Copilot</p><h2 class=''text-4xl md:text-5xl font-bold text-white mb-6 leading-tight''>Supercharge Your<br/>Content with AI.</h2><p class=''text-lg text-slate-300 max-w-2xl leading-relaxed mb-8''>NextBlock™ Cortex AI brings native block-level intelligence directly to your editor. Generate copy, refactor structures, and automate translations in one click, built directly on our high-performance architecture.</p>"}},{"block_type":"button","content":{"text":"Explore AI Capabilities →","url":"/article/nextblock-cortex-ai-guide","variant":"default","size":"lg"}},{"block_type":"button","content":{"text":"Get a License","url":"https://nextblock.dev/product/nextblock-cortex-ai-cortex-ai-license","variant":"outline","size":"lg"}}]]}'::jsonb, 5),
+
+  (v_home_page_id, v_en_lang_id, 'section',
+  '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":2,"text_content":"More Than a CMS. An Ecosystem.","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ is building a sustainable open-core roadmap so the platform grows with your business.</p>"}},{"block_type":"text","content":{"html_content":"<div class=''grid gap-6 lg:grid-cols-[0.75fr_1.25fr] mt-10 items-stretch''><div class=''overflow-hidden rounded-[2rem] border border-slate-200 dark:border-white/10 bg-slate-950 shadow-2xl''><img src=''/images/goals.webp'' alt=''Roadmap board outlining the NextBlock™ ecosystem and premium module direction'' class=''h-full w-full object-cover'' /><div class=''border-t border-white/10 bg-slate-950/95 px-6 py-5''><p class=''text-xs uppercase tracking-[0.24em] text-emerald-300 mb-2 font-bold''>Roadmap in motion</p><p class=''text-sm text-slate-300 mb-0''>Commerce ships first, then the broader ecosystem grows around plugins, blocks, and partner-built modules.</p></div></div><div class=''grid gap-6''><div class=''p-10 rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-500/5 dark:to-white/5 hover:border-emerald-500/40 transition-colors''><p class=''text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-2 font-bold''>Available now</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>NextBlock™ Commerce</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Transform your site into a composable storefront with products, checkout, multi-currency pricing, tax automation, and commerce blocks that live beside your editorial content.</p></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-violet-500/30 transition-colors''><p class=''text-xs uppercase tracking-wide text-violet-700 dark:text-violet-300 mb-2 font-bold''>Build the future</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Plugin and block marketplace</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>A community marketplace gives developers room to publish, sell, and distribute custom blocks, themes, integrations, and partner modules.</p></div></div></div>"}},{"block_type":"heading","content":{"level":2,"text_content":"Join Our Community.","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-600 dark:text-slate-400 text-center mx-auto''>NextBlock™ is being built in the open. Star the repo, share feedback, and help define the future of performance-first content management.</p>"}},{"block_type":"text","content":{"html_content":"<div class=''grid gap-4 md:grid-cols-3 mt-10 text-sm''><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://github.com/nextblock-cms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>GitHub</strong><span class=''text-slate-600 dark:text-slate-400''>Star the repo &amp; contribute</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://x.com/NextBlockCMS'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>X (Twitter)</strong><span class=''text-slate-600 dark:text-slate-400''>Follow updates &amp; announcements</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://dev.to/nextblockcms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>Dev.to</strong><span class=''text-slate-600 dark:text-slate-400''>Read technical deep dives</span></a></div>"}}]]}'::jsonb, 6),
 
   (v_home_page_id, v_en_lang_id, 'section',
   '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"180deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<h2 class=''text-3xl md:text-4xl font-bold text-center text-white mb-4''>Have Questions?</h2>"}},{"block_type":"text","content":{"html_content":"<p class=''text-center text-lg text-slate-300 mx-auto mb-8''>NextBlock™ partners with early adopters to co-build features, sponsor modules, and shape the product direction.</p>"}},{"block_type":"button","content":{"text":"Get in Touch","url":"/contact","variant":"default","size":"lg","position":"center"}}]]}'::jsonb, 6),
@@ -4617,16 +4620,19 @@ BEGIN
   (v_home_page_fr_id, v_fr_lang_id, 'section',
   '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"180deg","stops":[{"color":"#0f172a","position":0},{"color":"#020817","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<h2 class=''text-3xl md:text-4xl font-bold text-white text-center mb-6''>Conçu avec les meilleurs outils.</h2>"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-400 text-center max-w-2xl mx-auto''>Chaque couche de NextBlock™ repose sur des technologies éprouvées pour une expérience familière et performante.</p><div class=''grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 mt-10 text-sm font-semibold text-center text-white''><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Next.js</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>React</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Supabase</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Stripe</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Tailwind</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Tiptap</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Vercel</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Nx</div></div>"}},{"block_type":"text","content":{"html_content":"<h2 class=''text-3xl md:text-4xl font-bold text-white text-center mb-6 mt-16''>Puissant pour les développeurs. Intuitif pour les éditeurs.</h2>"}},{"block_type":"text","content":{"html_content":"<div class=''grid md:grid-cols-2 gap-8 mt-10 text-white''><div class=''p-8 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm''><h3 class=''text-xl font-bold mb-6 text-blue-400''>Pour les créateurs</h3><ul class=''space-y-4 text-sm text-slate-300''><li><strong class=''text-white block mb-1''>Éditeur de blocs</strong>Glisser-déposer façon Notion.</li><li><strong class=''text-white block mb-1''>Blocs riches</strong>Héros, galeries, témoignages.</li><li><strong class=''text-white block mb-1''>Médiathèque</strong>Dossiers, tags et actions groupées.</li><li><strong class=''text-white block mb-1''>Versions sécurisées</strong>Historique et restauration instantanée.</li></ul></div><div class=''p-8 rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-sm''><h3 class=''text-xl font-bold mb-6 text-purple-400''>Pour les développeurs</h3><ul class=''space-y-4 text-sm text-slate-300''><li><strong class=''text-white block mb-1''>Next.js 16</strong>Server Components, ISR et Edge prêts à l''emploi.</li><li><strong class=''text-white block mb-1''>Supabase</strong>Postgres, auth, stockage, temps réel.</li><li><strong class=''text-white block mb-1''>Monorepo Nx</strong>Dépendances lisibles et centrales.</li><li><strong class=''text-white block mb-1''>SDK de blocs</strong>Widgets typés et extensibles.</li></ul></div></div>"}}]]}'::jsonb, 2),
   (v_home_page_fr_id, v_fr_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#022c22","position":0},{"color":"#0f172a","position":50},{"color":"#020817","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"xl","vertical_alignment":"center","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<p class=''text-xs uppercase tracking-[0.25em] text-emerald-400 font-bold mb-4''>Disponible — Module Premium</p><h2 class=''text-4xl md:text-5xl font-bold text-white mb-6 leading-tight''>Transformez votre CMS<br/>en vitrine complète.</h2><p class=''text-lg text-slate-300 max-w-2xl leading-relaxed mb-8''>NextBlock™ Commerce transforme votre plateforme de contenu en moteur e-commerce complet. Produits, checkout, multi-devises, taxes, expédition, factures — le tout intégré nativement dans l''éditeur de blocs que vous connaissez déjà.</p>"}},{"block_type":"button","content":{"text":"Découvrir Commerce →","url":"/article/guide-commerce-nextblock","variant":"default","size":"lg"}},{"block_type":"button","content":{"text":"Obtenir une licence","url":"mailto:info@nextblock.dev","variant":"outline","size":"lg"}}],[{"block_type":"text","content":{"html_content":"<div class=''rounded-3xl overflow-hidden border border-emerald-500/20 bg-gradient-to-br from-white/5 to-emerald-500/5 shadow-2xl p-6 backdrop-blur-sm''><img src=''/images/commerce-square.webp'' alt=''Tableau de bord NextBlock™ Commerce'' class=''w-full h-auto rounded-2xl shadow-lg'' /><div class=''mt-4 grid grid-cols-3 gap-3 text-center''><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>∞</p><p class=''text-xs text-slate-400''>Devises</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>2</p><p class=''text-xs text-slate-400''>Fournisseurs</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>Auto</p><p class=''text-xs text-slate-400''>Taxes</p></div></div></div>"}}]]}'::jsonb, 3),
+  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#022c22","position":0},{"color":"#0f172a","position":50},{"color":"#020817","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"xl","vertical_alignment":"center","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<p class=''text-xs uppercase tracking-[0.25em] text-emerald-400 font-bold mb-4''>Disponible — Module Premium</p><h2 class=''text-4xl md:text-5xl font-bold text-white mb-6 leading-tight''>Transformez votre CMS<br/>en vitrine complète.</h2><p class=''text-lg text-slate-300 max-w-2xl leading-relaxed mb-8''>NextBlock™ Commerce transforme votre plateforme de contenu en moteur e-commerce complet. Produits, checkout, multi-devises, taxes, expédition, factures — le tout intégré nativement dans l''éditeur de blocs que vous connaissez déjà.</p>"}},{"block_type":"button","content":{"text":"Découvrir Commerce →","url":"/article/guide-commerce-nextblock","variant":"default","size":"lg"}},{"block_type":"button","content":{"text":"Obtenir une licence","url":"https://nextblock.dev/product/nextblock-commerce-pro-commerce-license","variant":"outline","size":"lg"}}],[{"block_type":"text","content":{"html_content":"<div class=''rounded-3xl overflow-hidden border border-emerald-500/20 bg-gradient-to-br from-white/5 to-emerald-500/5 shadow-2xl p-6 backdrop-blur-sm''><img src=''/images/commerce-square.webp'' alt=''Tableau de bord NextBlock™ Commerce'' class=''w-full h-auto rounded-2xl shadow-lg'' /><div class=''mt-4 grid grid-cols-3 gap-3 text-center''><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>∞</p><p class=''text-xs text-slate-400''>Devises</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>2</p><p class=''text-xs text-slate-400''>Fournisseurs</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>Auto</p><p class=''text-xs text-slate-400''>Taxes</p></div></div></div>"}}]]}'::jsonb, 3),
 
   (v_home_page_fr_id, v_fr_lang_id, 'section',
   '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":2,"text_content":"Tout pour vendre en ligne","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-lg text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto mb-12''>NextBlock™ Commerce livre une boîte à outils e-commerce complète pour aller du catalogue au paiement sans plugins tiers.</p><div class=''grid gap-6 md:grid-cols-2 lg:grid-cols-3''><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Multi-Devises</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Taux de change en temps réel, modes d''arrondi, prix charme et synchronisation automatique sur toutes les devises.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Taxes Automatiques</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Taux manuels empilés (TPS + TVQ) ou calcul automatique via Stripe Tax — à vous de choisir.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Zones d''Expédition</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Résolution par pays et état, tarification par devise et seuils de livraison gratuite.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Stripe &amp; Freemius</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Stripe pour les produits physiques, Freemius pour les licences numériques — checkout intelligent avec validation d''inventaire.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Suivi d''Inventaire</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Déduction automatique des quantités au paiement avec gestion des stocks par variante.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Commandes &amp; Factures</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Gestion du cycle de vie des commandes, numérotation stable des factures et rapports de commandes exportables.</p></div></div>"}}]]}'::jsonb, 4),
 
   (v_home_page_fr_id, v_fr_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":2,"text_content":"Plus qu''un CMS. Un écosystème.","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ construit une feuille de route open-core durable qui évolue avec votre activité.</p>"}},{"block_type":"text","content":{"html_content":"<div class=''grid gap-6 lg:grid-cols-[0.75fr_1.25fr] mt-10 items-stretch''><div class=''overflow-hidden rounded-[2rem] border border-slate-200 dark:border-white/10 bg-slate-950 shadow-2xl''><img src=''/images/goals.webp'' alt=''Tableau de roadmap montrant la direction de l''ecosysteme NextBlock™ et des modules premium'' class=''h-full w-full object-cover'' /><div class=''border-t border-white/10 bg-slate-950/95 px-6 py-5''><p class=''text-xs uppercase tracking-[0.24em] text-emerald-300 mb-2 font-bold''>Roadmap en mouvement</p><p class=''text-sm text-slate-300 mb-0''>Le commerce arrive en premier, puis l''ecosysteme s''etend avec des plugins, des blocs et des modules construits par les partenaires.</p></div></div><div class=''grid gap-6''><div class=''p-10 rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-500/5 dark:to-white/5 hover:border-emerald-500/40 transition-colors''><p class=''text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-2 font-bold''>Disponible maintenant</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>NextBlock™ Commerce</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Transformez votre site en vitrine composable avec produits, checkout, tarification multi-devise, taxes automatiques et blocs commerce relies a votre contenu editorial.</p></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-violet-500/30 transition-colors''><p class=''text-xs uppercase tracking-wide text-violet-700 dark:text-violet-300 mb-2 font-bold''>Construire la suite</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Marketplace de plugins et blocs</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Une marketplace communautaire ouvrira la voie a la publication, la vente et la distribution de blocs, themes, integrations et modules partenaires.</p></div></div></div>"}},{"block_type":"heading","content":{"level":2,"text_content":"Rejoignez la communauté.","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ se construit en public. Ajoutez une étoile, partagez vos retours et façonnez l''avenir du CMS orienté performance.</p>"}},{"block_type":"text","content":{"html_content":"<div class=''grid gap-4 md:grid-cols-3 mt-10 text-sm''><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://github.com/nextblock-cms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>GitHub</strong><span class=''text-slate-600 dark:text-slate-400''>Ajoutez une étoile &amp; contribuez</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://x.com/NextBlockCMS'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>X (Twitter)</strong><span class=''text-slate-600 dark:text-slate-400''>Suivez les annonces</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://dev.to/nextblockcms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>Dev.to</strong><span class=''text-slate-600 dark:text-slate-400''>Lisez nos articles techniques</span></a></div>"}}]]}'::jsonb, 5),
+  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#1e1b4b","position":0},{"color":"#0f172a","position":50},{"color":"#020817","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"xl","vertical_alignment":"center","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<div class=''rounded-3xl overflow-hidden border border-violet-500/20 bg-gradient-to-br from-white/5 to-violet-500/5 shadow-2xl p-6 backdrop-blur-sm''><img src=''/images/cortex-ai-square.webp'' alt=''Tableau de bord NextBlock™ Cortex AI montrant le générateur de blocs'' class=''w-full h-auto rounded-2xl shadow-lg'' /><div class=''mt-4 grid grid-cols-3 gap-3 text-center''><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>OpenRouter</p><p class=''text-xs text-slate-400''>Passerelle IA</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>BYOK</p><p class=''text-xs text-slate-400''>Contrôle des coûts</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>Zod</p><p class=''text-xs text-slate-400''>Blocs typés</p></div></div></div>"}}],[{"block_type":"text","content":{"html_content":"<p class=''text-xs uppercase tracking-[0.25em] text-violet-400 font-bold mb-4''>Disponible — Copilote IA</p><h2 class=''text-4xl md:text-5xl font-bold text-white mb-6 leading-tight''>Boostez votre<br/>contenu avec l''IA.</h2><p class=''text-lg text-slate-300 max-w-2xl leading-relaxed mb-8''>NextBlock™ Cortex AI apporte une intelligence native au niveau des blocs directement dans votre éditeur. Générez du texte, restructurez vos contenus et automatisez les traductions en un clic, le tout propulsé par notre architecture haute performance.</p>"}},{"block_type":"button","content":{"text":"Découvrir l''IA →","url":"/article/nextblock-cortex-ai-guide","variant":"default","size":"lg"}},{"block_type":"button","content":{"text":"Obtenir une licence","url":"https://nextblock.dev/product/nextblock-cortex-ai-cortex-ai-license","variant":"outline","size":"lg"}}]]}'::jsonb, 5),
 
   (v_home_page_fr_id, v_fr_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"180deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<h2 class=''text-3xl md:text-4xl font-bold text-center text-white mb-4''>Des questions ?</h2>"}},{"block_type":"text","content":{"html_content":"<p class=''text-center text-base text-slate-300 max-w-2xl mx-auto''>NextBlock™ co-construit avec des partenaires : fonctionnalités, modules sponsorisés et direction produit.</p>"}},{"block_type":"button","content":{"text":"Nous contacter","url":"mailto:info@nextblock.dev","variant":"default","size":"lg","position":"center"}}]]}'::jsonb, 6),
+  '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":2,"text_content":"Plus qu''un CMS. Un écosystème.","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ construit une feuille de route open-core durable qui évolue avec votre activité.</p>"}},{"block_type":"text","content":{"html_content":"<div class=''grid gap-6 lg:grid-cols-[0.75fr_1.25fr] mt-10 items-stretch''><div class=''overflow-hidden rounded-[2rem] border border-slate-200 dark:border-white/10 bg-slate-950 shadow-2xl''><img src=''/images/goals.webp'' alt=''Tableau de roadmap montrant la direction de l''ecosysteme NextBlock™ et des modules premium'' class=''h-full w-full object-cover'' /><div class=''border-t border-white/10 bg-slate-950/95 px-6 py-5''><p class=''text-xs uppercase tracking-[0.24em] text-emerald-300 mb-2 font-bold''>Roadmap en mouvement</p><p class=''text-sm text-slate-300 mb-0''>Le commerce arrive en premier, puis l''ecosysteme s''etend avec des plugins, des blocs et des modules construits par les partenaires.</p></div></div><div class=''grid gap-6''><div class=''p-10 rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-500/5 dark:to-white/5 hover:border-emerald-500/40 transition-colors''><p class=''text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-2 font-bold''>Disponible maintenant</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>NextBlock™ Commerce</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Transformez votre site en vitrine composable avec produits, checkout, tarification multi-devise, taxes automatiques et blocs commerce relies a votre contenu editorial.</p></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-violet-500/30 transition-colors''><p class=''text-xs uppercase tracking-wide text-violet-700 dark:text-violet-300 mb-2 font-bold''>Construire la suite</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Marketplace de plugins et blocs</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Une marketplace communautaire ouvrira la voie a la publication, la vente et la distribution de blocs, themes, integrations et modules partenaires.</p></div></div></div>"}},{"block_type":"heading","content":{"level":2,"text_content":"Rejoignez la communauté.","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ se construit en public. Ajoutez une étoile, partagez vos retours et façonnez l''avenir du CMS orienté performance.</p>"}},{"block_type":"text","content":{"html_content":"<div class=''grid gap-4 md:grid-cols-3 mt-10 text-sm''><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://github.com/nextblock-cms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>GitHub</strong><span class=''text-slate-600 dark:text-slate-400''>Ajoutez une étoile &amp; contribuez</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://x.com/NextBlockCMS'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>X (Twitter)</strong><span class=''text-slate-600 dark:text-slate-400''>Suivez les annonces</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://dev.to/nextblockcms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>Dev.to</strong><span class=''text-slate-600 dark:text-slate-400''>Lisez nos articles techniques</span></a></div>"}}]]}'::jsonb, 6),
+
+  (v_home_page_fr_id, v_fr_lang_id, 'section',
+  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"180deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<h2 class=''text-3xl md:text-4xl font-bold text-center text-white mb-4''>Des questions ?</h2>"}},{"block_type":"text","content":{"html_content":"<p class=''text-center text-base text-slate-300 max-w-2xl mx-auto''>NextBlock™ co-construit avec des partenaires : fonctionnalités, modules sponsorisés et direction produit.</p>"}},{"block_type":"button","content":{"text":"Nous contacter","url":"mailto:info@nextblock.dev","variant":"default","size":"lg","position":"center"}}]]}'::jsonb, 7),
 
   (v_blog_page_fr_id, v_fr_lang_id, 'hero',
   '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#020817","position":0},{"color":"#1e293b","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<p class=''text-sm uppercase tracking-[0.3em] text-blue-400 font-bold text-center md:text-left mb-4''>Le journal Nextblock</p>"}},{"block_type":"text","content":{"html_content":"<h2 class=''text-4xl md:text-5xl font-bold text-white text-center md:text-left mb-6''>Plongées dans la performance, l''expérience dev et l''édition visuelle.</h2>"}},{"block_type":"text","content":{"html_content":"<p class=''text-lg max-w-xl mx-auto md:mx-0 text-center md:text-left text-slate-300 leading-relaxed''>Walkthroughs d''architecture, recettes Supabase et expérimentations éditeur écrits par l''équipe Nextblock.</p>"}},{"block_type":"button","content":{"text":"Explorer les articles","url":"/articles#latest","variant":"default","size":"lg"}},{"block_type":"button","content":{"text":"S''abonner aux mises à jour","url":"https://github.com/nextblock-cms/nextblock/discussions","variant":"outline","size":"lg"}}],[{"block_type":"text","content":{"html_content":"<div class=''rounded-3xl overflow-hidden border border-white/10 bg-white/5 shadow-2xl p-4 backdrop-blur-sm''><img src=''/images/developer.webp'' alt=''Développeur travaillant avec la stack Nextblock'' class=''w-full object-cover rounded-2xl shadow-lg'' style=''max-width: 400px;'' /></div>"}}]]}'::jsonb, 0),
@@ -4635,6 +4641,14 @@ BEGIN
   '{"postsPerPage":6,"columns":3,"showPagination":true,"title":"Derniers articles"}'::jsonb, 1);
 END;
 $seed_fr$;
+
+-- Convert seeded 'hero' block types to 'section' with is_hero = true
+UPDATE public.blocks
+SET
+  block_type = 'section',
+  content = COALESCE(content, '{}'::jsonb) || '{"is_hero": true}'::jsonb
+WHERE block_type = 'hero';
+
 -- Post content blocks for all 3 posts (EN + FR)
 WITH target_posts AS (
   SELECT id, language_id, slug
@@ -4695,8 +4709,8 @@ $$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock™ i
 </figure>
 
 <h2>Block Registry as Product Surface</h2>
-<p>The block registry in <code>apps/nextblock/lib/blocks/blockRegistry.ts</code> is the source of truth for available block types, Zod schemas, starter content, and editor or renderer components. Today that includes everything from <code>text</code> and <code>heading</code> to <code>hero</code>, <code>section</code>, <code>posts_grid</code>, <code>checkout</code>, and <code>product_details</code>.</p>
-<p>Sections and heroes support nested column arrays, so layouts can be composed like real pages instead of flat content lists. Helpers such as <code>getBlockDefinition()</code>, <code>getInitialContent()</code>, and <code>validateBlockContent()</code> keep that flexibility strongly typed.</p>
+<p>The block registry in <code>apps/nextblock/lib/blocks/blockRegistry.ts</code> is the source of truth for available block types, Zod schemas, starter content, and editor or renderer components. Today that includes everything from <code>text</code> and <code>heading</code> to <code>section</code>, <code>posts_grid</code>, <code>checkout</code>, and <code>product_details</code>.</p>
+<p>Sections support nested column arrays, so layouts can be composed like real pages instead of flat content lists. Helpers such as <code>getBlockDefinition()</code>, <code>getInitialContent()</code>, and <code>validateBlockContent()</code> keep that flexibility strongly typed.</p>
 
 <h2>The Editing Layer</h2>
 <p>The <code>@nextblock-cms/editor</code> package wraps Tiptap v3 into a reusable editorial surface with slash commands, floating and bubble menus, drag handles, tables, task lists, character counts, and syntax-highlighted code blocks. It deliberately preserves richer HTML so advanced teams are not boxed into a simplified subset.</p>
@@ -4761,8 +4775,8 @@ $$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock™ r
 </figure>
 
 <h2>Le registre de blocs comme surface produit</h2>
-<p>Le registre dans <code>apps/nextblock/lib/blocks/blockRegistry.ts</code> d&eacute;finit les types disponibles, les sch&eacute;mas Zod, les contenus de d&eacute;part et les composants d'&eacute;dition ou de rendu. On y trouve aujourd'hui des blocs comme <code>text</code>, <code>heading</code>, <code>hero</code>, <code>section</code>, <code>posts_grid</code>, <code>checkout</code> et <code>product_details</code>.</p>
-<p>Les sections et h&eacute;ros supportent des colonnes imbriqu&eacute;es, ce qui permet de composer de vraies pages plut&ocirc;t qu'une simple liste de contenu. Des helpers comme <code>getBlockDefinition()</code>, <code>getInitialContent()</code> et <code>validateBlockContent()</code> gardent cette flexibilit&eacute; bien typ&eacute;e.</p>
+<p>Le registre dans <code>apps/nextblock/lib/blocks/blockRegistry.ts</code> d&eacute;finit les types disponibles, les sch&eacute;mas Zod, les contenus de d&eacute;part et les composants d'&eacute;dition ou de rendu. On y trouve aujourd'hui des blocs comme <code>text</code>, <code>heading</code>, <code>section</code>, <code>posts_grid</code>, <code>checkout</code> et <code>product_details</code>.</p>
+<p>Les sections supportent des colonnes imbriqu&eacute;es, ce qui permet de composer de vraies pages plut&ocirc;t qu'une simple liste de contenu. Des helpers comme <code>getBlockDefinition()</code>, <code>getInitialContent()</code> and <code>validateBlockContent()</code> gardent cette flexibilit&eacute; bien typ&eacute;e.</p>
 
 <h2>La couche d'edition</h2>
 <p>Le package <code>@nextblock-cms/editor</code> enveloppe Tiptap v3 dans une surface &eacute;ditoriale r&eacute;utilisable avec slash commands, menus contextuels, drag handles, tableaux, listes de taches, compteurs et blocs de code. Le but est de conserver un HTML riche quand une equipe en a besoin.</p>
@@ -5783,6 +5797,319 @@ COMMENT ON COLUMN public.pages.feature_image_id IS
 
 CREATE INDEX IF NOT EXISTS idx_pages_feature_image_id
   ON public.pages (feature_image_id);
+
+
+-- >>> FROM: 00000000000017_add_product_blocks.sql <<<
+-- 00000000000017_add_product_blocks.sql
+-- Migration to support modular block editor for product descriptions.
+
+-- 1. Add product_id column to public.blocks
+ALTER TABLE public.blocks
+  ADD COLUMN product_id uuid REFERENCES public.products(id) ON DELETE CASCADE;
+
+-- 2. Drop the old parent constraint on public.blocks
+ALTER TABLE public.blocks
+  DROP CONSTRAINT IF EXISTS check_exactly_one_parent;
+
+-- 3. Add the updated parent constraint supporting product_id
+ALTER TABLE public.blocks
+  ADD CONSTRAINT check_exactly_one_parent CHECK (
+    (page_id IS NOT NULL AND post_id IS NULL AND product_id IS NULL)
+    OR (post_id IS NOT NULL AND page_id IS NULL AND product_id IS NULL)
+    OR (product_id IS NOT NULL AND page_id IS NULL AND post_id IS NULL)
+  );
+
+-- 4. Add blocks column to product_drafts table
+ALTER TABLE public.product_drafts
+  ADD COLUMN IF NOT EXISTS blocks jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+-- 5. Add check constraint to ensure product_drafts.blocks is a JSON array
+ALTER TABLE public.product_drafts
+  DROP CONSTRAINT IF EXISTS product_drafts_blocks_array;
+
+ALTER TABLE public.product_drafts
+  ADD CONSTRAINT product_drafts_blocks_array CHECK (jsonb_typeof(blocks) = 'array');
+
+-- 6. Migrate existing product description_json to blocks
+INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
+SELECT
+  id as product_id,
+  language_id,
+  'text' as block_type,
+  jsonb_build_object('html_content', COALESCE(description_json#>>'{}', '')) as content,
+  0 as "order"
+FROM public.products
+WHERE description_json IS NOT NULL AND (description_json#>>'{}') <> ''
+ON CONFLICT DO NOTHING;
+
+-- 7. Recreate blocks_anon_read_policy
+DROP POLICY IF EXISTS blocks_anon_read_policy ON public.blocks;
+CREATE POLICY blocks_anon_read_policy
+  ON public.blocks
+  FOR SELECT
+  TO anon
+  USING (
+    (
+      page_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM public.pages AS p
+        WHERE p.id = blocks.page_id
+          AND p.status = 'published'
+      )
+    )
+    OR (
+      post_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM public.posts AS pt
+        WHERE pt.id = blocks.post_id
+          AND pt.status = 'published'
+          AND (pt.published_at IS NULL OR pt.published_at <= now())
+      )
+    )
+    OR (
+      product_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM public.products AS pr
+        WHERE pr.id = blocks.product_id
+          AND pr.status = 'active'
+      )
+    )
+  );
+
+-- 8. Recreate blocks_read_policy
+DROP POLICY IF EXISTS blocks_read_policy ON public.blocks;
+CREATE POLICY blocks_read_policy
+  ON public.blocks
+  FOR SELECT
+  TO authenticated
+  USING (
+    ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
+    OR (
+      (
+        page_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM public.pages AS p
+          WHERE p.id = blocks.page_id
+            AND p.status = 'published'
+        )
+      )
+      OR (
+        post_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM public.posts AS pt
+          WHERE pt.id = blocks.post_id
+            AND pt.status = 'published'
+            AND (pt.published_at IS NULL OR pt.published_at <= now())
+        )
+      )
+      OR (
+        product_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM public.products AS pr
+          WHERE pr.id = blocks.product_id
+            AND pr.status = 'active'
+        )
+      )
+    )
+  );
+
+
+-- >>> FROM: 00000000000018_setup_bot_protection_settings.sql <<<
+-- 00000000000018_setup_bot_protection_settings.sql
+-- NextBlock Bot Protection settings and sensitive keys policy hardening.
+
+COMMENT ON TABLE public.site_settings IS 'Key-value store for global site settings. Sensitive keys such as Cortex AI BYOK and Bot Protection Secret Key are protected by row-level policies.';
+
+DROP POLICY IF EXISTS site_settings_read_policy ON public.site_settings;
+DROP POLICY IF EXISTS site_settings_insert_policy ON public.site_settings;
+DROP POLICY IF EXISTS site_settings_update_policy ON public.site_settings;
+DROP POLICY IF EXISTS site_settings_delete_policy ON public.site_settings;
+
+CREATE POLICY site_settings_read_policy
+  ON public.site_settings
+  FOR SELECT
+  TO public
+  USING (
+    key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
+    OR (
+      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
+      AND (SELECT auth.role()) = 'authenticated'
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
+  );
+
+CREATE POLICY site_settings_insert_policy
+  ON public.site_settings
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    (
+      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
+  );
+
+CREATE POLICY site_settings_update_policy
+  ON public.site_settings
+  FOR UPDATE
+  TO authenticated
+  USING (
+    (
+      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
+  )
+  WITH CHECK (
+    (
+      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
+  );
+
+CREATE POLICY site_settings_delete_policy
+  ON public.site_settings
+  FOR DELETE
+  TO authenticated
+  USING (
+    (
+      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
+  );
+
+
+-- >>> FROM: 00000000000019_add_product_categories.sql <<<
+-- 00000000000019_add_product_categories.sql
+-- Migration adding categories and many-to-many product_categories join table.
+
+CREATE TABLE IF NOT EXISTS public.categories (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  slug text NOT NULL UNIQUE,
+  description text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.product_categories (
+  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+  category_id uuid NOT NULL REFERENCES public.categories(id) ON DELETE CASCADE,
+  PRIMARY KEY (product_id, category_id)
+);
+
+-- Indexing foreign keys for performance
+CREATE INDEX IF NOT EXISTS idx_product_categories_product_id ON public.product_categories(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_categories_category_id ON public.product_categories(category_id);
+
+-- Documenting the tables
+COMMENT ON TABLE public.categories IS 'Product categories for organizing catalog items.';
+COMMENT ON TABLE public.product_categories IS 'Junction table mapping products to multiple categories.';
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_categories ENABLE ROW LEVEL SECURITY;
+
+-- Define RLS Policies
+CREATE POLICY "Public can view categories"
+  ON public.categories
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Public can view product_categories"
+  ON public.product_categories
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Admin can manage categories"
+  ON public.categories
+  FOR ALL
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+CREATE POLICY "Admin can manage product_categories"
+  ON public.product_categories
+  FOR ALL
+  TO authenticated
+  USING (((SELECT public.is_admin()) IS TRUE))
+  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
+
+-- Define Grants for roles
+GRANT SELECT ON public.categories TO anon;
+GRANT ALL ON public.categories TO authenticated;
+GRANT ALL ON public.categories TO service_role;
+
+GRANT SELECT ON public.product_categories TO anon;
+GRANT ALL ON public.product_categories TO authenticated;
+GRANT ALL ON public.product_categories TO service_role;
+
+
+-- >>> FROM: 00000000000020_add_category_translations.sql <<<
+-- 00000000000020_add_category_translations.sql
+-- Add name_translations and description_translations columns to public.categories.
+
+ALTER TABLE public.categories
+ADD COLUMN IF NOT EXISTS name_translations jsonb NOT NULL DEFAULT '{}'::jsonb,
+ADD COLUMN IF NOT EXISTS description_translations jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+-- Comment on columns
+COMMENT ON COLUMN public.categories.name_translations IS 'Translated category names (e.g. {"fr": "Numérique"}).';
+COMMENT ON COLUMN public.categories.description_translations IS 'Translated category descriptions.';
+
+
+-- >>> FROM: 00000000000021_migrate_hero_blocks_to_sections.sql <<<
+-- 00000000000021_migrate_hero_blocks_to_sections.sql
+-- Migration to convert 'hero' block types to 'section' block types with {"is_hero": true} content.
+
+-- 1. Migrate active blocks
+UPDATE public.blocks
+SET
+  block_type = 'section',
+  content = COALESCE(content, '{}'::jsonb) || '{"is_hero": true}'::jsonb
+WHERE block_type = 'hero';
+
+-- 2. Migrate content drafts containing hero blocks
+UPDATE public.content_drafts
+SET blocks = (
+  SELECT COALESCE(
+    jsonb_agg(
+      CASE
+        WHEN elem.value->>'block_type' = 'hero' THEN
+          jsonb_set(elem.value, '{block_type}', '"section"'::jsonb) ||
+          jsonb_build_object('content', COALESCE(elem.value->'content', '{}'::jsonb) || '{"is_hero": true}'::jsonb)
+        ELSE elem.value
+      END
+    ),
+    '[]'::jsonb
+  )
+  FROM jsonb_array_elements(public.content_drafts.blocks) AS elem(value)
+)
+WHERE public.content_drafts.blocks @> '[{"block_type": "hero"}]';
+
+
 
 
   -- Step D: Anchor preserved profiles

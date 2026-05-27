@@ -39,7 +39,7 @@ export default function EditableBlock({
   const [LazyEditor, setLazyEditor] = useState<LazyExoticComponent<ComponentType<any>> | ComponentType<any> | null>(null);
 
   const SectionEditor = useMemo(() => {
-    if (block?.block_type === 'section' || block?.block_type === 'hero') {
+    if (block?.block_type === 'section') {
       const editorFilename = blockRegistry[block.block_type as BlockType]?.editorComponentFilename;
       if (editorFilename) {
         return lazy(() => import(`../editors/${editorFilename}`));
@@ -57,7 +57,7 @@ export default function EditableBlock({
 
 
   const handleEditClick = () => {
-    if (block.block_type === 'section' || block.block_type === 'hero') {
+    if (block.block_type === 'section') {
       setIsConfigPanelOpen(prev => !prev);
     } else {
       const blockDef = getBlockDefinition(block.block_type as BlockType);
@@ -90,7 +90,7 @@ export default function EditableBlock({
 
     // If the click was on the card's background (not a button), and it's an editable block type,
     // then trigger the edit handler.
-    if (block.block_type !== 'section' && block.block_type !== 'hero') {
+    if (block.block_type !== 'section') {
       handleEditClick();
     }
   };
@@ -277,7 +277,7 @@ export default function EditableBlock({
     }
   };
 
-  const isSection = block?.block_type === 'section' || block?.block_type === 'hero';
+  const isSection = block?.block_type === 'section';
   const blockDefinition = getBlockDefinition(block.block_type as BlockType);
 
   return (
@@ -318,7 +318,7 @@ export default function EditableBlock({
       {isSection ? (
         <div className="mt-2 min-h-[200px]">
           <Suspense fallback={<div className="flex justify-center items-center h-full"><p>Loading Editor...</p></div>}>
-            {SectionEditor && <SectionEditor block={block} content={block.content || {}} onChange={(newContent: Record<string, any>) => onContentChange(block.id, newContent)} blockType={block.block_type as 'section' | 'hero'} isConfigPanelOpen={isConfigPanelOpen} />}
+            {SectionEditor && <SectionEditor block={block} content={block.content || {}} onChange={(newContent: Record<string, any>) => onContentChange(block.id, newContent)} blockType={block.block_type as 'section'} isConfigPanelOpen={isConfigPanelOpen} />}
           </Suspense>
         </div>
       ) : renderPreview()}

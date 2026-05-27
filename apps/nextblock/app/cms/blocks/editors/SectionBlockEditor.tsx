@@ -36,7 +36,7 @@ interface SectionBlockEditorProps {
   content: Partial<SectionBlockContent>;
   onChange: (newContent: SectionBlockContent) => void;
   isConfigPanelOpen: boolean;
-  blockType: 'section' | 'hero';
+  blockType: 'section';
 }
 
 function formatMinHeight(value?: string) {
@@ -283,7 +283,7 @@ export default function SectionBlockEditor({
   // Parse drag item ID to get column and block indices
   const parseDragId = (id: string) => {
     if (!id) return null;
-    const blockMatch = id.match(/^(hero|section)-column-(\d+)-block-(\d+)$/);
+    const blockMatch = id.match(/^(section)-column-(\d+)-block-(\d+)$/);
     if (blockMatch) {
       return {
         type: "block",
@@ -292,7 +292,7 @@ export default function SectionBlockEditor({
         blockIndex: parseInt(blockMatch[3], 10),
       };
     }
-    const droppableMatch = id.match(/^(hero|section)-column-droppable-(\d+)$/);
+    const droppableMatch = id.match(/^(section)-column-droppable-(\d+)$/);
     if (droppableMatch) {
       return {
         type: "column",

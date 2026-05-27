@@ -120,6 +120,9 @@ export async function handleFormSubmission(
     }
   } catch (error) {
     console.error("[Bot Protection] Error during validation:", error);
+    // If database or fetch error occurs, we gracefully degrade or warn, but let's be secure and fail open/closed depending on preference.
+    // The requirement says: "If the API indicates a verification failure or falls below a threshold... reject the operation securely."
+    // Let's return error message.
     return { success: false, message: "Sorry, security verification could not be completed at this time." };
   }
 

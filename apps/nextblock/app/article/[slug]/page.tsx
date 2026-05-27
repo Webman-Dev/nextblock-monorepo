@@ -10,7 +10,7 @@ import PostClientContent from "./PostClientContent";
 import { getPostDataBySlug } from "./page.utils";
 import BlockRenderer from "../../../components/BlockRenderer";
 import { getSsgSupabaseClient } from "@nextblock-cms/db/server"; // Correct import
-import type { HeroBlockContent } from '../../../lib/blocks/blockRegistry';
+import type { SectionBlockContent } from '../../../lib/blocks/blockRegistry';
 import { resolveMediaUrl } from '../../../lib/media/resolveMediaUrl';
 import { resolveMetaDescription } from '../../lib/seo';
 import { draftMode } from 'next/headers';
@@ -167,9 +167,9 @@ export default async function DynamicPostPage({ params: paramsPromise }: PostPag
   let lcpImageUrl: string | null = null;
 
   if (initialPostData && initialPostData.blocks) {
-    const heroBlock = initialPostData.blocks.find(block => block.block_type === 'hero');
+    const heroBlock = initialPostData.blocks.find(block => block.block_type === 'section' && (block.content as any)?.is_hero);
     if (heroBlock) {
-      const heroContent = heroBlock.content as unknown as HeroBlockContent;
+      const heroContent = heroBlock.content as unknown as SectionBlockContent;
       if (
         heroContent.background &&
         heroContent.background.type === "image" &&

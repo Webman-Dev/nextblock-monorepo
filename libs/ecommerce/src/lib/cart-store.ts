@@ -15,7 +15,7 @@ interface CartState {
   items: CartItem[];
   appliedCoupon: AppliedCouponState | null;
   isOpen: boolean;
-  addItem: (item: Omit<CartItem, 'quantity'>) => AddItemResult;
+  addItem: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => AddItemResult;
   removeItem: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
   setAppliedCoupon: (coupon: AppliedCouponState | null) => void;
@@ -52,6 +52,7 @@ export const useCartStore = create<CartState>()(
       isOpen: false,
       addItem: (newItem) => {
         const { items } = get();
+        const quantityToAdd = newItem.quantity ?? 1;
         const availableStock = typeof newItem.stock === 'number' ? newItem.stock : null;
         const allocatedSkuQuantity =
           availableStock !== null ? getAllocatedSkuQuantity(items, newItem.sku) : 0;
@@ -87,7 +88,7 @@ export const useCartStore = create<CartState>()(
           };
         }
 
-        if (availableStock !== null && allocatedSkuQuantity >= availableStock) {
+        if (availableStock !== null && allocatedSkuQuantity + quantityToAdd > availableStock) {
           return {
             success: false,
             error: `Only ${availableStock} available for this SKU.`,
@@ -101,7 +102,7 @@ export const useCartStore = create<CartState>()(
                 ? {
                     ...item,
                     ...newItem,
-                    quantity: item.quantity + 1,
+                    quantity: item.quantity + quantityToAdd,
                   }
                 : item
             ),
@@ -109,7 +110,7 @@ export const useCartStore = create<CartState>()(
           });
         } else {
           set({
-            items: [...items, { ...newItem, quantity: 1 }],
+            items: [...items, { ...newItem, quantity: quantityToAdd }],
             isOpen: true,
           });
         }
