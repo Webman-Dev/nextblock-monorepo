@@ -55,21 +55,27 @@ function buildProductVisualEditAttributes(
     label,
   };
 
-  const deploymentUrl = typeof window !== 'undefined'
+  const baseUrl = typeof window !== 'undefined'
     ? window.location.origin
     : (process.env.NEXT_PUBLIC_URL || 
        process.env.TARGET_URL || 
        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") || 
        "http://localhost:3000");
 
+  const pageOrigin = typeof window !== 'undefined'
+    ? window.location.origin
+    : (process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : (process.env.NEXT_PUBLIC_URL || process.env.TARGET_URL || "http://localhost:3000"));
+
+  const origin = pageOrigin.replace(/\/+$/, "");
+
   const projectId = process.env.NEXTBLOCK_VERCEL_PROJECT_ID || process.env.VERCEL_PROJECT_ID;
   const workspaceId = process.env.NEXTBLOCK_VERCEL_WORKSPACE_ID || process.env.VERCEL_ORG_ID;
 
-  const origin = deploymentUrl.replace(/\/+$/, "");
-
   const payload: any = {
     origin,
-    editUrl: `${deploymentUrl}/cms/products/${product.id}/edit`,
+    editUrl: `${baseUrl}/cms/products/${product.id}/edit`,
     data: {
       parentType: 'product',
       parentId: product.id,

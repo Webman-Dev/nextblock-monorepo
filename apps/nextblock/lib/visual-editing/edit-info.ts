@@ -28,18 +28,22 @@ export function buildVisualEditAttributes(
     return undefined;
   }
 
-  const deploymentUrl = 
+  const baseUrl = 
     process.env.NEXT_PUBLIC_URL || 
     process.env.TARGET_URL || 
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") || 
     "http://localhost:3000";
 
-  const origin = deploymentUrl.replace(/\/+$/, "");
+  const pageOrigin = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : (process.env.NEXT_PUBLIC_URL || process.env.TARGET_URL || "http://localhost:3000");
+
+  const origin = pageOrigin.replace(/\/+$/, "");
 
   const payload: NextblockVisualEditInfo = {
     origin,
-    baseUrl: deploymentUrl,
-    editUrl: getEditUrl(context.documentType, context.documentId, deploymentUrl),
+    baseUrl: baseUrl,
+    editUrl: getEditUrl(context.documentType, context.documentId, baseUrl),
     data: {
       parentType: context.documentType,
       parentId: context.documentId,
