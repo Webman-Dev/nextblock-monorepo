@@ -29,7 +29,8 @@ export function buildVisualEditAttributes(
     : (process.env.NEXT_PUBLIC_URL || "http://localhost:3000");
 
   const payload: NextblockVisualEditInfo = {
-    origin: deploymentUrl,
+    origin: "nextblock",
+    baseUrl: deploymentUrl,
     editUrl: getEditUrl(context.documentType, context.documentId),
     data: {
       parentType: context.documentType,

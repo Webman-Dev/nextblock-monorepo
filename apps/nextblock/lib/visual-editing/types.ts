@@ -78,6 +78,7 @@ export type VisualEditingTarget =
 
 export interface NextblockVisualEditInfo {
   origin: string;
+  baseUrl?: string;
   projectId?: string;
   workspaceId?: string;
   editUrl: string;
