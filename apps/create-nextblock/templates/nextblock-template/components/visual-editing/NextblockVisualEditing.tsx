@@ -1,5 +1,15 @@
 "use client";
 
+// Force shadow DOMs (such as the Vercel Toolbar) to be open so we can inspect their content.
+if (typeof window !== "undefined") {
+  const originalAttachShadow = Element.prototype.attachShadow;
+  if (originalAttachShadow && !originalAttachShadow.toString().includes("open")) {
+    Element.prototype.attachShadow = function (init) {
+      return originalAttachShadow.call(this, { ...init, mode: "open" });
+    };
+  }
+}
+
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import React, {
@@ -731,10 +741,49 @@ export function NextblockVisualEditing() {
         return;
       }
 
-      const target = event.target instanceof Element
+      let target = event.target instanceof Element
         ? event.target.closest("[data-vercel-edit-info]")
         : null;
-      const info = parseEditInfo(target);
+      let info = parseEditInfo(target);
+
+      // If the target is not directly a visual editing element, but we clicked on a Vercel Toolbar/feedback overlay,
+      // try to resolve the underlying visual editing element from the coordinates.
+      if (!target && event.target instanceof Element) {
+        const isVercelElement =
+          event.target.tagName === "VERCEL-LIVE-FEEDBACK" ||
+          event.target.tagName === "VERCEL-TOOLBAR" ||
+          event.target.closest("vercel-live-feedback") ||
+          event.target.closest("vercel-toolbar");
+
+        if (isVercelElement) {
+          // Avoid intercepting if they clicked the toolbar pill itself.
+          const isToolbarPill =
+            event.target.tagName === "VERCEL-TOOLBAR" ||
+            event.target.closest("vercel-toolbar");
+
+          if (!isToolbarPill) {
+            // Check if Vercel Visual Editing Edit Mode is active (meaning edit button or outline is visible).
+            const host = document.querySelector("vercel-live-feedback");
+            const shadowRoot = host?.shadowRoot;
+            const html = shadowRoot?.innerHTML ?? "";
+
+            // Only intercept if we see "Open in" in the shadow root (Edit Mode active).
+            if (html.includes("Open in") || html.includes("cms.nextblock")) {
+              const elementsAtPoint = document.elementsFromPoint(event.clientX, event.clientY);
+              for (const el of elementsAtPoint) {
+                if (el instanceof HTMLElement && el.hasAttribute("data-vercel-edit-info")) {
+                  const parsed = parseEditInfo(el);
+                  if (parsed) {
+                    target = el;
+                    info = parsed;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
 
       if (!(target instanceof HTMLElement) || !info) {
         return;
