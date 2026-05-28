@@ -512,6 +512,7 @@ export function NextblockVisualEditing() {
   const activeAutosavePromiseRef = useRef<Promise<boolean> | null>(null);
   const hasQueuedAutosaveRef = useRef(false);
   const hasSavedSinceOpenRef = useRef(false);
+  const skipSaveOnBlurRef = useRef(false);
 
   useEffect(() => {
     activeInfoRef.current = activeInfo;
@@ -668,6 +669,7 @@ export function NextblockVisualEditing() {
     setIsEditorOpen(true);
     setIsLoadingBlock(true);
     clearAutosaveTimer();
+    skipSaveOnBlurRef.current = false;
     latestContentRef.current = null;
     lastSavedContentRef.current = "";
     lastFailedContentRef.current = "";
@@ -701,6 +703,123 @@ export function NextblockVisualEditing() {
       productField: isProductFieldInfo(info) ? info.data.target.field : undefined,
     });
   }, [clearAutosaveTimer]);
+
+  const flushAutosaveBeforeClose = useCallback(async () => {
+    clearAutosaveTimer();
+    if (autosaveStatus === "error") {
+      return true;
+    }
+
+    const didSave = await performAutosave();
+
+    if (didSave && hasSavedSinceOpenRef.current) {
+      hasSavedSinceOpenRef.current = false;
+      router.refresh();
+    }
+
+    return didSave;
+  }, [autosaveStatus, clearAutosaveTimer, performAutosave, router]);
+
+  const startInlineEditing = useCallback(async (
+    target: HTMLElement,
+    info: NextblockVisualEditInfo
+  ) => {
+    // Prevent multiple inline edits at the same time
+    if (target.contentEditable === "true") {
+      return;
+    }
+
+    const document = documentFromInfo(info);
+    activeInfoRef.current = info;
+    activeDocumentRef.current = document;
+    setActiveInfo(info);
+    setActiveDocument(document);
+    clearAutosaveTimer();
+    skipSaveOnBlurRef.current = false;
+    latestContentRef.current = null;
+    lastSavedContentRef.current = "";
+    lastFailedContentRef.current = "";
+    isAutosaveInFlightRef.current = false;
+    activeAutosavePromiseRef.current = null;
+    hasQueuedAutosaveRef.current = false;
+    hasSavedSinceOpenRef.current = false;
+    setAutosaveStatus("idle");
+    setMessage(null);
+
+    // Add visual loading state
+    target.style.opacity = "0.7";
+    const result = isProductFieldInfo(info)
+      ? await loadVisualEditingProductField(productFieldRequestFromInfo(info))
+      : await loadVisualEditingBlockContent(blockRequestFromInfo(info));
+    target.style.opacity = "";
+
+    const actionError = getActionError(result);
+    if (actionError) {
+      setMessage(actionError);
+      return;
+    }
+
+    const content = "content" in result ? result.content : null;
+    if (!content || typeof content !== "object") {
+      return;
+    }
+
+    latestContentRef.current = content;
+    lastSavedContentRef.current = serializeDraftContent(content);
+
+    const blockType = "blockType" in info.data.target ? info.data.target.blockType : null;
+
+    // Enable contentEditable
+    target.contentEditable = "true";
+    target.focus();
+
+    // Add visual indicators for active editing
+    target.style.outline = "2px solid rgb(37 99 235 / 0.72)";
+    target.style.outlineOffset = "4px";
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        target.blur();
+      }
+      if (blockType === "heading" && event.key === "Enter") {
+        event.preventDefault();
+        target.blur();
+      }
+    };
+
+    const handleInput = () => {
+      const updatedContent = { ...content } as any;
+      if (blockType === "heading") {
+        updatedContent.text_content = target.innerText;
+      } else if (blockType === "text") {
+        updatedContent.html_content = target.innerHTML;
+      }
+      scheduleAutosave(updatedContent);
+    };
+
+    const handleBlur = async () => {
+      target.contentEditable = "false";
+      target.style.outline = "";
+      target.style.outlineOffset = "";
+
+      target.removeEventListener("keydown", handleKeyDown);
+      target.removeEventListener("input", handleInput);
+      target.removeEventListener("blur", handleBlur);
+
+      if (skipSaveOnBlurRef.current) {
+        clearAutosaveTimer();
+        return;
+      }
+
+      // Flush autosave and refresh page
+      await flushAutosaveBeforeClose();
+    };
+
+    target.addEventListener("keydown", handleKeyDown);
+    target.addEventListener("input", handleInput);
+    target.addEventListener("blur", handleBlur);
+  }, [clearAutosaveTimer, flushAutosaveBeforeClose, scheduleAutosave]);
 
   useEffect(() => {
     const firstEditable = document.querySelector("[data-vercel-edit-info]");
@@ -740,14 +859,14 @@ export function NextblockVisualEditing() {
         return;
       }
 
-      event.preventDefault();
-      event.stopPropagation();
-      setHoverTarget({
-        element: target,
-        info,
-        rect: target.getBoundingClientRect(),
-      });
-      void openEditor(info, target);
+      const blockType = "blockType" in info.data.target ? info.data.target.blockType : null;
+      const canEditInline = (blockType === "text" || blockType === "heading") && !isProductFieldInfo(info);
+
+      if (canEditInline) {
+        event.preventDefault();
+        event.stopPropagation();
+        void startInlineEditing(target, info);
+      }
     };
 
     const handleToolbarEdit = (event: Event) => {
@@ -805,7 +924,7 @@ export function NextblockVisualEditing() {
       window.removeEventListener("vercel-toolbar:visual-edit", handleToolbarEdit);
       window.removeEventListener("visual-editing:edit", handleToolbarEdit);
     };
-  }, [isEditorOpen, openEditor]);
+  }, [isEditorOpen, openEditor, startInlineEditing]);
 
   const overlayPosition = useMemo(() => {
     if (!hoverTarget) {
@@ -827,22 +946,6 @@ export function NextblockVisualEditing() {
     setActiveSurfaceContext(null);
     setActiveModalTitle(undefined);
   }, [clearAutosaveTimer]);
-
-  const flushAutosaveBeforeClose = useCallback(async () => {
-    clearAutosaveTimer();
-    if (autosaveStatus === "error") {
-      return true;
-    }
-
-    const didSave = await performAutosave();
-
-    if (didSave && hasSavedSinceOpenRef.current) {
-      hasSavedSinceOpenRef.current = false;
-      router.refresh();
-    }
-
-    return didSave;
-  }, [autosaveStatus, clearAutosaveTimer, performAutosave, router]);
 
   const flushPendingEditorChanges = useCallback(async () => {
     clearAutosaveTimer();
@@ -898,6 +1001,7 @@ export function NextblockVisualEditing() {
       return;
     }
 
+    skipSaveOnBlurRef.current = true;
     clearAutosaveTimer();
     setIsDiscarding(true);
     setMessage(null);
@@ -919,8 +1023,8 @@ export function NextblockVisualEditing() {
     setMessage("Draft discarded.");
     hasSavedSinceOpenRef.current = false;
     closeVisualEditor();
-    router.refresh();
-  }, [activeDocument, clearAutosaveTimer, closeVisualEditor, router]);
+    window.location.reload();
+  }, [activeDocument, clearAutosaveTimer, closeVisualEditor]);
 
   const EditorComponent =
     activeBlock && activeInfo && isProductFieldInfo(activeInfo)
@@ -937,6 +1041,9 @@ export function NextblockVisualEditing() {
         size="sm"
         className="h-8 rounded-full border-amber-500/20 text-amber-800 dark:text-amber-300 hover:bg-amber-500/10 hover:text-amber-900 dark:hover:text-amber-200 px-3.5 text-xs"
         onClick={discardDraft}
+        onMouseDown={() => {
+          skipSaveOnBlurRef.current = true;
+        }}
         disabled={!activeDocument || isPublishing || isDiscarding}
       >
         {isDiscarding ? (
