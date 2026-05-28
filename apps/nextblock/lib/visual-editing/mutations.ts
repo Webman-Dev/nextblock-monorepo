@@ -11,6 +11,7 @@ import {
 } from "./draft-content";
 import type {
   NextblockDocumentType,
+  NextblockVisualDocumentType,
   VisualEditingBlockRequest,
 } from "./types";
 
@@ -18,8 +19,8 @@ export type VisualEditingMutationResult =
   | { success: true }
   | { error: string };
 
-export function isValidParentType(value: string): value is NextblockDocumentType {
-  return value === "page" || value === "post";
+export function isValidParentType(value: string): value is NextblockVisualDocumentType {
+  return value === "page" || value === "post" || value === "product";
 }
 
 export function assertValidVisualEditingRequest(request: VisualEditingBlockRequest) {
@@ -27,8 +28,16 @@ export function assertValidVisualEditingRequest(request: VisualEditingBlockReque
     throw new Error("Invalid parent type.");
   }
 
-  if (!Number.isFinite(request.parentId) || request.parentId <= 0) {
-    throw new Error("Invalid parent ID.");
+  if (request.parentType === "product") {
+    const PRODUCT_ID_PATTERN =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (typeof request.parentId !== "string" || !PRODUCT_ID_PATTERN.test(request.parentId)) {
+      throw new Error("Invalid product ID.");
+    }
+  } else {
+    if (typeof request.parentId !== "number" || !Number.isFinite(request.parentId) || request.parentId <= 0) {
+      throw new Error("Invalid parent ID.");
+    }
   }
 
   const { target } = request;
@@ -102,40 +111,77 @@ export async function saveVisualEditingBlockDraftMutation(
   try {
     assertValidVisualEditingRequest(request);
     const auth = await requireVisualEditingEditableUser();
-    const draft = await getOrCreateContentDraft(
-      auth.supabase,
-      request.parentType,
-      request.parentId,
-      auth.user.id
-    );
 
-    const nextSnapshot = updateDraftBlockContent(draft, request, content);
-    const { data, error } = await (auth.supabase as any)
-      .from("content_drafts")
-      .update({
-        author_id: auth.user.id,
-        blocks: nextSnapshot.blocks,
-      })
-      .eq("id", draft.id)
-      .select("*")
-      .single();
+    if (request.parentType === "product") {
+      const { getOrCreateProductDraft } = await import("./product-drafts");
+      const draft = await getOrCreateProductDraft(
+        auth.supabase,
+        request.parentId as string,
+        auth.user.id
+      );
 
-    if (error || !data) {
-      return {
-        error: formatVisualEditingError(
-          new Error(`Failed to save draft: ${error?.message ?? "unknown error"}`),
-          "Failed to save draft."
-        ),
-      };
+      const nextSnapshot = updateDraftBlockContent(draft, request as any, content);
+      const { data, error } = await (auth.supabase as any)
+        .from("product_drafts")
+        .update({
+          author_id: auth.user.id,
+          blocks: nextSnapshot.blocks,
+        })
+        .eq("id", draft.id)
+        .select("*")
+        .single();
+
+      if (error || !data) {
+        return {
+          error: formatVisualEditingError(
+            new Error(`Failed to save product draft: ${error?.message ?? "unknown error"}`),
+            "Failed to save product draft."
+          ),
+        };
+      }
+
+      const slug = typeof data.meta?.slug === "string" ? data.meta.slug : "";
+      if (slug) {
+        revalidateVisualEditingPath(`/product/${slug}`);
+      }
+
+      return { success: true };
+    } else {
+      const draft = await getOrCreateContentDraft(
+        auth.supabase,
+        request.parentType as NextblockDocumentType,
+        request.parentId as number,
+        auth.user.id
+      );
+
+      const nextSnapshot = updateDraftBlockContent(draft, request as any, content);
+      const { data, error } = await (auth.supabase as any)
+        .from("content_drafts")
+        .update({
+          author_id: auth.user.id,
+          blocks: nextSnapshot.blocks,
+        })
+        .eq("id", draft.id)
+        .select("*")
+        .single();
+
+      if (error || !data) {
+        return {
+          error: formatVisualEditingError(
+            new Error(`Failed to save draft: ${error?.message ?? "unknown error"}`),
+            "Failed to save draft."
+          ),
+        };
+      }
+
+      const savedDraft = normalizeContentDraftRow(data);
+      const slug = typeof savedDraft.meta.slug === "string" ? savedDraft.meta.slug : "";
+      if (slug) {
+        revalidateVisualEditingPath(getPublicPath(request.parentType as NextblockDocumentType, slug));
+      }
+
+      return { success: true };
     }
-
-    const savedDraft = normalizeContentDraftRow(data);
-    const slug = typeof savedDraft.meta.slug === "string" ? savedDraft.meta.slug : "";
-    if (slug) {
-      revalidateVisualEditingPath(getPublicPath(request.parentType, slug));
-    }
-
-    return { success: true };
   } catch (error) {
     return {
       error: formatVisualEditingError(error, "Failed to save draft."),

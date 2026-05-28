@@ -7,6 +7,7 @@ import PageClientContent from './[slug]/PageClientContent';
 import { getPageDataBySlug } from './[slug]/page.utils';
 import BlockRenderer from '../components/BlockRenderer';
 import { resolveMetaDescription } from './lib/seo';
+import { getRequestOrigin } from '../lib/visual-editing/edit-info';
 
 const DEFAULT_LOCALE = 'en';
 const LANGUAGE_COOKIE_KEY = 'NEXT_USER_LOCALE';
@@ -143,6 +144,7 @@ export default async function RootPage() {
     }
   }
 
+  const requestOrigin = await getRequestOrigin();
   const draft = await draftMode();
   const visualEditingEnabled =
     draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
@@ -157,6 +159,7 @@ export default async function RootPage() {
         slug: pageData.slug,
         languageId: pageData.language_id,
         draftId: pageData.draft_id ?? null,
+        pageOrigin: requestOrigin,
       }}
     />
   );

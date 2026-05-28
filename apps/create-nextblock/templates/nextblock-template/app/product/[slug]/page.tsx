@@ -17,6 +17,7 @@ import {
   applyProductDraftToProductRecord,
   getProductDraft,
 } from "../../../lib/visual-editing/product-drafts";
+import { getRequestOrigin } from "../../../lib/visual-editing/edit-info";
 // Ensure BlockType is imported or compatible with BlockRenderer props
 import type { Database } from "@nextblock-cms/db";
 type BlockType = Database['public']['Tables']['blocks']['Row'];
@@ -199,6 +200,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     ] as any as BlockType[];
   }
 
+  const requestOrigin = await getRequestOrigin();
   const productTemplateVisualEditing = templatePage
     ? {
         enabled: visualEditingEnabled,
@@ -207,6 +209,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         slug: templatePage.slug,
         languageId: templatePage.language_id,
         draftId: templatePage.draft_id ?? null,
+        pageOrigin: requestOrigin,
       }
     : undefined;
 

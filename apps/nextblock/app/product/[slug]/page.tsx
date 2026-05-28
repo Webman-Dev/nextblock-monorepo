@@ -18,6 +18,7 @@ import {
   applyProductDraftToProductRecord,
   getProductDraft,
 } from "../../../lib/visual-editing/product-drafts";
+import { getRequestOrigin } from "../../../lib/visual-editing/edit-info";
 import {
   resolveMetaTitle,
   resolveProductMetaDescription,
@@ -244,6 +245,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     ] as any as BlockType[];
   }
 
+  const requestOrigin = await getRequestOrigin();
   const productTemplateVisualEditing = templatePage
     ? {
         enabled: visualEditingEnabled,
@@ -252,6 +254,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         slug: templatePage.slug,
         languageId: templatePage.language_id,
         draftId: templatePage.draft_id ?? null,
+        pageOrigin: requestOrigin,
       }
     : undefined;
 

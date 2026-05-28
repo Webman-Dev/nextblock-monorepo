@@ -148,7 +148,13 @@ function parseEditInfo(element: Element | null): NextblockVisualEditInfo | null 
 
   try {
     const parsed = JSON.parse(raw) as NextblockVisualEditInfo;
-    return parsed?.origin === "nextblock" ? parsed : null;
+    const isNextblock = 
+      parsed?.origin === "nextblock" || 
+      parsed?.origin === "https://nextblock-editor" || 
+      parsed?.origin === "https://nextblock-editor.com" || 
+      parsed?.origin === "https://nextblock.dev" || 
+      (parsed && typeof parsed === "object" && parsed.data && "parentType" in parsed.data);
+    return isNextblock ? parsed : null;
   } catch {
     return null;
   }
@@ -168,7 +174,7 @@ function isProductFieldInfo(info: NextblockVisualEditInfo): info is ProductField
 }
 
 function blockRequestFromInfo(info: NextblockVisualEditInfo): VisualEditingBlockRequest {
-  if (info.data.parentType !== "page" && info.data.parentType !== "post") {
+  if (info.data.parentType !== "page" && info.data.parentType !== "post" && info.data.parentType !== "product") {
     throw new Error("Invalid block draft document.");
   }
 
@@ -178,7 +184,7 @@ function blockRequestFromInfo(info: NextblockVisualEditInfo): VisualEditingBlock
 
   return {
     parentType: info.data.parentType,
-    parentId: Number(info.data.parentId),
+    parentId: info.data.parentType === "product" ? String(info.data.parentId) : Number(info.data.parentId),
     target: info.data.target as VisualEditingBlockRequest["target"],
   };
 }
@@ -753,9 +759,24 @@ export function NextblockVisualEditing() {
           }
         | undefined;
 
-      if (detail?.editInfo?.origin === "nextblock") {
-          void openEditor(detail.editInfo, detail.element);
-        return;
+      const editInfo = detail?.editInfo;
+      const isNextblockEditInfo =
+        editInfo &&
+        typeof editInfo === "object" &&
+        editInfo.data &&
+        "parentType" in editInfo.data;
+
+      if (
+        editInfo?.origin === "nextblock" ||
+        editInfo?.origin === "https://nextblock-editor" ||
+        editInfo?.origin === "https://nextblock-editor.com" ||
+        editInfo?.origin === "https://nextblock.dev" ||
+        isNextblockEditInfo
+      ) {
+        if (editInfo) {
+          void openEditor(editInfo, detail?.element);
+          return;
+        }
       }
 
       const element =

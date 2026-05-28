@@ -77,7 +77,8 @@ export type VisualEditingTarget =
   | VisualEditingProductFieldTarget;
 
 export interface NextblockVisualEditInfo {
-  origin: "nextblock";
+  origin: string;
+  baseUrl?: string;
   projectId?: string;
   workspaceId?: string;
   editUrl: string;
@@ -93,11 +94,12 @@ export interface NextblockVisualEditInfo {
 
 export interface VisualEditingDocumentContext {
   enabled: boolean;
-  documentType: NextblockDocumentType;
-  documentId: number;
+  documentType: NextblockVisualDocumentType;
+  documentId: number | string;
   slug: string;
   languageId: number;
   draftId?: number | null;
+  pageOrigin?: string;
 }
 
 export type VisualEditAttributes = {
@@ -107,8 +109,8 @@ export type VisualEditAttributes = {
 };
 
 export interface VisualEditingBlockRequest {
-  parentType: NextblockDocumentType;
-  parentId: number;
+  parentType: NextblockVisualDocumentType;
+  parentId: number | string;
   target: VisualEditingBlockTarget;
 }
 

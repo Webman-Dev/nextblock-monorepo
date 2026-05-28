@@ -82,6 +82,7 @@ async function renderLoadedBlock({
           excludeTranslationGroupId={excludeTranslationGroupId}
           visualEditAttributes={visualEditAttributes}
           productVisualEditingEnabled={productVisualEditingEnabled}
+          visualEditing={visualEditing}
         />
       );
     }

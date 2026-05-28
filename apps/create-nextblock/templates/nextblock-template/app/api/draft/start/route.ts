@@ -40,9 +40,9 @@ async function targetExists(supabase: unknown, target: DraftPathTarget) {
     .from(table)
     .select("id")
     .eq("slug", target.slug)
-    .maybeSingle();
+    .limit(1);
 
-  return !error && Boolean(data);
+  return !error && Array.isArray(data) && data.length > 0;
 }
 
 export async function GET(request: NextRequest) {
