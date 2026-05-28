@@ -12,6 +12,7 @@ import {
   resolvePageMetaDescription,
   stringifyJsonLd,
 } from "../lib/seo";
+import { getRequestOrigin } from "../../lib/visual-editing/edit-info";
 
 export const dynamicParams = true;
 export const revalidate = 360;
@@ -169,6 +170,7 @@ export default async function DynamicPage({ params: paramsPromise }: PageProps) 
 
 
 
+  const requestOrigin = await getRequestOrigin();
   const draft = await draftMode();
   const visualEditingEnabled =
     draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
@@ -195,6 +197,7 @@ export default async function DynamicPage({ params: paramsPromise }: PageProps) 
         slug: pageData.slug,
         languageId: pageData.language_id,
         draftId: pageData.draft_id ?? null,
+        pageOrigin: requestOrigin,
       }}
     />
   ) : null;

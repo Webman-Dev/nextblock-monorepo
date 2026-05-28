@@ -20,6 +20,21 @@ function getEditUrl(
   return `${baseUrl}${path}`;
 }
 
+export async function getRequestOrigin(): Promise<string | undefined> {
+  try {
+    const { headers } = require("next/headers");
+    const headersList = await headers();
+    const host = headersList.get("host");
+    const proto = headersList.get("x-forwarded-proto") || "https";
+    if (host) {
+      return `${proto}://${host}`;
+    }
+  } catch {
+    // Fallback for static builds/tests
+  }
+  return undefined;
+}
+
 export function buildVisualEditAttributes(
   context: VisualEditingDocumentContext | undefined,
   target: VisualEditingBlockTarget
@@ -34,9 +49,9 @@ export function buildVisualEditAttributes(
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") || 
     "http://localhost:3000";
 
-  const pageOrigin = process.env.VERCEL_URL
+  const pageOrigin = context?.pageOrigin || (process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
-    : (process.env.NEXT_PUBLIC_URL || process.env.TARGET_URL || "http://localhost:3000");
+    : (process.env.NEXT_PUBLIC_URL || process.env.TARGET_URL || "http://localhost:3000"));
 
   const origin = pageOrigin.replace(/\/+$/, "");
 

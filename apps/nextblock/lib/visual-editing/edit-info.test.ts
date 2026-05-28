@@ -119,4 +119,25 @@ describe("buildVisualEditAttributes", () => {
     const payloadTarget = JSON.parse(attrsTarget?.["data-vercel-edit-info"] ?? "{}");
     expect(payloadTarget.origin).toBe("https://another-domain.xyz/subpath");
   });
+
+  it("uses pageOrigin from context if provided", () => {
+    const attrs = buildVisualEditAttributes(
+      {
+        enabled: true,
+        documentType: "page",
+        documentId: 10,
+        slug: "home",
+        languageId: 1,
+        pageOrigin: "https://my-custom-origin.dev/",
+      },
+      {
+        kind: "top-level",
+        blockId: 1,
+        blockIndex: 0,
+        blockType: "text",
+      }
+    );
+    const payload = JSON.parse(attrs?.["data-vercel-edit-info"] ?? "{}");
+    expect(payload.origin).toBe("https://my-custom-origin.dev");
+  });
 });

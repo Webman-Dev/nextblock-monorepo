@@ -99,6 +99,7 @@ export interface VisualEditingDocumentContext {
   slug: string;
   languageId: number;
   draftId?: number | null;
+  pageOrigin?: string;
 }
 
 export type VisualEditAttributes = {

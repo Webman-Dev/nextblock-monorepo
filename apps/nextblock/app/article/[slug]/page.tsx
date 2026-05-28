@@ -18,6 +18,7 @@ import {
   stringifyJsonLd,
 } from '../../lib/seo';
 import { draftMode, headers } from 'next/headers';
+import { getRequestOrigin } from '../../../lib/visual-editing/edit-info';
 
 export const dynamicParams = true;
 export const revalidate = 3600;
@@ -182,6 +183,7 @@ export default async function DynamicPostPage({ params: paramsPromise }: PostPag
     }
   }
 
+  const requestOrigin = await getRequestOrigin();
   const draft = await draftMode();
   const visualEditingEnabled =
     draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
@@ -217,6 +219,7 @@ export default async function DynamicPostPage({ params: paramsPromise }: PostPag
         slug: initialPostData.slug,
         languageId: initialPostData.language_id,
         draftId: initialPostData.draft_id ?? null,
+        pageOrigin: requestOrigin,
       }}
     />
   ) : null;
