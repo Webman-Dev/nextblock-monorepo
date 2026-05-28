@@ -762,23 +762,43 @@ export function NextblockVisualEditing() {
             event.target.closest("vercel-toolbar");
 
           if (!isToolbarPill) {
-            // Check if Vercel Visual Editing Edit Mode is active (meaning edit button or outline is visible).
-            const host = document.querySelector("vercel-live-feedback");
-            const shadowRoot = host?.shadowRoot;
-            const html = shadowRoot?.innerHTML ?? "";
+            // Find the underlying element with data-vercel-edit-info under the cursor.
+            const elementsAtPoint = document.elementsFromPoint(event.clientX, event.clientY);
+            let candidateTarget: HTMLElement | null = null;
+            let candidateInfo: NextblockVisualEditInfo | null = null;
 
-            // Only intercept if we see "Open in" in the shadow root (Edit Mode active).
-            if (html.includes("Open in") || html.includes("cms.nextblock")) {
-              const elementsAtPoint = document.elementsFromPoint(event.clientX, event.clientY);
-              for (const el of elementsAtPoint) {
-                if (el instanceof HTMLElement && el.hasAttribute("data-vercel-edit-info")) {
-                  const parsed = parseEditInfo(el);
-                  if (parsed) {
-                    target = el;
-                    info = parsed;
-                    break;
-                  }
+            for (const el of elementsAtPoint) {
+              if (el instanceof HTMLElement && el.hasAttribute("data-vercel-edit-info")) {
+                const parsed = parseEditInfo(el);
+                if (parsed) {
+                  candidateTarget = el;
+                  candidateInfo = parsed;
+                  break;
                 }
+              }
+            }
+
+            if (candidateTarget && candidateInfo) {
+              // Only open the editor if this specific block is already selected in the Vercel Toolbar.
+              // We check this by verifying if the block's edit URL pathname is present in the Vercel feedback shadow DOM.
+              const host = document.querySelector("vercel-live-feedback");
+              const shadowRoot = host?.shadowRoot;
+              const html = shadowRoot?.innerHTML ?? "";
+
+              let pathname = "";
+              try {
+                if (candidateInfo.editUrl) {
+                  const url = new URL(candidateInfo.editUrl);
+                  pathname = url.pathname;
+                }
+              } catch {
+                const match = candidateInfo.editUrl?.match(/https?:\/\/[^\/]+(\/[^?#]+)/);
+                pathname = match ? match[1] : (candidateInfo.editUrl ?? "");
+              }
+
+              if (pathname && html.includes(pathname)) {
+                target = candidateTarget;
+                info = candidateInfo;
               }
             }
           }
