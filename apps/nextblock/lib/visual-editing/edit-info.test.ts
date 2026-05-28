@@ -58,7 +58,7 @@ describe("buildVisualEditAttributes", () => {
     const target = JSON.parse(attrs?.["data-vercel-edit-target"] ?? "{}");
 
     expect(payload).toMatchObject({
-      origin: "http://localhost:3000",
+      origin: "localhost",
       projectId: "prj_123",
       workspaceId: "team_123",
       editUrl: "http://localhost:3000/cms/posts/42/edit",
@@ -96,7 +96,7 @@ describe("buildVisualEditAttributes", () => {
       }
     );
     const payload = JSON.parse(attrs?.["data-vercel-edit-info"] ?? "{}");
-    expect(payload.origin).toBe("https://custom-domain.com");
+    expect(payload.origin).toBe("custom-domain.com");
 
     // Test TARGET_URL fallback if NEXT_PUBLIC_URL is empty
     delete process.env.NEXT_PUBLIC_URL;
@@ -117,7 +117,7 @@ describe("buildVisualEditAttributes", () => {
       }
     );
     const payloadTarget = JSON.parse(attrsTarget?.["data-vercel-edit-info"] ?? "{}");
-    expect(payloadTarget.origin).toBe("https://another-domain.xyz/subpath");
+    expect(payloadTarget.origin).toBe("another-domain.xyz");
   });
 
   it("uses pageOrigin from context if provided", () => {
@@ -138,6 +138,6 @@ describe("buildVisualEditAttributes", () => {
       }
     );
     const payload = JSON.parse(attrs?.["data-vercel-edit-info"] ?? "{}");
-    expect(payload.origin).toBe("https://my-custom-origin.dev");
+    expect(payload.origin).toBe("my-custom-origin.dev");
   });
 });

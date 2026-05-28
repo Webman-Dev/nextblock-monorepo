@@ -69,7 +69,14 @@ function buildProductVisualEditAttributes(
        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") || 
        "http://localhost:3000");
 
-  const origin = pageOrigin.replace(/\/+$/, "");
+  let origin = pageOrigin.replace(/\/+$/, "");
+  try {
+    if (origin.startsWith('http://') || origin.startsWith('https://')) {
+      origin = new URL(origin).hostname;
+    }
+  } catch {
+    // Fallback
+  }
 
   const projectId = process.env.NEXTBLOCK_VERCEL_PROJECT_ID || process.env.VERCEL_PROJECT_ID;
   const workspaceId = process.env.NEXTBLOCK_VERCEL_WORKSPACE_ID || process.env.VERCEL_ORG_ID;

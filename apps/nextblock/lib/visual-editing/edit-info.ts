@@ -53,7 +53,14 @@ export function buildVisualEditAttributes(
     ? `https://${process.env.VERCEL_URL}`
     : (process.env.NEXT_PUBLIC_URL || process.env.TARGET_URL || "http://localhost:3000"));
 
-  const origin = pageOrigin.replace(/\/+$/, "");
+  let origin = pageOrigin.replace(/\/+$/, "");
+  try {
+    if (origin.startsWith("http://") || origin.startsWith("https://")) {
+      origin = new URL(origin).hostname;
+    }
+  } catch {
+    // Fallback
+  }
 
   const payload: NextblockVisualEditInfo = {
     origin,
