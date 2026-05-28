@@ -6,6 +6,7 @@ import type { Json } from "@nextblock-cms/db";
 import {
   createClient,
   getServiceRoleSupabaseClient,
+  verifyPackageOnline,
 } from "@nextblock-cms/db/server";
 import { syncCategoriesForTranslationGroup } from "@nextblock-cms/ecommerce/server";
 
@@ -102,6 +103,7 @@ interface PreparedContentImport {
   targetId: number | null;
   meta: Record<string, unknown>;
   blocks: BackupBlockRecord[];
+  replaceBlocks: boolean;
   oldSlug?: string | null;
 }
 
@@ -115,6 +117,10 @@ interface PreparedProductImport {
   categoryIds: string[];
   mediaIds: string[];
   variants: BackupProductVariantRecord[];
+  replaceBlocks: boolean;
+  replaceMedia: boolean;
+  replaceVariants: boolean;
+  syncCategories: boolean;
   oldSlug?: string | null;
 }
 
@@ -154,6 +160,49 @@ function normalizeRequiredString(value: unknown) {
 function normalizeId(value: unknown) {
   const text = normalizeRequiredString(value);
   return text || null;
+}
+
+function rowHasOwnField(row: ImportSourceRow, fieldName: string) {
+  return Object.prototype.hasOwnProperty.call(row, fieldName);
+}
+
+function rowHasImportValue(row: ImportSourceRow, fieldName: string) {
+  if (!rowHasOwnField(row, fieldName)) return false;
+
+  const value = (row as Record<string, unknown>)[fieldName];
+  if (value === null || value === undefined) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return true;
+  return normalizeRequiredString(value) !== "";
+}
+
+function canPreserveBlankFields(options: CmsImportOptions, target: unknown) {
+  return Boolean(
+    options.ignoreBlankFields &&
+      options.conflictMode === "overwrite_existing" &&
+      options.applyMode === "live" &&
+      target
+  );
+}
+
+function shouldPreserveBlankField(
+  row: ImportSourceRow,
+  fieldName: string,
+  options: CmsImportOptions,
+  target: unknown
+) {
+  return canPreserveBlankFields(options, target) && !rowHasImportValue(row, fieldName);
+}
+
+function setMetaValue(
+  meta: Record<string, unknown>,
+  key: string,
+  value: unknown,
+  shouldSet = true
+) {
+  if (shouldSet) {
+    meta[key] = value;
+  }
 }
 
 function readRequiredNumber(
@@ -253,6 +302,10 @@ async function loadLanguages(supabase: SupabaseAny) {
   return { languages, byCode, byId };
 }
 
+async function isEcommerceContentAvailable(supabase: SupabaseAny) {
+  return verifyPackageOnline("ecommerce", supabase).catch(() => false);
+}
+
 async function loadMediaMaps(supabase: SupabaseAny) {
   const { data, error } = await supabase
     .from("media")
@@ -310,17 +363,14 @@ function resolveMediaId(params: {
   return null;
 }
 
-function getLanguageId(
+function getOptionalLanguageId(
   row: ImportSourceRow,
   rowNumber: number,
   languagesByCode: Map<string, LanguageRecord>,
   errors: CmsImportMessage[]
 ) {
   const languageCode = normalizeRequiredString((row as any).language_code).toLowerCase();
-  if (!languageCode) {
-    addMessage(errors, rowNumber, "language_code is required.");
-    return null;
-  }
+  if (!languageCode) return null;
 
   const language = languagesByCode.get(languageCode);
   if (!language) {
@@ -483,40 +533,59 @@ async function prepareContentImports(params: {
 
   for (const [index, row] of params.rows.entries()) {
     const rowNumber = index + 2;
-    const languageId = getLanguageId(row, rowNumber, languagesByCode, summary.errors);
-    const title = normalizeRequiredString((row as any).title);
-    const incomingSlug = normalizeRequiredString((row as any).slug);
-    const status = normalizeRequiredString((row as any).status || "draft");
-
-    if (!title) addMessage(summary.errors, rowNumber, "title is required.");
-    if (!incomingSlug) addMessage(summary.errors, rowNumber, "slug is required.");
-    if (!PAGE_STATUSES.has(status)) {
-      addMessage(summary.errors, rowNumber, `status must be one of: ${Array.from(PAGE_STATUSES).join(", ")}.`);
-    }
-    if (!languageId || !title || !incomingSlug || !PAGE_STATUSES.has(status)) {
-      continue;
-    }
-
     const numericId = Number((row as any).id);
     const matchedById =
       params.options.conflictMode === "overwrite_existing" && Number.isFinite(numericId)
         ? existing.byId.get(numericId)
         : undefined;
+    let languageId = getOptionalLanguageId(row, rowNumber, languagesByCode, summary.errors);
+    if (!languageId && matchedById) {
+      languageId = matchedById.language_id;
+    }
+
+    const incomingSlug = normalizeRequiredString((row as any).slug);
     const matchedBySlug =
-      params.options.conflictMode === "overwrite_existing"
+      params.options.conflictMode === "overwrite_existing" && languageId && incomingSlug
         ? existing.bySlug.get(`${languageId}:${incomingSlug}`)
         : undefined;
     const target = matchedById ?? matchedBySlug ?? null;
     const action = target ? "update" : "create";
+    const preserveBlanks = canPreserveBlankFields(params.options, target);
+    const preserveField = (fieldName: string) =>
+      shouldPreserveBlankField(row, fieldName, params.options, target);
+    const title = normalizeRequiredString((row as any).title);
+    const status = preserveField("status")
+      ? ""
+      : normalizeRequiredString((row as any).status || "draft");
+
+    if (!languageId && !rowHasImportValue(row, "language_code")) {
+      addMessage(summary.errors, rowNumber, "language_code is required.");
+    }
+    if (!title && !preserveField("title")) addMessage(summary.errors, rowNumber, "title is required.");
+    if (!incomingSlug && !preserveField("slug")) addMessage(summary.errors, rowNumber, "slug is required.");
+    if (!preserveField("status") && !PAGE_STATUSES.has(status)) {
+      addMessage(summary.errors, rowNumber, `status must be one of: ${Array.from(PAGE_STATUSES).join(", ")}.`);
+    }
+    if (
+      !languageId ||
+      (!title && !preserveField("title")) ||
+      (!incomingSlug && !preserveField("slug")) ||
+      (!preserveField("status") && !PAGE_STATUSES.has(status))
+    ) {
+      continue;
+    }
+
     const slugSet = slugSets.get(languageId) ?? new Set<string>();
-    const slug =
-      params.options.conflictMode === "create_new" || action === "create"
+    const shouldUpdateSlug = !preserveField("slug");
+    const slug = shouldUpdateSlug
+      ? params.options.conflictMode === "create_new" || action === "create"
         ? makeUniqueSlug(incomingSlug, slugSet)
-        : incomingSlug;
+        : incomingSlug
+      : target?.slug ?? incomingSlug;
     slugSets.set(languageId, slugSet);
 
     const slugOwner = existing.bySlug.get(`${languageId}:${slug}`);
-    if (action === "update" && slugOwner && slugOwner.id !== target?.id) {
+    if (action === "update" && shouldUpdateSlug && slugOwner && slugOwner.id !== target?.id) {
       addMessage(summary.errors, rowNumber, `Slug "${slug}" already belongs to another ${params.contentType.slice(0, -1)} in this language.`);
       continue;
     }
@@ -529,37 +598,64 @@ async function prepareContentImports(params: {
           ? translationGroupMap.get(importedGroupId) ?? translationGroupMap.set(importedGroupId, uuidv4()).get(importedGroupId)
           : uuidv4();
 
-    const featureImageId = resolveMediaId({
-      id: normalizeId((row as any).feature_image_id),
-      objectKey: normalizeId((row as any).feature_image_object_key),
-      rowNumber,
-      fieldLabel: "Feature image",
-      mediaById: mediaMaps.byId,
-      mediaByObjectKey: mediaMaps.byObjectKey,
-      warnings: summary.warnings,
-    });
+    const shouldResolveFeatureImage =
+      !preserveBlanks ||
+      rowHasImportValue(row, "feature_image_id") ||
+      rowHasImportValue(row, "feature_image_object_key");
+    const featureImageId = shouldResolveFeatureImage
+      ? resolveMediaId({
+          id: normalizeId((row as any).feature_image_id),
+          objectKey: normalizeId((row as any).feature_image_object_key),
+          rowNumber,
+          fieldLabel: "Feature image",
+          mediaById: mediaMaps.byId,
+          mediaByObjectKey: mediaMaps.byObjectKey,
+          warnings: summary.warnings,
+        })
+      : undefined;
 
-    const blocks = parseBlocksForContent(row, rowNumber, languageId, summary.errors);
-    const meta: Record<string, unknown> = {
-      language_id: languageId,
-      title,
-      slug,
-      status,
-      meta_title: normalizeNullableString((row as any).meta_title),
-      meta_description: normalizeNullableString((row as any).meta_description),
-      feature_image_id: featureImageId,
-      translation_group_id: translationGroupId,
-    };
+    const replaceBlocks =
+      !preserveBlanks ||
+      rowHasImportValue(row, "blocks_json") ||
+      rowHasImportValue(row, "content_html") ||
+      Array.isArray((row as BackupPageRecord).blocks);
+    const blocks = replaceBlocks
+      ? parseBlocksForContent(row, rowNumber, languageId, summary.errors)
+      : [];
+    const meta: Record<string, unknown> = {};
+    setMetaValue(meta, "language_id", languageId, !preserveField("language_code"));
+    setMetaValue(meta, "title", title, !preserveField("title"));
+    setMetaValue(meta, "slug", slug, shouldUpdateSlug);
+    setMetaValue(meta, "status", status, !preserveField("status"));
+    setMetaValue(
+      meta,
+      "meta_title",
+      normalizeNullableString((row as any).meta_title),
+      !preserveField("meta_title")
+    );
+    setMetaValue(
+      meta,
+      "meta_description",
+      normalizeNullableString((row as any).meta_description),
+      !preserveField("meta_description")
+    );
+    setMetaValue(meta, "feature_image_id", featureImageId, shouldResolveFeatureImage);
+    setMetaValue(
+      meta,
+      "translation_group_id",
+      translationGroupId,
+      !preserveField("translation_group_id")
+    );
 
     if (params.contentType === "posts") {
-      meta.label = normalizeNullableString((row as any).label);
-      meta.excerpt = normalizeNullableString((row as any).excerpt);
-      meta.subtitle = normalizeNullableString((row as any).subtitle);
-      meta.published_at = readOptionalDate(
-        (row as any).published_at,
+      setMetaValue(meta, "label", normalizeNullableString((row as any).label), !preserveField("label"));
+      setMetaValue(meta, "excerpt", normalizeNullableString((row as any).excerpt), !preserveField("excerpt"));
+      setMetaValue(meta, "subtitle", normalizeNullableString((row as any).subtitle), !preserveField("subtitle"));
+      setMetaValue(
+        meta,
         "published_at",
-        rowNumber,
-        summary.errors
+        readOptionalDate((row as any).published_at, "published_at", rowNumber, summary.errors),
+        !preserveField("published_at")
       );
     }
 
@@ -570,6 +666,7 @@ async function prepareContentImports(params: {
       targetId: target?.id ?? null,
       meta,
       blocks,
+      replaceBlocks,
       oldSlug: target?.slug ?? null,
     });
   }
@@ -626,49 +723,24 @@ async function prepareProductImports(params: {
 
   for (const [index, row] of params.rows.entries()) {
     const rowNumber = index + 2;
-    const languageId = getLanguageId(row, rowNumber, languagesByCode, summary.errors);
-    const title = normalizeRequiredString((row as any).title);
-    const incomingSlug = normalizeRequiredString((row as any).slug);
-    const incomingSku = normalizeRequiredString((row as any).sku);
-    const productType = normalizeRequiredString((row as any).product_type || "physical");
-    const paymentProvider = normalizeRequiredString((row as any).payment_provider || (productType === "digital" ? "freemius" : "stripe"));
-    const status = normalizeRequiredString((row as any).status || "draft");
-
-    if (!title) addMessage(summary.errors, rowNumber, "title is required.");
-    if (!incomingSlug) addMessage(summary.errors, rowNumber, "slug is required.");
-    if (!incomingSku) addMessage(summary.errors, rowNumber, "sku is required.");
-    if (!PRODUCT_TYPES.has(productType)) {
-      addMessage(summary.errors, rowNumber, "product_type must be physical or digital.");
-    }
-    if (!PAYMENT_PROVIDERS.has(paymentProvider)) {
-      addMessage(summary.errors, rowNumber, "payment_provider must be stripe or freemius.");
-    }
-    if (productType === "physical" && paymentProvider !== "stripe") {
-      addMessage(summary.errors, rowNumber, "physical products must use stripe.");
-    }
-    if (productType === "digital" && paymentProvider !== "freemius") {
-      addMessage(summary.errors, rowNumber, "digital products must use freemius.");
-    }
-    if (!PRODUCT_STATUSES.has(status)) {
-      addMessage(summary.errors, rowNumber, `status must be one of: ${Array.from(PRODUCT_STATUSES).join(", ")}.`);
-    }
-    const price = readRequiredNumber((row as any).price, "price", rowNumber, summary.errors);
-    const stock = readRequiredNumber((row as any).stock, "stock", rowNumber, summary.errors);
-    if (!languageId || !title || !incomingSlug || !incomingSku || !PRODUCT_TYPES.has(productType) || !PAYMENT_PROVIDERS.has(paymentProvider) || !PRODUCT_STATUSES.has(status) || price === null || stock === null) {
-      continue;
-    }
-
     const rowId = normalizeId((row as any).id);
     const matchedById =
       params.options.conflictMode === "overwrite_existing" && rowId
         ? existing.byId.get(rowId)
         : undefined;
+    let languageId = getOptionalLanguageId(row, rowNumber, languagesByCode, summary.errors);
+    if (!languageId && matchedById) {
+      languageId = matchedById.language_id;
+    }
+
+    const incomingSlug = normalizeRequiredString((row as any).slug);
+    const incomingSku = normalizeRequiredString((row as any).sku);
     const matchedBySku =
-      params.options.conflictMode === "overwrite_existing"
+      params.options.conflictMode === "overwrite_existing" && languageId && incomingSku
         ? existing.bySku.get(`${languageId}:${incomingSku}`)
         : undefined;
     const matchedBySlug =
-      params.options.conflictMode === "overwrite_existing"
+      params.options.conflictMode === "overwrite_existing" && languageId && incomingSlug
         ? existing.bySlug.get(`${languageId}:${incomingSlug}`)
         : undefined;
 
@@ -679,59 +751,146 @@ async function prepareProductImports(params: {
 
     const target = matchedById ?? matchedBySku ?? matchedBySlug ?? null;
     const action = target ? "update" : "create";
+    const preserveBlanks = canPreserveBlankFields(params.options, target);
+    const preserveField = (fieldName: string) =>
+      shouldPreserveBlankField(row, fieldName, params.options, target);
+    const title = normalizeRequiredString((row as any).title);
+    const productType = preserveField("product_type")
+      ? ""
+      : normalizeRequiredString((row as any).product_type || "physical");
+    const paymentProvider = preserveField("payment_provider")
+      ? ""
+      : normalizeRequiredString(
+          (row as any).payment_provider || (productType === "digital" ? "freemius" : "stripe")
+        );
+    const status = preserveField("status")
+      ? ""
+      : normalizeRequiredString((row as any).status || "draft");
+    const price = preserveField("price")
+      ? undefined
+      : readRequiredNumber((row as any).price, "price", rowNumber, summary.errors);
+    const stock = preserveField("stock")
+      ? undefined
+      : readRequiredNumber((row as any).stock, "stock", rowNumber, summary.errors);
+    const updatesProductType = !preserveField("product_type");
+    const updatesPaymentProvider = !preserveField("payment_provider");
+
+    if (!languageId && !rowHasImportValue(row, "language_code")) {
+      addMessage(summary.errors, rowNumber, "language_code is required.");
+    }
+    if (!title && !preserveField("title")) addMessage(summary.errors, rowNumber, "title is required.");
+    if (!incomingSlug && !preserveField("slug")) addMessage(summary.errors, rowNumber, "slug is required.");
+    if (!incomingSku && !preserveField("sku")) addMessage(summary.errors, rowNumber, "sku is required.");
+    if (updatesProductType && !PRODUCT_TYPES.has(productType)) {
+      addMessage(summary.errors, rowNumber, "product_type must be physical or digital.");
+    }
+    if (updatesPaymentProvider && !PAYMENT_PROVIDERS.has(paymentProvider)) {
+      addMessage(summary.errors, rowNumber, "payment_provider must be stripe or freemius.");
+    }
+    if (preserveBlanks && updatesProductType !== updatesPaymentProvider) {
+      addMessage(summary.errors, rowNumber, "product_type and payment_provider must be imported together when ignoring blank fields.");
+    }
+    if (updatesProductType && updatesPaymentProvider && productType === "physical" && paymentProvider !== "stripe") {
+      addMessage(summary.errors, rowNumber, "physical products must use stripe.");
+    }
+    if (updatesProductType && updatesPaymentProvider && productType === "digital" && paymentProvider !== "freemius") {
+      addMessage(summary.errors, rowNumber, "digital products must use freemius.");
+    }
+    if (!preserveField("status") && !PRODUCT_STATUSES.has(status)) {
+      addMessage(summary.errors, rowNumber, `status must be one of: ${Array.from(PRODUCT_STATUSES).join(", ")}.`);
+    }
+    if (
+      !languageId ||
+      (!title && !preserveField("title")) ||
+      (!incomingSlug && !preserveField("slug")) ||
+      (!incomingSku && !preserveField("sku")) ||
+      (updatesProductType && !PRODUCT_TYPES.has(productType)) ||
+      (updatesPaymentProvider && !PAYMENT_PROVIDERS.has(paymentProvider)) ||
+      (preserveBlanks && updatesProductType !== updatesPaymentProvider) ||
+      (updatesProductType && updatesPaymentProvider && productType === "physical" && paymentProvider !== "stripe") ||
+      (updatesProductType && updatesPaymentProvider && productType === "digital" && paymentProvider !== "freemius") ||
+      (!preserveField("status") && !PRODUCT_STATUSES.has(status)) ||
+      price === null ||
+      stock === null
+    ) {
+      continue;
+    }
+
     const slugSet = slugSets.get(languageId) ?? new Set<string>();
     const skuSet = skuSets.get(languageId) ?? new Set<string>();
-    const slug =
-      params.options.conflictMode === "create_new" || action === "create"
+    const shouldUpdateSlug = !preserveField("slug");
+    const shouldUpdateSku = !preserveField("sku");
+    const slug = shouldUpdateSlug
+      ? params.options.conflictMode === "create_new" || action === "create"
         ? makeUniqueSlug(incomingSlug, slugSet)
-        : incomingSlug;
-    const sku =
-      params.options.conflictMode === "create_new" || action === "create"
+        : incomingSlug
+      : target?.slug ?? incomingSlug;
+    const sku = shouldUpdateSku
+      ? params.options.conflictMode === "create_new" || action === "create"
         ? makeUniqueSku(incomingSku, skuSet)
-        : incomingSku;
+        : incomingSku
+      : target?.sku ?? incomingSku;
     slugSets.set(languageId, slugSet);
     skuSets.set(languageId, skuSet);
 
     const slugOwner = existing.bySlug.get(`${languageId}:${slug}`);
     const skuOwner = existing.bySku.get(`${languageId}:${sku}`);
-    if (action === "update" && slugOwner && slugOwner.id !== target?.id) {
+    if (action === "update" && shouldUpdateSlug && slugOwner && slugOwner.id !== target?.id) {
       addMessage(summary.errors, rowNumber, `Slug "${slug}" already belongs to another product in this language.`);
       continue;
     }
-    if (action === "update" && skuOwner && skuOwner.id !== target?.id) {
+    if (action === "update" && shouldUpdateSku && skuOwner && skuOwner.id !== target?.id) {
       addMessage(summary.errors, rowNumber, `SKU "${sku}" already belongs to another product in this language.`);
       continue;
     }
 
     const localErrors: Array<{ row: number; message: string }> = [];
     const prices =
-      (row as BackupProductRecord).prices ??
-      parseJsonField<Record<string, number>>((row as CsvLikeRow).prices_json, "prices_json", rowNumber, localErrors) ??
-      {};
+      preserveField("prices_json")
+        ? undefined
+        : (row as BackupProductRecord).prices ??
+          parseJsonField<Record<string, number>>((row as CsvLikeRow).prices_json, "prices_json", rowNumber, localErrors) ??
+          {};
     const salePrices =
-      (row as BackupProductRecord).sale_prices ??
-      parseJsonField<Record<string, number | null>>((row as CsvLikeRow).sale_prices_json, "sale_prices_json", rowNumber, localErrors) ??
-      {};
+      preserveField("sale_prices_json")
+        ? undefined
+        : (row as BackupProductRecord).sale_prices ??
+          parseJsonField<Record<string, number | null>>((row as CsvLikeRow).sale_prices_json, "sale_prices_json", rowNumber, localErrors) ??
+          {};
     const descriptionJson =
-      (row as BackupProductRecord).description_json ??
-      parseJsonField<Json>((row as CsvLikeRow).description_json, "description_json", rowNumber, localErrors);
+      preserveField("description_json")
+        ? undefined
+        : (row as BackupProductRecord).description_json ??
+          parseJsonField<Json>((row as CsvLikeRow).description_json, "description_json", rowNumber, localErrors);
+    const replaceVariants =
+      !preserveBlanks ||
+      rowHasImportValue(row, "variants_json") ||
+      Array.isArray((row as BackupProductRecord).variants);
     const rawVariants =
-      (row as BackupProductRecord).variants ??
-      parseJsonField<BackupProductVariantRecord[]>((row as CsvLikeRow).variants_json, "variants_json", rowNumber, localErrors) ??
-      [];
+      replaceVariants
+        ? (row as BackupProductRecord).variants ??
+          parseJsonField<BackupProductVariantRecord[]>((row as CsvLikeRow).variants_json, "variants_json", rowNumber, localErrors) ??
+          []
+        : [];
 
     for (const error of localErrors) {
       addMessage(summary.errors, error.row, error.message);
     }
     if (localErrors.length > 0) continue;
-    if (!Array.isArray(rawVariants)) {
+    if (replaceVariants && !Array.isArray(rawVariants)) {
       addMessage(summary.errors, rowNumber, "variants_json must be an array.");
       continue;
     }
 
-    const categorySlugs = Array.isArray((row as BackupProductRecord).category_slugs)
-      ? ((row as BackupProductRecord).category_slugs || [])
-      : splitList((row as CsvLikeRow).category_slugs);
+    const syncCategories =
+      !preserveBlanks ||
+      rowHasImportValue(row, "category_slugs") ||
+      Array.isArray((row as BackupProductRecord).category_slugs);
+    const categorySlugs = syncCategories
+      ? Array.isArray((row as BackupProductRecord).category_slugs)
+        ? ((row as BackupProductRecord).category_slugs || [])
+        : splitList((row as CsvLikeRow).category_slugs)
+      : [];
     const categoryIds: string[] = [];
     for (const categorySlug of categorySlugs) {
       const categoryId = categoryMap.get(categorySlug);
@@ -743,12 +902,22 @@ async function prepareProductImports(params: {
     }
     if (summary.errors.some((error) => error.row === rowNumber)) continue;
 
-    const explicitMediaIds = Array.isArray((row as BackupProductRecord).media_ids)
-      ? ((row as BackupProductRecord).media_ids || [])
-      : splitList((row as CsvLikeRow).media_ids);
-    const mediaObjectKeys = Array.isArray((row as BackupProductRecord).media_object_keys)
-      ? ((row as BackupProductRecord).media_object_keys || [])
-      : splitList((row as CsvLikeRow).media_object_keys);
+    const replaceMedia =
+      !preserveBlanks ||
+      rowHasImportValue(row, "media_ids") ||
+      rowHasImportValue(row, "media_object_keys") ||
+      Array.isArray((row as BackupProductRecord).media_ids) ||
+      Array.isArray((row as BackupProductRecord).media_object_keys);
+    const explicitMediaIds = replaceMedia
+      ? Array.isArray((row as BackupProductRecord).media_ids)
+        ? ((row as BackupProductRecord).media_ids || [])
+        : splitList((row as CsvLikeRow).media_ids)
+      : [];
+    const mediaObjectKeys = replaceMedia
+      ? Array.isArray((row as BackupProductRecord).media_object_keys)
+        ? ((row as BackupProductRecord).media_object_keys || [])
+        : splitList((row as CsvLikeRow).media_object_keys)
+      : [];
     const mediaIds = new Set<string>();
     for (const mediaId of explicitMediaIds) {
       const resolved = resolveMediaId({
@@ -801,35 +970,91 @@ async function prepareProductImports(params: {
           ? translationGroupMap.get(importedGroupId) ?? translationGroupMap.set(importedGroupId, uuidv4()).get(importedGroupId)
           : uuidv4();
 
-    const blocks = parseBlocksForProduct(row, rowNumber, languageId, summary.errors);
-    const meta: Record<string, unknown> = {
-      language_id: languageId,
-      translation_group_id: translationGroupId,
-      product_type: productType,
-      payment_provider: paymentProvider,
-      title,
-      slug,
-      sku,
-      upc: normalizeNullableString((row as any).upc),
-      status,
-      price,
-      prices,
-      sale_price: parseNullableNumber(String((row as any).sale_price ?? "")),
-      sale_prices: salePrices,
-      stock,
-      is_taxable: parseBoolean(String((row as any).is_taxable ?? ""), true),
-      meta_title: normalizeNullableString((row as any).meta_title),
-      meta_description: normalizeNullableString((row as any).meta_description),
-      short_description: normalizeNullableString((row as any).short_description),
-      description_json: descriptionJson ?? null,
-      freemius_product_id: normalizeNullableString((row as any).freemius_product_id),
-      freemius_plan_id: normalizeNullableString((row as any).freemius_plan_id),
-      trial_period_days: parseNumber(String((row as any).trial_period_days ?? ""), 0),
-      trial_requires_payment_method: parseBoolean(String((row as any).trial_requires_payment_method ?? ""), false),
-      product_media: Array.from(mediaIds).map((media_id) => ({ media_id })),
-      category_ids: categoryIds,
-      variants,
-    };
+    const replaceBlocks =
+      !preserveBlanks ||
+      rowHasImportValue(row, "description_blocks_json") ||
+      rowHasImportValue(row, "description_html") ||
+      Array.isArray((row as BackupProductRecord).description_blocks);
+    const blocks = replaceBlocks
+      ? parseBlocksForProduct(row, rowNumber, languageId, summary.errors)
+      : [];
+    const meta: Record<string, unknown> = {};
+    setMetaValue(meta, "language_id", languageId, !preserveField("language_code"));
+    setMetaValue(
+      meta,
+      "translation_group_id",
+      translationGroupId,
+      !preserveField("translation_group_id")
+    );
+    setMetaValue(meta, "product_type", productType, updatesProductType);
+    setMetaValue(meta, "payment_provider", paymentProvider, updatesPaymentProvider);
+    setMetaValue(meta, "title", title, !preserveField("title"));
+    setMetaValue(meta, "slug", slug, shouldUpdateSlug);
+    setMetaValue(meta, "sku", sku, shouldUpdateSku);
+    setMetaValue(meta, "upc", normalizeNullableString((row as any).upc), !preserveField("upc"));
+    setMetaValue(meta, "status", status, !preserveField("status"));
+    setMetaValue(meta, "price", price, !preserveField("price"));
+    setMetaValue(meta, "prices", prices, !preserveField("prices_json"));
+    setMetaValue(
+      meta,
+      "sale_price",
+      parseNullableNumber(String((row as any).sale_price ?? "")),
+      !preserveField("sale_price")
+    );
+    setMetaValue(meta, "sale_prices", salePrices, !preserveField("sale_prices_json"));
+    setMetaValue(meta, "stock", stock, !preserveField("stock"));
+    setMetaValue(
+      meta,
+      "is_taxable",
+      parseBoolean(String((row as any).is_taxable ?? ""), true),
+      !preserveField("is_taxable")
+    );
+    setMetaValue(meta, "meta_title", normalizeNullableString((row as any).meta_title), !preserveField("meta_title"));
+    setMetaValue(
+      meta,
+      "meta_description",
+      normalizeNullableString((row as any).meta_description),
+      !preserveField("meta_description")
+    );
+    setMetaValue(
+      meta,
+      "short_description",
+      normalizeNullableString((row as any).short_description),
+      !preserveField("short_description")
+    );
+    setMetaValue(
+      meta,
+      "description_json",
+      descriptionJson ?? null,
+      !preserveField("description_json")
+    );
+    setMetaValue(
+      meta,
+      "freemius_product_id",
+      normalizeNullableString((row as any).freemius_product_id),
+      !preserveField("freemius_product_id")
+    );
+    setMetaValue(
+      meta,
+      "freemius_plan_id",
+      normalizeNullableString((row as any).freemius_plan_id),
+      !preserveField("freemius_plan_id")
+    );
+    setMetaValue(
+      meta,
+      "trial_period_days",
+      parseNumber(String((row as any).trial_period_days ?? ""), 0),
+      !preserveField("trial_period_days")
+    );
+    setMetaValue(
+      meta,
+      "trial_requires_payment_method",
+      parseBoolean(String((row as any).trial_requires_payment_method ?? ""), false),
+      !preserveField("trial_requires_payment_method")
+    );
+    setMetaValue(meta, "product_media", Array.from(mediaIds).map((media_id) => ({ media_id })), replaceMedia);
+    setMetaValue(meta, "category_ids", categoryIds, syncCategories);
+    setMetaValue(meta, "variants", variants, replaceVariants);
 
     prepared.push({
       contentType: "products",
@@ -841,6 +1066,10 @@ async function prepareProductImports(params: {
       categoryIds,
       mediaIds: Array.from(mediaIds),
       variants,
+      replaceBlocks,
+      replaceMedia,
+      replaceVariants,
+      syncCategories,
       oldSlug: target?.slug ?? null,
     });
   }
@@ -939,16 +1168,20 @@ async function applyContentImport(params: {
       throw new Error(`Failed to save draft from row ${item.rowNumber}: ${error.message}`);
     }
   } else {
-    const { error } = await auth.supabase
-      .from(table)
-      .update(item.meta as any)
-      .eq("id", parentId);
+    if (Object.keys(item.meta).length > 0) {
+      const { error } = await auth.supabase
+        .from(table)
+        .update(item.meta as any)
+        .eq("id", parentId);
 
-    if (error) {
-      throw new Error(`Failed to update ${item.contentType.slice(0, -1)} from row ${item.rowNumber}: ${error.message}`);
+      if (error) {
+        throw new Error(`Failed to update ${item.contentType.slice(0, -1)} from row ${item.rowNumber}: ${error.message}`);
+      }
     }
 
-    await replaceBlocks(auth.supabase, item.contentType, parentId, item.blocks);
+    if (item.replaceBlocks) {
+      await replaceBlocks(auth.supabase, item.contentType, parentId, item.blocks);
+    }
     await (auth.supabase as any)
       .from("content_drafts")
       .delete()
@@ -983,32 +1216,41 @@ async function applyContentImport(params: {
 }
 
 function toLiveProductPayload(meta: Record<string, unknown>) {
-  return {
-    language_id: meta.language_id,
-    translation_group_id: meta.translation_group_id,
-    product_type: meta.product_type,
-    payment_provider: meta.payment_provider,
-    title: meta.title,
-    slug: meta.slug,
-    sku: meta.sku,
-    upc: meta.upc,
-    status: meta.status,
-    price: majorToMinor(meta.price as number) ?? 0,
-    prices: priceMapMajorToMinor(meta.prices as Record<string, number>),
-    sale_price: majorToMinor(meta.sale_price as number | null),
-    sale_prices: salePriceMapMajorToMinor(meta.sale_prices as Record<string, number | null>),
-    stock: meta.stock,
-    is_taxable: meta.is_taxable,
-    meta_title: meta.meta_title,
-    meta_description: meta.meta_description,
-    short_description: meta.short_description,
-    description_json: meta.description_json,
-    freemius_product_id: meta.freemius_product_id,
-    freemius_plan_id: meta.freemius_plan_id,
-    trial_period_days: meta.trial_period_days,
-    trial_requires_payment_method: meta.trial_requires_payment_method,
+  const payload: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
+  const hasKey = (key: string) => Object.prototype.hasOwnProperty.call(meta, key);
+  const copy = (key: string) => {
+    if (hasKey(key)) payload[key] = meta[key];
+  };
+
+  copy("language_id");
+  copy("translation_group_id");
+  copy("product_type");
+  copy("payment_provider");
+  copy("title");
+  copy("slug");
+  copy("sku");
+  copy("upc");
+  copy("status");
+  if (hasKey("price")) payload.price = majorToMinor(meta.price as number) ?? 0;
+  if (hasKey("prices")) payload.prices = priceMapMajorToMinor(meta.prices as Record<string, number>);
+  if (hasKey("sale_price")) payload.sale_price = majorToMinor(meta.sale_price as number | null);
+  if (hasKey("sale_prices")) {
+    payload.sale_prices = salePriceMapMajorToMinor(meta.sale_prices as Record<string, number | null>);
+  }
+  copy("stock");
+  copy("is_taxable");
+  copy("meta_title");
+  copy("meta_description");
+  copy("short_description");
+  copy("description_json");
+  copy("freemius_product_id");
+  copy("freemius_plan_id");
+  copy("trial_period_days");
+  copy("trial_requires_payment_method");
+
+  return payload;
 }
 
 async function replaceProductMedia(supabase: SupabaseAny, productId: string, mediaIds: string[]) {
@@ -1141,10 +1383,18 @@ async function applyProductImport(params: {
       throw new Error(`Failed to update product from row ${item.rowNumber}: ${error.message}`);
     }
 
-    await replaceBlocks(auth.supabase, "products", productId, item.blocks);
-    await replaceProductMedia(auth.supabase, productId, item.mediaIds);
-    await replaceProductVariants(auth.supabase, productId, item.variants);
-    await syncCategoriesForTranslationGroup(auth.supabase as any, productId, item.categoryIds);
+    if (item.replaceBlocks) {
+      await replaceBlocks(auth.supabase, "products", productId, item.blocks);
+    }
+    if (item.replaceMedia) {
+      await replaceProductMedia(auth.supabase, productId, item.mediaIds);
+    }
+    if (item.replaceVariants) {
+      await replaceProductVariants(auth.supabase, productId, item.variants);
+    }
+    if (item.syncCategories) {
+      await syncCategoriesForTranslationGroup(auth.supabase as any, productId, item.categoryIds);
+    }
     await (auth.supabase as any).from("product_drafts").delete().eq("product_id", productId);
   }
 
@@ -1174,7 +1424,47 @@ async function prepareImports(params: {
   rows: ImportSourceRow[];
   options: CmsImportOptions;
 }) {
+  if (params.options.ignoreBlankFields) {
+    const summary = emptySummary();
+    summary.totalRows = params.rows.length;
+    if (params.options.conflictMode !== "overwrite_existing") {
+      addMessage(summary.errors, 0, "Ignore blank fields can only be used with overwrite imports.");
+    }
+    if (params.options.applyMode !== "live") {
+      addMessage(summary.errors, 0, "Ignore blank fields can only be used with live imports.");
+    }
+    if (summary.errors.length > 0) {
+      summary.success = false;
+      return { summary, prepared: [] as PreparedImport[] };
+    }
+  }
+
   if (params.contentType === "products") {
+    if (params.rows.length === 0) {
+      const summary = emptySummary();
+      summary.totalRows = 0;
+      return { summary, prepared: [] as PreparedImport[] };
+    }
+
+    const ecommerceAvailable = await isEcommerceContentAvailable(params.supabase);
+    if (!ecommerceAvailable) {
+      const summary = emptySummary();
+      summary.totalRows = params.rows.length;
+      if (params.options.skipUnavailableProductContent) {
+        summary.skipped = params.rows.length;
+        addMessage(
+          summary.warnings,
+          0,
+          "Products were skipped because the ecommerce package is not active.",
+          "warning"
+        );
+      } else {
+        addMessage(summary.errors, 0, "The ecommerce package must be active to import products.");
+      }
+      summary.success = summary.errors.length === 0;
+      return { summary, prepared: [] as PreparedImport[] };
+    }
+
     return prepareProductImports({
       supabase: params.supabase,
       rows: params.rows,
@@ -1343,6 +1633,11 @@ async function exportPosts(supabase: SupabaseAny, languageId?: number) {
 }
 
 async function exportProducts(supabase: SupabaseAny, languageId?: number) {
+  const ecommerceAvailable = await isEcommerceContentAvailable(supabase);
+  if (!ecommerceAvailable) {
+    return [];
+  }
+
   let query = supabase
     .from("products")
     .select("*, languages(code)")
@@ -1354,6 +1649,10 @@ async function exportProducts(supabase: SupabaseAny, languageId?: number) {
   if (error) throw new Error(`Failed to export products: ${error.message}`);
 
   const products = data || [];
+  if (products.length === 0) {
+    return [];
+  }
+
   const productIds = products.map((product: any) => String(product.id));
   const blockMap = await fetchBlocksByParent(supabase, "product_id", productIds);
 
@@ -1572,7 +1871,7 @@ export async function dryRunBundleImport(params: {
       supabase: auth.supabase,
       contentType,
       rows: rows as ImportSourceRow[],
-      options: params.options,
+      options: { ...params.options, skipUnavailableProductContent: true },
     });
 
     summary.totalRows += result.summary.totalRows;
@@ -1604,7 +1903,7 @@ export async function applyBundleImport(params: {
       supabase: auth.supabase,
       contentType,
       rows: rows as ImportSourceRow[],
-      options: params.options,
+      options: { ...params.options, skipUnavailableProductContent: true },
     });
 
     summary.totalRows += result.summary.totalRows;

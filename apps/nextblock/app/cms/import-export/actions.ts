@@ -66,6 +66,7 @@ export async function dryRunCmsCsvImportAction(params: {
   csv: string;
   conflictMode: CmsImportConflictMode;
   applyMode: CmsImportApplyMode;
+  ignoreBlankFields?: boolean;
 }) {
   try {
     return await dryRunCsvImport({
@@ -74,6 +75,7 @@ export async function dryRunCmsCsvImportAction(params: {
       options: {
         conflictMode: params.conflictMode,
         applyMode: params.applyMode,
+        ignoreBlankFields: params.ignoreBlankFields,
       },
     });
   } catch (error) {
@@ -101,6 +103,7 @@ export async function applyCmsCsvImportAction(params: {
   csv: string;
   conflictMode: CmsImportConflictMode;
   applyMode: CmsImportApplyMode;
+  ignoreBlankFields?: boolean;
 }) {
   try {
     return await applyCsvImport({
@@ -109,6 +112,7 @@ export async function applyCmsCsvImportAction(params: {
       options: {
         conflictMode: params.conflictMode,
         applyMode: params.applyMode,
+        ignoreBlankFields: params.ignoreBlankFields,
       },
     });
   } catch (error) {

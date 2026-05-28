@@ -301,16 +301,22 @@ function OperationProgressBar({
   );
 }
 
-export function BackupRestoreWorkspace() {
+export function BackupRestoreWorkspace({
+  isEcommerceActive,
+}: {
+  isEcommerceActive: boolean;
+}) {
   const router = useRouter();
+  const availableContentTypes = isEcommerceActive
+    ? CONTENT_TYPES
+    : CONTENT_TYPES.filter((item) => item.value !== "products");
+  const contentTypeLabel = isEcommerceActive ? "pages, posts, and products" : "pages and posts";
   const [backupMode, setBackupMode] = useState<BackupMode>("content_json");
   const [bundleJson, setBundleJson] = useState("");
   const [fileName, setFileName] = useState("");
-  const [selectedTypes, setSelectedTypes] = useState<CmsContentType[]>([
-    "pages",
-    "posts",
-    "products",
-  ]);
+  const [selectedTypes, setSelectedTypes] = useState<CmsContentType[]>(
+    isEcommerceActive ? ["pages", "posts", "products"] : ["pages", "posts"]
+  );
   const [conflictMode, setConflictMode] =
     useState<CmsImportConflictMode>("overwrite_existing");
   const [applyMode, setApplyMode] = useState<CmsImportApplyMode>("draft");
@@ -399,7 +405,7 @@ export function BackupRestoreWorkspace() {
     startProgress({
       scope: "export",
       label: "Exporting Content JSON",
-      detail: "Collecting pages, posts, products, and blocks.",
+      detail: `Collecting ${contentTypeLabel} and blocks.`,
       value: 12,
       cap: 82,
     });
@@ -638,7 +644,7 @@ export function BackupRestoreWorkspace() {
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Backup And Restore</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
           Export content-only JSON backups or full migration ZIP archives with database and R2 files.
         </p>
       </div>
@@ -653,8 +659,9 @@ export function BackupRestoreWorkspace() {
           <span className="space-y-1">
             <span className="block text-sm font-medium">Content JSON</span>
             <span className="block text-sm text-muted-foreground">
-              Pages, posts, products, metadata, translation groups, blocks, product variants,
-              category slugs, and media references. Image binaries are not included.
+              {isEcommerceActive
+                ? "Pages, posts, products, metadata, translation groups, blocks, product variants, category slugs, and media references. Image binaries are not included."
+                : "Pages, posts, metadata, translation groups, and blocks. Product content is included only when the ecommerce package is active. Image binaries are not included."}
             </span>
           </span>
         </label>
@@ -676,7 +683,7 @@ export function BackupRestoreWorkspace() {
             <CardTitle>Export Backup</CardTitle>
             <CardDescription>
               {backupMode === "content_json"
-                ? "Download an editable JSON bundle for CMS pages, posts, and products."
+                ? `Download an editable JSON bundle for CMS ${contentTypeLabel}.`
                 : "Download a full migration ZIP with database dump and R2 media objects."}
             </CardDescription>
           </CardHeader>
@@ -720,7 +727,7 @@ export function BackupRestoreWorkspace() {
             <CardTitle>Restore from Backup</CardTitle>
             <CardDescription>
               {backupMode === "content_json"
-                ? "Review a content backup before restoring pages, posts, and products."
+                ? `Review a content backup before restoring ${contentTypeLabel}.`
                 : "Review a full ZIP first, then restore database and R2 media into this environment."}
             </CardDescription>
           </CardHeader>
@@ -752,7 +759,7 @@ export function BackupRestoreWorkspace() {
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-3">
-                  {CONTENT_TYPES.map((item) => (
+                  {availableContentTypes.map((item) => (
                     <label
                       key={item.value}
                       className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"

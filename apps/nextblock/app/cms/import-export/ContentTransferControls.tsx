@@ -8,6 +8,7 @@ import {
   AlertDescription,
   Badge,
   Button,
+  Checkbox,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -22,8 +23,12 @@ import {
   SelectTrigger,
   SelectValue,
   Spinner,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "@nextblock-cms/ui";
-import { Download, FileDown, FileSpreadsheet, Upload } from "lucide-react";
+import { Download, FileDown, FileSpreadsheet, HelpCircle, Upload } from "lucide-react";
 
 import type {
   CmsContentType,
@@ -63,6 +68,15 @@ function readFileAsText(file: File) {
     reader.onerror = () => reject(reader.error || new Error("Failed to read file."));
     reader.readAsText(file);
   });
+}
+
+function getMinimumRequirementText(contentType: CmsContentType) {
+  if (contentType === "products") {
+    return "For partial product updates, keep either id or language_code + sku. Blank fields are preserved only for live overwrite imports.";
+  }
+
+  const noun = contentType === "posts" ? "post" : "page";
+  return `For partial ${noun} updates, keep either id or language_code + slug. Blank fields are preserved only for live overwrite imports.`;
 }
 
 function SummaryPanel({ summary }: { summary: CmsImportSummary | null }) {
@@ -128,8 +142,11 @@ export function ContentTransferControls({
   const [conflictMode, setConflictMode] =
     useState<CmsImportConflictMode>("overwrite_existing");
   const [applyMode, setApplyMode] = useState<CmsImportApplyMode>("draft");
+  const [ignoreBlankFields, setIgnoreBlankFields] = useState(false);
   const [summary, setSummary] = useState<CmsImportSummary | null>(null);
   const [isPending, startTransition] = useTransition();
+  const canIgnoreBlankFields = conflictMode === "overwrite_existing" && applyMode === "live";
+  const effectiveIgnoreBlankFields = canIgnoreBlankFields && ignoreBlankFields;
 
   const downloadTemplate = () => {
     startTransition(async () => {
@@ -165,6 +182,7 @@ export function ContentTransferControls({
         csv,
         conflictMode,
         applyMode,
+        ignoreBlankFields: effectiveIgnoreBlankFields,
       });
       setSummary(result);
       if (result.success) {
@@ -184,6 +202,7 @@ export function ContentTransferControls({
         csv,
         conflictMode,
         applyMode,
+        ignoreBlankFields: effectiveIgnoreBlankFields,
       });
       setSummary(result);
       if (!result.success) {
@@ -263,6 +282,7 @@ export function ContentTransferControls({
                   value={conflictMode}
                   onValueChange={(value) => {
                     setConflictMode(value as CmsImportConflictMode);
+                    if (value !== "overwrite_existing") setIgnoreBlankFields(false);
                     setSummary(null);
                   }}
                 >
@@ -281,6 +301,7 @@ export function ContentTransferControls({
                   value={applyMode}
                   onValueChange={(value) => {
                     setApplyMode(value as CmsImportApplyMode);
+                    if (value !== "live") setIgnoreBlankFields(false);
                     setSummary(null);
                   }}
                 >
@@ -292,6 +313,52 @@ export function ContentTransferControls({
                     <SelectItem value="live">Live content</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            <div className="rounded-md border bg-muted/20 p-3">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id={`${contentType}-ignore-blank-fields`}
+                  checked={ignoreBlankFields}
+                  disabled={!canIgnoreBlankFields}
+                  onCheckedChange={(checked) => {
+                    setIgnoreBlankFields(Boolean(checked));
+                    setSummary(null);
+                  }}
+                />
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Label
+                      htmlFor={`${contentType}-ignore-blank-fields`}
+                      className={!canIgnoreBlankFields ? "text-muted-foreground" : undefined}
+                    >
+                      Ignore blank fields
+                    </Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            aria-label="Minimum CSV columns"
+                          >
+                            <HelpCircle className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          {getMinimumRequirementText(contentType)}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, empty CSV cells are skipped instead of clearing existing values.
+                    {contentType === "products"
+                      ? " Use live overwrite imports for partial updates like SKU, language, and price."
+                      : " Use live overwrite imports for partial content updates."}
+                  </p>
+                </div>
               </div>
             </div>
 

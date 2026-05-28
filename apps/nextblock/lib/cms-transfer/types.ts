@@ -7,6 +7,8 @@ export type CmsImportApplyMode = "draft" | "live";
 export interface CmsImportOptions {
   conflictMode: CmsImportConflictMode;
   applyMode: CmsImportApplyMode;
+  ignoreBlankFields?: boolean;
+  skipUnavailableProductContent?: boolean;
 }
 
 export interface CmsImportMessage {

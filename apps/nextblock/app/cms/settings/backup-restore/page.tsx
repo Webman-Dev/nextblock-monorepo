@@ -1,4 +1,4 @@
-import { createClient } from "@nextblock-cms/db/server";
+import { createClient, verifyPackageOnline } from "@nextblock-cms/db/server";
 import { redirect } from "next/navigation";
 
 import { BackupRestoreWorkspace } from "./BackupRestoreWorkspace";
@@ -23,5 +23,7 @@ export default async function BackupRestorePage() {
     redirect("/unauthorized?reason=admin_required");
   }
 
-  return <BackupRestoreWorkspace />;
+  const isEcommerceActive = await verifyPackageOnline("ecommerce").catch(() => false);
+
+  return <BackupRestoreWorkspace isEcommerceActive={isEcommerceActive} />;
 }
