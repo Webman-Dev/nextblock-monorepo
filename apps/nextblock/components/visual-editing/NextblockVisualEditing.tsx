@@ -1085,7 +1085,7 @@ export function NextblockVisualEditing() {
         }
       `}</style>
 
-      {overlayPosition && hoverTarget && (
+      {!isEditorOpen && overlayPosition && hoverTarget && (
         <button
           type="button"
           aria-label="Edit block"
