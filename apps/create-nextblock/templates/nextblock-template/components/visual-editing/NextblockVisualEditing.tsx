@@ -1,15 +1,5 @@
 "use client";
 
-// Force shadow DOMs (such as the Vercel Toolbar) to be open so we can inspect their content.
-if (typeof window !== "undefined") {
-  const originalAttachShadow = Element.prototype.attachShadow;
-  if (originalAttachShadow && !originalAttachShadow.toString().includes("open")) {
-    Element.prototype.attachShadow = function (init) {
-      return originalAttachShadow.call(this, { ...init, mode: "open" });
-    };
-  }
-}
-
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import React, {
@@ -741,69 +731,10 @@ export function NextblockVisualEditing() {
         return;
       }
 
-      let target = event.target instanceof Element
+      const target = event.target instanceof Element
         ? event.target.closest("[data-vercel-edit-info]")
         : null;
-      let info = parseEditInfo(target);
-
-      // If the target is not directly a visual editing element, but we clicked on a Vercel Toolbar/feedback overlay,
-      // try to resolve the underlying visual editing element from the coordinates.
-      if (!target && event.target instanceof Element) {
-        const isVercelElement =
-          event.target.tagName === "VERCEL-LIVE-FEEDBACK" ||
-          event.target.tagName === "VERCEL-TOOLBAR" ||
-          event.target.closest("vercel-live-feedback") ||
-          event.target.closest("vercel-toolbar");
-
-        if (isVercelElement) {
-          // Avoid intercepting if they clicked the toolbar pill itself.
-          const isToolbarPill =
-            event.target.tagName === "VERCEL-TOOLBAR" ||
-            event.target.closest("vercel-toolbar");
-
-          if (!isToolbarPill) {
-            // Find the underlying element with data-vercel-edit-info under the cursor.
-            const elementsAtPoint = document.elementsFromPoint(event.clientX, event.clientY);
-            let candidateTarget: HTMLElement | null = null;
-            let candidateInfo: NextblockVisualEditInfo | null = null;
-
-            for (const el of elementsAtPoint) {
-              if (el instanceof HTMLElement && el.hasAttribute("data-vercel-edit-info")) {
-                const parsed = parseEditInfo(el);
-                if (parsed) {
-                  candidateTarget = el;
-                  candidateInfo = parsed;
-                  break;
-                }
-              }
-            }
-
-            if (candidateTarget && candidateInfo) {
-              // Only open the editor if this specific block is already selected in the Vercel Toolbar.
-              // We check this by verifying if the block's edit URL pathname is present in the Vercel feedback shadow DOM.
-              const host = document.querySelector("vercel-live-feedback");
-              const shadowRoot = host?.shadowRoot;
-              const html = shadowRoot?.innerHTML ?? "";
-
-              let pathname = "";
-              try {
-                if (candidateInfo.editUrl) {
-                  const url = new URL(candidateInfo.editUrl);
-                  pathname = url.pathname;
-                }
-              } catch {
-                const match = candidateInfo.editUrl?.match(/https?:\/\/[^\/]+(\/[^?#]+)/);
-                pathname = match ? match[1] : (candidateInfo.editUrl ?? "");
-              }
-
-              if (pathname && html.includes(pathname)) {
-                target = candidateTarget;
-                info = candidateInfo;
-              }
-            }
-          }
-        }
-      }
+      const info = parseEditInfo(target);
 
       if (!(target instanceof HTMLElement) || !info) {
         return;

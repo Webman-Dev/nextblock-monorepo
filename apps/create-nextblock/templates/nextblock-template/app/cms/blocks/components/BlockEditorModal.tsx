@@ -82,6 +82,14 @@ export function BlockEditorModal({
   const [isFlushingBeforeClose, setIsFlushingBeforeClose] = useState(false);
   const isValid = true; // Placeholder for future validation logic
   const isAutosaveMode = saveMode === "autosave";
+  const [saveShortcutLabel, setSaveShortcutLabel] = useState("CMD+S");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isMac = navigator.userAgent.indexOf("Mac") !== -1;
+      setSaveShortcutLabel(isMac ? "CMD+S" : "Ctrl+S");
+    }
+  }, []);
 
   useEffect(() => {
     // When the modal is opened with a new block, reset the temp content
@@ -143,7 +151,7 @@ export function BlockEditorModal({
 
       event.preventDefault();
       if (isAutosaveMode) {
-        void flushAutosave();
+        handleCloseAttempt();
       } else {
         handleSave();
       }
@@ -153,7 +161,7 @@ export function BlockEditorModal({
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [flushAutosave, handleSave, isAutosaveMode, isOpen]);
+  }, [handleCloseAttempt, handleSave, isAutosaveMode, isOpen]);
 
   const handleContentChange = (newContent: unknown) => {
     setTempContent(newContent);
@@ -229,7 +237,7 @@ export function BlockEditorModal({
                     </Button>
                     {!isAutosaveMode && (
                       <Button onClick={handleSave} disabled={!isValid} size="sm">
-                        Save (CMD+S)
+                        Save ({saveShortcutLabel})
                       </Button>
                     )}
                  </div>
