@@ -100,6 +100,13 @@ const FeaturedProductBlockEditor = dynamic(
   () => import("../../app/cms/blocks/editors/FeaturedProductBlockEditor"),
   { ssr: false }
 ) as EditorComponent;
+
+// Used for any non-core block type, i.e. user-defined custom blocks. Renders
+// the field-based config form (with a JSON fallback for unknown types).
+const DynamicCustomBlockEditor = dynamic(
+  () => import("../../app/cms/blocks/editors/DynamicCustomBlockEditor"),
+  { ssr: false }
+) as EditorComponent;
 const TestimonialBlockEditor = dynamic(
   () =>
     import("../blocks/TestimonialBlock").then(
@@ -473,7 +480,9 @@ function ProductPlainTextFieldEditor({ block, content, onChange }: BlockEditorPr
 }
 
 function getEditorComponent(blockType: string) {
-  return editorComponents[blockType as BlockType] ?? JsonBlockEditor;
+  // Core blocks have dedicated editors; everything else is treated as a custom
+  // block and gets the dynamic field-config editor (not the raw JSON editor).
+  return editorComponents[blockType as BlockType] ?? DynamicCustomBlockEditor;
 }
 
 function getProductFieldEditorComponent(target: VisualEditingProductFieldTarget) {
@@ -866,7 +875,15 @@ export function NextblockVisualEditing() {
         event.preventDefault();
         event.stopPropagation();
         void startInlineEditing(target, info);
+        return;
       }
+
+      // Any other block (custom blocks, images, buttons, etc.): a single click
+      // anywhere on the block opens its config editor. The isEditorOpen guard
+      // above plus the modal overlay prevent clicks from opening another block.
+      event.preventDefault();
+      event.stopPropagation();
+      void openEditor(info, target);
     };
 
     const handleToolbarEdit = (event: Event) => {

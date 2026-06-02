@@ -13,6 +13,7 @@ import { BlockEditorModal } from './BlockEditorModal';
 import { ConfirmationDialog } from '@nextblock-cms/ui';
 import BlockTypeSelector from './BlockTypeSelector';
 import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
+import { CustomBlockEditorPreview } from './CustomBlockEditorPreview';
 
 type ColumnBlock = SectionBlockContent['column_blocks'][0][0];
 
@@ -253,10 +254,26 @@ function SortableColumnBlock({ block, index, columnIndex, onEdit, onDelete, bloc
                    </div>
                </div>
            );
-      default:
-        // For fallback blocks, we might still want the label if we can't render a preview
-        // But user asked to remove it. Let's show a generic "configured" message or similar.
-        return <div className={cn("text-xs", isDarkBackground ? "text-white/50" : "text-muted-foreground")}>Unknown Block Type</div>;
+      default: {
+        const formattedLabel = block.block_type
+          .split(/[-_]/)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ");
+        const placeholder = (
+          <div className={cn("text-xs flex flex-col gap-0.5", isDarkBackground ? "text-white/70" : "text-muted-foreground")}>
+            <span className="font-medium">{formattedLabel}</span>
+            <span className="text-[10px] opacity-70">Click edit to configure</span>
+          </div>
+        );
+        // Custom blocks (block_type === definition slug) render their real layout.
+        return (
+          <CustomBlockEditorPreview
+            blockType={block.block_type}
+            content={(block.content || {}) as Record<string, any>}
+            fallback={placeholder}
+          />
+        );
+      }
     }
   };
 
@@ -404,7 +421,9 @@ export default function ColumnEditor({ columnIndex, blocks, onBlocksChange, bloc
   const handleStartEdit = (block: ColumnBlock, index: number) => {
     const blockDef = getBlockDefinition(block.block_type);
     if (!blockDef) {
-      console.error(`No definition found for block type: ${block.block_type}`);
+      const Editor = lazy(() => import(`../editors/DynamicCustomBlockEditor`));
+      setLazyEditor(Editor);
+      setEditingBlock({ ...block, index });
       return;
     }
 

@@ -6,7 +6,7 @@ type PublicBlockRendererLoader = () => Promise<{
 }>;
 
 const publicBlockRendererLoaders: Partial<
-  Record<BlockType, PublicBlockRendererLoader>
+  Record<BlockType | "hero", PublicBlockRendererLoader>
 > = {
   text: () => import("./renderers/TextBlockRenderer"),
   heading: () => import("./renderers/HeadingBlockRenderer"),
@@ -21,5 +21,5 @@ const publicBlockRendererLoaders: Partial<
 };
 
 export function getPublicBlockRendererLoader(blockType: string) {
-  return publicBlockRendererLoaders[blockType as BlockType];
+  return publicBlockRendererLoaders[blockType as BlockType | "hero"];
 }

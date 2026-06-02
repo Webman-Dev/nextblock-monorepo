@@ -9,6 +9,9 @@ import type {
 } from "../../../lib/visual-editing/types";
 import { getPublicBlockRendererLoader } from "../publicRendererLoaders";
 import SectionSlider from "./SectionSlider";
+import { getCachedCustomBlockDefinitionBySlug } from "../../../lib/custom-block-definitions";
+import { CachedDynamicLayoutEngine } from "../../renderers/CachedDynamicLayoutEngine";
+import { resolveBlockRelations } from "../../../lib/resolve-block-relations";
 
 // Static imports for core block renderers for LCP/performance optimization
 import TextBlockRenderer from "./TextBlockRenderer";
@@ -17,6 +20,10 @@ import ImageBlockRenderer from "./ImageBlockRenderer";
 import ButtonBlockRenderer from "./ButtonBlockRenderer";
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
+const BACKGROUND_COMPOSITING_CLASSES =
+  "isolate transform-gpu [backface-visibility:hidden] [transform-style:preserve-3d]";
+const ABSOLUTE_BACKGROUND_CLASSES =
+  "pointer-events-none absolute inset-[-1px] -z-10 transform-gpu [backface-visibility:hidden] [transform-style:preserve-3d]";
 const ECOMMERCE_BLOCK_TYPES = new Set([
   "product_grid",
   "featured_product",
@@ -100,6 +107,28 @@ function formatMinHeight(value?: string) {
   return trimmed;
 }
 
+function formatStopPosition(position: number) {
+  return Number.isInteger(position) ? String(position) : position.toFixed(1);
+}
+
+function formatGradientStops(stops: Array<{ color: string; position: number }>) {
+  return stops
+    .map((stop, index) => {
+      const previous = stops[index - 1];
+      const next = stops[index + 1];
+      let position = stop.position;
+
+      if (next && next.position === stop.position && stop.position > 0) {
+        position = stop.position - 0.1;
+      } else if (previous && previous.position === stop.position && stop.position < 100) {
+        position = stop.position + 0.1;
+      }
+
+      return `${stop.color} ${formatStopPosition(position)}%`;
+    })
+    .join(', ');
+}
+
 // Background style generator (handles solid, theme and gradients; image handled in JSX)
 function generateBackgroundStyles(background: SectionBlockContent['background']) {
   const styles: React.CSSProperties = {};
@@ -126,7 +155,7 @@ function generateBackgroundStyles(background: SectionBlockContent['background'])
     case 'gradient':
       if (background.gradient) {
         const { type, direction, stops } = background.gradient;
-        const gradientStops = stops.map(stop => `${stop.color} ${stop.position}%`).join(', ');
+        const gradientStops = formatGradientStops(stops);
         styles.background = `${type}-gradient(${direction || 'to right'}, ${gradientStops})`;
       }
       break;
@@ -144,7 +173,7 @@ function generateBackgroundStyles(background: SectionBlockContent['background'])
 
 function generateGradientOverlayStyle(gradient: any): React.CSSProperties {
   const { type, direction, stops } = gradient;
-  const gradientStops = stops.map((stop: any) => `${stop.color} ${stop.position}%`).join(', ');
+  const gradientStops = formatGradientStops(stops);
   return {
     background: `${type}-gradient(${direction || 'to right'}, ${gradientStops})`,
   };
@@ -180,6 +209,7 @@ async function renderNestedBlock({
         content={block.content as any}
         languageId={languageId}
         visualEditAttributes={visualEditAttributes}
+        renderContext="section"
       />
     );
   }
@@ -231,6 +261,36 @@ async function renderNestedBlock({
           visualEditAttributes={visualEditAttributes}
         />
       );
+    }
+
+    // Custom block definitions are data-rendered the same way as at the top
+    // level. A custom block's block_type is the definition slug.
+    const definition = await getCachedCustomBlockDefinitionBySlug(block.block_type);
+    if (definition) {
+      const resolvedBlock = (await resolveBlockRelations({
+        data: block.content as Record<string, any>,
+        fields: definition.fields,
+      })) as any;
+
+      return (
+        <div {...visualEditAttributes}>
+          <CachedDynamicLayoutEngine
+            definition={definition}
+            layoutSchema={definition.layout_schema}
+            fields={definition.fields}
+            data={{
+              ...(resolvedBlock.data || {}),
+              resolved_relations: resolvedBlock.resolved_relations || {},
+            }}
+          />
+        </div>
+      );
+    }
+
+    // Unknown type with no matching definition: keep the diagnostic out of the
+    // public-facing page (only show it inside the live editor).
+    if (!visualEditing?.enabled) {
+      return null;
     }
 
     return (
@@ -341,7 +401,7 @@ export default async function SectionBlockRenderer({
         return (
           <div
             key={`slide-${slideIndex}`}
-            className={`relative w-full flex items-center ${paddingTopClass} ${paddingBottomClass} ${slideBgClassName}`}
+            className={`relative w-full flex items-center ${BACKGROUND_COMPOSITING_CLASSES} ${paddingTopClass} ${paddingBottomClass} ${slideBgClassName}`}
             style={{
               ...slideBgStyles,
               minHeight: formatMinHeight(slideBackground.min_height) || '400px'
@@ -349,7 +409,7 @@ export default async function SectionBlockRenderer({
           >
             {/* Background image Layer for slide */}
             {slideBackground.type === 'image' && slideBackground.image && (
-              <div className="absolute inset-0 -z-10 pointer-events-none">
+              <div className={ABSOLUTE_BACKGROUND_CLASSES}>
                 <Image
                   src={`${R2_BASE_URL}/${slideBackground.image.object_key}`}
                   alt={slideBackground.image.alt_text || ""}
@@ -367,7 +427,7 @@ export default async function SectionBlockRenderer({
                 />
                 {slideBackground.image.overlay && slideBackground.image.overlay.gradient && (
                   <div 
-                    className="absolute inset-0"
+                    className="absolute inset-0 transform-gpu [backface-visibility:hidden]"
                     style={generateGradientOverlayStyle(slideBackground.image.overlay.gradient)}
                   />
                 )}
@@ -403,7 +463,7 @@ export default async function SectionBlockRenderer({
 
     return (
       <section
-        className="relative w-full overflow-hidden"
+        className={`relative w-full overflow-hidden ${BACKGROUND_COMPOSITING_CLASSES}`}
         {...visualEditAttributes}
       >
         <SectionSlider
@@ -457,7 +517,7 @@ export default async function SectionBlockRenderer({
 
   return (
     <section
-      className={`relative w-full ${paddingTopClass} ${paddingBottomClass} ${backgroundClassName}`.trim()}
+      className={`relative w-full ${BACKGROUND_COMPOSITING_CLASSES} ${paddingTopClass} ${paddingBottomClass} ${backgroundClassName}`.trim()}
       style={{
         ...styles,
         minHeight: formatMinHeight(content.background?.min_height)
@@ -466,7 +526,7 @@ export default async function SectionBlockRenderer({
     >
       {/* Background image Layer */}
       {content.background?.type === 'image' && content.background.image && (
-        <div className="absolute inset-0 -z-10 pointer-events-none">
+        <div className={ABSOLUTE_BACKGROUND_CLASSES}>
           <Image
             src={`${R2_BASE_URL}/${content.background.image.object_key}`}
             alt={content.background.image.alt_text || ""}
@@ -484,7 +544,7 @@ export default async function SectionBlockRenderer({
           />
           {content.background.image.overlay && content.background.image.overlay.gradient && (
             <div 
-              className="absolute inset-0"
+              className="absolute inset-0 transform-gpu [backface-visibility:hidden]"
               style={generateGradientOverlayStyle(content.background.image.overlay.gradient)}
             />
           )}

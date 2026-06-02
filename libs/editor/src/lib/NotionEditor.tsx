@@ -1,8 +1,9 @@
 // libs/editor/src/lib/NotionEditor.tsx
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent, JSONContent } from '@tiptap/react';
+import type { Extensions } from '@tiptap/core';
 import { Loader2, Sparkles } from 'lucide-react';
 import { editorExtensions } from './kit';
 import { EditorBubbleMenu } from './components/menus/BubbleMenu';
@@ -30,6 +31,8 @@ interface NotionEditorProps {
   onFocus?: () => void;
   onBlur?: () => void;
   openImagePicker?: OpenImagePicker;
+  extensions?: Extensions;
+  dynamicExtensions?: Extensions;
 }
 
 export const NotionEditor: React.FC<NotionEditorProps> = ({
@@ -46,6 +49,8 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   onFocus,
   onBlur,
   openImagePicker,
+  extensions,
+  dynamicExtensions,
 }) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [aiPrompt, setAiPrompt] = useState('');
@@ -67,9 +72,17 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   };
 
   const initialParsedContent = getParsedContent(content || initialContent);
+  const configuredExtensions = useMemo(
+    () =>
+      extensions ??
+      (dynamicExtensions && dynamicExtensions.length > 0
+        ? [...editorExtensions, ...dynamicExtensions]
+        : editorExtensions),
+    [dynamicExtensions, extensions]
+  );
 
   const editor = useEditor({
-    extensions: editorExtensions,
+    extensions: configuredExtensions,
     content: initialParsedContent,
     editable,
     immediatelyRender: false, // Next.js hydration safety

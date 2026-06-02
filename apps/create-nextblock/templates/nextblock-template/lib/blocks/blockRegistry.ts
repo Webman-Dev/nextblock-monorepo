@@ -1,6 +1,8 @@
 import { z } from '../zod-config';
 import { TestimonialBlockConfig, TestimonialBlockContent } from '../../components/blocks/TestimonialBlock';
 import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSchema, FeaturedProductBlockContent, CartBlockSchema, CartBlockContent, CheckoutBlockSchema, CheckoutBlockContent, ProductDetailsBlockSchema, ProductDetailsBlockContent } from './ecommerce-block-schemas';
+import { availableBlockTypes, type BlockType } from './blockTypes';
+export { availableBlockTypes, type BlockType } from './blockTypes';
 
 /**
  * Block Registry System
@@ -9,12 +11,6 @@ import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSc
  * It serves as the single source of truth for block definitions, including
  * their initial content, editor components, renderer components, and Zod schemas.
  */
-
-/**
- * Available block types - defined here as the source of truth
- */
-export const availableBlockTypes = ["text", "heading", "image", "button", "posts_grid", "video_embed", "section", "form", "testimonial", "product_grid", "featured_product", "cart", "checkout", "product_details"] as const;
-export type BlockType = (typeof availableBlockTypes)[number];
 
 // --- Zod Schemas & Inferred Types ---
 
@@ -543,8 +539,11 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
  * @param blockType - The type of block to get the definition for
  * @returns The block definition or undefined if not found
  */
-export function getBlockDefinition(blockType: BlockType): BlockDefinition | undefined {
-  return blockRegistry[blockType];
+export function getBlockDefinition(blockType: string): BlockDefinition | undefined {
+  if (blockType in blockRegistry) {
+    return blockRegistry[blockType as BlockType];
+  }
+  return undefined;
 }
 
 /**
@@ -553,8 +552,11 @@ export function getBlockDefinition(blockType: BlockType): BlockDefinition | unde
  * @param blockType - The type of block to get initial content for
  * @returns The initial content object or undefined if block type not found
  */
-export function getInitialContent(blockType: BlockType): object | undefined {
-  return blockRegistry[blockType]?.initialContent;
+export function getInitialContent(blockType: string): object | undefined {
+  if (blockType in blockRegistry) {
+    return blockRegistry[blockType as BlockType]?.initialContent;
+  }
+  return {};
 }
 
 /**
@@ -563,8 +565,14 @@ export function getInitialContent(blockType: BlockType): object | undefined {
  * @param blockType - The type of block to get the label for
  * @returns The user-friendly label or undefined if block type not found
  */
-export function getBlockLabel(blockType: BlockType): string | undefined {
-  return blockRegistry[blockType]?.label;
+export function getBlockLabel(blockType: string): string | undefined {
+  if (blockType in blockRegistry) {
+    return blockRegistry[blockType as BlockType]?.label;
+  }
+  return blockType
+    .split(/[-_]+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 /**
@@ -573,8 +581,8 @@ export function getBlockLabel(blockType: BlockType): string | undefined {
  * @param blockType - The block type to validate
  * @returns True if the block type exists in the registry
  */
-export function isValidBlockType(blockType: string): blockType is BlockType {
-  return blockType in blockRegistry;
+export function isValidBlockType(blockType: string): boolean {
+  return blockType in blockRegistry || /^[a-z0-9_-]+$/.test(blockType);
 }
 
 /**
@@ -583,8 +591,11 @@ export function isValidBlockType(blockType: string): blockType is BlockType {
  * @param blockType - The type of block to get the schema for
  * @returns The Zod schema object or undefined if not found
  */
-export function getBlockSchema(blockType: BlockType): z.ZodType<any> | undefined {
-  return blockRegistry[blockType]?.schema;
+export function getBlockSchema(blockType: string): z.ZodType<any> | undefined {
+  if (blockType in blockRegistry) {
+    return blockRegistry[blockType as BlockType]?.schema;
+  }
+  return z.record(z.string(), z.any());
 }
 
 /**
@@ -593,8 +604,13 @@ export function getBlockSchema(blockType: BlockType): z.ZodType<any> | undefined
  * @param blockType - The type of block to get documentation for
  * @returns The documentation object or undefined if not found
  */
-export function getBlockDocumentation(blockType: BlockType): BlockDefinition['documentation'] | undefined {
-  return blockRegistry[blockType]?.documentation;
+export function getBlockDocumentation(blockType: string): BlockDefinition['documentation'] | undefined {
+  if (blockType in blockRegistry) {
+    return blockRegistry[blockType as BlockType]?.documentation;
+  }
+  return {
+    description: "Custom user-defined block layout component",
+  };
 }
 
 /**

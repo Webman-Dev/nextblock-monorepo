@@ -39,6 +39,7 @@ const PRODUCT_ID_PATTERN =
 const productEditableFields = new Set<ProductVisualEditingField>([
   "title",
   "short_description",
+  "description_json",
 ]);
 
 const productSnapshotFields = [
@@ -108,8 +109,14 @@ export function assertValidProductFieldRequest(request: VisualEditingProductFiel
     throw new Error("Invalid product field target.");
   }
 
-  if (request.target.input !== "plain-text") {
-    throw new Error("Invalid product field editor.");
+  if (request.target.field === "description_json") {
+    if (request.target.input !== "tiptap") {
+      throw new Error("Invalid product field editor.");
+    }
+  } else {
+    if (request.target.input !== "plain-text") {
+      throw new Error("Invalid product field editor.");
+    }
   }
 }
 
@@ -134,6 +141,13 @@ function normalizeProductFieldContent(
       throw new Error("Product short description must be text.");
     }
 
+    return content;
+  }
+
+  if (field === "description_json") {
+    if (content !== null && typeof content !== "object") {
+      throw new Error("Product description must be a rich-text JSON document.");
+    }
     return content;
   }
 
@@ -372,6 +386,10 @@ export async function publishProductVisualEditingDraft(
       const productUpdate: Record<string, unknown> = {};
       addStringUpdate(productUpdate, draft, "title");
       addNullableStringUpdate(productUpdate, draft, "short_description");
+      if (hasOwn(draft.meta, "description_json")) {
+        const val = draft.meta["description_json"];
+        productUpdate["description_json"] = (val !== null && typeof val === "object") ? val : null;
+      }
 
 
       if (Object.keys(productUpdate).length > 0) {

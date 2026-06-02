@@ -6,7 +6,11 @@ import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
 import PageClientContent from './[slug]/PageClientContent';
 import { getPageDataBySlug } from './[slug]/page.utils';
 import BlockRenderer from '../components/BlockRenderer';
-import { resolveMetaDescription } from './lib/seo';
+import {
+  resolveMetaTitle,
+  resolvePageMetaDescription,
+  stringifyJsonLd,
+} from './lib/seo';
 import { getRequestOrigin } from '../lib/visual-editing/edit-info';
 
 const DEFAULT_LOCALE = 'en';
@@ -89,13 +93,14 @@ export async function generateMetadata(): Promise<Metadata> {
     });
   }
 
-  const description = resolveMetaDescription(pageData.meta_description);
+  const title = resolveMetaTitle(pageData.meta_title, pageData.title);
+  const description = resolvePageMetaDescription(pageData.meta_description, pageData.blocks);
 
   return {
-    title: pageData.meta_title || pageData.title,
+    title,
     description,
     openGraph: {
-      title: pageData.meta_title || pageData.title,
+      title,
       description,
       type: 'website',
       url: `${siteUrl}/`,
@@ -148,6 +153,18 @@ export default async function RootPage() {
   const draft = await draftMode();
   const visualEditingEnabled =
     draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
+  const siteUrl = process.env.NEXT_PUBLIC_URL || '';
+  const nonce = (await headers()).get('x-nonce') || undefined;
+  const title = resolveMetaTitle(pageData.meta_title, pageData.title);
+  const description = resolvePageMetaDescription(pageData.meta_description, pageData.blocks);
+  const pageJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: title,
+    description,
+    url: `${siteUrl}/`,
+    inLanguage: pageData.language_code,
+  };
   const pageBlocks = (
     <BlockRenderer
       blocks={pageData.blocks}
@@ -165,12 +182,20 @@ export default async function RootPage() {
   );
 
   return (
-    <PageClientContent
-      initialPageData={pageData}
-      currentSlug={homepageSlug}
-      translatedSlugs={translatedSlugs}
-    >
-      {pageBlocks}
-    </PageClientContent>
+    <>
+      <script
+        type="application/ld+json"
+        nonce={nonce}
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: stringifyJsonLd(pageJsonLd) }}
+      />
+      <PageClientContent
+        initialPageData={pageData}
+        currentSlug={homepageSlug}
+        translatedSlugs={translatedSlugs}
+      >
+        {pageBlocks}
+      </PageClientContent>
+    </>
   );
 }

@@ -61,7 +61,8 @@ export type VisualEditingBlockTarget =
 
 export type ProductVisualEditingField =
   | "title"
-  | "short_description";
+  | "short_description"
+  | "description_json";
 
 export type ProductVisualEditingInput = "plain-text" | "html" | "tiptap";
 

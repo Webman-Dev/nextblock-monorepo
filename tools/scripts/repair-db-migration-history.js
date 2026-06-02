@@ -18,7 +18,7 @@ const migrationsDir = path.join(workdir, 'supabase/migrations');
 const npxBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const args = new Set(process.argv.slice(2));
 const baselineRepairFirstVersion = '00000000000000';
-const baselineRepairLastVersion = '00000000000012';
+const baselineRepairLastVersion = '00000000000022';
 
 function log(message, color = colors.reset) {
   console.log(`${color}${message}${colors.reset}`);

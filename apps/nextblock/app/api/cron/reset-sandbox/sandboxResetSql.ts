@@ -4560,8 +4560,8 @@ BEGIN
 
   INSERT INTO public.blocks (page_id, language_id, block_type, content, "order") VALUES
   (v_contact_page_id, v_en_lang_id, 'hero', '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":1,"text_content":"Let''s Build the Future Together","textAlign":"center","textColor":"white"}},{"block_type":"text","content":{"html_content":"<p class=''text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4''>NextBlock™ is an open-source project driven by community feedback. We''d love to hear your thoughts, ideas, or questions.</p>"}}]]}'::jsonb, 0),
-  (v_contact_page_id, v_en_lang_id, 'section', '{"container_type":"cms.container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"lg","bottom":"lg"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<div class=''max-w-2xl mx-auto text-center''><h2 class=''text-2xl font-bold mb-4''>Open Source & Community Driven</h2><p class=''text-slate-600 dark:text-slate-400 mb-6''>NextBlock™ is built in the open. We rely on developers and editors like you to help us define the roadmap. Whether it''s a bug report, a feature request, or just a shoutout, every message helps us move faster.</p></div>"}}]]}'::jsonb, 1),
-  (v_contact_page_id, v_en_lang_id, 'form', '{"recipient_email":"cms.contact@nextblock.dev","submit_button_text":"Send Message","success_message":"Thank you for your feedback! We''ll get back to you soon.","fields":[{"temp_id":"name","label":"Name","field_type":"text","is_required":true,"placeholder":"Your name"},{"temp_id":"email","label":"Email","field_type":"email","is_required":true,"placeholder":"your@email.com"},{"temp_id":"message","label":"Message","field_type":"textarea","is_required":true,"placeholder":"How can we help?"}]}'::jsonb, 2);
+  (v_contact_page_id, v_en_lang_id, 'section', '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"lg","bottom":"lg"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<div class=''max-w-2xl mx-auto text-center''><h2 class=''text-2xl font-bold mb-4''>Open Source & Community Driven</h2><p class=''text-slate-600 dark:text-slate-400 mb-6''>NextBlock™ is built in the open. We rely on developers and editors like you to help us define the roadmap. Whether it''s a bug report, a feature request, or just a shoutout, every message helps us move faster.</p></div>"}}]]}'::jsonb, 1),
+  (v_contact_page_id, v_en_lang_id, 'form', '{"recipient_email":"foo@bar.com","submit_button_text":"Send Message","success_message":"Thank you for your feedback! We''ll get back to you soon.","fields":[{"temp_id":"name","label":"Name","field_type":"text","is_required":true,"placeholder":"Your name"},{"temp_id":"email","label":"Email","field_type":"email","is_required":true,"placeholder":"your@email.com"},{"temp_id":"message","label":"Message","field_type":"textarea","is_required":true,"placeholder":"How can we help?"}]}'::jsonb, 2);
 END;
 $seed$;
 SELECT id AS home_page_id
@@ -4608,7 +4608,7 @@ BEGIN
   INSERT INTO public.blocks (page_id, language_id, block_type, content, "order") VALUES
   (v_contact_page_fr_id, v_fr_lang_id, 'hero', '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":1,"text_content":"Bâtissons le futur ensemble","textAlign":"center","textColor":"white"}},{"block_type":"text","content":{"html_content":"<p class=''text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4''>NextBlock™ est un projet open-source propulsé par vos retours. Nous serions ravis d''entendre vos idées ou vos questions.</p>"}}]]}'::jsonb, 0),
   (v_contact_page_fr_id, v_fr_lang_id, 'section', '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"lg","bottom":"lg"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<div class=''max-w-2xl mx-auto text-center''><h2 class=''text-2xl font-bold mb-4''>Open Source & Communautaire</h2><p class=''text-slate-600 dark:text-slate-400 mb-6''>NextBlock™ est construit en public. Nous comptons sur les développeurs et éditeurs comme vous pour définir notre roadmap. Qu''il s''agisse d''un bug, d''une suggestion ou d''un simple salut, chaque message compte.</p></div>"}}]]}'::jsonb, 1),
-  (v_contact_page_fr_id, v_fr_lang_id, 'form', '{"recipient_email":"contact@nextblock.dev","submit_button_text":"Envoyer le message","success_message":"Merci pour vos retours ! Nous vous répondrons bientôt.","fields":[{"temp_id":"nom","label":"Nom","field_type":"text","is_required":true,"placeholder":"Votre nom"},{"temp_id":"email","label":"Email","field_type":"email","is_required":true,"placeholder":"votre@email.com"},{"temp_id":"message","label":"Message","field_type":"textarea","is_required":true,"placeholder":"Comment pouvons-nous vous aider ?"}]}'::jsonb, 2);
+  (v_contact_page_fr_id, v_fr_lang_id, 'form', '{"recipient_email":"foo@bar.com","submit_button_text":"Envoyer le message","success_message":"Merci pour vos retours ! Nous vous répondrons bientôt.","fields":[{"temp_id":"nom","label":"Nom","field_type":"text","is_required":true,"placeholder":"Votre nom"},{"temp_id":"email","label":"Email","field_type":"email","is_required":true,"placeholder":"votre@email.com"},{"temp_id":"message","label":"Message","field_type":"textarea","is_required":true,"placeholder":"Comment pouvons-nous vous aider ?"}]}'::jsonb, 2);
 
   INSERT INTO public.blocks (page_id, language_id, block_type, content, "order") VALUES
   (v_home_page_fr_id, v_fr_lang_id, 'hero',
@@ -6295,6 +6295,267 @@ $cortex_ai_html$),
   );
 END $$;
 
+
+
+-- >>> FROM: 00000000000023_setup_custom_block_definitions.sql <<<
+-- Custom block definition registry for data-rendered user blocks.
+
+CREATE OR REPLACE FUNCTION public.is_valid_custom_block_fields(candidate jsonb)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  SELECT CASE
+    WHEN jsonb_typeof(candidate) <> 'array' THEN false
+    ELSE
+      NOT EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(candidate) AS field(value)
+        WHERE jsonb_typeof(field.value) <> 'object'
+          OR jsonb_typeof(field.value -> 'key') IS DISTINCT FROM 'string'
+          OR jsonb_typeof(field.value -> 'label') IS DISTINCT FROM 'string'
+          OR jsonb_typeof(field.value -> 'type') IS DISTINCT FROM 'string'
+          OR field.value ->> 'key' !~ '^[a-z][a-z0-9_]*$'
+          OR field.value ->> 'type' NOT IN ('text', 'rich-text', 'image_r2', 'db_relation')
+      )
+      AND (
+        SELECT COUNT(*) = COUNT(DISTINCT field.value ->> 'key')
+        FROM jsonb_array_elements(candidate) AS field(value)
+      )
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_valid_custom_block_layout_schema(candidate jsonb)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  SELECT CASE
+    WHEN jsonb_typeof(candidate) <> 'object' THEN false
+    ELSE candidate ->> 'type' IN ('container', 'field_render')
+  END;
+$$;
+
+CREATE TABLE IF NOT EXISTS public.custom_block_definitions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug text NOT NULL UNIQUE CHECK (slug ~ '^[a-z][a-z0-9-]*$'),
+  name text NOT NULL CHECK (length(trim(name)) > 0),
+  description text NOT NULL DEFAULT '',
+  fields jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (public.is_valid_custom_block_fields(fields)),
+  layout_schema jsonb NOT NULL CHECK (public.is_valid_custom_block_layout_schema(layout_schema)),
+  is_original boolean NOT NULL DEFAULT true
+);
+
+COMMENT ON TABLE public.custom_block_definitions IS
+  'Registry for user-created block definitions rendered from database JSONB without runtime code compilation.';
+COMMENT ON COLUMN public.custom_block_definitions.fields IS
+  'Strict JSONB field declarations for data-rendered custom blocks.';
+COMMENT ON COLUMN public.custom_block_definitions.layout_schema IS
+  'Open-ended recursive layout schema consumed by the dynamic layout renderer.';
+COMMENT ON COLUMN public.custom_block_definitions.is_original IS
+  'False when a definition was created by duplicating an existing registry row.';
+
+CREATE INDEX IF NOT EXISTS idx_custom_block_definitions_is_original
+  ON public.custom_block_definitions (is_original);
+
+CREATE OR REPLACE FUNCTION public.duplicate_block_definition(target_id uuid)
+RETURNS public.custom_block_definitions
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  source_definition public.custom_block_definitions%ROWTYPE;
+  copied_definition public.custom_block_definitions%ROWTYPE;
+  base_slug text;
+  copy_slug text;
+  copy_index integer := 1;
+BEGIN
+  IF auth.role() <> 'service_role'
+     AND COALESCE((SELECT public.get_current_user_role())::text, '') NOT IN ('ADMIN', 'WRITER') THEN
+    RAISE EXCEPTION 'Not authorized to duplicate custom block definitions.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  SELECT *
+    INTO source_definition
+  FROM public.custom_block_definitions
+  WHERE id = target_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Custom block definition % not found.', target_id
+      USING ERRCODE = 'P0002';
+  END IF;
+
+  base_slug := regexp_replace(source_definition.slug, '-copy(-[0-9]+)?$', '');
+  copy_slug := base_slug || '-copy';
+
+  WHILE EXISTS (
+    SELECT 1
+    FROM public.custom_block_definitions
+    WHERE slug = copy_slug
+  ) LOOP
+    copy_index := copy_index + 1;
+    copy_slug := base_slug || '-copy-' || copy_index;
+  END LOOP;
+
+  INSERT INTO public.custom_block_definitions (
+    id,
+    slug,
+    name,
+    description,
+    fields,
+    layout_schema,
+    is_original
+  )
+  VALUES (
+    gen_random_uuid(),
+    copy_slug,
+    source_definition.name || ' Copy',
+    source_definition.description,
+    source_definition.fields,
+    source_definition.layout_schema,
+    false
+  )
+  RETURNING *
+    INTO copied_definition;
+
+  RETURN copied_definition;
+END;
+$$;
+
+ALTER TABLE public.custom_block_definitions ENABLE ROW LEVEL SECURITY;
+
+GRANT SELECT ON public.custom_block_definitions TO anon, authenticated, service_role;
+GRANT INSERT, UPDATE, DELETE ON public.custom_block_definitions TO authenticated;
+GRANT ALL ON public.custom_block_definitions TO service_role;
+
+DROP POLICY IF EXISTS custom_block_definitions_public_read_policy
+  ON public.custom_block_definitions;
+
+CREATE POLICY custom_block_definitions_public_read_policy
+  ON public.custom_block_definitions
+  FOR SELECT
+  TO public
+  USING (true);
+
+DROP POLICY IF EXISTS custom_block_definitions_insert_policy
+  ON public.custom_block_definitions;
+
+CREATE POLICY custom_block_definitions_insert_policy
+  ON public.custom_block_definitions
+  FOR INSERT
+  TO authenticated
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+DROP POLICY IF EXISTS custom_block_definitions_update_policy
+  ON public.custom_block_definitions;
+
+CREATE POLICY custom_block_definitions_update_policy
+  ON public.custom_block_definitions
+  FOR UPDATE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+DROP POLICY IF EXISTS custom_block_definitions_delete_policy
+  ON public.custom_block_definitions;
+
+CREATE POLICY custom_block_definitions_delete_policy
+  ON public.custom_block_definitions
+  FOR DELETE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+DROP POLICY IF EXISTS custom_block_definitions_service_role_policy
+  ON public.custom_block_definitions;
+
+CREATE POLICY custom_block_definitions_service_role_policy
+  ON public.custom_block_definitions
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+REVOKE ALL ON FUNCTION public.duplicate_block_definition(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.duplicate_block_definition(uuid) TO authenticated, service_role;
+
+
+-- >>> FROM: 00000000000024_setup_ucp_cart_sessions.sql <<<
+-- 00000000000019_setup_ucp_cart_sessions.sql
+-- Persist Universal Commerce Protocol cart sessions for agentic cart handoff.
+
+CREATE TABLE IF NOT EXISTS public.ucp_cart_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  status text NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'cancelled', 'completed')),
+  currency text NOT NULL DEFAULT 'USD',
+  locale text,
+  buyer_identity jsonb NOT NULL DEFAULT '{}'::jsonb,
+  context jsonb NOT NULL DEFAULT '{}'::jsonb,
+  signals jsonb NOT NULL DEFAULT '{}'::jsonb,
+  attribution jsonb NOT NULL DEFAULT '{}'::jsonb,
+  line_items jsonb NOT NULL DEFAULT '[]'::jsonb,
+  totals jsonb NOT NULL DEFAULT '[]'::jsonb,
+  checkout_url text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL DEFAULT (now() + interval '7 days'),
+  CONSTRAINT ucp_cart_sessions_buyer_identity_object
+    CHECK (jsonb_typeof(buyer_identity) = 'object'),
+  CONSTRAINT ucp_cart_sessions_context_object
+    CHECK (jsonb_typeof(context) = 'object'),
+  CONSTRAINT ucp_cart_sessions_signals_object
+    CHECK (jsonb_typeof(signals) = 'object'),
+  CONSTRAINT ucp_cart_sessions_attribution_object
+    CHECK (jsonb_typeof(attribution) = 'object'),
+  CONSTRAINT ucp_cart_sessions_line_items_array
+    CHECK (jsonb_typeof(line_items) = 'array'),
+  CONSTRAINT ucp_cart_sessions_totals_array
+    CHECK (jsonb_typeof(totals) = 'array'),
+  CONSTRAINT ucp_cart_sessions_metadata_object
+    CHECK (jsonb_typeof(metadata) = 'object')
+);
+
+CREATE INDEX IF NOT EXISTS idx_ucp_cart_sessions_status_expires_at
+  ON public.ucp_cart_sessions (status, expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_ucp_cart_sessions_created_at
+  ON public.ucp_cart_sessions (created_at DESC);
+
+CREATE OR REPLACE FUNCTION public.handle_ucp_cart_sessions_update()
+RETURNS trigger AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_handle_ucp_cart_sessions_update
+  ON public.ucp_cart_sessions;
+
+CREATE TRIGGER trg_handle_ucp_cart_sessions_update
+  BEFORE UPDATE ON public.ucp_cart_sessions
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_ucp_cart_sessions_update();
+
+ALTER TABLE public.ucp_cart_sessions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS ucp_cart_sessions_service_role_policy
+  ON public.ucp_cart_sessions;
+
+CREATE POLICY ucp_cart_sessions_service_role_policy
+  ON public.ucp_cart_sessions
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.ucp_cart_sessions TO service_role;
+GRANT EXECUTE ON FUNCTION public.handle_ucp_cart_sessions_update() TO service_role;
 
 
   -- Step D: Anchor preserved profiles

@@ -1,4 +1,8 @@
-import { fetchAllPublishedPages, fetchAllPublishedPosts } from '../lib/sitemap-utils';
+import {
+  fetchAllActiveProducts,
+  fetchAllPublishedPages,
+  fetchAllPublishedPosts,
+} from '../lib/sitemap-utils';
 import { NextResponse } from 'next/server';
 
 const baseUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
@@ -33,12 +37,20 @@ export async function GET() {
       // Proceed with an empty array for posts
     }
 
+    let products: SitemapEntry[] = [];
+    try {
+      products = await fetchAllActiveProducts();
+    } catch (error) {
+      console.error("Error fetching active products for sitemap:", error);
+      // Proceed with an empty array for products
+    }
+
     const staticRoutes: SitemapEntry[] = [
       { path: '/', lastModified: new Date().toISOString() },
       { path: '/articles', lastModified: new Date().toISOString() },
     ];
 
-    const allEntries = [...staticRoutes, ...pages, ...posts];
+    const allEntries = [...staticRoutes, ...pages, ...posts, ...products];
 
     const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

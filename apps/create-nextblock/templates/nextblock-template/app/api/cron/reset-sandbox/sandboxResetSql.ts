@@ -4561,7 +4561,7 @@ BEGIN
   INSERT INTO public.blocks (page_id, language_id, block_type, content, "order") VALUES
   (v_contact_page_id, v_en_lang_id, 'hero', '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":1,"text_content":"Let''s Build the Future Together","textAlign":"center","textColor":"white"}},{"block_type":"text","content":{"html_content":"<p class=''text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4''>NextBlock™ is an open-source project driven by community feedback. We''d love to hear your thoughts, ideas, or questions.</p>"}}]]}'::jsonb, 0),
   (v_contact_page_id, v_en_lang_id, 'section', '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"lg","bottom":"lg"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<div class=''max-w-2xl mx-auto text-center''><h2 class=''text-2xl font-bold mb-4''>Open Source & Community Driven</h2><p class=''text-slate-600 dark:text-slate-400 mb-6''>NextBlock™ is built in the open. We rely on developers and editors like you to help us define the roadmap. Whether it''s a bug report, a feature request, or just a shoutout, every message helps us move faster.</p></div>"}}]]}'::jsonb, 1),
-  (v_contact_page_id, v_en_lang_id, 'form', '{"recipient_email":"cms.contact@nextblock.dev","submit_button_text":"Send Message","success_message":"Thank you for your feedback! We''ll get back to you soon.","fields":[{"temp_id":"name","label":"Name","field_type":"text","is_required":true,"placeholder":"Your name"},{"temp_id":"email","label":"Email","field_type":"email","is_required":true,"placeholder":"your@email.com"},{"temp_id":"message","label":"Message","field_type":"textarea","is_required":true,"placeholder":"How can we help?"}]}'::jsonb, 2);
+  (v_contact_page_id, v_en_lang_id, 'form', '{"recipient_email":"foo@bar.com","submit_button_text":"Send Message","success_message":"Thank you for your feedback! We''ll get back to you soon.","fields":[{"temp_id":"name","label":"Name","field_type":"text","is_required":true,"placeholder":"Your name"},{"temp_id":"email","label":"Email","field_type":"email","is_required":true,"placeholder":"your@email.com"},{"temp_id":"message","label":"Message","field_type":"textarea","is_required":true,"placeholder":"How can we help?"}]}'::jsonb, 2);
 END;
 $seed$;
 SELECT id AS home_page_id
@@ -4608,7 +4608,7 @@ BEGIN
   INSERT INTO public.blocks (page_id, language_id, block_type, content, "order") VALUES
   (v_contact_page_fr_id, v_fr_lang_id, 'hero', '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":1,"text_content":"Bâtissons le futur ensemble","textAlign":"center","textColor":"white"}},{"block_type":"text","content":{"html_content":"<p class=''text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4''>NextBlock™ est un projet open-source propulsé par vos retours. Nous serions ravis d''entendre vos idées ou vos questions.</p>"}}]]}'::jsonb, 0),
   (v_contact_page_fr_id, v_fr_lang_id, 'section', '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"lg","bottom":"lg"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<div class=''max-w-2xl mx-auto text-center''><h2 class=''text-2xl font-bold mb-4''>Open Source & Communautaire</h2><p class=''text-slate-600 dark:text-slate-400 mb-6''>NextBlock™ est construit en public. Nous comptons sur les développeurs et éditeurs comme vous pour définir notre roadmap. Qu''il s''agisse d''un bug, d''une suggestion ou d''un simple salut, chaque message compte.</p></div>"}}]]}'::jsonb, 1),
-  (v_contact_page_fr_id, v_fr_lang_id, 'form', '{"recipient_email":"cms.contact@nextblock.dev","submit_button_text":"Envoyer le message","success_message":"Merci pour vos retours ! Nous vous répondrons bientôt.","fields":[{"temp_id":"nom","label":"Nom","field_type":"text","is_required":true,"placeholder":"Votre nom"},{"temp_id":"email","label":"Email","field_type":"email","is_required":true,"placeholder":"votre@email.com"},{"temp_id":"message","label":"Message","field_type":"textarea","is_required":true,"placeholder":"Comment pouvons-nous vous aider ?"}]}'::jsonb, 2);
+  (v_contact_page_fr_id, v_fr_lang_id, 'form', '{"recipient_email":"foo@bar.com","submit_button_text":"Envoyer le message","success_message":"Merci pour vos retours ! Nous vous répondrons bientôt.","fields":[{"temp_id":"nom","label":"Nom","field_type":"text","is_required":true,"placeholder":"Votre nom"},{"temp_id":"email","label":"Email","field_type":"email","is_required":true,"placeholder":"votre@email.com"},{"temp_id":"message","label":"Message","field_type":"textarea","is_required":true,"placeholder":"Comment pouvons-nous vous aider ?"}]}'::jsonb, 2);
 
   INSERT INTO public.blocks (page_id, language_id, block_type, content, "order") VALUES
   (v_home_page_fr_id, v_fr_lang_id, 'hero',
@@ -6110,6 +6110,452 @@ SET blocks = (
 WHERE public.content_drafts.blocks @> '[{"block_type": "hero"}]';
 
 
+
+
+-- >>> FROM: 00000000000022_seed_cortex_ai_guide_post.sql <<<
+-- 00000000000022_seed_cortex_ai_guide_post.sql
+-- Adds the Cortex AI guide post linked from the seeded home page CTA.
+
+
+DO $$
+DECLARE
+  v_en_lang_id bigint;
+  v_cortex_media_id uuid;
+  v_cortex_post_id bigint;
+BEGIN
+  SELECT id INTO v_en_lang_id
+  FROM public.languages
+  WHERE code = 'en'
+  LIMIT 1;
+
+  IF v_en_lang_id IS NULL THEN
+    RAISE EXCEPTION 'English language not found.';
+  END IF;
+
+  INSERT INTO public.media AS seed_media (
+    file_name,
+    object_key,
+    file_path,
+    file_type,
+    size_bytes,
+    width,
+    height,
+    folder,
+    description
+  )
+  VALUES (
+    'cortex-ai.webp',
+    'images/cortex-ai.webp',
+    'images/cortex-ai.webp',
+    'image/webp',
+    298588,
+    1024,
+    571,
+    'images',
+    'NextBlock Cortex AI editorial feature image'
+  )
+  ON CONFLICT (object_key) DO UPDATE
+  SET
+    file_name = COALESCE(seed_media.file_name, EXCLUDED.file_name),
+    file_path = COALESCE(seed_media.file_path, EXCLUDED.file_path),
+    file_type = COALESCE(seed_media.file_type, EXCLUDED.file_type),
+    size_bytes = COALESCE(seed_media.size_bytes, EXCLUDED.size_bytes),
+    width = COALESCE(seed_media.width, EXCLUDED.width),
+    height = COALESCE(seed_media.height, EXCLUDED.height),
+    folder = COALESCE(seed_media.folder, EXCLUDED.folder),
+    description = COALESCE(seed_media.description, EXCLUDED.description),
+    updated_at = now()
+  RETURNING id INTO v_cortex_media_id;
+
+  INSERT INTO public.posts (
+    language_id,
+    title,
+    slug,
+    label,
+    status,
+    excerpt,
+    subtitle,
+    published_at,
+    meta_title,
+    meta_description,
+    translation_group_id,
+    feature_image_id
+  )
+  VALUES (
+    v_en_lang_id,
+    'NextBlock Cortex AI Guide',
+    'nextblock-cortex-ai-guide',
+    'AI Copilot',
+    'published',
+    'A practical guide to Cortex AI, the block-aware assistant for model routing, BYOK controls, and faster editorial production inside NextBlock.',
+    'See how Cortex AI brings structured generation, provider choice, and safer content workflows directly into the NextBlock editor.',
+    now(),
+    'NextBlock Cortex AI Guide',
+    'Learn how NextBlock Cortex AI helps teams generate, refine, and translate structured block content with model routing and BYOK controls.',
+    gen_random_uuid(),
+    v_cortex_media_id
+  )
+  ON CONFLICT (language_id, slug) DO NOTHING
+  RETURNING id INTO v_cortex_post_id;
+
+  IF v_cortex_post_id IS NULL THEN
+    SELECT id INTO v_cortex_post_id
+    FROM public.posts
+    WHERE language_id = v_en_lang_id
+      AND slug = 'nextblock-cortex-ai-guide'
+    LIMIT 1;
+
+    UPDATE public.posts
+    SET
+      feature_image_id = v_cortex_media_id,
+      updated_at = now()
+    WHERE id = v_cortex_post_id
+      AND feature_image_id IS NULL;
+  END IF;
+
+  IF v_cortex_post_id IS NULL THEN
+    RAISE EXCEPTION 'Unable to create or find Cortex AI guide post.';
+  END IF;
+
+  INSERT INTO public.blocks (post_id, language_id, block_type, content, "order")
+  SELECT
+    v_cortex_post_id,
+    v_en_lang_id,
+    'text',
+    jsonb_build_object('html_content', $cortex_ai_html$
+<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock Cortex AI is the AI layer built for the way NextBlock pages are actually composed. Instead of treating your site like a blank document, it understands blocks, sections, editor constraints, and the model choices your team wants to use.</p>
+
+<div class='grid gap-4 md:grid-cols-3 my-10'>
+  <div class='rounded-3xl border border-violet-200/70 bg-violet-50/80 p-6 dark:border-violet-500/20 dark:bg-violet-500/10'>
+    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Model routing</p>
+    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Pick the right model</h3>
+    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Route generation through OpenRouter or your configured provider strategy so each task can balance speed, quality, and cost.</p>
+  </div>
+  <div class='rounded-3xl border border-sky-200/70 bg-sky-50/80 p-6 dark:border-sky-500/20 dark:bg-sky-500/10'>
+    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-200'>BYOK control</p>
+    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Use your own keys</h3>
+    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Keep provider credentials under your control while still giving editors a clean, guided AI workflow in the CMS.</p>
+  </div>
+  <div class='rounded-3xl border border-emerald-200/70 bg-emerald-50/80 p-6 dark:border-emerald-500/20 dark:bg-emerald-500/10'>
+    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Typed output</p>
+    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Generate valid blocks</h3>
+    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Schema-aware generation helps AI output land as usable page structure instead of loose copy that needs a rebuild.</p>
+  </div>
+</div>
+
+<h2>Why Cortex AI Belongs Inside the Editor</h2>
+<p>Generic chat tools can draft copy, but they do not know the difference between a hero, a card grid, a product description, and a localized article. Cortex AI lives closer to the editing surface, so generation can respect the same block contracts that render on the public site.</p>
+<p>That makes AI useful for practical production work: drafting a landing section, tightening an excerpt, expanding a product story, translating a post, or reshaping a rough idea into a block layout that already fits the system.</p>
+
+<div class='rounded-[2rem] border border-slate-200/80 bg-slate-50/90 p-6 my-10 dark:border-white/10 dark:bg-slate-900/70'>
+  <p class='text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Editorial workflow</p>
+  <div class='grid gap-5 md:grid-cols-2 mt-5'>
+    <div class='rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-slate-950/50'>
+      <h3 class='mt-0 text-xl text-slate-900 dark:text-white'>Faster first drafts</h3>
+      <p class='text-sm text-slate-600 dark:text-slate-300'>Start with a structured prompt and get a section, article outline, or product narrative that already matches the site voice.</p>
+    </div>
+    <div class='rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-slate-950/50'>
+      <h3 class='mt-0 text-xl text-slate-900 dark:text-white'>Cleaner revisions</h3>
+      <p class='text-sm text-slate-600 dark:text-slate-300'>Ask for shorter, clearer, more technical, more polished, or locale-ready output without leaving the content screen.</p>
+    </div>
+  </div>
+</div>
+
+<h2>Model Routing and Cost Control</h2>
+<p>Cortex AI is designed around provider choice. Teams can route requests through the configured AI gateway, choose task-appropriate models, and keep bring-your-own-key setups separate from the editor experience. Editors get a simple control surface while developers keep the operational knobs.</p>
+<ul>
+  <li>Use fast, inexpensive models for drafts, variations, and rewrites</li>
+  <li>Reserve stronger models for long-form strategy, technical copy, or difficult transformations</li>
+  <li>Keep provider keys and routing defaults in the server-side configuration layer</li>
+  <li>Make cost and quality decisions without changing the public rendering system</li>
+</ul>
+
+<h2>Block-Aware Generation</h2>
+<p>The important shift is that Cortex AI is not just writing text. It is meant to produce content that can map back to NextBlock surfaces: section copy, article bodies, product descriptions, headings, calls to action, and localized variants. That reduces the cleanup step that usually happens after copying AI text from a separate tool.</p>
+<p>Because the output is shaped around existing block contracts, the generated content feels native in the editor and predictable on the frontend.</p>
+
+<h2>Safer Team Workflows</h2>
+<p>AI works best when it is helpful without becoming invisible infrastructure. Cortex AI keeps humans in the loop: editors review the output, developers control the available providers, and the CMS keeps the generated content inside the same revision and publishing flow as everything else.</p>
+
+<h2>A Practical Launch Flow</h2>
+<ol>
+  <li>Draft the article, landing section, or product story from a focused prompt.</li>
+  <li>Refine the result against the brand voice and target audience.</li>
+  <li>Generate a localized version or shorter excerpt for cards and metadata.</li>
+  <li>Review the content in the NextBlock editor, publish, and keep iterating through normal revisions.</li>
+</ol>
+
+<p>Cortex AI turns the CMS into a more capable production surface: not a replacement for editorial judgment, but a faster way to shape good ideas into structured pages that are ready to ship.</p>
+$cortex_ai_html$),
+    0
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM public.blocks
+    WHERE post_id = v_cortex_post_id
+  );
+END $$;
+
+
+
+-- >>> FROM: 00000000000023_setup_custom_block_definitions.sql <<<
+-- Custom block definition registry for data-rendered user blocks.
+
+CREATE OR REPLACE FUNCTION public.is_valid_custom_block_fields(candidate jsonb)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  SELECT CASE
+    WHEN jsonb_typeof(candidate) <> 'array' THEN false
+    ELSE
+      NOT EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(candidate) AS field(value)
+        WHERE jsonb_typeof(field.value) <> 'object'
+          OR jsonb_typeof(field.value -> 'key') IS DISTINCT FROM 'string'
+          OR jsonb_typeof(field.value -> 'label') IS DISTINCT FROM 'string'
+          OR jsonb_typeof(field.value -> 'type') IS DISTINCT FROM 'string'
+          OR field.value ->> 'key' !~ '^[a-z][a-z0-9_]*$'
+          OR field.value ->> 'type' NOT IN ('text', 'rich-text', 'image_r2', 'db_relation')
+      )
+      AND (
+        SELECT COUNT(*) = COUNT(DISTINCT field.value ->> 'key')
+        FROM jsonb_array_elements(candidate) AS field(value)
+      )
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_valid_custom_block_layout_schema(candidate jsonb)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  SELECT CASE
+    WHEN jsonb_typeof(candidate) <> 'object' THEN false
+    ELSE candidate ->> 'type' IN ('container', 'field_render')
+  END;
+$$;
+
+CREATE TABLE IF NOT EXISTS public.custom_block_definitions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug text NOT NULL UNIQUE CHECK (slug ~ '^[a-z][a-z0-9-]*$'),
+  name text NOT NULL CHECK (length(trim(name)) > 0),
+  description text NOT NULL DEFAULT '',
+  fields jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (public.is_valid_custom_block_fields(fields)),
+  layout_schema jsonb NOT NULL CHECK (public.is_valid_custom_block_layout_schema(layout_schema)),
+  is_original boolean NOT NULL DEFAULT true
+);
+
+COMMENT ON TABLE public.custom_block_definitions IS
+  'Registry for user-created block definitions rendered from database JSONB without runtime code compilation.';
+COMMENT ON COLUMN public.custom_block_definitions.fields IS
+  'Strict JSONB field declarations for data-rendered custom blocks.';
+COMMENT ON COLUMN public.custom_block_definitions.layout_schema IS
+  'Open-ended recursive layout schema consumed by the dynamic layout renderer.';
+COMMENT ON COLUMN public.custom_block_definitions.is_original IS
+  'False when a definition was created by duplicating an existing registry row.';
+
+CREATE INDEX IF NOT EXISTS idx_custom_block_definitions_is_original
+  ON public.custom_block_definitions (is_original);
+
+CREATE OR REPLACE FUNCTION public.duplicate_block_definition(target_id uuid)
+RETURNS public.custom_block_definitions
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  source_definition public.custom_block_definitions%ROWTYPE;
+  copied_definition public.custom_block_definitions%ROWTYPE;
+  base_slug text;
+  copy_slug text;
+  copy_index integer := 1;
+BEGIN
+  IF auth.role() <> 'service_role'
+     AND COALESCE((SELECT public.get_current_user_role())::text, '') NOT IN ('ADMIN', 'WRITER') THEN
+    RAISE EXCEPTION 'Not authorized to duplicate custom block definitions.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  SELECT *
+    INTO source_definition
+  FROM public.custom_block_definitions
+  WHERE id = target_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Custom block definition % not found.', target_id
+      USING ERRCODE = 'P0002';
+  END IF;
+
+  base_slug := regexp_replace(source_definition.slug, '-copy(-[0-9]+)?$', '');
+  copy_slug := base_slug || '-copy';
+
+  WHILE EXISTS (
+    SELECT 1
+    FROM public.custom_block_definitions
+    WHERE slug = copy_slug
+  ) LOOP
+    copy_index := copy_index + 1;
+    copy_slug := base_slug || '-copy-' || copy_index;
+  END LOOP;
+
+  INSERT INTO public.custom_block_definitions (
+    id,
+    slug,
+    name,
+    description,
+    fields,
+    layout_schema,
+    is_original
+  )
+  VALUES (
+    gen_random_uuid(),
+    copy_slug,
+    source_definition.name || ' Copy',
+    source_definition.description,
+    source_definition.fields,
+    source_definition.layout_schema,
+    false
+  )
+  RETURNING *
+    INTO copied_definition;
+
+  RETURN copied_definition;
+END;
+$$;
+
+ALTER TABLE public.custom_block_definitions ENABLE ROW LEVEL SECURITY;
+
+GRANT SELECT ON public.custom_block_definitions TO anon, authenticated, service_role;
+GRANT INSERT, UPDATE, DELETE ON public.custom_block_definitions TO authenticated;
+GRANT ALL ON public.custom_block_definitions TO service_role;
+
+DROP POLICY IF EXISTS custom_block_definitions_public_read_policy
+  ON public.custom_block_definitions;
+
+CREATE POLICY custom_block_definitions_public_read_policy
+  ON public.custom_block_definitions
+  FOR SELECT
+  TO public
+  USING (true);
+
+DROP POLICY IF EXISTS custom_block_definitions_insert_policy
+  ON public.custom_block_definitions;
+
+CREATE POLICY custom_block_definitions_insert_policy
+  ON public.custom_block_definitions
+  FOR INSERT
+  TO authenticated
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+DROP POLICY IF EXISTS custom_block_definitions_update_policy
+  ON public.custom_block_definitions;
+
+CREATE POLICY custom_block_definitions_update_policy
+  ON public.custom_block_definitions
+  FOR UPDATE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
+  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+DROP POLICY IF EXISTS custom_block_definitions_delete_policy
+  ON public.custom_block_definitions;
+
+CREATE POLICY custom_block_definitions_delete_policy
+  ON public.custom_block_definitions
+  FOR DELETE
+  TO authenticated
+  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
+
+DROP POLICY IF EXISTS custom_block_definitions_service_role_policy
+  ON public.custom_block_definitions;
+
+CREATE POLICY custom_block_definitions_service_role_policy
+  ON public.custom_block_definitions
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+REVOKE ALL ON FUNCTION public.duplicate_block_definition(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.duplicate_block_definition(uuid) TO authenticated, service_role;
+
+
+-- >>> FROM: 00000000000024_setup_ucp_cart_sessions.sql <<<
+-- 00000000000019_setup_ucp_cart_sessions.sql
+-- Persist Universal Commerce Protocol cart sessions for agentic cart handoff.
+
+CREATE TABLE IF NOT EXISTS public.ucp_cart_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  status text NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'cancelled', 'completed')),
+  currency text NOT NULL DEFAULT 'USD',
+  locale text,
+  buyer_identity jsonb NOT NULL DEFAULT '{}'::jsonb,
+  context jsonb NOT NULL DEFAULT '{}'::jsonb,
+  signals jsonb NOT NULL DEFAULT '{}'::jsonb,
+  attribution jsonb NOT NULL DEFAULT '{}'::jsonb,
+  line_items jsonb NOT NULL DEFAULT '[]'::jsonb,
+  totals jsonb NOT NULL DEFAULT '[]'::jsonb,
+  checkout_url text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL DEFAULT (now() + interval '7 days'),
+  CONSTRAINT ucp_cart_sessions_buyer_identity_object
+    CHECK (jsonb_typeof(buyer_identity) = 'object'),
+  CONSTRAINT ucp_cart_sessions_context_object
+    CHECK (jsonb_typeof(context) = 'object'),
+  CONSTRAINT ucp_cart_sessions_signals_object
+    CHECK (jsonb_typeof(signals) = 'object'),
+  CONSTRAINT ucp_cart_sessions_attribution_object
+    CHECK (jsonb_typeof(attribution) = 'object'),
+  CONSTRAINT ucp_cart_sessions_line_items_array
+    CHECK (jsonb_typeof(line_items) = 'array'),
+  CONSTRAINT ucp_cart_sessions_totals_array
+    CHECK (jsonb_typeof(totals) = 'array'),
+  CONSTRAINT ucp_cart_sessions_metadata_object
+    CHECK (jsonb_typeof(metadata) = 'object')
+);
+
+CREATE INDEX IF NOT EXISTS idx_ucp_cart_sessions_status_expires_at
+  ON public.ucp_cart_sessions (status, expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_ucp_cart_sessions_created_at
+  ON public.ucp_cart_sessions (created_at DESC);
+
+CREATE OR REPLACE FUNCTION public.handle_ucp_cart_sessions_update()
+RETURNS trigger AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_handle_ucp_cart_sessions_update
+  ON public.ucp_cart_sessions;
+
+CREATE TRIGGER trg_handle_ucp_cart_sessions_update
+  BEFORE UPDATE ON public.ucp_cart_sessions
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_ucp_cart_sessions_update();
+
+ALTER TABLE public.ucp_cart_sessions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS ucp_cart_sessions_service_role_policy
+  ON public.ucp_cart_sessions;
+
+CREATE POLICY ucp_cart_sessions_service_role_policy
+  ON public.ucp_cart_sessions
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.ucp_cart_sessions TO service_role;
+GRANT EXECUTE ON FUNCTION public.handle_ucp_cart_sessions_update() TO service_role;
 
 
   -- Step D: Anchor preserved profiles

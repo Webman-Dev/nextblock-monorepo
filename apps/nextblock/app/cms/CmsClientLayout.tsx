@@ -8,7 +8,7 @@ import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
-  ExternalLink, Paintbrush, Brain, TicketPercent, ShieldAlert, Folder, DatabaseBackup,
+  ExternalLink, Paintbrush, Brain, TicketPercent, ShieldAlert, Folder, DatabaseBackup, Boxes,
 } from "lucide-react"
 import { Button } from "@nextblock-cms/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar"
@@ -198,6 +198,9 @@ export default function CmsClientLayout({
   // pageTitle logic should now work reliably with usePathname
   let pageTitle = "CMS"; // Default title
   if (pathname === "/cms/dashboard") pageTitle = "Dashboard";
+  else if (pathname.startsWith("/cms/custom-blocks/new")) pageTitle = "Create Custom Block";
+  else if (pathname.startsWith("/cms/custom-blocks/") && pathname.endsWith("/edit")) pageTitle = "Edit Custom Block";
+  else if (pathname.startsWith("/cms/custom-blocks")) pageTitle = "Block Management";
   else if (pathname.startsWith("/cms/pages/new")) pageTitle = "New Page";
   else if (pathname.startsWith("/cms/pages/") && pathname.endsWith("/edit")) pageTitle = "Edit Page";
   else if (pathname.startsWith("/cms/pages")) pageTitle = "Pages";
@@ -296,6 +299,9 @@ export default function CmsClientLayout({
               </NavItem>
               <NavItem href="/cms/media" icon={ImageIconLucide} isActive={pathname.startsWith("/cms/media")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Media
+              </NavItem>
+              <NavItem href="/cms/custom-blocks" icon={Boxes} isActive={pathname.startsWith("/cms/custom-blocks")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                Blocks
               </NavItem>
               <NavItem href="/cms/navigation" icon={ListTree} isActive={pathname.startsWith("/cms/navigation")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Navigation

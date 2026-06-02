@@ -56,6 +56,7 @@
     "verify:cortex-ai-routing": "npx tsx apps/nextblock/scripts/verify-cortex-ai-routing.ts",
     "verify:cortex-ai-generate-blocks": "npx tsx apps/nextblock/scripts/verify-cortex-ai-generate-blocks.ts",
     "verify:cortex-ai-global-tools": "npx tsx apps/nextblock/scripts/verify-cortex-ai-global-tools.ts",
+    "verify:cortex-ai-build-widget": "npx tsx --tsconfig tsconfig.base.json apps/nextblock/scripts/verify-cortex-ai-build-widget.tsx",
     "verify:editor-block-schema": "npx tsx apps/nextblock/scripts/validate-editor-block-schema.ts",
     "sandbox:reset": "node tools/scripts/reset-sandbox.js",
     "stripe": "stripe listen --forward-to localhost:4200/api/webhooks/stripe",

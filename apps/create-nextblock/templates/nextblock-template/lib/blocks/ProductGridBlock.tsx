@@ -27,6 +27,7 @@ export const ProductGridBlock = async ({
   // We fetch more to ensure we have enough after manual checks
   const { data: products } = await getProducts(supabase, {
     languageId,
+    categoryId: content.type === 'category' ? content.categoryId : undefined,
     limit: content.limit + 2, 
   }); 
   

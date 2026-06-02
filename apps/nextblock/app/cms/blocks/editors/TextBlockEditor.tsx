@@ -1,13 +1,18 @@
 // app/cms/blocks/editors/TextBlockEditor.tsx
 'use client';
 
-import React, { useId, useState, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import type { Extensions } from '@tiptap/core';
 import MediaPickerDialog from '../../media/components/MediaPickerDialog';
 import { Label } from '@nextblock-cms/ui';
 import { BlockEditorProps } from '../components/BlockEditorModal';
 import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
 import { useCortexAiActive } from '../../components/CortexAiActiveContext';
+import {
+  createDynamicCustomBlockExtensions,
+  type DynamicCustomBlockEditorDefinition,
+} from '../../../../lib/editor/dynamic-extensions';
 
 // Props expected by NotionEditor
 type NotionEditorProps = {
@@ -16,6 +21,7 @@ type NotionEditorProps = {
   openImagePicker?: () => Promise<{ src: string; alt?: string; width?: number | null; height?: number | null; blurDataURL?: string | null } | null>;
   className?: string;
   showAiPrompt?: boolean;
+  dynamicExtensions?: Extensions;
 };
 
 // Use the alias that resolves in your repo; if you mapped @nextblock-cms/editor, swap it here.
@@ -35,6 +41,8 @@ export default function TextBlockEditor({
 }: BlockEditorProps<Partial<TextBlockContent>>) {
   const labelId = useId();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [dynamicDefinitions, setDynamicDefinitions] = useState<DynamicCustomBlockEditorDefinition[]>([]);
+  const [dynamicDefinitionsLoaded, setDynamicDefinitionsLoaded] = useState(false);
   const isCortexAiActive = useCortexAiActive();
   const resolverRef = useRef<null | ((v: any) => void)>(null);
   const openImagePicker = useCallback(() => {
@@ -42,6 +50,57 @@ export default function TextBlockEditor({
     return new Promise<{ src: string; alt?: string; width?: number | null; height?: number | null; blurDataURL?: string | null } | null>((resolve) => {
       resolverRef.current = resolve;
     });
+  }, []);
+  const dynamicExtensions = useMemo(
+    () => createDynamicCustomBlockExtensions(dynamicDefinitions),
+    [dynamicDefinitions]
+  );
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadDynamicDefinitions() {
+      try {
+        const response = await fetch('/api/custom-blocks/editor-definitions', {
+          cache: 'no-store',
+          method: 'GET',
+        });
+        const payload = (await response.json()) as {
+          definitions?: DynamicCustomBlockEditorDefinition[];
+          error?: string;
+        };
+
+        if (!isActive) {
+          return;
+        }
+
+        if (!response.ok) {
+          console.error(
+            '[TextBlockEditor] Failed to load custom block editor definitions:',
+            payload.error
+          );
+          setDynamicDefinitions([]);
+          return;
+        }
+
+        setDynamicDefinitions(payload.definitions ?? []);
+      } catch (error) {
+        if (isActive) {
+          console.error('[TextBlockEditor] Failed to load custom block editor definitions:', error);
+          setDynamicDefinitions([]);
+        }
+      } finally {
+        if (isActive) {
+          setDynamicDefinitionsLoaded(true);
+        }
+      }
+    }
+
+    void loadDynamicDefinitions();
+
+    return () => {
+      isActive = false;
+    };
   }, []);
 
   return (
@@ -51,13 +110,21 @@ export default function TextBlockEditor({
       </Label>
 
       <div id={labelId} role="group" aria-labelledby={labelId} className="flex-1 min-h-0 flex flex-col">
-        <NotionEditor
-          content={content?.html_content ?? ''}
-          onChange={(html) => onChange({ html_content: html })}
-          openImagePicker={openImagePicker}
-          className={className}
-          showAiPrompt={isCortexAiActive}
-        />
+        {dynamicDefinitionsLoaded ? (
+          <NotionEditor
+            key={dynamicDefinitions.map((definition) => definition.id).join('|') || 'static'}
+            content={content?.html_content ?? ''}
+            dynamicExtensions={dynamicExtensions}
+            onChange={(html) => onChange({ html_content: html })}
+            openImagePicker={openImagePicker}
+            className={className}
+            showAiPrompt={isCortexAiActive}
+          />
+        ) : (
+          <div className="flex min-h-[500px] flex-1 items-center justify-center rounded-lg border bg-background text-sm text-muted-foreground">
+            Loading editor...
+          </div>
+        )}
 
         {/* Hidden controlled MediaPickerDialog for image selection */}
         <div className="sr-only" aria-hidden>

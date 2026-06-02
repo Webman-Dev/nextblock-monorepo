@@ -3115,6 +3115,7 @@ const POST_FIELD_NAMES = new Set([
   'title',
 ]);
 const PRODUCT_FIELD_NAMES = new Set([
+  'description_json',
   'language_id',
   'meta_description',
   'meta_title',

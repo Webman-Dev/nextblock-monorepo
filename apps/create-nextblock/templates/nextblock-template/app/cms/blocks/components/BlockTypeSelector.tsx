@@ -21,13 +21,16 @@ import BlockTypeCard from './BlockTypeCard';
 interface BlockTypeSelectorProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSelectBlockType: (blockType: BlockType) => void;
+  onSelectBlockType: (blockType: any) => void;
   allowedBlockTypes?: BlockType[];
 }
 
-const CATEGORIES = ["All", "Layout", "Content", "Media", "Interactive", "E-commerce"];
+const CATEGORIES = ["All", "Layout", "Content", "Media", "Interactive", "E-commerce", "Custom"];
 
-const getBlockCategory = (type: string): string => {
+const getBlockCategory = (type: string, isCustomSlug?: boolean): string => {
+  if (isCustomSlug) {
+    return 'Custom';
+  }
   switch (type) {
     case 'section':
       return 'Layout';
@@ -61,33 +64,67 @@ const BlockTypeSelector: React.FC<BlockTypeSelectorProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [activeCategory, setActiveCategory] = React.useState('All');
+  const [customDefs, setCustomDefs] = React.useState<any[]>([]);
 
-  // Reset state when modal is opened
+  // Reset state and fetch custom blocks when modal is opened
   React.useEffect(() => {
     if (isOpen) {
       setSearchQuery('');
       setActiveCategory('All');
+      
+      fetch("/api/custom-blocks/editor-definitions")
+        .then((res) => {
+          if (res.ok) {
+            return res.json();
+          }
+          throw new Error("Failed to fetch definitions");
+        })
+        .then((data) => {
+          if (data && data.definitions) {
+            setCustomDefs(data.definitions);
+          }
+        })
+        .catch((err) => console.error("Error loading custom blocks for selector:", err));
     }
   }, [isOpen]);
 
-  const handleSelect = (blockType: BlockType) => {
+  const handleSelect = (blockType: string) => {
     onSelectBlockType(blockType);
     onOpenChange(false);
   };
 
   const blockDefs = React.useMemo(() => {
-    return Object.values(blockRegistry).filter(
+    const coreDefs = Object.values(blockRegistry).filter(
       (blockDef) =>
         !allowedBlockTypes || allowedBlockTypes.includes(blockDef.type)
     );
-  }, [allowedBlockTypes]);
+
+    const mappedCustomDefs = customDefs.map((def) => ({
+      type: def.slug,
+      label: def.name,
+      icon: "LayoutTemplate",
+      initialContent: def.fields.reduce((acc: any, field: any) => {
+        acc[field.key] = field.type === "image_r2" ? null : field.type === "db_relation" ? (field.multiple ? [] : null) : "";
+        return acc;
+      }, {}),
+      documentation: {
+        description: def.description || "Custom user-defined block layout component.",
+        useCases: ["Custom page components"],
+      },
+    }));
+
+    return [...coreDefs, ...mappedCustomDefs];
+  }, [allowedBlockTypes, customDefs]);
 
   // Memoized filter and search results to prevent re-calculations during key strokes
   const filteredBlockDefs = React.useMemo(() => {
     return blockDefs
       .filter((blockDef) => {
+        const isCustom = customDefs.some((d) => d.slug === blockDef.type);
+        const category = getBlockCategory(blockDef.type, isCustom);
+
         // Category Filter
-        if (activeCategory !== 'All' && getBlockCategory(blockDef.type) !== activeCategory) {
+        if (activeCategory !== 'All' && category !== activeCategory) {
           return false;
         }
         // Search Filter
@@ -100,7 +137,7 @@ const BlockTypeSelector: React.FC<BlockTypeSelectorProps> = ({
         return true;
       })
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [blockDefs, searchQuery, activeCategory]);
+  }, [blockDefs, searchQuery, activeCategory, customDefs]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>

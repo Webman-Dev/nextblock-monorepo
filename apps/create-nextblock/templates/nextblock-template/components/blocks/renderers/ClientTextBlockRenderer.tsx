@@ -15,6 +15,7 @@ interface ClientTextBlockRendererProps {
   content: TextBlockContent;
   languageId: number;
   visualEditAttributes?: VisualEditAttributes;
+  renderContext?: 'prose' | 'section';
 }
 
 function normalizeHtmlEncodingArtifacts(html: string): string {
@@ -228,9 +229,14 @@ const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({
   content,
   languageId,
   visualEditAttributes,
+  renderContext = 'prose',
 }) => {
   void languageId;
   const normalizedHtml = normalizeHtmlEncodingArtifacts(content.html_content || "");
+  const wrapperClassName =
+    renderContext === 'section'
+      ? 'w-full min-w-0'
+      : 'my-4 prose dark:prose-invert container mx-auto';
   const options: HTMLReactParserOptions = {
     replace: (domNode) => {
       if (domNode instanceof Element && domNode.attribs) {
@@ -298,7 +304,7 @@ const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({
       JSON.parse(normalizedHtml);
       return (
         <div
-          className="my-4 prose dark:prose-invert container mx-auto"
+          className={wrapperClassName}
           {...visualEditAttributes}
         >
           <SimpleTiptapRenderer content={normalizedHtml} />
@@ -311,7 +317,7 @@ const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({
 
   return (
     <div
-      className="my-4 prose dark:prose-invert container mx-auto"
+      className={wrapperClassName}
       {...visualEditAttributes}
     >
       {parse(normalizedHtml, options)}

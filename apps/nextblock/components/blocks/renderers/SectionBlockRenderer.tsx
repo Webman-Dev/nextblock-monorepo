@@ -9,6 +9,9 @@ import type {
 } from "../../../lib/visual-editing/types";
 import { getPublicBlockRendererLoader } from "../publicRendererLoaders";
 import SectionSlider from "./SectionSlider";
+import { getCachedCustomBlockDefinitionBySlug } from "../../../lib/custom-block-definitions";
+import { CachedDynamicLayoutEngine } from "../../renderers/CachedDynamicLayoutEngine";
+import { resolveBlockRelations } from "../../../lib/resolve-block-relations";
 
 // Static imports for core block renderers for LCP/performance optimization
 import TextBlockRenderer from "./TextBlockRenderer";
@@ -258,6 +261,36 @@ async function renderNestedBlock({
           visualEditAttributes={visualEditAttributes}
         />
       );
+    }
+
+    // Custom block definitions are data-rendered the same way as at the top
+    // level. A custom block's block_type is the definition slug.
+    const definition = await getCachedCustomBlockDefinitionBySlug(block.block_type);
+    if (definition) {
+      const resolvedBlock = (await resolveBlockRelations({
+        data: block.content as Record<string, any>,
+        fields: definition.fields,
+      })) as any;
+
+      return (
+        <div {...visualEditAttributes}>
+          <CachedDynamicLayoutEngine
+            definition={definition}
+            layoutSchema={definition.layout_schema}
+            fields={definition.fields}
+            data={{
+              ...(resolvedBlock.data || {}),
+              resolved_relations: resolvedBlock.resolved_relations || {},
+            }}
+          />
+        </div>
+      );
+    }
+
+    // Unknown type with no matching definition: keep the diagnostic out of the
+    // public-facing page (only show it inside the live editor).
+    if (!visualEditing?.enabled) {
+      return null;
     }
 
     return (

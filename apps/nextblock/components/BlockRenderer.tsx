@@ -14,6 +14,9 @@ import { headers } from "next/headers";
 type Block = Database['public']['Tables']['blocks']['Row'];
 import SectionBlockRenderer from "./blocks/renderers/SectionBlockRenderer"; // Static import for LCP
 import ClientTextBlockRenderer from "./blocks/renderers/ClientTextBlockRenderer"; // Static import for client component
+import { getCachedCustomBlockDefinitionBySlug } from "../lib/custom-block-definitions";
+import { CachedDynamicLayoutEngine } from "./renderers/CachedDynamicLayoutEngine";
+import { resolveBlockRelations } from "../lib/resolve-block-relations";
 
 const ECOMMERCE_BLOCK_TYPES = new Set([
   "product_grid",
@@ -87,6 +90,36 @@ async function renderLoadedBlock({
       );
     }
 
+    const definition = await getCachedCustomBlockDefinitionBySlug(block.block_type);
+    if (definition) {
+      const resolvedBlock = (await resolveBlockRelations({
+        data: block.content as Record<string, any>,
+        fields: definition.fields,
+      })) as any;
+
+      return (
+        <div key={block.id} {...visualEditAttributes}>
+          <CachedDynamicLayoutEngine
+            definition={definition}
+            layoutSchema={definition.layout_schema}
+            fields={definition.fields}
+            data={{
+              ...(resolvedBlock.data || {}),
+              resolved_relations: resolvedBlock.resolved_relations || {},
+            }}
+          />
+        </div>
+      );
+    }
+
+    // No renderer and no matching custom block definition. Public visitors
+    // should never see a raw error/JSON dump, so only surface the diagnostic
+    // when visual editing is actually enabled (the page always passes a
+    // visualEditing object, so check the enabled flag); otherwise render nothing.
+    if (!visualEditing?.enabled) {
+      return null;
+    }
+
     return (
       <div
         key={block.id}
@@ -96,7 +129,12 @@ async function renderLoadedBlock({
         <p>
           <strong>Unsupported block type:</strong> {block.block_type}
         </p>
-        <pre className="text-xs whitespace-pre-wrap">
+        <p className="text-xs mt-1">
+          No custom block definition was found for the slug{' '}
+          <code>{block.block_type}</code>. Save a custom block with this exact slug,
+          or re-add the block from the picker.
+        </p>
+        <pre className="text-xs whitespace-pre-wrap mt-2">
           {JSON.stringify(block.content, null, 2)}
         </pre>
       </div>

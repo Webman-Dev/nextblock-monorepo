@@ -11,6 +11,7 @@ interface TextBlockRendererProps {
   content: TextBlockContent;
   languageId: number;
   visualEditAttributes?: VisualEditAttributes;
+  renderContext?: 'prose' | 'section';
 }
 
 function addNonceToInlineScripts(html: string, nonce: string): string {
@@ -26,6 +27,7 @@ const TextBlockRenderer: React.FC<TextBlockRendererProps> = async ({
   content,
   languageId,
   visualEditAttributes,
+  renderContext = 'prose',
 }) => {
   const hdrs = await headers();
   const nonce = hdrs.get('x-nonce') || '';
@@ -36,6 +38,7 @@ const TextBlockRenderer: React.FC<TextBlockRendererProps> = async ({
       content={patchedContent}
       languageId={languageId}
       visualEditAttributes={visualEditAttributes}
+      renderContext={renderContext}
     />
   );
 };

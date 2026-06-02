@@ -5,6 +5,7 @@ import {
   getVariantEffectivePriceRange,
   normalizePriceMap,
   normalizeSalePriceMap,
+  resolveTranslatedText,
 } from '@nextblock-cms/ecommerce';
 import { getSsgSupabaseClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 import { notFound } from 'next/navigation';
@@ -18,6 +19,11 @@ import {
   getProductDraft,
 } from "../../../lib/visual-editing/product-drafts";
 import { getRequestOrigin } from "../../../lib/visual-editing/edit-info";
+import {
+  resolveMetaTitle,
+  resolveProductMetaDescription,
+  stringifyJsonLd,
+} from "../../lib/seo";
 // Ensure BlockType is imported or compatible with BlockRenderer props
 import type { Database } from "@nextblock-cms/db";
 type BlockType = Database['public']['Tables']['blocks']['Row'];
@@ -33,10 +39,43 @@ interface ProductPageProps {
   }>;
 }
 
+function formatMinorUnitAmount(amount: unknown) {
+  const numericAmount = typeof amount === 'number' ? amount : Number(amount);
+  if (!Number.isFinite(numericAmount)) {
+    return undefined;
+  }
+
+  return (numericAmount / 100).toFixed(2);
+}
+
+function resolveOfferAvailability(productRecord: any) {
+  if (productRecord.product_type === 'digital') {
+    return 'https://schema.org/InStock';
+  }
+
+  return typeof productRecord.stock === 'number' && productRecord.stock <= 0
+    ? 'https://schema.org/OutOfStock'
+    : 'https://schema.org/InStock';
+}
+
+function resolveCategoryName(category: any, languageCode?: string | null) {
+  if (!category || typeof category.name !== 'string') {
+    return null;
+  }
+
+  return resolveTranslatedText(
+    category.name,
+    category.name_translations,
+    languageCode
+  );
+}
+
 export async function generateStaticParams() {
   const supabase = getSsgSupabaseClient();
   const { data: products } = await getProducts(supabase);
-  const productRows = (products || []) as any[];
+  const productRows = ((products || []) as any[]).filter(
+    (product) => product.status === 'active'
+  );
   if (productRows.length === 0) return [];
   return productRows.map((product: any) => ({
     slug: product.slug,
@@ -65,7 +104,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   const { data: product } = await getProductBySlug(supabase, slug, preferredLocale);
   const productRecord = product as any;
 
-  if (!productRecord) return { title: 'Product Not Found' };
+  if (!productRecord || productRecord.status !== 'active') return { title: 'Product Not Found' };
   
   // Resolve image URL for OG Image
   let imageUrl = undefined;
@@ -103,12 +142,18 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
     });
   }
 
+  const title = resolveMetaTitle(productRecord.meta_title, productRecord.title);
+  const description = resolveProductMetaDescription(
+    productRecord.meta_description,
+    productRecord.short_description
+  );
+
   return {
-    title: productRecord.meta_title || productRecord.title,
-    description: productRecord.meta_description || productRecord.short_description || `Buy ${productRecord.title}`,
+    title,
+    description,
     openGraph: {
-      title: productRecord.meta_title || productRecord.title,
-      description: productRecord.meta_description || productRecord.short_description || `Buy ${productRecord.title}`,
+      title,
+      description,
       images: imageUrl ? [imageUrl] : [],
       url: `${siteUrl}/product/${slug}`,
     },
@@ -150,7 +195,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const { data: product } = await getProductBySlug(supabase, slug, preferredLocale);
   let productRecord = product as any;
 
-  if (!productRecord) {
+  if (!productRecord || productRecord.status !== 'active') {
     notFound();
   }
 
@@ -250,6 +295,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
     languageCode
   );
   const variantPriceRange = getVariantEffectivePriceRange(variants);
+  const productCategories = (productRecord.product_categories || [])
+    .map((pc: any) => pc.category)
+    .filter(Boolean);
+  const productCategoryNames = productCategories
+    .map((category: any) => resolveCategoryName(category, languageCode))
+    .filter((name: string | null): name is string => Boolean(name));
 
   const contextProduct = {
     id: productRecord.id,
@@ -284,7 +335,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     has_variants: variants.length > 0,
     attributes,
     variants,
-    categories: (productRecord.product_categories || []).map((pc: any) => pc.category).filter(Boolean),
+    categories: productCategories,
     product_variants: (productRecord.product_variants || []).map((variant: any) => ({
       id: variant.id,
       price: variant.price,
@@ -293,9 +344,52 @@ export default async function ProductPage({ params }: ProductPageProps) {
       sale_prices: normalizeSalePriceMap(variant.sale_prices),
     })),
   };
+  const siteUrl = process.env.NEXT_PUBLIC_URL || "";
+  const nonce = (await headers()).get('x-nonce') || undefined;
+  const title = resolveMetaTitle(productRecord.meta_title, productRecord.title);
+  const description = resolveProductMetaDescription(
+    productRecord.meta_description,
+    productRecord.short_description
+  );
+  const { data: defaultCurrency } = await supabase
+    .from('currencies')
+    .select('code')
+    .eq('is_default', true)
+    .maybeSingle();
+  const price = formatMinorUnitAmount(productRecord.sale_price ?? productRecord.price);
+  const productJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: title,
+    description,
+    image: images.map((image) => image.url),
+    category:
+      productCategoryNames.length > 1
+        ? productCategoryNames
+        : productCategoryNames[0] ?? undefined,
+    sku: productRecord.sku || undefined,
+    gtin: productRecord.upc || undefined,
+    url: `${siteUrl}/product/${productRecord.slug}`,
+    offers: price
+      ? {
+          '@type': 'Offer',
+          url: `${siteUrl}/product/${productRecord.slug}`,
+          price,
+          priceCurrency: defaultCurrency?.code || 'USD',
+          availability: resolveOfferAvailability(productRecord),
+          itemCondition: 'https://schema.org/NewCondition',
+        }
+      : undefined,
+  };
 
   return (
     <div className="min-h-screen bg-background pb-12">
+        <script
+          type="application/ld+json"
+          nonce={nonce}
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: stringifyJsonLd(productJsonLd) }}
+        />
         <ProductProvider product={contextProduct}>
             {/* 
               BlockRenderer expects languageId property. 

@@ -209,6 +209,36 @@ export type Database = {
           },
         ]
       }
+      custom_block_definitions: {
+        Row: {
+          description: string
+          fields: Json
+          id: string
+          is_original: boolean
+          layout_schema: Json
+          name: string
+          slug: string
+        }
+        Insert: {
+          description?: string
+          fields?: Json
+          id?: string
+          is_original?: boolean
+          layout_schema: Json
+          name: string
+          slug: string
+        }
+        Update: {
+          description?: string
+          fields?: Json
+          id?: string
+          is_original?: boolean
+          layout_schema?: Json
+          name?: string
+          slug?: string
+        }
+        Relationships: []
+      }
       coupon_freemius_mappings: {
         Row: {
           coupon_id: string
@@ -1855,6 +1885,10 @@ export type Database = {
         Args: { target_currency: string }
         Returns: undefined
       }
+      duplicate_block_definition: {
+        Args: { target_id: string }
+        Returns: Database["public"]["Tables"]["custom_block_definitions"]["Row"]
+      }
       format_order_invoice_number: {
         Args: { p_value: number }
         Returns: string
@@ -1870,6 +1904,14 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_valid_currency_amount_map: {
         Args: { amounts: Json }
+        Returns: boolean
+      }
+      is_valid_custom_block_fields: {
+        Args: { candidate: Json }
+        Returns: boolean
+      }
+      is_valid_custom_block_layout_schema: {
+        Args: { candidate: Json }
         Returns: boolean
       }
       is_valid_sale_price_map: {

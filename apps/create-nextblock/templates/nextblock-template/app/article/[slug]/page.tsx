@@ -12,8 +12,12 @@ import BlockRenderer from "../../../components/BlockRenderer";
 import { getSsgSupabaseClient } from "@nextblock-cms/db/server"; // Correct import
 import type { SectionBlockContent } from '../../../lib/blocks/blockRegistry';
 import { resolveMediaUrl } from '../../../lib/media/resolveMediaUrl';
-import { resolveMetaDescription } from '../../lib/seo';
-import { draftMode } from 'next/headers';
+import {
+  resolveMetaTitle,
+  resolvePostMetaDescription,
+  stringifyJsonLd,
+} from '../../lib/seo';
+import { draftMode, headers } from 'next/headers';
 import { getRequestOrigin } from '../../../lib/visual-editing/edit-info';
 
 export const dynamicParams = true;
@@ -104,17 +108,14 @@ export async function generateMetadata(
     });
   }
 
-  const description = resolveMetaDescription(
-    postData.meta_description,
-    postData.excerpt,
-    postData.subtitle
-  );
+  const title = resolveMetaTitle(postData.meta_title, postData.title);
+  const description = resolvePostMetaDescription(postData.meta_description, postData.subtitle);
 
   return {
-    title: postData.meta_title || postData.title,
+    title,
     description,
     openGraph: {
-      title: postData.meta_title || postData.title,
+      title,
       description,
       type: 'article',
       publishedTime: postData.published_at || postData.created_at,
@@ -186,6 +187,27 @@ export default async function DynamicPostPage({ params: paramsPromise }: PostPag
   const draft = await draftMode();
   const visualEditingEnabled =
     draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
+  const siteUrl = process.env.NEXT_PUBLIC_URL || "";
+  const nonce = (await headers()).get('x-nonce') || undefined;
+  const title = resolveMetaTitle(initialPostData.meta_title, initialPostData.title);
+  const description = resolvePostMetaDescription(
+    initialPostData.meta_description,
+    initialPostData.subtitle
+  );
+  const articleJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: title,
+    description,
+    image: initialPostData.feature_image_url ? [initialPostData.feature_image_url] : undefined,
+    datePublished: initialPostData.published_at || initialPostData.created_at,
+    dateModified: initialPostData.updated_at,
+    inLanguage: initialPostData.language_code,
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': `${siteUrl}/article/${initialPostData.slug}`,
+    },
+  };
   const postBlocks = initialPostData ? (
     <BlockRenderer
       blocks={initialPostData.blocks}
@@ -207,6 +229,12 @@ export default async function DynamicPostPage({ params: paramsPromise }: PostPag
       {lcpImageUrl && (
         <link rel="preload" as="image" href={lcpImageUrl} />
       )}
+      <script
+        type="application/ld+json"
+        nonce={nonce}
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: stringifyJsonLd(articleJsonLd) }}
+      />
       <PostClientContent initialPostData={initialPostData} currentSlug={params.slug} translatedSlugs={translatedSlugs}>
         {postBlocks}
       </PostClientContent>

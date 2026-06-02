@@ -134,6 +134,13 @@ const SEEDED_ASSETS: SeedAsset[] = [
     description: 'Sandbox seed asset: NextBlock™ Commerce editorial feature image.',
   },
   {
+    source: 'images/cortex-ai.webp',
+    dest: 'images/cortex-ai.webp',
+    fileName: 'cortex-ai.webp',
+    contentType: 'image/webp',
+    description: 'Sandbox seed asset: NextBlock Cortex AI editorial feature image.',
+  },
+  {
     source: 'images/t-shirt.webp',
     dest: 'images/t-shirt.webp',
     fileName: 't-shirt.webp',
@@ -207,6 +214,10 @@ const CORE_MEDIA_RECORDS: Array<{
     description: 'NextBlock™ Commerce editorial feature image',
   },
   {
+    assetKey: 'images/cortex-ai.webp',
+    description: 'NextBlock Cortex AI editorial feature image',
+  },
+  {
     assetKey: 'images/cortex-ai-square.webp',
     description: 'NextBlock™ Cortex AI cover image',
   },
@@ -237,7 +248,7 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
     price: 3200,
     variantStocks: { small: 8, medium: 12, large: 6 },
     en: {
-      title: 'NextBlock™ Studio Tee',
+      title: 'NextBlock™ Studio Tee (Mock Item)',
       slug: 'nextblock-studio-tee',
       shortDescription:
         'A heavyweight studio tee built for long build sessions, late launches, and every quiet hour between.',
@@ -256,7 +267,7 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
       },
     },
     fr: {
-      title: 'T-shirt Studio NextBlock™',
+      title: 'T-shirt Studio NextBlock™ (Article fictif)',
       slug: 'nextblock-studio-tee-fr',
       shortDescription:
         'Un t-shirt lourd et confortable pense pour les longues sessions de build, les lancements tardifs et les jours ou il faut rester dans le flow.',
@@ -281,7 +292,7 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
     price: 2600,
     variantStocks: { small: 6, medium: 10, large: 6 },
     en: {
-      title: 'NextBlock™ Signal Cap',
+      title: 'NextBlock™ Signal Cap (Mock Item)',
       slug: 'nextblock-signal-cap',
       shortDescription:
         'A clean everyday cap with subtle techwear energy and just enough structure to finish a sharp off-duty kit.',
@@ -300,7 +311,7 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
       },
     },
     fr: {
-      title: 'Casquette Signal NextBlock™',
+      title: 'Casquette Signal NextBlock™ (Article fictif)',
       slug: 'nextblock-signal-cap-fr',
       shortDescription:
         'Une casquette nette et facile a porter, avec une presence sobre et un esprit techwear leger pour tous les jours.',
@@ -325,7 +336,7 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
     price: 6800,
     variantStocks: { small: 5, medium: 8, large: 5 },
     en: {
-      title: 'NextBlock™ Utility Pants',
+      title: 'NextBlock™ Utility Pants (Mock Item)',
       slug: 'nextblock-utility-pants',
       shortDescription:
         'Tapered utility pants designed for commute-to-keyboard days, with an easy fit that still feels sharp.',
@@ -344,7 +355,7 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
       },
     },
     fr: {
-      title: 'Pantalon utilitaire NextBlock™',
+      title: 'Pantalon utilitaire NextBlock™ (Article fictif)',
       slug: 'nextblock-utility-pants-fr',
       shortDescription:
         'Un pantalon utilitaire a la coupe fuselee pense pour les trajets, les longues heures au clavier et les journees ou il faut rester mobile.',
@@ -640,15 +651,257 @@ async function enrichCommerceProducts(params: {
   const shortDescEn =
     'NextBlock™ Commerce Pro is the ultimate AI-native, block-based headless e-commerce engine for Next.js. Deploy fast global storefronts with native multi-currency pricing, Stripe/Freemius checkouts, automatic tax calculations, and flexible shipping zones.';
 
-  const htmlDescriptionEn = `<h2>Build Ultra-Fast Composable Storefronts with NextBlock™ Commerce</h2>
-<p>NextBlock™ Commerce Pro turns your Next.js CMS into a high-conversion e-commerce storefront. Designed to deliver 100% Lighthouse scores out of the box, it connects seamlessly with Stripe and Freemius to process physical and digital products globally.</p>
-<h3>Enterprise-Grade E-Commerce Features</h3>
-<ul>
-  <li><strong>Multi-Currency Pricing:</strong> Native support for global currencies with real-time FX sync, custom rounding, and charm pricing.</li>
-  <li><strong>Tax Automation:</strong> Seamless manual tax tiers or fully automated sales tax calculation via Stripe Tax.</li>
-  <li><strong>Resilient Inventory:</strong> Multi-variant stock tracking with automatic reservation and payment deduction.</li>
-  <li><strong>Shipping Zones:</strong> Country and state-level shipping resolution with per-currency thresholds.</li>
-</ul>`;
+  // ── Section 0: Hero Gradient ──
+  const commerceS0En = {
+    container_type: 'container',
+    background: {
+      type: 'gradient',
+      gradient: {
+        type: 'linear',
+        direction: '135deg',
+        stops: [
+          { color: '#022c22', position: 0 },
+          { color: '#064e3b', position: 40 },
+          { color: '#0f172a', position: 100 },
+        ],
+      },
+    },
+    responsive_columns: { mobile: 1, tablet: 1, desktop: 2 },
+    column_gap: 'xl',
+    vertical_alignment: 'center',
+    padding: { top: 'xl', bottom: 'xl' },
+    column_blocks: [
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<p class="text-xs uppercase tracking-[0.3em] text-emerald-400 font-semibold mb-4">Enterprise E-Commerce Engine</p>
+<h2 class="text-3xl md:text-5xl font-extrabold text-white leading-tight mb-5">Turn Next.js Into a<br/>Global Storefront.</h2>
+<p class="text-base md:text-lg text-slate-200 leading-relaxed mb-6">Commerce Pro is a composable, developer-first engine that powers physical product catalogs, digital licensing, and subscription commerce — all from your existing Next.js stack.</p>`,
+          },
+        },
+        {
+          block_type: 'button',
+          content: {
+            text: 'Get Commerce Pro →',
+            url: 'https://nextblock.dev/product/nextblock-commerce-pro-commerce-license',
+            variant: 'default',
+            size: 'lg',
+            position: 'left',
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="rounded-2xl border border-emerald-700 bg-slate-950 p-6 shadow-xl sm:p-8">
+<h3 class="text-lg font-bold text-white mb-5">Why Teams Choose Commerce Pro</h3>
+<ul class="space-y-4 text-sm leading-relaxed text-slate-300">
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-950 flex items-center justify-center text-emerald-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Multi-Currency Pricing</strong> — real-time exchange rates, charm pricing rules, and automatic locale detection.</span>
+  </li>
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-950 flex items-center justify-center text-emerald-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Tax Automation</strong> — built-in Stripe Tax integration calculates, collects, and reports in 40+ countries.</span>
+  </li>
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-950 flex items-center justify-center text-emerald-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Resilient Stock Tracking</strong> — inventory locks at checkout to prevent over-selling, with per-variant control.</span>
+  </li>
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-950 flex items-center justify-center text-emerald-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Flexible Shipping Zones</strong> — rate tables, free-shipping thresholds, and per-country rules out of the box.</span>
+  </li>
+</ul>
+</div>`,
+          },
+        },
+      ],
+    ],
+  };
+
+  // ── Section 1: Social-proof metrics bar ──
+  const commerceS1En = {
+    container_type: 'container',
+    background: { type: 'theme', theme: 'muted' },
+    responsive_columns: { mobile: 1, tablet: 2, desktop: 4 },
+    column_gap: 'lg',
+    padding: { top: 'lg', bottom: 'lg' },
+    vertical_alignment: 'center',
+    column_blocks: [
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">40+</span><span class="text-xs text-muted-foreground uppercase tracking-wider">Tax Jurisdictions</span></p>' } }],
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">135+</span><span class="text-xs text-muted-foreground uppercase tracking-wider">Currencies Supported</span></p>' } }],
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">&lt; 50ms</span><span class="text-xs text-muted-foreground uppercase tracking-wider">Cart API Response</span></p>' } }],
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">100 %</span><span class="text-xs text-muted-foreground uppercase tracking-wider">Lighthouse Score</span></p>' } }],
+    ],
+  };
+
+  // ── Section 2: Three-column feature cards ──
+  const commerceS2En = {
+    container_type: 'container',
+    background: { type: 'none' },
+    responsive_columns: { mobile: 1, tablet: 2, desktop: 3 },
+    column_gap: 'lg',
+    padding: { top: 'xl', bottom: 'xl' },
+    vertical_alignment: 'stretch',
+    column_blocks: [
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors hover:border-emerald-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950 dark:hover:border-emerald-500 sm:p-7">
+<div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18M7 15h3"></path></svg></div>
+<h4 class="text-base font-bold text-slate-900 dark:text-white mb-2">Headless Stripe Checkout</h4>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Integrated checkout session creation for single or multiple items. Auto-fulfillment fires via webhook events, with built-in idempotency guards.</p>
+</div>`,
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors hover:border-emerald-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950 dark:hover:border-emerald-500 sm:p-7">
+<div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 7a4 4 0 1 1-2.83 6.83L7 19H4v-3h3l2.17-2.17A4 4 0 0 1 15 7Z"></path><path d="M17.5 8.5h.01"></path></svg></div>
+<h4 class="text-base font-bold text-slate-900 dark:text-white mb-2">Freemius Digital Licensing</h4>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Distribute software downloads, validate license keys, and manage SaaS trial periods natively — no third-party integration layer required.</p>
+</div>`,
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors hover:border-emerald-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950 dark:hover:border-emerald-500 sm:p-7">
+<div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="m4 15 4-4 4 4 3-3 5 5"></path><circle cx="15" cy="9" r="1"></circle></svg></div>
+<h4 class="text-base font-bold text-slate-900 dark:text-white mb-2">Visual Merchandising</h4>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Content creators can add product details pages, highlight promotions, and build full landing pages — all inside the block editor, no code needed.</p>
+</div>`,
+          },
+        },
+      ],
+    ],
+  };
+
+  // ── Section 3: Deep-dive 2-col ──
+  const commerceS3En = {
+    container_type: 'container',
+    background: {
+      type: 'gradient',
+      gradient: {
+        type: 'linear',
+        direction: '180deg',
+        stops: [
+          { color: '#020617', position: 0 },
+          { color: '#0f172a', position: 100 },
+        ],
+      },
+    },
+    responsive_columns: { mobile: 1, tablet: 1, desktop: 2 },
+    column_gap: 'xl',
+    vertical_alignment: 'center',
+    padding: { top: 'xl', bottom: 'xl' },
+    column_blocks: [
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<p class="text-xs uppercase tracking-[0.3em] text-emerald-400 font-semibold mb-4">Under The Hood</p>
+<h3 class="text-2xl md:text-3xl font-extrabold text-white mb-4">Built for Production Scale</h3>
+<p class="text-slate-300 leading-relaxed mb-5">Commerce Pro was designed from day one for high-traffic stores. Every API path is edge-cached, every database query is indexed, and every webhook handler is idempotent.</p>
+<ul class="space-y-3 text-sm text-slate-400">
+  <li class="flex items-start gap-2.5">
+    <span class="text-emerald-400">→</span>
+    <span>Variant-level inventory with optimistic locking</span>
+  </li>
+  <li class="flex items-start gap-2.5">
+    <span class="text-emerald-400">→</span>
+    <span>Automatic shipping zone calculation and rate tables</span>
+  </li>
+  <li class="flex items-start gap-2.5">
+    <span class="text-emerald-400">→</span>
+    <span>Real-time order status with Stripe webhook sync</span>
+  </li>
+  <li class="flex items-start gap-2.5">
+    <span class="text-emerald-400">→</span>
+    <span>Product attributes and filterable facets system</span>
+  </li>
+</ul>`,
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="space-y-4">
+<div class="p-5 rounded-xl border border-slate-700 bg-slate-900">
+  <h5 class="text-sm font-bold text-white mb-1">Order Management</h5>
+  <p class="text-xs text-slate-400 leading-relaxed">Full order lifecycle from cart to fulfillment. Automatic status transitions, email notifications, and refund handling baked in.</p>
+</div>
+<div class="p-5 rounded-xl border border-slate-700 bg-slate-900">
+  <h5 class="text-sm font-bold text-white mb-1">Product Categories</h5>
+  <p class="text-xs text-slate-400 leading-relaxed">Hierarchical taxonomy with slugs, media attachments, and full i18n support. Categories are managed directly in the CMS dashboard.</p>
+</div>
+<div class="p-5 rounded-xl border border-slate-700 bg-slate-900">
+  <h5 class="text-sm font-bold text-white mb-1">Multi-Language Storefronts</h5>
+  <p class="text-xs text-slate-400 leading-relaxed">Products, categories, and checkout flows are fully translatable. Each language variant shares inventory and pricing while maintaining its own SEO metadata.</p>
+</div>
+</div>`,
+          },
+        },
+      ],
+    ],
+  };
+
+  // ── Section 4: CTA ──
+  const commerceS4En = {
+    container_type: 'container',
+    background: {
+      type: 'gradient',
+      gradient: {
+        type: 'linear',
+        direction: '135deg',
+        stops: [
+          { color: '#064e3b', position: 0 },
+          { color: '#022c22', position: 100 },
+        ],
+      },
+    },
+    responsive_columns: { mobile: 1, tablet: 1, desktop: 1 },
+    column_gap: 'none',
+    padding: { top: 'xl', bottom: 'xl' },
+    vertical_alignment: 'center',
+    column_blocks: [
+      [
+        {
+          block_type: 'heading',
+          content: { level: 2, text_content: 'Ready to launch your storefront?', textAlign: 'center', textColor: 'background' },
+        },
+        {
+          block_type: 'text',
+          content: {
+            html_content: '<p class="text-center text-emerald-100 max-w-xl mx-auto mt-2 mb-6">Start selling today with Commerce Pro. Multi-currency, tax-compliant, and lightning-fast out of the box.</p>',
+          },
+        },
+        {
+          block_type: 'button',
+          content: {
+            text: 'Purchase Commerce Pro',
+            url: 'https://nextblock.dev/product/nextblock-commerce-pro-commerce-license',
+            variant: 'secondary',
+            size: 'lg',
+            position: 'center',
+          },
+        },
+      ],
+    ],
+  };
+
+  const commerceSectionsEn = [commerceS0En, commerceS1En, commerceS2En, commerceS3En, commerceS4En];
 
   await params.sql`
     UPDATE public.products
@@ -665,23 +918,207 @@ async function enrichCommerceProducts(params: {
 
   // Set description blocks for English product
   await params.sql`DELETE FROM public.blocks WHERE product_id = ${product.id}`;
-  await params.sql`
-    INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
-    VALUES (${product.id}, ${params.enLangId}, 'text', ${params.sql.json({ html_content: htmlDescriptionEn })}, 0)
-  `;
+  for (let i = 0; i < commerceSectionsEn.length; i++) {
+    await params.sql`
+      INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
+      VALUES (${product.id}, ${params.enLangId}, 'section', ${params.sql.json(commerceSectionsEn[i] as any)}, ${i})
+    `;
+  }
 
+  // ── French Sections ──
   const shortDescFr =
     "NextBlock™ Commerce Pro est le moteur e-commerce headless et orienté IA ultime pour Next.js. Déployez des boutiques mondiales ultra-rapides avec support multi-devises, Stripe/Freemius, taxes automatisées et zones d'expédition.";
 
-  const htmlDescriptionFr = `<h2>Créez des boutiques composables ultra-rapides avec NextBlock™ Commerce</h2>
-<p>NextBlock™ Commerce Pro transforme votre CMS Next.js en une boutique e-commerce à fort taux de conversion. Pensé pour offrir des scores Lighthouse de 100%, il s'intègre parfaitement avec Stripe et Freemius pour vendre des produits physiques et numériques à l'échelle internationale.</p>
-<h3>Fonctionnalités e-commerce de niveau entreprise</h3>
-<ul>
-  <li><strong>Multi-Devises :</strong> Support natif des devises mondiales avec taux de change en temps réel et arrondis personnalisés.</li>
-  <li><strong>Taxes Automatisées :</strong> Configuration manuelle ou calcul automatique des taxes de vente via Stripe Tax.</li>
-  <li><strong>Gestion des Stocks :</strong> Suivi précis des stocks par variante avec réservation automatique.</li>
-  <li><strong>Zones de Livraison :</strong> Tarification flexible selon le pays et l'état de destination.</li>
-</ul>`;
+  const commerceS0Fr = {
+    ...commerceS0En,
+    column_blocks: [
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<p class="text-xs uppercase tracking-[0.3em] text-emerald-400 font-semibold mb-4">Moteur E-Commerce d'Entreprise</p>
+<h2 class="text-3xl md:text-5xl font-extrabold text-white leading-tight mb-5">Faites de Next.js une<br/>Boutique Mondiale.</h2>
+<p class="text-base md:text-lg text-slate-200 leading-relaxed mb-6">Commerce Pro est un moteur composable pensé pour les développeurs : catalogues physiques, licences numériques et abonnements — le tout depuis votre stack Next.js existant.</p>`,
+          },
+        },
+        {
+          block_type: 'button',
+          content: {
+            text: 'Obtenir Commerce Pro →',
+            url: 'https://nextblock.dev/product/nextblock-commerce-pro-commerce-license',
+            variant: 'default',
+            size: 'lg',
+            position: 'left',
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="rounded-2xl border border-emerald-700 bg-slate-950 p-6 shadow-xl sm:p-8">
+<h3 class="text-lg font-bold text-white mb-5">Pourquoi choisir Commerce Pro</h3>
+<ul class="space-y-4 text-sm leading-relaxed text-slate-300">
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-950 flex items-center justify-center text-emerald-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Multi-Devises</strong> — taux de change en temps réel, arrondis personnalisés et détection automatique de la localisation.</span>
+  </li>
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-950 flex items-center justify-center text-emerald-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Taxes automatisées</strong> — intégration Stripe Tax pour le calcul, la collecte et le reporting dans plus de 40 pays.</span>
+  </li>
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-950 flex items-center justify-center text-emerald-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Gestion des Stocks</strong> — verrouillage de l'inventaire au checkout pour éviter les surventes, avec contrôle par variante.</span>
+  </li>
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-950 flex items-center justify-center text-emerald-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Zones d'expédition flexibles</strong> — tables de tarifs, seuils de livraison gratuite et règles par pays inclus.</span>
+  </li>
+</ul>
+</div>`,
+          },
+        },
+      ],
+    ],
+  };
+
+  const commerceS1Fr = {
+    ...commerceS1En,
+    column_blocks: [
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">40+</span><span class="text-xs text-muted-foreground uppercase tracking-wider">Juridictions fiscales</span></p>' } }],
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">135+</span><span class="text-xs text-muted-foreground uppercase tracking-wider">Devises supportées</span></p>' } }],
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">&lt; 50ms</span><span class="text-xs text-muted-foreground uppercase tracking-wider">Réponse API panier</span></p>' } }],
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">100 %</span><span class="text-xs text-muted-foreground uppercase tracking-wider">Score Lighthouse</span></p>' } }],
+    ],
+  };
+
+  const commerceS2Fr = {
+    ...commerceS2En,
+    column_blocks: [
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors hover:border-emerald-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950 dark:hover:border-emerald-500 sm:p-7">
+<div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18M7 15h3"></path></svg></div>
+<h4 class="text-base font-bold text-slate-900 dark:text-white mb-2">Checkout Stripe Headless</h4>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Création de sessions Stripe Checkout pour un ou plusieurs articles. Traitement automatique des commandes par webhooks avec protection d'idempotence.</p>
+</div>`,
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors hover:border-emerald-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950 dark:hover:border-emerald-500 sm:p-7">
+<div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 7a4 4 0 1 1-2.83 6.83L7 19H4v-3h3l2.17-2.17A4 4 0 0 1 15 7Z"></path><path d="M17.5 8.5h.01"></path></svg></div>
+<h4 class="text-base font-bold text-slate-900 dark:text-white mb-2">Licences Numériques Freemius</h4>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Distribuez vos logiciels, validez les clés de licence et gérez les périodes d'essai SaaS — aucune intégration tierce requise.</p>
+</div>`,
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors hover:border-emerald-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950 dark:hover:border-emerald-500 sm:p-7">
+<div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="m4 15 4-4 4 4 3-3 5 5"></path><circle cx="15" cy="9" r="1"></circle></svg></div>
+<h4 class="text-base font-bold text-slate-900 dark:text-white mb-2">Merchandising Visuel</h4>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Vos équipes éditoriales enrichissent les fiches produits de landing pages, promotions et galeries — directement dans l'éditeur de blocs.</p>
+</div>`,
+          },
+        },
+      ],
+    ],
+  };
+
+  const commerceS3Fr = {
+    ...commerceS3En,
+    column_blocks: [
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<p class="text-xs uppercase tracking-[0.3em] text-emerald-400 font-semibold mb-4">Sous le capot</p>
+<h3 class="text-2xl md:text-3xl font-extrabold text-white mb-4">Conçu pour la production à grande échelle</h3>
+<p class="text-slate-300 leading-relaxed mb-5">Commerce Pro a été conçu dès le départ pour les boutiques à fort trafic. Chaque API est mise en cache à la périphérie, chaque requête est indexée, et chaque gestionnaire de webhook est idempotent.</p>
+<ul class="space-y-3 text-sm text-slate-400">
+  <li class="flex items-start gap-2.5">
+    <span class="text-emerald-400">→</span>
+    <span>Inventaire par variante avec verrouillage optimiste</span>
+  </li>
+  <li class="flex items-start gap-2.5">
+    <span class="text-emerald-400">→</span>
+    <span>Calcul automatique des zones d'expédition et tables de tarifs</span>
+  </li>
+  <li class="flex items-start gap-2.5">
+    <span class="text-emerald-400">→</span>
+    <span>Statut des commandes en temps réel via synchronisation Stripe webhook</span>
+  </li>
+  <li class="flex items-start gap-2.5">
+    <span class="text-emerald-400">→</span>
+    <span>Système d'attributs produits et de facettes filtrables</span>
+  </li>
+</ul>`,
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="space-y-4">
+<div class="p-5 rounded-xl border border-slate-700 bg-slate-900">
+  <h5 class="text-sm font-bold text-white mb-1">Gestion des commandes</h5>
+  <p class="text-xs text-slate-400 leading-relaxed">Cycle de vie complet : du panier à la livraison. Transitions automatiques, notifications par courriel et gestion des remboursements intégrées.</p>
+</div>
+<div class="p-5 rounded-xl border border-slate-700 bg-slate-900">
+  <h5 class="text-sm font-bold text-white mb-1">Catégories de produits</h5>
+  <p class="text-xs text-slate-400 leading-relaxed">Taxonomie hiérarchique avec slugs, médias associés et support i18n complet. Les catégories sont gérées directement dans le tableau de bord du CMS.</p>
+</div>
+<div class="p-5 rounded-xl border border-slate-700 bg-slate-900">
+  <h5 class="text-sm font-bold text-white mb-1">Boutiques multilingues</h5>
+  <p class="text-xs text-slate-400 leading-relaxed">Produits, catégories et flux de paiement entièrement traduisibles. Chaque variante linguistique partage l'inventaire et les prix tout en conservant ses propres métadonnées SEO.</p>
+</div>
+</div>`,
+          },
+        },
+      ],
+    ],
+  };
+
+  const commerceS4Fr = {
+    ...commerceS4En,
+    column_blocks: [
+      [
+        {
+          block_type: 'heading',
+          content: { level: 2, text_content: 'Prêt à lancer votre boutique ?', textAlign: 'center', textColor: 'background' },
+        },
+        {
+          block_type: 'text',
+          content: {
+            html_content: '<p class="text-center text-emerald-100 max-w-xl mx-auto mt-2 mb-6">Commencez à vendre dès aujourd\'hui avec Commerce Pro. Multi-devises, conforme aux taxes, ultra-rapide dès l\'installation.</p>',
+          },
+        },
+        {
+          block_type: 'button',
+          content: {
+            text: 'Acheter Commerce Pro',
+            url: 'https://nextblock.dev/product/nextblock-commerce-pro-commerce-license',
+            variant: 'secondary',
+            size: 'lg',
+            position: 'center',
+          },
+        },
+      ],
+    ],
+  };
+
+  const commerceSectionsFr = [commerceS0Fr, commerceS1Fr, commerceS2Fr, commerceS3Fr, commerceS4Fr];
 
   const [frProduct] = await params.sql`
     INSERT INTO public.products (
@@ -740,14 +1177,14 @@ async function enrichCommerceProducts(params: {
 
   if (frProduct?.id) {
     await attachProductMedia(params.sql, frProduct.id as string, commerceMediaId);
-    // Set description blocks for French product
     await params.sql`DELETE FROM public.blocks WHERE product_id = ${frProduct.id}`;
-    await params.sql`
-      INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
-      VALUES (${frProduct.id}, ${params.frLangId}, 'text', ${params.sql.json({ html_content: htmlDescriptionFr })}, 0)
-    `;
+    for (let i = 0; i < commerceSectionsFr.length; i++) {
+      await params.sql`
+        INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
+        VALUES (${frProduct.id}, ${params.frLangId}, 'section', ${params.sql.json(commerceSectionsFr[i] as any)}, ${i})
+      `;
+    }
   }
-
 
   console.log('[Sandbox Reset] Successfully enriched commerce products (EN & FR).');
 }
@@ -782,14 +1219,257 @@ async function enrichCortexAiProducts(params: {
   const shortDescEn =
     'NextBlock™ Cortex AI License brings block-level machine intelligence to your Next.js block editor. Generate copy, refactor structures, and automate translations in one click, built on an open, BYOK cost-controlled architecture.';
 
-  const htmlDescriptionEn = `<h2>Native Block-Level AI Intelligence for Your Editor</h2>
-<p>NextBlock™ Cortex AI brings next-generation AI copilot capabilities directly to the Notion-style block editor. Generate high-fidelity marketing copy, restructure layouts, and translate entire pages with one click, preserving all Tailwind classes and block JSONB schemas.</p>
-<h3>Open AI Gateway &amp; BYOK Cost Control</h3>
-<ul>
-  <li><strong>Bring Your Own Key (BYOK):</strong> Connect your own OpenRouter credentials for direct API access with zero platform markup.</li>
-  <li><strong>Block-Aware Generation:</strong> Cortex AI understands structured nested block components rather than just raw text.</li>
-  <li><strong>Tailored Prompting:</strong> Fine-tune responses to fit your design system, tone of voice, and Tailwind utilities.</li>
-</ul>`;
+  // ── Section 0: Hero Gradient ──
+  const cortexS0En = {
+    container_type: 'container',
+    background: {
+      type: 'gradient',
+      gradient: {
+        type: 'linear',
+        direction: '135deg',
+        stops: [
+          { color: '#1e1b4b', position: 0 },
+          { color: '#312e81', position: 35 },
+          { color: '#0f172a', position: 100 },
+        ],
+      },
+    },
+    responsive_columns: { mobile: 1, tablet: 1, desktop: 2 },
+    column_gap: 'xl',
+    vertical_alignment: 'center',
+    padding: { top: 'xl', bottom: 'xl' },
+    column_blocks: [
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<p class="text-xs uppercase tracking-[0.3em] text-violet-400 font-semibold mb-4">AI Intelligence Layer</p>
+<h2 class="text-3xl md:text-5xl font-extrabold text-white leading-tight mb-5">Supercharge Your<br/>Editor with AI.</h2>
+<p class="text-base md:text-lg text-slate-200 leading-relaxed mb-6">Cortex AI integrates state-of-the-art LLMs directly into the block authoring surface. Generate copy, summarize content, refactor layouts, and translate pages — all without leaving your editor.</p>`,
+          },
+        },
+        {
+          block_type: 'button',
+          content: {
+            text: 'Get Cortex AI →',
+            url: 'https://nextblock.dev/product/nextblock-cortex-ai-cortex-ai-license',
+            variant: 'default',
+            size: 'lg',
+            position: 'left',
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="rounded-2xl border border-violet-700 bg-slate-950 p-6 shadow-xl sm:p-8">
+<h3 class="text-lg font-bold text-white mb-5">OpenRouter &amp; BYOK Architecture</h3>
+<ul class="space-y-4 text-sm leading-relaxed text-slate-300">
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-violet-950 flex items-center justify-center text-violet-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Bring Your Own Key</strong> — complete cost control using your own OpenRouter API tokens. No hidden fees.</span>
+  </li>
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-violet-950 flex items-center justify-center text-violet-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Block-Aware Prompts</strong> — Cortex AI understands the JSONB schema, not just raw text. Outputs valid block structures.</span>
+  </li>
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-violet-950 flex items-center justify-center text-violet-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Design-System Aware</strong> — generated content respects your Tailwind config and brand guidelines automatically.</span>
+  </li>
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-violet-950 flex items-center justify-center text-violet-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Multi-Model Support</strong> — switch between GPT-4o, Claude, Gemini, and more via a single config toggle.</span>
+  </li>
+</ul>
+</div>`,
+          },
+        },
+      ],
+    ],
+  };
+
+  // ── Section 1: Social-proof metrics bar ──
+  const cortexS1En = {
+    container_type: 'container',
+    background: { type: 'theme', theme: 'muted' },
+    responsive_columns: { mobile: 1, tablet: 2, desktop: 4 },
+    column_gap: 'lg',
+    padding: { top: 'lg', bottom: 'lg' },
+    vertical_alignment: 'center',
+    column_blocks: [
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">50+</span><span class="text-xs text-muted-foreground uppercase tracking-wider">AI Models Available</span></p>' } }],
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">< 2s</span><span class="text-xs text-muted-foreground uppercase tracking-wider">Avg. Generation Time</span></p>' } }],
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">100 %</span><span class="text-xs text-muted-foreground uppercase tracking-wider">BYOK Cost Control</span></p>' } }],
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">2</span><span class="text-xs text-muted-foreground uppercase tracking-wider">Languages Supported</span></p>' } }],
+    ],
+  };
+
+  // ── Section 2: Three-column feature cards ──
+  const cortexS2En = {
+    container_type: 'container',
+    background: { type: 'none' },
+    responsive_columns: { mobile: 1, tablet: 2, desktop: 3 },
+    column_gap: 'lg',
+    padding: { top: 'xl', bottom: 'xl' },
+    vertical_alignment: 'stretch',
+    column_blocks: [
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors hover:border-violet-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950 dark:hover:border-violet-500 sm:p-7">
+<p class="text-2xl mb-3">✍️</p>
+<h4 class="text-base font-bold text-slate-900 dark:text-white mb-2">One-Click Copywriting</h4>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Draft blog entries, optimize headlines, generate call-to-actions, and write product descriptions — all with context-aware prompts that know your content.</p>
+</div>`,
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors hover:border-violet-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950 dark:hover:border-violet-500 sm:p-7">
+<p class="text-2xl mb-3">🔄</p>
+<h4 class="text-base font-bold text-slate-900 dark:text-white mb-2">Structure Refactoring</h4>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Instantly convert columns, add layout grids, or reorganize block nodes. Cortex AI generates valid JSONB schema, not just text suggestions.</p>
+</div>`,
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors hover:border-violet-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950 dark:hover:border-violet-500 sm:p-7">
+<p class="text-2xl mb-3">🌐</p>
+<h4 class="text-base font-bold text-slate-900 dark:text-white mb-2">Automated Translation</h4>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Localize complete pages between English and French while preserving all nested sub-blocks, layouts, and section styling intact.</p>
+</div>`,
+          },
+        },
+      ],
+    ],
+  };
+
+  // ── Section 3: Deep-dive 2-col ──
+  const cortexS3En = {
+    container_type: 'container',
+    background: {
+      type: 'gradient',
+      gradient: {
+        type: 'linear',
+        direction: '180deg',
+        stops: [
+          { color: '#020617', position: 0 },
+          { color: '#0f172a', position: 100 },
+        ],
+      },
+    },
+    responsive_columns: { mobile: 1, tablet: 1, desktop: 2 },
+    column_gap: 'xl',
+    vertical_alignment: 'center',
+    padding: { top: 'xl', bottom: 'xl' },
+    column_blocks: [
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<p class="text-xs uppercase tracking-[0.3em] text-violet-400 font-semibold mb-4">How It Works</p>
+<h3 class="text-2xl md:text-3xl font-extrabold text-white mb-4">AI That Understands Blocks</h3>
+<p class="text-slate-300 leading-relaxed mb-5">Unlike generic AI tools, Cortex AI is deeply integrated with the NextBlock™ block editor. It understands your section layouts, column structures, and nested content hierarchies — generating outputs that slot directly into your page without manual cleanup.</p>
+<ul class="space-y-3 text-sm text-slate-400">
+  <li class="flex items-start gap-2.5">
+    <span class="text-violet-400">→</span>
+    <span>Inline AI toolbar appears on text selection</span>
+  </li>
+  <li class="flex items-start gap-2.5">
+    <span class="text-violet-400">→</span>
+    <span>Prompt presets for common content tasks</span>
+  </li>
+  <li class="flex items-start gap-2.5">
+    <span class="text-violet-400">→</span>
+    <span>Full-page generation from a single prompt</span>
+  </li>
+  <li class="flex items-start gap-2.5">
+    <span class="text-violet-400">→</span>
+    <span>Token usage tracking in the admin dashboard</span>
+  </li>
+</ul>`,
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="space-y-4">
+<div class="p-5 rounded-xl border border-slate-700 bg-slate-900">
+  <h5 class="text-sm font-bold text-white mb-1">Content Generation</h5>
+  <p class="text-xs text-slate-400 leading-relaxed">From short ad copy to long-form articles, Cortex AI generates on-brand content that matches your tone and style. Outputs are pre-formatted for your design system.</p>
+</div>
+<div class="p-5 rounded-xl border border-slate-700 bg-slate-900">
+  <h5 class="text-sm font-bold text-white mb-1">SEO Optimization</h5>
+  <p class="text-xs text-slate-400 leading-relaxed">Auto-generate meta titles, descriptions, and heading hierarchies. Cortex AI analyzes your content structure and suggests SEO improvements in real-time.</p>
+</div>
+<div class="p-5 rounded-xl border border-slate-700 bg-slate-900">
+  <h5 class="text-sm font-bold text-white mb-1">Privacy-First Design</h5>
+  <p class="text-xs text-slate-400 leading-relaxed">Your content is sent directly to OpenRouter using YOUR key. NextBlock™ never stores, logs, or proxies your AI requests — full data sovereignty guaranteed.</p>
+</div>
+</div>`,
+          },
+        },
+      ],
+    ],
+  };
+
+  // ── Section 4: CTA ──
+  const cortexS4En = {
+    container_type: 'container',
+    background: {
+      type: 'gradient',
+      gradient: {
+        type: 'linear',
+        direction: '135deg',
+        stops: [
+          { color: '#312e81', position: 0 },
+          { color: '#1e1b4b', position: 100 },
+        ],
+      },
+    },
+    responsive_columns: { mobile: 1, tablet: 1, desktop: 1 },
+    column_gap: 'none',
+    padding: { top: 'xl', bottom: 'xl' },
+    vertical_alignment: 'center',
+    column_blocks: [
+      [
+        {
+          block_type: 'heading',
+          content: { level: 2, text_content: 'Ready to add AI to your editor?', textAlign: 'center', textColor: 'background' },
+        },
+        {
+          block_type: 'text',
+          content: {
+            html_content: '<p class="text-center text-violet-100 max-w-xl mx-auto mt-2 mb-6">Unlock the full power of AI-driven content creation. BYOK, privacy-first, and deeply integrated with your block editor.</p>',
+          },
+        },
+        {
+          block_type: 'button',
+          content: {
+            text: 'Purchase Cortex AI',
+            url: 'https://nextblock.dev/product/nextblock-cortex-ai-cortex-ai-license',
+            variant: 'secondary',
+            size: 'lg',
+            position: 'center',
+          },
+        },
+      ],
+    ],
+  };
+
+  const cortexSectionsEn = [cortexS0En, cortexS1En, cortexS2En, cortexS3En, cortexS4En];
 
   await params.sql`
     UPDATE public.products
@@ -806,22 +1486,207 @@ async function enrichCortexAiProducts(params: {
 
   // Set description blocks for English Cortex AI product
   await params.sql`DELETE FROM public.blocks WHERE product_id = ${product.id}`;
-  await params.sql`
-    INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
-    VALUES (${product.id}, ${params.enLangId}, 'text', ${params.sql.json({ html_content: htmlDescriptionEn })}, 0)
-  `;
+  for (let i = 0; i < cortexSectionsEn.length; i++) {
+    await params.sql`
+      INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
+      VALUES (${product.id}, ${params.enLangId}, 'section', ${params.sql.json(cortexSectionsEn[i] as any)}, ${i})
+    `;
+  }
 
+  // ── French Sections ──
   const shortDescFr =
     "La licence NextBlock™ Cortex AI apporte l'intelligence artificielle au niveau des blocs directement dans votre éditeur de contenu Next.js. Génération, refactorisation et traduction de pages en un clic.";
 
-  const htmlDescriptionFr = `<h2>Une intelligence artificielle native au niveau des blocs</h2>
-<p>NextBlock™ Cortex AI apporte un copilote IA directement dans votre éditeur de blocs façon Notion. Générez du texte marketing de qualité, restructurez des mises en page et traduisez des pages complètes en un clic, tout en conservant vos classes Tailwind et schémas JSONB.</p>
-<h3>Contrôle des coûts avec BYOK (Bring Your Own Key)</h3>
-<ul>
-  <li><strong>BYOK :</strong> Connectez vos propres identifiants OpenRouter pour un accès direct aux meilleurs modèles sans frais supplémentaires.</li>
-  <li><strong>Génération consciente des blocs :</strong> Cortex AI comprend les composants structurés plutôt que le texte brut.</li>
-  <li><strong>Adaptation au design system :</strong> Réponses optimisées pour respecter vos composants et classes CSS.</li>
-</ul>`;
+  const cortexS0Fr = {
+    ...cortexS0En,
+    column_blocks: [
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<p class="text-xs uppercase tracking-[0.3em] text-violet-400 font-semibold mb-4">Couche d'Intelligence IA</p>
+<h2 class="text-3xl md:text-5xl font-extrabold text-white leading-tight mb-5">Boostez votre éditeur<br/>avec l'IA native.</h2>
+<p class="text-base md:text-lg text-slate-200 leading-relaxed mb-6">Cortex AI intègre les LLMs les plus performants directement dans votre surface d'édition de blocs. Rédigez, résumez, restructurez et traduisez — sans quitter l'éditeur.</p>`,
+          },
+        },
+        {
+          block_type: 'button',
+          content: {
+            text: 'Obtenir Cortex AI →',
+            url: 'https://nextblock.dev/product/nextblock-cortex-ai-cortex-ai-license',
+            variant: 'default',
+            size: 'lg',
+            position: 'left',
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="rounded-2xl border border-violet-700 bg-slate-950 p-6 shadow-xl sm:p-8">
+<h3 class="text-lg font-bold text-white mb-5">OpenRouter et architecture BYOK</h3>
+<ul class="space-y-4 text-sm leading-relaxed text-slate-300">
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-violet-950 flex items-center justify-center text-violet-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Bring Your Own Key</strong> — contrôle total des coûts avec vos propres jetons API OpenRouter. Aucun frais caché.</span>
+  </li>
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-violet-950 flex items-center justify-center text-violet-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Prompts conscients des blocs</strong> — Cortex AI comprend le schéma JSONB, pas seulement le texte brut. Produit des structures de blocs valides.</span>
+  </li>
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-violet-950 flex items-center justify-center text-violet-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Respect du design system</strong> — le contenu généré respecte automatiquement votre configuration Tailwind et vos guidelines de marque.</span>
+  </li>
+  <li class="flex items-start gap-3">
+    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-violet-950 flex items-center justify-center text-violet-300 text-xs font-bold">✓</span>
+    <span><strong class="text-white">Support multi-modèles</strong> — basculez entre GPT-4o, Claude, Gemini et plus via un simple paramètre.</span>
+  </li>
+</ul>
+</div>`,
+          },
+        },
+      ],
+    ],
+  };
+
+  const cortexS1Fr = {
+    ...cortexS1En,
+    column_blocks: [
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">50+</span><span class="text-xs text-muted-foreground uppercase tracking-wider">Modèles IA disponibles</span></p>' } }],
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">< 2s</span><span class="text-xs text-muted-foreground uppercase tracking-wider">Temps de génération moy.</span></p>' } }],
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">100 %</span><span class="text-xs text-muted-foreground uppercase tracking-wider">Contrôle des coûts BYOK</span></p>' } }],
+      [{ block_type: 'text', content: { html_content: '<p class="text-center"><span class="block text-2xl font-extrabold text-foreground">2</span><span class="text-xs text-muted-foreground uppercase tracking-wider">Langues supportées</span></p>' } }],
+    ],
+  };
+
+  const cortexS2Fr = {
+    ...cortexS2En,
+    column_blocks: [
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors hover:border-violet-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950 dark:hover:border-violet-500 sm:p-7">
+<p class="text-2xl mb-3">✍️</p>
+<h4 class="text-base font-bold text-slate-900 dark:text-white mb-2">Rédaction en un clic</h4>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Rédigez des articles, optimisez vos titres, créez des appels à l'action et rédigez des descriptions produits — le tout avec des prompts contextuels.</p>
+</div>`,
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors hover:border-violet-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950 dark:hover:border-violet-500 sm:p-7">
+<p class="text-2xl mb-3">🔄</p>
+<h4 class="text-base font-bold text-slate-900 dark:text-white mb-2">Refactorisation de structure</h4>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Convertissez des colonnes, ajoutez des grilles ou réorganisez vos nœuds de blocs. Cortex AI génère un schéma JSONB valide, pas des suggestions textuelles.</p>
+</div>`,
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors hover:border-violet-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950 dark:hover:border-violet-500 sm:p-7">
+<p class="text-2xl mb-3">🌐</p>
+<h4 class="text-base font-bold text-slate-900 dark:text-white mb-2">Traduction automatique</h4>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Localisez vos pages complètes entre le français et l'anglais en préservant tous les blocs imbriqués, mises en page et styles de section.</p>
+</div>`,
+          },
+        },
+      ],
+    ],
+  };
+
+  const cortexS3Fr = {
+    ...cortexS3En,
+    column_blocks: [
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<p class="text-xs uppercase tracking-[0.3em] text-violet-400 font-semibold mb-4">Comment ça marche</p>
+<h3 class="text-2xl md:text-3xl font-extrabold text-white mb-4">Une IA qui comprend les blocs</h3>
+<p class="text-slate-300 leading-relaxed mb-5">Contrairement aux outils IA génériques, Cortex AI est profondément intégré à l'éditeur de blocs NextBlock™. Il comprend vos sections, structures de colonnes et hiérarchies de contenu — générant des sorties qui s'insèrent directement dans votre page.</p>
+<ul class="space-y-3 text-sm text-slate-400">
+  <li class="flex items-start gap-2.5">
+    <span class="text-violet-400">→</span>
+    <span>Barre d'outils IA intégrée à la sélection de texte</span>
+  </li>
+  <li class="flex items-start gap-2.5">
+    <span class="text-violet-400">→</span>
+    <span>Prompts prédéfinis pour les tâches courantes</span>
+  </li>
+  <li class="flex items-start gap-2.5">
+    <span class="text-violet-400">→</span>
+    <span>Génération de pages complètes à partir d'un seul prompt</span>
+  </li>
+  <li class="flex items-start gap-2.5">
+    <span class="text-violet-400">→</span>
+    <span>Suivi de la consommation de tokens dans le tableau de bord</span>
+  </li>
+</ul>`,
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="space-y-4">
+<div class="p-5 rounded-xl border border-slate-700 bg-slate-900">
+  <h5 class="text-sm font-bold text-white mb-1">Génération de contenu</h5>
+  <p class="text-xs text-slate-400 leading-relaxed">Des textes publicitaires aux articles de fond, Cortex AI génère du contenu fidèle à votre marque. Les sorties sont pré-formatées pour votre design system.</p>
+</div>
+<div class="p-5 rounded-xl border border-slate-700 bg-slate-900">
+  <h5 class="text-sm font-bold text-white mb-1">Optimisation SEO</h5>
+  <p class="text-xs text-slate-400 leading-relaxed">Génération automatique de titres méta, descriptions et hiérarchie de titres. Cortex AI analyse votre structure et suggère des améliorations SEO en temps réel.</p>
+</div>
+<div class="p-5 rounded-xl border border-slate-700 bg-slate-900">
+  <h5 class="text-sm font-bold text-white mb-1">Conception axée sur la vie privée</h5>
+  <p class="text-xs text-slate-400 leading-relaxed">Votre contenu est envoyé directement à OpenRouter avec VOTRE clé. NextBlock™ ne stocke, ne journalise et ne proxifie jamais vos requêtes IA — souveraineté totale sur vos données.</p>
+</div>
+</div>`,
+          },
+        },
+      ],
+    ],
+  };
+
+  const cortexS4Fr = {
+    ...cortexS4En,
+    column_blocks: [
+      [
+        {
+          block_type: 'heading',
+          content: { level: 2, text_content: "Prêt à ajouter l'IA à votre éditeur ?", textAlign: 'center', textColor: 'background' },
+        },
+        {
+          block_type: 'text',
+          content: {
+            html_content: '<p class="text-center text-violet-100 max-w-xl mx-auto mt-2 mb-6">Libérez la puissance de la création de contenu assistée par IA. BYOK, vie privée d\'abord, et intégration profonde avec votre éditeur de blocs.</p>',
+          },
+        },
+        {
+          block_type: 'button',
+          content: {
+            text: 'Acheter Cortex AI',
+            url: 'https://nextblock.dev/product/nextblock-cortex-ai-cortex-ai-license',
+            variant: 'secondary',
+            size: 'lg',
+            position: 'center',
+          },
+        },
+      ],
+    ],
+  };
+
+  const cortexSectionsFr = [cortexS0Fr, cortexS1Fr, cortexS2Fr, cortexS3Fr, cortexS4Fr];
 
   const [frProduct] = await params.sql`
     INSERT INTO public.products (
@@ -855,16 +1720,18 @@ async function enrichCortexAiProducts(params: {
 
   if (frProduct?.id) {
     await attachProductMedia(params.sql, frProduct.id as string, cortexMediaId);
-    // Set description blocks for French Cortex AI product
     await params.sql`DELETE FROM public.blocks WHERE product_id = ${frProduct.id}`;
-    await params.sql`
-      INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
-      VALUES (${frProduct.id}, ${params.frLangId}, 'text', ${params.sql.json({ html_content: htmlDescriptionFr })}, 0)
-    `;
+    for (let i = 0; i < cortexSectionsFr.length; i++) {
+      await params.sql`
+        INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
+        VALUES (${frProduct.id}, ${params.frLangId}, 'section', ${params.sql.json(cortexSectionsFr[i] as any)}, ${i})
+      `;
+    }
   }
 
   console.log('[Sandbox Reset] Successfully enriched Cortex AI products (EN & FR).');
 }
+
 
 async function ensureSandboxCommerceProductSynced(params: {
   sql: SqlClient;

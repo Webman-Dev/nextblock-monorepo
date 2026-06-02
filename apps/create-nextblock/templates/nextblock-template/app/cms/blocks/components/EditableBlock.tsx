@@ -14,6 +14,7 @@ import { DeleteBlockButtonClient } from './DeleteBlockButtonClient';
 import { cn } from '@nextblock-cms/utils';
 import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
 import { SimpleTiptapRenderer } from '@nextblock-cms/ecommerce';
+import { CustomBlockEditorPreview } from './CustomBlockEditorPreview';
 
 export interface EditableBlockProps {
   block: Block;
@@ -75,6 +76,11 @@ export default function EditableBlock({
       else if (blockDef?.editorComponentFilename) {
         const filename = blockDef.editorComponentFilename;
         const Editor = lazy(() => import(`../editors/${filename.replace(/\.tsx$/, '')}`));
+        setLazyEditor(Editor);
+        setEditingBlock(block);
+      }
+      else {
+        const Editor = lazy(() => import(`../editors/DynamicCustomBlockEditor`));
         setLazyEditor(Editor);
         setEditingBlock(block);
       }
@@ -262,7 +268,7 @@ export default function EditableBlock({
        default: {
         const blockDefinition = getBlockDefinition(currentBlockType as BlockType);
         const blockLabel = blockDefinition?.label || currentBlockType;
-        return (
+        const placeholder = (
           <div
             className="py-4 flex flex-col items-center justify-center space-y-2 min-h-[80px] border border-dashed rounded-md bg-muted/20 cursor-pointer hover:border-primary"
             onClick={handleCardClick}
@@ -272,6 +278,14 @@ export default function EditableBlock({
               <p className="text-xs text-muted-foreground">Click edit to modify content</p>
             </div>
           </div>
+        );
+        // Custom blocks (block_type === definition slug) render their real layout.
+        return (
+          <CustomBlockEditorPreview
+            blockType={currentBlockType}
+            content={(block.content || {}) as Record<string, any>}
+            fallback={placeholder}
+          />
         );
        }
     }
