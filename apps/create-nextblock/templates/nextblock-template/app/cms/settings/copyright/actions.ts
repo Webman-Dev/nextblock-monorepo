@@ -8,23 +8,6 @@ export type CopyrightSettings = {
   [key: string]: string;
 };
 
-function normalizePotentialMojibake(value: string): string {
-  if (!/[ÃÂ]/.test(value)) {
-    return value;
-  }
-
-  return value
-    .replaceAll('Ãƒâ€šÃ‚Â©', '©')
-    .replaceAll('Ã‚Â©', '©')
-    .replaceAll('Â©', '©')
-    .replaceAll('Tous droits rÃƒÆ’Ã‚Â©servÃƒÆ’Ã‚Â©s.', 'Tous droits réservés.')
-    .replaceAll('Tous droits rÃƒÂ©servÃƒÂ©s.', 'Tous droits réservés.')
-    .replaceAll('Tous droits rÃ©servÃ©s.', 'Tous droits réservés.')
-    .replaceAll('rÃƒÆ’Ã‚Â©servÃƒÆ’Ã‚Â©s', 'réservés')
-    .replaceAll('rÃƒÂ©servÃƒÂ©s', 'réservés')
-    .replaceAll('rÃ©servÃ©s', 'réservés');
-}
-
 export async function getCopyrightSettings(): Promise<CopyrightSettings> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -40,14 +23,7 @@ export async function getCopyrightSettings(): Promise<CopyrightSettings> {
     return { en: '© {year} Default Copyright. All rights reserved.' };
   }
 
-  const rawValue = data.value as CopyrightSettings;
-
-  return Object.fromEntries(
-    Object.entries(rawValue).map(([locale, text]) => [
-      locale,
-      typeof text === 'string' ? normalizePotentialMojibake(text) : text,
-    ])
-  ) as CopyrightSettings;
+  return data.value as CopyrightSettings;
 }
 
 export async function updateCopyrightSettings(formData: FormData) {
@@ -72,7 +48,7 @@ export async function updateCopyrightSettings(formData: FormData) {
   formData.forEach((value, key) => {
     if (key.startsWith('copyright_')) {
       const langCode = key.replace('copyright_', '');
-      newSettings[langCode] = normalizePotentialMojibake(value as string);
+      newSettings[langCode] = value as string;
     }
   });
 

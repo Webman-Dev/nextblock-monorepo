@@ -22,8 +22,8 @@ import type { Database } from '@nextblock-cms/db';
 import { headers, cookies, draftMode } from 'next/headers';
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { unstable_cache } from 'next/cache';
-import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
-import { DEFAULT_SITE_DESCRIPTION } from './lib/seo';
+import { createStaticSupabaseClient, getSiteSettings } from './lib/site-settings';
+import { DEFAULT_OG_IMAGE } from './lib/seo';
 
 const defaultUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
 
@@ -52,44 +52,8 @@ type StoreCurrency = Database['public']['Tables']['currencies']['Row'];
 type NavigationItem = Database['public']['Tables']['navigation_items']['Row'];
 type MenuLocation = Database['public']['Enums']['menu_location'];
 type HeaderLogo = Database['public']['Tables']['logos']['Row'] & {
-  site_title?: string | null;
   media: (Database['public']['Tables']['media']['Row'] & { alt_text: string | null }) | null;
 };
-
-function normalizePotentialMojibake(value: string): string {
-  if (!/[ÃÂ]/.test(value)) {
-    return value;
-  }
-
-  return value
-    .replaceAll('Ãƒâ€šÃ‚Â©', '©')
-    .replaceAll('Ã‚Â©', '©')
-    .replaceAll('Â©', '©')
-    .replaceAll('Tous droits rÃƒÆ’Ã‚Â©servÃƒÆ’Ã‚Â©s.', 'Tous droits réservés.')
-    .replaceAll('Tous droits rÃƒÂ©servÃƒÂ©s.', 'Tous droits réservés.')
-    .replaceAll('Tous droits rÃ©servÃ©s.', 'Tous droits réservés.')
-    .replaceAll('rÃƒÆ’Ã‚Â©servÃƒÆ’Ã‚Â©s', 'réservés')
-    .replaceAll('rÃƒÂ©servÃƒÂ©s', 'réservés')
-    .replaceAll('rÃ©servÃ©s', 'réservés');
-}
-
-function createStaticSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing Supabase environment variables for public layout data');
-  }
-
-  return createSupabaseJsClient<Database>(supabaseUrl, supabaseKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
-}
 
 const getCachedLanguages = unstable_cache(
   async (): Promise<Language[]> => {
@@ -124,14 +88,7 @@ const getCachedCopyrightSettings = unstable_cache(
       return { en: '(c) {year} Nextblock CMS. All rights reserved.' };
     }
 
-    const rawValue = data.value as Record<string, string>;
-
-    return Object.fromEntries(
-      Object.entries(rawValue).map(([locale, text]) => [
-        locale,
-        typeof text === 'string' ? normalizePotentialMojibake(text) : text,
-      ])
-    ) as Record<string, string>;
+    return data.value as Record<string, string>;
   },
   ['public-layout-copyright'],
   { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
@@ -181,38 +138,6 @@ const getCachedTranslations = unstable_cache(
     revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS,
     tags: ['public-layout-translations'],
   }
-);
-
-const getCachedSiteSettings = unstable_cache(
-  async (): Promise<Record<string, string>> => {
-    const supabase = createStaticSupabaseClient();
-    const { data, error } = await supabase
-      .from('site_settings')
-      .select('key, value')
-      .in('key', ['site_title', 'site_description']);
-
-    if (error || !data) {
-      console.error('Error fetching cached site settings:', error);
-      return {
-        site_title: 'Nextblock CMS',
-        site_description: DEFAULT_SITE_DESCRIPTION
-      };
-    }
-
-    const settings: Record<string, string> = {};
-    data.forEach(item => {
-      if (typeof item.value === 'string') {
-        settings[item.key] = item.value;
-      }
-    });
-
-    return {
-      site_title: settings.site_title || 'Nextblock CMS',
-      site_description: settings.site_description || DEFAULT_SITE_DESCRIPTION
-    };
-  },
-  ['public-site-settings'],
-  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
 );
 
 const getCachedCurrencies = unstable_cache(
@@ -374,7 +299,7 @@ async function loadLayoutData() {
 
   const role = profile?.role ?? null;
   const canAccessCms = role === 'ADMIN' || role === 'WRITER';
-  const siteTitle = logo?.site_title ?? 'Nextblock';
+  const { siteTitle } = await getSiteSettings();
 
   return {
     user,
@@ -399,27 +324,29 @@ async function loadLayoutData() {
 }
 
 export async function generateMetadata(): Promise<Metadata> {
-  const siteSettings = await getCachedSiteSettings();
+  const { siteTitle, siteDescription, siteKeywords } = await getSiteSettings();
   const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
 
   return {
     metadataBase: new URL(defaultUrl),
     title: {
-      default: siteSettings.site_title,
-      template: `%s | ${siteSettings.site_title}`,
+      default: siteTitle,
+      template: `%s | ${siteTitle}`,
     },
-    description: siteSettings.site_description,
+    description: siteDescription,
+    keywords: siteKeywords,
+    applicationName: siteTitle,
     openGraph: {
-      title: siteSettings.site_title,
-      description: siteSettings.site_description,
+      title: siteTitle,
+      description: siteDescription,
       url: defaultUrl,
-      siteName: siteSettings.site_title,
+      siteName: siteTitle,
       images: [
         {
-          url: '/images/metadata_image.webp',
+          url: DEFAULT_OG_IMAGE,
           width: 1200,
           height: 630,
-          alt: siteSettings.site_title,
+          alt: siteTitle,
         },
       ],
       locale: 'en_US',
@@ -427,9 +354,9 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     twitter: {
       card: 'summary_large_image',
-      title: siteSettings.site_title,
-      description: siteSettings.site_description,
-      images: ['/images/metadata_image.webp'],
+      title: siteTitle,
+      description: siteDescription,
+      images: [DEFAULT_OG_IMAGE],
     },
     icons: {
       icon: [

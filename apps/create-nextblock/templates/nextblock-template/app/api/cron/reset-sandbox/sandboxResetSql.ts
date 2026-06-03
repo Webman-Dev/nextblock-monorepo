@@ -3134,11 +3134,15 @@ VALUES (
 ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO public.site_settings (key, value)
-VALUES ('site_title', '"Nextblock CMS"'::jsonb)
+VALUES ('site_title', '"NextBlock™ CMS"'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO public.site_settings (key, value)
-VALUES ('site_description', '"Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture."'::jsonb)
+VALUES ('site_description', '"NextBlock is an open-source CMS on Next.js + Supabase — a visual block editor, blazing-fast multilingual pages, and built-in e-commerce."'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+INSERT INTO public.site_settings (key, value)
+VALUES ('site_keywords', '"NextBlock, CMS, Next.js, Supabase, headless CMS, block editor, visual page builder, multilingual, e-commerce, open source"'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO public.site_settings (key, value)

@@ -16,7 +16,10 @@ import {
   resolveMetaTitle,
   resolvePostMetaDescription,
   stringifyJsonLd,
+  buildSocialMetadata,
+  toOpenGraphLocale,
 } from '../../lib/seo';
+import { getSiteSettings } from '../../lib/site-settings';
 import { draftMode, headers } from 'next/headers';
 import { getRequestOrigin } from '../../../lib/visual-editing/edit-info';
 
@@ -110,28 +113,21 @@ export async function generateMetadata(
 
   const title = resolveMetaTitle(postData.meta_title, postData.title);
   const description = resolvePostMetaDescription(postData.meta_description, postData.subtitle);
+  const { siteTitle } = await getSiteSettings();
 
   return {
     title,
     description,
-    openGraph: {
+    ...buildSocialMetadata({
       title,
       description,
+      url: `${siteUrl}/article/${params.slug}`,
+      siteTitle,
+      imageUrl: postData.feature_image_url,
       type: 'article',
       publishedTime: postData.published_at || postData.created_at,
-      url: `${siteUrl}/article/${params.slug}`,
-      images: postData.feature_image_url
-        ? [
-            {
-              url: postData.feature_image_url,
-              // You can optionally add width, height, and alt here if known
-              // width: 1200, // Example
-              // height: 630, // Example
-              // alt: postData.meta_title || postData.title, // Example
-            },
-          ]
-        : undefined, // Or an empty array if you prefer: [],
-    },
+      locale: toOpenGraphLocale(postData.language_code),
+    }),
     alternates: {
       canonical: `${siteUrl}/article/${params.slug}`,
       languages: Object.keys(alternates).length > 0 ? alternates : undefined,

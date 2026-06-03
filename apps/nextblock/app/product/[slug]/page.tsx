@@ -23,7 +23,10 @@ import {
   resolveMetaTitle,
   resolveProductMetaDescription,
   stringifyJsonLd,
+  buildSocialMetadata,
+  toOpenGraphLocale,
 } from "../../lib/seo";
+import { getSiteSettings } from "../../lib/site-settings";
 // Ensure BlockType is imported or compatible with BlockRenderer props
 import type { Database } from "@nextblock-cms/db";
 type BlockType = Database['public']['Tables']['blocks']['Row'];
@@ -147,16 +150,20 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
     productRecord.meta_description,
     productRecord.short_description
   );
+  const { siteTitle } = await getSiteSettings();
 
   return {
     title,
     description,
-    openGraph: {
+    ...buildSocialMetadata({
       title,
       description,
-      images: imageUrl ? [imageUrl] : [],
       url: `${siteUrl}/product/${slug}`,
-    },
+      siteTitle,
+      imageUrl,
+      type: 'website',
+      locale: toOpenGraphLocale(productRecord.language_code),
+    }),
     alternates: {
       canonical: `${siteUrl}/product/${slug}`,
       languages: Object.keys(alternates).length > 0 ? alternates : undefined,

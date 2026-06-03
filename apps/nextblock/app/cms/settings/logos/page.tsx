@@ -17,8 +17,9 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@nextblock-cms/ui'
-import { getLogos } from './actions'
+import { getLogos, getSiteSeoSettings } from './actions'
 import BrandingSettingsForm from './components/BrandingSettingsForm'
+import SiteSeoSettingsForm from './components/SiteSeoSettingsForm'
 import MediaImage from '../../media/components/MediaImage'
 import DeleteLogoButton from './components/DeleteLogoButton'
 import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl'
@@ -28,7 +29,11 @@ function resolveLogoSrc(objectKey?: string | null) {
 }
 
 export default async function CmsLogosListPage() {
-  const [logos, branding] = await Promise.all([getLogos(), getInvoiceBrandingData()])
+  const [logos, branding, seoSettings] = await Promise.all([
+    getLogos(),
+    getInvoiceBrandingData(),
+    getSiteSeoSettings(),
+  ])
 
   return (
     <div className="w-full space-y-8">
@@ -36,10 +41,12 @@ export default async function CmsLogosListPage() {
         <div>
           <h1 className="text-2xl font-semibold">Branding</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage the active website logo and the seller details printed on invoices.
+            Manage the site title &amp; SEO, the active website logo, and the seller details printed on invoices.
           </p>
         </div>
       </div>
+
+      <SiteSeoSettingsForm initialSettings={seoSettings} />
 
       <BrandingSettingsForm initialSettings={branding.settings} />
 

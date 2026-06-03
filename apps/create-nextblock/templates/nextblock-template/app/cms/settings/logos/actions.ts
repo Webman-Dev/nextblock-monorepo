@@ -5,6 +5,7 @@ import { INVOICE_SETTINGS_KEY, serializeInvoiceSettings, type InvoiceSettings } 
 import { revalidatePath, updateTag } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { Logo } from './types'
+import { SITE_SETTINGS_CACHE_TAG } from '../../../lib/site-settings'
 
 const PUBLIC_LAYOUT_LOGO_CACHE_TAG = 'public-layout-logo'
 
@@ -133,5 +134,56 @@ export async function saveInvoiceSettings(payload: InvoiceSettings) {
   }
 
   revalidatePath('/cms/settings/logos')
+  return { success: true }
+}
+
+export interface SiteSeoSettings {
+  siteTitle: string
+  siteDescription: string
+  siteKeywords: string
+}
+
+export async function getSiteSeoSettings(): Promise<SiteSeoSettings> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('site_settings')
+    .select('key, value')
+    .in('key', ['site_title', 'site_description', 'site_keywords'])
+
+  const settings: Record<string, string> = {}
+  if (!error && data) {
+    data.forEach((item) => {
+      if (typeof item.value === 'string') {
+        settings[item.key] = item.value
+      }
+    })
+  }
+
+  return {
+    siteTitle: settings.site_title ?? '',
+    siteDescription: settings.site_description ?? '',
+    siteKeywords: settings.site_keywords ?? '',
+  }
+}
+
+export async function saveSiteSeoSettings(payload: SiteSeoSettings) {
+  const supabase = createClient()
+
+  const { error } = await supabase.from('site_settings').upsert([
+    { key: 'site_title', value: payload.siteTitle.trim() },
+    { key: 'site_description', value: payload.siteDescription.trim() },
+    { key: 'site_keywords', value: payload.siteKeywords.trim() },
+  ])
+
+  if (error) {
+    console.error('Error saving site SEO settings:', error.message)
+    return { success: false, error: error.message }
+  }
+
+  // Bust the cached public site settings (title/description/keywords) and the
+  // root layout so metadata + header brand update immediately.
+  updateTag(SITE_SETTINGS_CACHE_TAG)
+  revalidatePath('/cms/settings/logos')
+  revalidatePath('/', 'layout')
   return { success: true }
 }

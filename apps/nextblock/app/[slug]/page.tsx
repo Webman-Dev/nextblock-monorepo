@@ -11,7 +11,10 @@ import {
   resolveMetaTitle,
   resolvePageMetaDescription,
   stringifyJsonLd,
+  buildSocialMetadata,
+  toOpenGraphLocale,
 } from "../lib/seo";
+import { getSiteSettings } from "../lib/site-settings";
 import { getRequestOrigin } from "../../lib/visual-editing/edit-info";
 
 export const dynamicParams = true;
@@ -102,23 +105,20 @@ export async function generateMetadata(
 
   const title = resolveMetaTitle(pageData.meta_title, pageData.title);
   const description = resolvePageMetaDescription(pageData.meta_description, pageData.blocks);
+  const { siteTitle } = await getSiteSettings();
 
   return {
     title,
     description,
-    openGraph: {
+    ...buildSocialMetadata({
       title,
       description,
-      type: 'website',
       url: `${siteUrl}/${params.slug}`,
-      images: pageData.feature_image_url
-        ? [
-            {
-              url: pageData.feature_image_url,
-            },
-          ]
-        : undefined,
-    },
+      siteTitle,
+      imageUrl: pageData.feature_image_url,
+      type: 'website',
+      locale: toOpenGraphLocale(pageData.language_code),
+    }),
     alternates: {
       canonical: `${siteUrl}/${params.slug}`,
       languages: Object.keys(alternates).length > 0 ? alternates : undefined,

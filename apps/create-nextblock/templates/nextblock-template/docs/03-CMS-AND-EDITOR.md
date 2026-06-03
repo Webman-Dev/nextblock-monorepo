@@ -33,7 +33,6 @@ The registry currently includes:
 - `posts_grid`
 - `video_embed`
 - `section`
-- `hero`
 - `form`
 - `testimonial`
 - `product_grid`
@@ -42,8 +41,14 @@ The registry currently includes:
 - `checkout`
 - `product_details`
 
-Sections and heroes can contain nested column block arrays, so the page builder
-supports multi-column compositions instead of only flat block lists.
+The authoritative type list is `apps/nextblock/lib/blocks/blockTypes.ts`
+(`availableBlockTypes`).
+
+A `section` block can contain nested column block arrays, so the page builder
+supports multi-column compositions instead of only flat block lists. Legacy
+`hero` blocks were folded into `section` (carrying an `is_hero` flag) by
+migration `00000000000021_migrate_hero_blocks_to_sections.sql`, so `hero` is no
+longer a standalone registered block type.
 
 ### How the CMS uses the registry
 
@@ -168,6 +173,24 @@ commerce primitives backed by `@nextblock-cms/ecommerce`, including:
 
 These bridge the CMS page builder to the premium commerce library without
 copying storefront logic into the app.
+
+## Custom Blocks (Data-Driven CRUD)
+
+Beyond the code-defined built-ins above, editors can create their own block
+types at runtime from the CMS, with no code deploy. These **custom block
+definitions** are stored as rows in `custom_block_definitions` (typed fields
+plus a recursive layout schema) and rendered on the public site by a dynamic
+layout engine instead of a compiled React renderer.
+
+The wiring is intentionally simple: a page/post block whose `block_type` equals
+a custom definition's `slug` is resolved through
+`getCachedCustomBlockDefinitionBySlug()` and rendered by
+`CachedDynamicLayoutEngine`. Authoring, CRUD, duplicate, and JSON
+import/export/backup all live under `app/cms/custom-blocks`.
+
+Full details, including the field types, the layout schema, caching, and the
+Cortex AI "build widget" path, are in
+[10-CUSTOM-BLOCKS.md](./10-CUSTOM-BLOCKS.md).
 
 ## Relationship to the SDK
 

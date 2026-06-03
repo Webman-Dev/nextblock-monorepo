@@ -1,5 +1,15 @@
+import type { Metadata } from 'next';
+
+export const DEFAULT_SITE_TITLE = 'NextBlock™ CMS';
+
 export const DEFAULT_SITE_DESCRIPTION =
-  'Nextblock CMS pairs a visual block editor with a blazing-fast Next.js + Supabase architecture.';
+  'NextBlock is an open-source CMS on Next.js + Supabase — a visual block editor, blazing-fast multilingual pages, and built-in e-commerce.';
+
+export const DEFAULT_SITE_KEYWORDS =
+  'NextBlock, CMS, Next.js, Supabase, headless CMS, block editor, visual page builder, multilingual, e-commerce, open source';
+
+/** Bundled fallback Open Graph image (resolved to absolute via metadataBase). */
+export const DEFAULT_OG_IMAGE = '/images/metadata_image.webp';
 
 const DEFAULT_META_DESCRIPTION_LENGTH = 160;
 
@@ -130,7 +140,11 @@ export function resolveMetaTitle(
   manualTitle: string | null | undefined,
   fallbackTitle: string | null | undefined
 ) {
-  return normalizeMetaCandidate(manualTitle) ?? normalizeMetaCandidate(fallbackTitle) ?? 'Nextblock CMS';
+  return (
+    normalizeMetaCandidate(manualTitle) ??
+    normalizeMetaCandidate(fallbackTitle) ??
+    DEFAULT_SITE_TITLE
+  );
 }
 
 export function resolveMetaDescription(...candidates: Array<string | null | undefined>) {
@@ -167,4 +181,99 @@ export function resolveProductMetaDescription(
 
 export function stringifyJsonLd(value: unknown) {
   return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
+/**
+ * Appends the site title to a page title for social cards, e.g.
+ * `composeTitleWithSite('Home', 'NextBlock™ CMS') === 'Home | NextBlock™ CMS'`.
+ * Unlike Next.js' `title.template` (which only affects the `<title>` tag), this
+ * lets us produce a complete `og:title` / `twitter:title`.
+ */
+export function composeTitleWithSite(
+  pageTitle: string | null | undefined,
+  siteTitle: string | null | undefined
+): string {
+  const cleanTitle = (pageTitle ?? '').trim();
+  const cleanSite = (siteTitle ?? '').trim();
+
+  if (!cleanSite) return cleanTitle;
+  if (!cleanTitle) return cleanSite;
+
+  const suffix = ` | ${cleanSite}`;
+  return cleanTitle === cleanSite || cleanTitle.endsWith(suffix)
+    ? cleanTitle
+    : `${cleanTitle}${suffix}`;
+}
+
+/** Maps a language code (e.g. `fr`, `en-US`) to an Open Graph locale (`fr_FR`). */
+export function toOpenGraphLocale(languageCode?: string | null): string {
+  const code = (languageCode ?? '').toLowerCase().split('-')[0];
+  const map: Record<string, string> = {
+    en: 'en_US',
+    fr: 'fr_FR',
+    es: 'es_ES',
+    de: 'de_DE',
+    pt: 'pt_PT',
+    it: 'it_IT',
+    nl: 'nl_NL',
+  };
+  return map[code] ?? 'en_US';
+}
+
+export interface SocialMetadataInput {
+  /** Bare page title (without the site-title suffix). */
+  title: string;
+  description: string;
+  /** Canonical URL of the page (absolute, or path resolved via metadataBase). */
+  url: string;
+  siteTitle: string;
+  /** Resolved feature-image URL; falls back to the default OG image when empty. */
+  imageUrl?: string | null;
+  type?: 'website' | 'article';
+  publishedTime?: string | null;
+  locale?: string | null;
+}
+
+/**
+ * Builds the `openGraph` + `twitter` metadata for a public page so that every
+ * page emits a complete, suffixed social title and always has an OG image
+ * (the feature image when present, otherwise the bundled default).
+ */
+export function buildSocialMetadata(
+  input: SocialMetadataInput
+): Pick<Metadata, 'openGraph' | 'twitter'> {
+  const usingDefaultImage = !input.imageUrl;
+  const imageUrl = input.imageUrl || DEFAULT_OG_IMAGE;
+  const socialTitle = composeTitleWithSite(input.title, input.siteTitle);
+  const image = usingDefaultImage
+    ? { url: imageUrl, width: 1200, height: 630, alt: socialTitle }
+    : { url: imageUrl, alt: socialTitle };
+
+  const openGraphBase = {
+    title: socialTitle,
+    description: input.description,
+    url: input.url,
+    siteName: input.siteTitle,
+    images: [image],
+    ...(input.locale ? { locale: input.locale } : {}),
+  };
+
+  const openGraph =
+    input.type === 'article'
+      ? {
+          ...openGraphBase,
+          type: 'article' as const,
+          ...(input.publishedTime ? { publishedTime: input.publishedTime } : {}),
+        }
+      : { ...openGraphBase, type: 'website' as const };
+
+  return {
+    openGraph,
+    twitter: {
+      card: 'summary_large_image',
+      title: socialTitle,
+      description: input.description,
+      images: [imageUrl],
+    },
+  };
 }

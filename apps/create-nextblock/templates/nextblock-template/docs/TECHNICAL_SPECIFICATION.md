@@ -260,11 +260,11 @@ The following architectural invariants are enforced at workspace level and must 
 
 #### 1.3.1.1 Must-Have Capabilities — Content Management
 
-**Block Registry** — The application exposes fifteen block types, registered in `apps/nextblock/lib/blocks/blockRegistry.ts`, spanning content and commerce domains.
+**Block Registry** — The application exposes fourteen built-in block types, registered in `apps/nextblock/lib/blocks/blockRegistry.ts`, spanning content and commerce domains. Editors can additionally define data-driven custom block types at runtime (`custom_block_definitions`); see the custom blocks reference.
 
 | Domain | Block Types |
 |:--|:--|
-| Content | `text`, `heading`, `image`, `button`, `video_embed`, `section`, `hero`, `form`, `testimonial`, `posts_grid` |
+| Content | `text`, `heading`, `image`, `button`, `video_embed`, `section`, `form`, `testimonial`, `posts_grid` |
 | Commerce | `product_grid`, `featured_product`, `cart`, `checkout`, `product_details` |
 
 **Editor Capabilities** — The `@nextblock-cms/editor` library (version `0.2.24`) exports `Editor`, `NotionEditor`, `EditorToolbar`, `EditorBubbleMenu`, `EditorFloatingMenu`, `EnhancedFloatingMenu`, `SlashCommandList`, `DragHandle`, `HtmlContent`, and `editorExtensions`. Feature set includes Tiptap StarterKit rich text, syntax-highlighted code blocks, tables, task lists, slash commands, drag handles, image handling, character counting, typography, mathematics, emoji, mentions, inline alert and call-to-action widgets, and custom HTML-preserving extensions for `div`, `style`, `script`, `svg`, `span`, and catch-all attribute preservation. A media-picker bridge is exposed via `setOpenImagePicker()`.
@@ -538,7 +538,7 @@ The public content delivery feature provides locale-aware rendering of marketing
 
 **Description**
 
-The block-based page builder is implemented as a registry in `apps/nextblock/lib/blocks/blockRegistry.ts` that currently exposes fifteen block types. Content blocks comprise `text`, `heading`, `image`, `button`, `posts_grid`, `video_embed`, `section`, `hero`, `form`, and `testimonial`; commerce blocks comprise `product_grid`, `featured_product`, `cart`, `checkout`, and `product_details`. Each registration consists of a Zod schema, initial content generator, renderer component, and editor component. Section and hero blocks support nested `column_blocks`, container type variants (`full-width`, `container`, `container-sm`, `container-lg`, `container-xl`), responsive column counts (mobile 1–2, tablet 1–3, desktop 1–4), gap and padding controls, and background modes (gradient, solid, image).
+The block-based page builder is implemented as a registry in `apps/nextblock/lib/blocks/blockRegistry.ts` that currently exposes fourteen built-in block types. Content blocks comprise `text`, `heading`, `image`, `button`, `posts_grid`, `video_embed`, `section`, `form`, and `testimonial`; commerce blocks comprise `product_grid`, `featured_product`, `cart`, `checkout`, and `product_details`. Each registration consists of a Zod schema, initial content generator, renderer component, and editor component. Section blocks support nested `column_blocks`, container type variants (`full-width`, `container`, `container-sm`, `container-lg`, `container-xl`), responsive column counts (mobile 1–2, tablet 1–3, desktop 1–4), gap and padding controls, and background modes (gradient, solid, image); legacy `hero` blocks were folded into `section` (carrying an `is_hero` flag) by migration `00000000000021`. Beyond these built-ins, editors can define data-driven custom block types at runtime (`custom_block_definitions`), rendered by a dynamic layout engine.
 
 **Business Value:** Provides a WordPress-Gutenberg-comparable authoring surface while retaining React/TypeScript first-class typing. **User Benefits:** Authors compose layouts without HTML knowledge; schema validation prevents malformed content. **Technical Context:** Registry exposes helper functions `getBlockDefinition()`, `getInitialContent()`, `getBlockSchema()`, `validateBlockContent()`, `generateDefaultContent()`, and `isValidBlockType()`.
 
@@ -546,7 +546,7 @@ The block-based page builder is implemented as a registry in `apps/nextblock/lib
 
 | Dependency Type | Details |
 |:--|:--|
-| Prerequisite Features | F-005 (Editor — used by `text` and `product_details`), F-006 (Media — used by `image`, `hero`, `section`), F-007 (Translations) |
+| Prerequisite Features | F-005 (Editor — used by `text` and `product_details`), F-006 (Media — used by `image`, `section`), F-007 (Translations) |
 | System Dependencies | `blocks` database table (from migration `00000000000002`) |
 | External Dependencies | `zod` 4.3.6 for schema validation |
 | Integration Requirements | Commerce blocks (`product_grid`, `featured_product`, `cart`, `checkout`, `product_details`) require `@nextblock-cms/ecommerce` via F-022 |
@@ -1283,9 +1283,9 @@ This subsection provides the detailed, testable requirements that operationalize
 | F-001-RQ-002 | Image pipeline MUST emit AVIF + WebP with the 11 device sizes and 9 image sizes declared in `next.config.js` | Must-Have | Medium |
 | F-001-RQ-003 | Public routes MUST respect `Cache-Control: public, max-age=0, must-revalidate` for HTML (bfcache compatibility) | Must-Have | Low |
 | F-001-RQ-004 | Sitemap and robots.txt MUST enumerate all publishable pages and articles | Must-Have | Low |
-| F-004-RQ-001 | Block registry MUST expose 15 block types with Zod schemas, renderers, and editors | Must-Have | High |
+| F-004-RQ-001 | Block registry MUST expose 14 built-in block types with Zod schemas, renderers, and editors | Must-Have | High |
 | F-004-RQ-002 | Helper functions `getBlockDefinition`, `getBlockSchema`, `validateBlockContent`, `generateDefaultContent`, `isValidBlockType` MUST be exported | Must-Have | Low |
-| F-004-RQ-003 | Section and hero blocks MUST support nested columns with responsive breakpoints (mobile 1–2, tablet 1–3, desktop 1–4) | Must-Have | Medium |
+| F-004-RQ-003 | Section blocks MUST support nested columns with responsive breakpoints (mobile 1–2, tablet 1–3, desktop 1–4) | Must-Have | Medium |
 | F-005-RQ-001 | Editor library MUST export `Editor`, `NotionEditor`, `EditorToolbar`, `EditorBubbleMenu`, `EditorFloatingMenu`, `EnhancedFloatingMenu`, `SlashCommandList`, `DragHandle`, `HtmlContent`, `editorExtensions` | Must-Have | Medium |
 | F-005-RQ-002 | Editor MUST preserve custom HTML constructs (`div`, `style`, `script`, `svg`, `span`) and unrecognized attributes | Must-Have | High |
 | F-006-RQ-001 | Media uploads MUST record metadata (`object_key`, `file_type`, `size_bytes`, `width`, `height`, `blur_data_url`, `variants`) in the `media` table | Must-Have | Medium |
@@ -2229,6 +2229,7 @@ Supabase PostgreSQL is the authoritative data store for all structured data in t
 | `00000000000008_seed_platform_defaults.sql` | Default settings, USD currency, English language |
 | `00000000000009` — `00000000000010` | Additional platform seeds |
 | `00000000000011` through `00000000000016` | Cortex AI settings, coupons, audit, drafts, and page feature images |
+| `00000000000017` through `00000000000024` | Product blocks, bot-protection settings, product categories + translations, hero→section migration, Cortex AI guide seed, custom block definitions, and cart sessions |
 
 Per the maintenance constraint in Section 2.4.5, these numbered files must remain applied in order; out-of-sequence application will violate referential integrity. Live/shared database changes must be appended as new non-destructive migrations rather than by rewriting existing files.
 
@@ -2818,7 +2819,7 @@ flowchart TB
     LoadContent --> HydrateBlocks[Hydrate Block Tree<br/>from blocks Table]
     HydrateBlocks --> AuthoringLoop{Author<br/>Action}
     
-    AuthoringLoop -->|Add Block| Registry[Lookup blockRegistry<br/>15 block types]
+    AuthoringLoop -->|Add Block| Registry[Lookup blockRegistry<br/>14 built-in block types]
     Registry --> InitContent[generateDefaultContent<br/>from Zod schema]
     InitContent --> RenderEditor[Render EditorComponent]
     
@@ -9797,14 +9798,14 @@ The published `@nextblock-cms/sdk` library (version `0.2.9`) defines the typed e
 
 ### 7.5.2 Built-in Block Registry (F-004)
 
-The in-app registry at `apps/nextblock/lib/blocks/blockRegistry.ts` currently exposes **fifteen block types**:
+The in-app registry at `apps/nextblock/lib/blocks/blockRegistry.ts` currently exposes **fourteen built-in block types** (editors can also define data-driven custom blocks at runtime):
 
 | Family | Block Types |
 |:--|:--|
-| Content | `text`, `heading`, `image`, `button`, `posts_grid`, `video_embed`, `section`, `hero`, `form`, `testimonial` |
+| Content | `text`, `heading`, `image`, `button`, `posts_grid`, `video_embed`, `section`, `form`, `testimonial` |
 | Commerce | `product_grid`, `featured_product`, `cart`, `checkout`, `product_details` |
 
-Each registration consists of a Zod schema, initial content generator, renderer component, and editor component. Section and hero blocks additionally support:
+Each registration consists of a Zod schema, initial content generator, renderer component, and editor component. Section blocks additionally support:
 - **Nested `column_blocks`** for multi-column composition
 - **Container variants** — `full-width`, `container`, `container-sm`, `container-lg`, `container-xl`
 - **Responsive column counts** — mobile 1–2, tablet 1–3, desktop 1–4
@@ -9960,7 +9961,7 @@ flowchart TD
     Sortable --> Item[SortableBlockItem<br/>per-block wrapper]
     Item --> Editable[EditableBlock<br/>preview/edit/delete controls]
     Editable --> Preview[Preview Mode]
-    Editable --> InlineCfg[Inline section/hero config]
+    Editable --> InlineCfg[Inline section config]
     Editable --> Modal[BlockEditorModal<br/>draft staging + unsaved-change detection]
     Modal --> LazyEditor[BlockEditor by type<br/>next/dynamic]
     
@@ -11716,7 +11717,7 @@ Cross-reference: Section 6.2 (Database Design), Section 4.11 (Validation Rules a
 
 ### 9.1.3 Block Registry Reference
 
-The authoring surface exposes fifteen block types registered in `apps/nextblock/lib/blocks/blockRegistry.ts`. The block content schema is validated per block type using Zod at the client layer, and blocks are composed by the Tiptap editor surface into page and post content.
+The authoring surface exposes fourteen built-in block types registered in `apps/nextblock/lib/blocks/blockRegistry.ts`, plus data-driven custom blocks defined at runtime. The block content schema is validated per block type using Zod at the client layer, and blocks are composed by the Tiptap editor surface into page and post content.
 
 | Block Category | Block Types |
 |:--|:--|
@@ -11989,7 +11990,7 @@ The glossary defines domain-specific, product-specific, and platform-specific te
 
 **Best-Effort Graceful Degrade** — A resilience category in which non-critical integration failures emit `console.warn` or `console.error` but allow the primary operation to continue. Examples include Stripe session rehydration and revalidation logging. See Section 5.4.3.
 
-**Block (Block Type)** — A composable content unit in the authoring surface. NextBlock registers fifteen block types (e.g., `heading`, `paragraph`, `image`, `gallery`, `button`, `embed`, `form`). See Section 9.1.3.
+**Block (Block Type)** — A composable content unit in the authoring surface. NextBlock registers fourteen built-in block types (e.g., `heading`, `image`, `button`, `posts_grid`, `section`, `form`) and also supports data-driven custom blocks. See Section 9.1.3.
 
 **Block Registry** — The compile-time registry defined at `apps/nextblock/lib/blocks/blockRegistry.ts` that maps block type identifiers to render components and Zod content schemas.
 
