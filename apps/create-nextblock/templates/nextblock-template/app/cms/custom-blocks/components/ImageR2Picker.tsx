@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import Image from 'next/image';
 import { Image as ImageIcon, Loader2, UploadCloud, X } from 'lucide-react';
 import { Button, Input, Label } from '@nextblock-cms/ui';
 
@@ -154,11 +153,12 @@ export function ImageR2Picker({
       <div className="flex items-center gap-3">
         <div className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
           {value?.url ? (
-            <Image
+            // Plain img (not next/image): the source can be any R2/external host
+            // and must never crash the editor on an unconfigured next/image host.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
               alt={value.alt || value.file_name || 'Uploaded image'}
-              className="object-cover"
-              fill
-              sizes="80px"
+              className="h-full w-full object-cover"
               src={value.url}
             />
           ) : (

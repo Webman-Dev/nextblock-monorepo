@@ -119,11 +119,45 @@ function stringifyDisplayValue(value: unknown): string {
   return String(value);
 }
 
-function getResolvedRelationLabel(field: CustomBlockField, data: DynamicLayoutData) {
+// Monetary columns are stored as integer minor units (cents) in the database but
+// must be shown to visitors as currency (e.g. 25000 -> $250.00).
+function isPriceColumn(column: string) {
+  return column === 'price' || column === 'prices' || column === 'price_adjustment' || /_price$/.test(column) || /_prices$/.test(column);
+}
+
+function formatCentsAsCurrency(cents: number) {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function formatRelationColumnValue(column: string, value: unknown): string {
+  if (isPriceColumn(column)) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return formatCentsAsCurrency(value);
+    }
+    // Multi-currency maps like { "USD": 25000 } store minor units too.
+    if (isRecord(value)) {
+      const amounts = Object.values(value).filter(
+        (entry): entry is number => typeof entry === 'number' && Number.isFinite(entry)
+      );
+      if (amounts.length > 0) {
+        return formatCentsAsCurrency(amounts[0]);
+      }
+    }
+  }
+
+  return stringifyDisplayValue(value);
+}
+
+function getResolvedRelationLabel(
+  field: CustomBlockField,
+  data: DynamicLayoutData,
+  column?: string
+) {
   if (field.type !== 'db_relation') {
     return '';
   }
 
+  const targetColumn = column ?? field.display_column;
   const relation = data.resolved_relations?.[field.key];
   const entries = Array.isArray(relation) ? relation : relation ? [relation] : [];
   const labels = entries
@@ -134,9 +168,9 @@ function getResolvedRelationLabel(field: CustomBlockField, data: DynamicLayoutDa
 
       const relationEntry = entry as ResolvedRelationEntry;
       if (relationEntry.record) {
-        const preferred = relationEntry.record[field.display_column];
+        const preferred = relationEntry.record[targetColumn];
         if (preferred !== null && preferred !== undefined && preferred !== '') {
-          return String(preferred);
+          return formatRelationColumnValue(targetColumn, preferred);
         }
 
         return stringifyDisplayValue(relationEntry.record);
@@ -304,9 +338,13 @@ function renderFieldNode(
     return <WarningTag message={`Unknown field "${node.field_key}"`} />;
   }
 
+  // A field_render node bound to a db_relation may pick a specific column of the
+  // resolved record (e.g. show a product's price or title), overriding the
+  // field's default display_column.
+  const relationColumn = typeof node.column === 'string' && node.column ? node.column : undefined;
   let value =
     field.type === 'db_relation'
-      ? getResolvedRelationLabel(field, context.data) || context.data[field.key]
+      ? getResolvedRelationLabel(field, context.data, relationColumn) || context.data[field.key]
       : context.data[field.key];
   const className = typeof node.className === 'string' ? node.className : undefined;
 
@@ -317,7 +355,7 @@ function renderFieldNode(
     let imageRef: string | null = null;
 
     if (isRecord(entry) && isRecord(entry.record)) {
-      imageRef = extractRelationImageRef(entry.record, field.display_column);
+      imageRef = extractRelationImageRef(entry.record, relationColumn ?? field.display_column);
     } else if (looksLikeImageRef(value)) {
       imageRef = value;
     }

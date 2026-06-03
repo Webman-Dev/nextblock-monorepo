@@ -70,6 +70,17 @@ export default function CustomBlocksListPage() {
 
   useEffect(() => {
     fetchBlocks();
+
+    // Refetch when Cortex AI (or another surface) reports a custom block change,
+    // and when the tab regains focus, so the library stays in sync without a reload.
+    const handleDataChanged = () => fetchBlocks();
+    window.addEventListener("nextblock:cortex-data-changed", handleDataChanged);
+    window.addEventListener("focus", handleDataChanged);
+
+    return () => {
+      window.removeEventListener("nextblock:cortex-data-changed", handleDataChanged);
+      window.removeEventListener("focus", handleDataChanged);
+    };
   }, []);
 
   const handleDuplicate = async (id: string, name: string) => {

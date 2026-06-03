@@ -38,6 +38,7 @@ import {
   executeDatabaseActionPlan,
   executeDatabaseMutation,
 } from '../../../../lib/ai-global-agent-db-tools';
+import { executeDeleteCustomBlock } from '../../../../lib/ai-global-agent-custom-block-tools';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +57,7 @@ const confirmedToolCallSchema = z.strictObject({
     'create_cms_post',
     'create_cms_product',
     'delete_cms_item',
+    'delete_custom_block',
     'execute_database_action_plan',
     'execute_database_mutation',
     'execute_cms_action_plan',
@@ -91,6 +93,8 @@ const GLOBAL_AGENT_SYSTEM_PROMPT = [
   'For requests that ask to rename or change one existing navigation link, use update_navigation_bar with mode "update" and identify the existing item with match.label or match.url. Never use mode "replace" for a one-link rename.',
   'Use mode "replace" only when the user explicitly asks to rebuild or replace the entire navigation menu and you provide the full menu.',
   'Use update_footer for public footer links or copyright settings.',
+  'For custom/reusable block types (a "custom block", "block type", "widget", or a request to design a new kind of block such as a product card, testimonial, or feature card), use the global custom block tools, which do NOT need an open page/post/product: create_custom_block to build a new block from a description, update_custom_block to edit one by slug, delete_custom_block to remove one, and list_custom_blocks to find a slug. Never tell the user to open a page first for these; never use insert_content_block or page-aware tools to define a new block type. create_custom_block and update_custom_block run immediately; after success, tell the user the block was added to their Custom Blocks library and can now be dropped onto any page.',
+  'Distinguish adding content to the current page (page-aware tools, needs page context) from defining a reusable block type (custom block tools, global, no page context).',
   'When editing a CMS page, post, product, or block, use page-aware tools only. Use read_current_cms_item before updating content unless the user provided exact field/block data.',
   'Use update_current_cms_fields for current page/post/product metadata and product description_json. Use update_content_block for top-level page/post blocks. Use update_section_column_block for nested blocks inside section or hero blocks.',
   'When the user asks to add a visible title, heading, intro, description, or copy above/below a form or other block, use insert_content_block with a text or heading block. Do not treat visible page copy as meta_title, meta_description, or SEO metadata unless the user explicitly says SEO/meta.',
@@ -507,6 +511,8 @@ async function executeConfirmedToolCall(params: {
       return executeCreateCmsProduct(params.input as any, params.context);
     case 'delete_cms_item':
       return executeDeleteCmsItem(params.input as any, params.context);
+    case 'delete_custom_block':
+      return executeDeleteCustomBlock(params.input as any, params.context);
     case 'execute_database_action_plan':
       return executeDatabaseActionPlan(params.input as any, params.context);
     case 'execute_database_mutation':
@@ -722,6 +728,8 @@ export async function POST(request: Request) {
     const modelIds = routingPolicy.modelIds;
     const tools = createCortexGlobalAgentTools({
       actorUserId: adminAccess.userId,
+      cortexAiApiKey: sandboxKey,
+      cortexAiModelSelection: sandboxKey && modelSelection ? modelSelection : undefined,
       latestUserMessage,
       pageContext,
       supabase: getServiceRoleSupabaseClient(),

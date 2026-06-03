@@ -98,7 +98,9 @@ const MUTATING_TOOL_NAMES = new Set([
   "create_cms_page",
   "create_cms_post",
   "create_cms_product",
+  "create_custom_block",
   "delete_cms_item",
+  "delete_custom_block",
   "execute_database_action_plan",
   "execute_database_mutation",
   "execute_cms_action_plan",
@@ -106,10 +108,15 @@ const MUTATING_TOOL_NAMES = new Set([
   "update_cms_item_field",
   "update_current_cms_fields",
   "update_content_block",
+  "update_custom_block",
   "update_footer",
   "update_navigation_bar",
   "update_section_column_block",
 ]);
+
+// Window event fired after a Cortex mutation so client-rendered lists that fetch
+// their own data (e.g. the custom blocks library) can refresh without a full reload.
+export const CORTEX_DATA_CHANGED_EVENT = "nextblock:cortex-data-changed";
 
 const TOOL_COPY: Record<string, { done: string; running: string }> = {
   search_documentation: {
@@ -127,6 +134,22 @@ const TOOL_COPY: Record<string, { done: string; running: string }> = {
   create_cms_product: {
     done: "Product created",
     running: "Preparing product...",
+  },
+  create_custom_block: {
+    done: "Custom block created",
+    running: "Designing custom block...",
+  },
+  update_custom_block: {
+    done: "Custom block updated",
+    running: "Updating custom block...",
+  },
+  delete_custom_block: {
+    done: "Custom block deleted",
+    running: "Preparing delete...",
+  },
+  list_custom_blocks: {
+    done: "Custom blocks listed",
+    running: "Listing custom blocks...",
   },
   execute_cms_action_plan: {
     done: "CMS plan completed",
@@ -1260,6 +1283,11 @@ export function CortexGlobalAgentChat() {
       );
     } finally {
       window.clearTimeout(timeoutId);
+      if (shouldRefreshAfterMutation && typeof window !== "undefined") {
+        // Let client-rendered lists (e.g. the custom blocks library) refetch even
+        // though router.refresh() does not re-run their mount-time data fetch.
+        window.dispatchEvent(new Event(CORTEX_DATA_CHANGED_EVENT));
+      }
       if (navigationPath) {
         if (shouldRefreshAfterMutation) {
           pendingRefreshPathRef.current = navigationPath;

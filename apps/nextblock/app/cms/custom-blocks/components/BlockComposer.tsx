@@ -159,10 +159,11 @@ export function BlockComposer({ initialData, mode }: BlockComposerProps) {
         if (f.type === "rich-text") freshMock[f.key] = `<p>Mock <strong>Rich Text</strong> content for ${f.key}</p>`;
         if (f.type === "image_r2") {
           freshMock[f.key] = {
-            url: "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=300&h=300&fit=crop",
-            alt: "Mock placeholder image",
-            width: 300,
-            height: 300,
+            url: "/images/commerce-square.webp",
+            object_key: "images/commerce-square.webp",
+            alt: "Sample product image",
+            width: 400,
+            height: 400,
           };
         }
         if (f.type === "db_relation") {
@@ -1049,33 +1050,34 @@ export function BlockComposer({ initialData, mode }: BlockComposerProps) {
                     </Button>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-2.5">
                     {fields.map((field, idx) => (
                       <div
                         key={idx}
-                        className="p-4 border rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 space-y-4"
+                        className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/40 shadow-sm"
                       >
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-                          <div className="md:col-span-4 space-y-1.5">
-                            <Label className="text-xs font-semibold text-muted-foreground">Property Key</Label>
+                        {/* Identity row */}
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end p-3">
+                          <div className="md:col-span-4 space-y-1">
+                            <Label className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">Property Key</Label>
                             <Input
                               value={field.key}
                               placeholder="e.g. quote"
                               onChange={(e) => updateField(idx, { key: e.target.value })}
-                              className="h-9 font-mono text-xs"
+                              className="h-8 font-mono text-xs"
                             />
                           </div>
-                          <div className="md:col-span-4 space-y-1.5">
-                            <Label className="text-xs font-semibold text-muted-foreground">Label</Label>
+                          <div className="md:col-span-4 space-y-1">
+                            <Label className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">Label</Label>
                             <Input
                               value={field.label}
                               placeholder="e.g. Author Name"
                               onChange={(e) => updateField(idx, { label: e.target.value })}
-                              className="h-9 text-xs"
+                              className="h-8 text-xs"
                             />
                           </div>
-                          <div className="md:col-span-3 space-y-1.5">
-                            <Label className="text-xs font-semibold text-muted-foreground">Type</Label>
+                          <div className="md:col-span-3 space-y-1">
+                            <Label className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">Type</Label>
                             <select
                               value={field.type}
                               onChange={(e) =>
@@ -1083,7 +1085,7 @@ export function BlockComposer({ initialData, mode }: BlockComposerProps) {
                                   type: e.target.value as "text" | "rich-text" | "image_r2" | "db_relation",
                                 })
                               }
-                              className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 h-9"
+                              className="w-full rounded-md border border-input bg-background px-2 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 h-8"
                             >
                               <option value="text">Text (single-line)</option>
                               <option value="rich-text">Rich-Text (HTML)</option>
@@ -1091,94 +1093,86 @@ export function BlockComposer({ initialData, mode }: BlockComposerProps) {
                               <option value="db_relation">Live DB Relation Link</option>
                             </select>
                           </div>
-                          <div className="md:col-span-1 flex justify-end pt-4 md:pt-0">
+                          <div className="md:col-span-1 flex justify-end">
                             <Button
                               variant="ghost"
                               size="icon"
                               onClick={() => deleteField(idx)}
-                              className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              className="h-8 w-8 text-slate-400 hover:text-destructive hover:bg-destructive/10"
+                              title="Remove field"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
 
-                        {/* Extra configurations depending on field type */}
-                        {field.type === "db_relation" && (
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-3 bg-white dark:bg-slate-900 border rounded-lg border-slate-100 dark:border-slate-800 text-xs">
-                            <div className="space-y-1">
-                              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Target Table</Label>
-                              <select
-                                value={field.table}
-                                onChange={(e) => {
-                                  const table = e.target.value;
-                                  const spec = relationTables.find((t) => t.table === table);
-                                  updateField(idx, {
-                                    table,
-                                    display_column: spec?.displayColumn || "title",
-                                    value_column: spec?.valueColumn || "id",
-                                  });
-                                }}
-                                className="w-full rounded-md border px-2 py-1 h-8 bg-transparent"
-                              >
-                                {relationTables.map((t) => (
-                                  <option key={t.table} value={t.table}>
-                                    {t.label} ({t.table})
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Display Column</Label>
-                              {(() => {
-                                const spec = relationTables.find((t) => t.table === field.table);
-                                const allowedColumns = spec?.selectColumns || ["title", "name", "full_name", "file_name", "id", "slug", "avatar_url", "object_key", "feature_image_id"];
-                                return (
-                                  <select
-                                    value={field.display_column}
-                                    onChange={(e) => updateField(idx, { display_column: e.target.value })}
-                                    className="w-full rounded-md border px-2 py-1 h-8 bg-transparent text-xs"
-                                  >
-                                    {allowedColumns.map((col) => (
-                                      <option key={col} value={col}>
-                                        {col}
-                                      </option>
-                                    ))}
-                                  </select>
-                                );
-                              })()}
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Value Column</Label>
-                              <Input
-                                value={field.value_column}
-                                onChange={(e) => updateField(idx, { value_column: e.target.value })}
-                                className="h-8 text-xs font-mono"
-                                disabled
-                              />
-                            </div>
-                            <div className="flex items-center space-x-2 pt-4">
+                        {/* Config + flags strip: context on the left, toggles on the right */}
+                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/70 dark:bg-slate-950/30 px-3 py-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {field.type === "db_relation" ? (
+                              <>
+                                <Label className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground shrink-0">
+                                  Table
+                                </Label>
+                                <select
+                                  value={field.table}
+                                  onChange={(e) => {
+                                    const table = e.target.value;
+                                    const spec = relationTables.find((t) => t.table === table);
+                                    updateField(idx, {
+                                      table,
+                                      display_column: spec?.displayColumn || "title",
+                                      value_column: spec?.valueColumn || "id",
+                                    });
+                                  }}
+                                  className="h-7 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                >
+                                  {relationTables.map((t) => (
+                                    <option key={t.table} value={t.table}>
+                                      {t.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <span className="hidden lg:inline truncate text-[11px] text-muted-foreground">
+                                  · choose the column in the Layout Tree
+                                </span>
+                              </>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                {getFieldIcon(field.type)}
+                                {field.type === "text"
+                                  ? "Single-line text"
+                                  : field.type === "rich-text"
+                                    ? "Formatted HTML content"
+                                    : "Direct image upload (Cloudflare R2)"}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-4 shrink-0">
+                            {field.type === "db_relation" && (
+                              <div className="flex items-center gap-1.5">
+                                <Checkbox
+                                  id={`multiple-${idx}`}
+                                  checked={field.multiple === true}
+                                  onCheckedChange={(checked) => updateField(idx, { multiple: checked === true })}
+                                />
+                                <Label htmlFor={`multiple-${idx}`} className="text-xs font-medium cursor-pointer">
+                                  Link multiple
+                                </Label>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1.5">
                               <Checkbox
-                                id={`multiple-${idx}`}
-                                checked={field.multiple === true}
-                                onCheckedChange={(checked) => updateField(idx, { multiple: checked === true })}
+                                id={`required-${idx}`}
+                                checked={field.required === true}
+                                onCheckedChange={(checked) => updateField(idx, { required: checked === true })}
                               />
-                              <Label htmlFor={`multiple-${idx}`} className="text-xs font-medium cursor-pointer">
-                                Link Multiple Rows
+                              <Label htmlFor={`required-${idx}`} className="text-xs font-medium cursor-pointer">
+                                Required
                               </Label>
                             </div>
                           </div>
-                        )}
-
-                        <div className="flex items-center space-x-2 text-xs">
-                          <Checkbox
-                            id={`required-${idx}`}
-                            checked={field.required === true}
-                            onCheckedChange={(checked) => updateField(idx, { required: checked === true })}
-                          />
-                          <Label htmlFor={`required-${idx}`} className="font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
-                            Required Field
-                          </Label>
                         </div>
                       </div>
                     ))}
@@ -1273,7 +1267,10 @@ export function BlockComposer({ initialData, mode }: BlockComposerProps) {
                               >
                                 <option value="" disabled>Select property key...</option>
                                 {fields.map((f) => {
-                                  const usedElsewhere = fieldKeysUsedElsewhere.has(f.key);
+                                  // Relation fields may be reused by multiple nodes (e.g. image, title,
+                                  // price); only single-value fields are limited to one placement.
+                                  const usedElsewhere =
+                                    fieldKeysUsedElsewhere.has(f.key) && f.type !== "db_relation";
                                   return (
                                     <option key={f.key} value={f.key} disabled={usedElsewhere}>
                                       {f.label} ({f.key}){usedElsewhere ? " — already used" : ""}
@@ -1282,6 +1279,32 @@ export function BlockComposer({ initialData, mode }: BlockComposerProps) {
                                 })}
                               </select>
                             </div>
+                            {(() => {
+                              const mappedField = fields.find((f) => f.key === selectedNode.field_key);
+                              if (mappedField?.type !== "db_relation") return null;
+                              const spec = relationTables.find((t) => t.table === mappedField.table);
+                              const columns = spec?.selectColumns || [];
+                              return (
+                                <div className="space-y-1">
+                                  <Label className="font-semibold">Relation Column</Label>
+                                  <select
+                                    value={selectedNode.column || ""}
+                                    onChange={(e) => handleUpdateSelectedNode({ column: e.target.value || undefined })}
+                                    className="w-full rounded-md border h-8 px-2 bg-transparent text-xs"
+                                  >
+                                    <option value="">Default ({mappedField.display_column})</option>
+                                    {columns.map((col) => (
+                                      <option key={col} value={col}>
+                                        {col}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Which column of the related record to show. Render as &lt;img&gt; for its image; price columns display as currency.
+                                  </p>
+                                </div>
+                              );
+                            })()}
                             <div className="space-y-1">
                               <Label className="font-semibold">Render Tag Element</Label>
                               <select

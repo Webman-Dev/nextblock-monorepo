@@ -17,7 +17,6 @@ import {
   buildCortexWidgetBuilderPrompt,
   buildCortexWidgetBuilderSystemPrompt,
   cortexWidgetBuildRequestSchema,
-  cortexWidgetDefinitionSchema,
   validateCortexWidgetDefinitionOutput,
   type CortexWidgetDefinition,
   type CortexWidgetBuildRequest,
@@ -87,8 +86,15 @@ export async function generateCortexWidgetDefinition(
             abortSignal: abortController.signal,
             maxOutputTokens: 7000,
             maxRetries: 0,
+            // Use JSON mode WITHOUT a provider-side schema. The widget definition
+            // is a recursive, discriminated-union structure; sending it as a
+            // response_format json_schema is rejected by Google Gemini
+            // ("reference to undefined schema", recursion not supported) and by
+            // OpenAI ("'oneOf' is not permitted"). We instead describe the shape
+            // in the prompt and validate the returned JSON with our own Zod
+            // schema below, which works across every OpenRouter model.
+            output: 'no-schema',
             prompt: buildCortexWidgetBuilderPrompt(request),
-            schema: cortexWidgetDefinitionSchema,
             system: buildCortexWidgetBuilderSystemPrompt(),
             temperature: 0.15,
           } as Record<string, unknown>,

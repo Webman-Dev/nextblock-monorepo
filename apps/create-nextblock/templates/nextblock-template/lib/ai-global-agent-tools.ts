@@ -1,5 +1,6 @@
 import { tool } from 'ai';
 import { createCortexDatabaseAgentTools } from './ai-global-agent-db-tools';
+import { createCortexCustomBlockTools } from './ai-global-agent-custom-block-tools';
 import { z } from './zod-config';
 
 export const availableCortexAiBlockTypes = [
@@ -34,6 +35,8 @@ type CmsContentType = 'page' | 'post' | 'product';
 
 type ToolExecutionContext = {
   actorUserId?: string | null;
+  cortexAiApiKey?: string | null;
+  cortexAiModelSelection?: unknown;
   latestUserMessage?: string | null;
   pageContext?: CortexAiPageContext | null;
   revalidatePath?: RevalidateFn;
@@ -4687,6 +4690,7 @@ export async function executeCmsActionPlan(
 export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
   return {
     ...createCortexDatabaseAgentTools(context),
+    ...createCortexCustomBlockTools(context),
     fetch_ecommerce_stats: tool({
       description:
         'Fetch quantitative ecommerce statistics and reports from the database. Use this to answer questions about revenue, order counts, order status counts such as pending or trial, and top-selling products over a time range. This tool is read-only and does not require confirmation.',

@@ -120,10 +120,16 @@ export type CustomBlockLayoutNode =
   | {
       as?: z.infer<typeof htmlElementSchema>;
       className?: string;
+      column?: string;
       emptyFallback?: string;
       field_key: string;
       type: 'field_render';
     };
+
+// Optional column override for a field_render node bound to a db_relation field:
+// selects which column of the resolved related record to display, so a single
+// relation field can surface several columns (e.g. a product's title and price).
+const relationColumnSchema = z.string().trim().min(1).max(80);
 
 export const customBlockLayoutNodeSchema: z.ZodType<CustomBlockLayoutNode> = z.lazy(() =>
   z.discriminatedUnion('type', [
@@ -136,6 +142,7 @@ export const customBlockLayoutNodeSchema: z.ZodType<CustomBlockLayoutNode> = z.l
     z.strictObject({
       as: htmlElementSchema.optional(),
       className: tailwindClassSchema.optional(),
+      column: relationColumnSchema.optional(),
       emptyFallback: z.string().max(300).optional(),
       field_key: customBlockFieldKeySchema,
       type: z.literal('field_render'),
