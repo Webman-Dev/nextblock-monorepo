@@ -56,6 +56,9 @@ export interface CmsBackupBundleV1 {
     posts: BackupPostRecord[];
     products: BackupProductRecord[];
   };
+  // Optional for backward compatibility with bundles exported before the
+  // Blocks Library was added to the content backup.
+  custom_blocks?: BackupCustomBlockRecord[];
 }
 
 export interface BackupBlockRecord {
@@ -63,6 +66,15 @@ export interface BackupBlockRecord {
   block_type: string;
   content: Json;
   order?: number;
+}
+
+export interface BackupCustomBlockRecord {
+  slug: string;
+  name: string;
+  description?: string;
+  fields: Json;
+  layout_schema: Json;
+  is_original?: boolean;
 }
 
 export interface BackupPageRecord {

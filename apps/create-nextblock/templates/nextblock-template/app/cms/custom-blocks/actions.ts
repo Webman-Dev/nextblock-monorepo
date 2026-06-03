@@ -16,6 +16,16 @@ import {
   CUSTOM_BLOCK_DEFINITIONS_CACHE_TAG,
   getCustomBlockDefinitionCacheTag,
 } from "../../../lib/custom-block-definitions";
+import {
+  applyBlocksLibraryImport,
+  dryRunBlocksLibraryImport,
+  exportBlocksLibraryBundle,
+} from "../../../lib/cms-transfer/server";
+import type {
+  CmsImportConflictMode,
+  CmsImportSummary,
+  CmsTransferActionResult,
+} from "../../../lib/cms-transfer/types";
 
 type SupabaseServerClient = ReturnType<typeof createClient>;
 type CustomBlockDefinitionRow = Database["public"]["Tables"]["custom_block_definitions"]["Row"];
@@ -440,5 +450,70 @@ export async function duplicateCustomBlockDefinition(
       error: getSafeErrorMessage(error),
       success: false,
     };
+  }
+}
+
+function blocksLibraryDateStamp() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function blocksLibraryErrorSummary(message: string): CmsImportSummary {
+  return {
+    success: false,
+    totalRows: 0,
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    preview: [],
+    warnings: [],
+    errors: [{ row: 0, type: "error", message }],
+  };
+}
+
+export async function exportBlocksLibraryAction(): Promise<CmsTransferActionResult> {
+  try {
+    return {
+      success: true,
+      fileName: `nextblock-blocks-library-${blocksLibraryDateStamp()}.json`,
+      mimeType: "application/json",
+      content: await exportBlocksLibraryBundle(),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to export blocks library.",
+    };
+  }
+}
+
+export async function dryRunBlocksLibraryImportAction(params: {
+  bundleJson: string;
+  conflictMode: CmsImportConflictMode;
+}): Promise<CmsImportSummary> {
+  try {
+    return await dryRunBlocksLibraryImport({
+      bundleJson: params.bundleJson,
+      options: { conflictMode: params.conflictMode },
+    });
+  } catch (error) {
+    return blocksLibraryErrorSummary(
+      error instanceof Error ? error.message : "Failed to review blocks library import."
+    );
+  }
+}
+
+export async function applyBlocksLibraryImportAction(params: {
+  bundleJson: string;
+  conflictMode: CmsImportConflictMode;
+}): Promise<CmsImportSummary> {
+  try {
+    return await applyBlocksLibraryImport({
+      bundleJson: params.bundleJson,
+      options: { conflictMode: params.conflictMode },
+    });
+  } catch (error) {
+    return blocksLibraryErrorSummary(
+      error instanceof Error ? error.message : "Failed to apply blocks library import."
+    );
   }
 }

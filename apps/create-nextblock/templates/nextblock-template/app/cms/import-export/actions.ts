@@ -156,11 +156,13 @@ export async function dryRunCmsBackupBundleImportAction(params: {
   contentTypes: CmsContentType[];
   conflictMode: CmsImportConflictMode;
   applyMode: CmsImportApplyMode;
+  includeBlocks?: boolean;
 }) {
   try {
     return await dryRunBundleImport({
       bundleJson: params.bundleJson,
       contentTypes: params.contentTypes,
+      includeBlocks: params.includeBlocks,
       options: {
         conflictMode: params.conflictMode,
         applyMode: params.applyMode,
@@ -191,11 +193,13 @@ export async function applyCmsBackupBundleImportAction(params: {
   contentTypes: CmsContentType[];
   conflictMode: CmsImportConflictMode;
   applyMode: CmsImportApplyMode;
+  includeBlocks?: boolean;
 }) {
   try {
     return await applyBundleImport({
       bundleJson: params.bundleJson,
       contentTypes: params.contentTypes,
+      includeBlocks: params.includeBlocks,
       options: {
         conflictMode: params.conflictMode,
         applyMode: params.applyMode,

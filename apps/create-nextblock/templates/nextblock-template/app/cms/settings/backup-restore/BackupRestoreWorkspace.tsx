@@ -317,6 +317,7 @@ export function BackupRestoreWorkspace({
   const [selectedTypes, setSelectedTypes] = useState<CmsContentType[]>(
     isEcommerceActive ? ["pages", "posts", "products"] : ["pages", "posts"]
   );
+  const [includeBlocks, setIncludeBlocks] = useState(true);
   const [conflictMode, setConflictMode] =
     useState<CmsImportConflictMode>("overwrite_existing");
   const [applyMode, setApplyMode] = useState<CmsImportApplyMode>("draft");
@@ -488,8 +489,8 @@ export function BackupRestoreWorkspace({
       toast.error("Choose a backup JSON file first.");
       return;
     }
-    if (selectedTypes.length === 0) {
-      toast.error("Select at least one content type.");
+    if (selectedTypes.length === 0 && !includeBlocks) {
+      toast.error("Select at least one content type or the Blocks Library.");
       return;
     }
 
@@ -506,6 +507,7 @@ export function BackupRestoreWorkspace({
         contentTypes: selectedTypes,
         conflictMode,
         applyMode,
+        includeBlocks,
       });
       setSummary(result);
       setJsonRestoreComplete(false);
@@ -521,7 +523,7 @@ export function BackupRestoreWorkspace({
   };
 
   const applyImport = () => {
-    if (!summary?.success || selectedTypes.length === 0) return;
+    if (!summary?.success || (selectedTypes.length === 0 && !includeBlocks)) return;
 
     startProgress({
       scope: "restore",
@@ -536,6 +538,7 @@ export function BackupRestoreWorkspace({
         contentTypes: selectedTypes,
         conflictMode,
         applyMode,
+        includeBlocks,
       });
       setSummary(result);
       if (!result.success) {
@@ -660,8 +663,8 @@ export function BackupRestoreWorkspace({
             <span className="block text-sm font-medium">Content JSON</span>
             <span className="block text-sm text-muted-foreground">
               {isEcommerceActive
-                ? "Pages, posts, products, metadata, translation groups, blocks, product variants, category slugs, and media references. Image binaries are not included."
-                : "Pages, posts, metadata, translation groups, and blocks. Product content is included only when the ecommerce package is active. Image binaries are not included."}
+                ? "Pages, posts, products, metadata, translation groups, blocks, product variants, category slugs, media references, and custom block definitions (Blocks Library). Image binaries are not included."
+                : "Pages, posts, metadata, translation groups, blocks, and custom block definitions (Blocks Library). Product content is included only when the ecommerce package is active. Image binaries are not included."}
             </span>
           </span>
         </label>
@@ -771,6 +774,17 @@ export function BackupRestoreWorkspace({
                       {item.label}
                     </label>
                   ))}
+                  <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                    <Checkbox
+                      checked={includeBlocks}
+                      onCheckedChange={(checked) => {
+                        setIncludeBlocks(checked === true);
+                        setSummary(null);
+                        setJsonRestoreComplete(false);
+                      }}
+                    />
+                    Blocks Library
+                  </label>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -834,7 +848,11 @@ export function BackupRestoreWorkspace({
                     type="button"
                     variant="outline"
                     onClick={reviewImport}
-                    disabled={isPending || !bundleJson.trim() || selectedTypes.length === 0}
+                    disabled={
+                      isPending ||
+                      !bundleJson.trim() ||
+                      (selectedTypes.length === 0 && !includeBlocks)
+                    }
                   >
                     {isPending ? <Spinner className="mr-2 h-4 w-4" /> : <Upload className="mr-2 h-4 w-4" />}
                     Review Backup
@@ -842,7 +860,11 @@ export function BackupRestoreWorkspace({
                   <Button
                     type="button"
                     onClick={applyImport}
-                    disabled={isPending || !summary?.success || selectedTypes.length === 0}
+                    disabled={
+                      isPending ||
+                      !summary?.success ||
+                      (selectedTypes.length === 0 && !includeBlocks)
+                    }
                   >
                     {isPending ? <Spinner className="mr-2 h-4 w-4" /> : <Upload className="mr-2 h-4 w-4" />}
                     Restore from Backup

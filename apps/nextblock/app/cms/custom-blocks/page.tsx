@@ -39,6 +39,7 @@ import {
   deleteCustomBlockDefinition,
   duplicateCustomBlockDefinition,
 } from "./actions";
+import { BlocksLibraryTransferControls } from "./components/BlocksLibraryTransferControls";
 import type { CustomBlockDefinition } from "@nextblock-cms/utils";
 
 export default function CustomBlocksListPage() {
@@ -155,11 +156,14 @@ export default function CustomBlocksListPage() {
             Build and manage custom block modules, layouts, and relations for rich pages.
           </p>
         </div>
-        <Button asChild className="shadow-sm hover:scale-[1.01] transition-transform">
-          <Link href="/cms/custom-blocks/new">
-            <PlusCircle className="mr-2 h-4 w-4" /> Create Custom Block
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <BlocksLibraryTransferControls onImported={fetchBlocks} />
+          <Button asChild className="shadow-sm hover:scale-[1.01] transition-transform">
+            <Link href="/cms/custom-blocks/new">
+              <PlusCircle className="mr-2 h-4 w-4" /> Create Custom Block
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Toolbar */}

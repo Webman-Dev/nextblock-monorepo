@@ -1,6 +1,6 @@
 import "server-only";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { v4 as uuidv4 } from "uuid";
 import type { Json } from "@nextblock-cms/db";
 import {
@@ -9,6 +9,15 @@ import {
   verifyPackageOnline,
 } from "@nextblock-cms/db/server";
 import { syncCategoriesForTranslationGroup } from "@nextblock-cms/ecommerce/server";
+import {
+  buildCustomBlockCopySlug,
+  customBlockDefinitionCreateSchema,
+} from "@nextblock-cms/utils";
+
+import {
+  CUSTOM_BLOCK_DEFINITIONS_CACHE_TAG,
+  getCustomBlockDefinitionCacheTag,
+} from "../custom-block-definitions";
 
 import {
   createPageRevision,
@@ -43,12 +52,14 @@ import {
 } from "./csv";
 import type {
   BackupBlockRecord,
+  BackupCustomBlockRecord,
   BackupPageRecord,
   BackupPostRecord,
   BackupProductRecord,
   BackupProductVariantRecord,
   CmsBackupBundleV1,
   CmsContentType,
+  CmsImportConflictMode,
   CmsImportMessage,
   CmsImportOptions,
   CmsImportPreviewItem,
@@ -1842,6 +1853,7 @@ export async function exportBackupBundle() {
       posts: await exportPosts(auth.supabase),
       products: await exportProducts(auth.supabase),
     },
+    custom_blocks: await exportCustomBlockRecords(auth.supabase),
   };
 
   return JSON.stringify(bundle, null, 2);
@@ -1860,6 +1872,7 @@ export async function dryRunBundleImport(params: {
   bundleJson: string;
   contentTypes: CmsContentType[];
   options: CmsImportOptions;
+  includeBlocks?: boolean;
 }) {
   const auth = await requireTransferUser(true);
   const bundle = parseBundle(params.bundleJson);
@@ -1874,13 +1887,16 @@ export async function dryRunBundleImport(params: {
       options: { ...params.options, skipUnavailableProductContent: true },
     });
 
-    summary.totalRows += result.summary.totalRows;
-    summary.created += result.summary.created;
-    summary.updated += result.summary.updated;
-    summary.skipped += result.summary.skipped;
-    summary.errors.push(...result.summary.errors);
-    summary.warnings.push(...result.summary.warnings);
-    summary.preview.push(...result.summary.preview);
+    mergeBundleSummary(summary, result.summary);
+  }
+
+  if (params.includeBlocks) {
+    const blockResult = await prepareBlocksLibraryImport({
+      supabase: auth.supabase,
+      records: Array.isArray(bundle.custom_blocks) ? bundle.custom_blocks : [],
+      options: { conflictMode: params.options.conflictMode },
+    });
+    mergeBundleSummary(summary, blockResult.summary);
   }
 
   summary.success = summary.errors.length === 0;
@@ -1891,11 +1907,13 @@ export async function applyBundleImport(params: {
   bundleJson: string;
   contentTypes: CmsContentType[];
   options: CmsImportOptions;
+  includeBlocks?: boolean;
 }) {
   const auth = await requireTransferUser(true);
   const bundle = parseBundle(params.bundleJson);
   const summary = emptySummary();
   const allPrepared: PreparedImport[] = [];
+  let preparedBlocks: PreparedBlockImport[] = [];
 
   for (const contentType of params.contentTypes) {
     const rows = bundle.content[contentType] || [];
@@ -1906,14 +1924,18 @@ export async function applyBundleImport(params: {
       options: { ...params.options, skipUnavailableProductContent: true },
     });
 
-    summary.totalRows += result.summary.totalRows;
-    summary.created += result.summary.created;
-    summary.updated += result.summary.updated;
-    summary.skipped += result.summary.skipped;
-    summary.errors.push(...result.summary.errors);
-    summary.warnings.push(...result.summary.warnings);
-    summary.preview.push(...result.summary.preview);
+    mergeBundleSummary(summary, result.summary);
     allPrepared.push(...(result.prepared as PreparedImport[]));
+  }
+
+  if (params.includeBlocks) {
+    const blockResult = await prepareBlocksLibraryImport({
+      supabase: auth.supabase,
+      records: Array.isArray(bundle.custom_blocks) ? bundle.custom_blocks : [],
+      options: { conflictMode: params.options.conflictMode },
+    });
+    mergeBundleSummary(summary, blockResult.summary);
+    preparedBlocks = blockResult.prepared;
   }
 
   summary.success = summary.errors.length === 0;
@@ -1922,5 +1944,300 @@ export async function applyBundleImport(params: {
   }
 
   await applyPreparedImports(auth, allPrepared, params.options);
+  if (preparedBlocks.length > 0) {
+    await applyPreparedBlockImports(auth.supabase, preparedBlocks);
+  }
+  return summary;
+}
+
+function mergeBundleSummary(target: CmsImportSummary, source: CmsImportSummary) {
+  target.totalRows += source.totalRows;
+  target.created += source.created;
+  target.updated += source.updated;
+  target.skipped += source.skipped;
+  target.errors.push(...source.errors);
+  target.warnings.push(...source.warnings);
+  target.preview.push(...source.preview);
+}
+
+// ---------------------------------------------------------------------------
+// Blocks Library (custom block definitions) transfer
+//
+// Custom blocks are nested JSON (fields + layout_schema), so they use the same
+// JSON bundle approach as the content backup rather than CSV. The Blocks Library
+// page exports/imports a dedicated bundle, and the content backup embeds the
+// same records under `custom_blocks`.
+// ---------------------------------------------------------------------------
+
+export const BLOCKS_LIBRARY_BUNDLE_TYPE = "nextblock-blocks-library-backup";
+export const BLOCKS_LIBRARY_BUNDLE_VERSION = 1;
+
+const CUSTOM_BLOCK_DEFINITION_SELECT =
+  "id, slug, name, description, fields, layout_schema, is_original";
+
+export interface BlocksLibraryImportOptions {
+  conflictMode: CmsImportConflictMode;
+}
+
+interface PreparedBlockImport {
+  rowNumber: number;
+  action: "create" | "update";
+  targetId: string | null;
+  slug: string;
+  payload: {
+    slug: string;
+    name: string;
+    description: string;
+    fields: Json;
+    layout_schema: Json;
+    is_original: boolean;
+  };
+}
+
+function toJson(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json;
+}
+
+async function exportCustomBlockRecords(supabase: SupabaseAny): Promise<BackupCustomBlockRecord[]> {
+  const { data, error } = await supabase
+    .from("custom_block_definitions")
+    .select(CUSTOM_BLOCK_DEFINITION_SELECT)
+    .order("name", { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to export custom block definitions: ${error.message}`);
+  }
+
+  return (data || []).map((row: any) => ({
+    slug: row.slug,
+    name: row.name,
+    description: typeof row.description === "string" ? row.description : "",
+    fields: row.fields,
+    layout_schema: row.layout_schema,
+    is_original: Boolean(row.is_original),
+  }));
+}
+
+function extractBlocksLibraryRecords(bundleJson: string): BackupCustomBlockRecord[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bundleJson);
+  } catch {
+    throw new Error("Blocks library file is not valid JSON.");
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error("Blocks library file must be a JSON object.");
+  }
+
+  // Accept a dedicated blocks-library bundle (`blocks`) or a full content
+  // backup bundle that carries the same records under `custom_blocks`.
+  const raw = Array.isArray((parsed as any).blocks)
+    ? (parsed as any).blocks
+    : Array.isArray((parsed as any).custom_blocks)
+      ? (parsed as any).custom_blocks
+      : null;
+
+  if (!raw) {
+    throw new Error('Blocks library file is missing its "blocks" array.');
+  }
+
+  return raw as BackupCustomBlockRecord[];
+}
+
+async function prepareBlocksLibraryImport(params: {
+  supabase: SupabaseAny;
+  records: BackupCustomBlockRecord[];
+  options: BlocksLibraryImportOptions;
+}): Promise<{ summary: CmsImportSummary; prepared: PreparedBlockImport[] }> {
+  const summary = emptySummary();
+  summary.totalRows = params.records.length;
+  const prepared: PreparedBlockImport[] = [];
+
+  const { data, error } = await params.supabase
+    .from("custom_block_definitions")
+    .select("id, slug");
+  if (error) {
+    addMessage(summary.errors, 0, `Failed to load existing custom blocks: ${error.message}`);
+    summary.success = false;
+    return { summary, prepared };
+  }
+
+  const existingBySlug = new Map<string, string>();
+  const knownSlugs = new Set<string>();
+  for (const row of data || []) {
+    existingBySlug.set(String((row as any).slug), String((row as any).id));
+    knownSlugs.add(String((row as any).slug));
+  }
+  const seenSlugs = new Set<string>();
+
+  for (const [index, record] of params.records.entries()) {
+    const rowNumber = index + 1;
+    if (!isRecord(record)) {
+      addMessage(summary.errors, rowNumber, "Block entry must be an object.");
+      continue;
+    }
+
+    const parsedDefinition = customBlockDefinitionCreateSchema.safeParse({
+      description: record.description,
+      fields: record.fields,
+      is_original: record.is_original,
+      layout_schema: record.layout_schema,
+      name: record.name,
+      slug: record.slug,
+    });
+
+    const label =
+      (typeof record.slug === "string" && record.slug) ||
+      (typeof record.name === "string" && record.name) ||
+      `entry ${rowNumber}`;
+
+    if (!parsedDefinition.success) {
+      for (const issue of parsedDefinition.error.issues) {
+        const path = issue.path.join(".");
+        addMessage(
+          summary.errors,
+          rowNumber,
+          `Block "${label}": ${path ? `${path}: ` : ""}${issue.message}`
+        );
+      }
+      continue;
+    }
+
+    const definition = parsedDefinition.data;
+    const existingId = existingBySlug.get(definition.slug) ?? null;
+
+    let action: "create" | "update";
+    let targetId: string | null;
+    let slug = definition.slug;
+    let isOriginal = definition.is_original;
+
+    if (params.options.conflictMode === "overwrite_existing" && existingId) {
+      action = "update";
+      targetId = existingId;
+    } else {
+      action = "create";
+      targetId = null;
+      // "Create new copies" always clones; "Overwrite" still needs a fresh slug
+      // when it collides with an existing block or another row in this import.
+      const mustRename =
+        params.options.conflictMode === "create_new" ||
+        knownSlugs.has(slug) ||
+        seenSlugs.has(slug);
+      if (mustRename) {
+        slug = buildCustomBlockCopySlug(slug, new Set([...knownSlugs, ...seenSlugs]));
+        isOriginal = false;
+      }
+    }
+
+    seenSlugs.add(slug);
+    knownSlugs.add(slug);
+
+    prepared.push({
+      rowNumber,
+      action,
+      targetId,
+      slug,
+      payload: {
+        slug,
+        name: definition.name,
+        description: definition.description,
+        fields: toJson(definition.fields),
+        layout_schema: toJson(definition.layout_schema),
+        is_original: isOriginal,
+      },
+    });
+  }
+
+  summary.created = prepared.filter((item) => item.action === "create").length;
+  summary.updated = prepared.filter((item) => item.action === "update").length;
+  summary.success = summary.errors.length === 0;
+  return { summary, prepared };
+}
+
+async function applyPreparedBlockImports(
+  supabase: SupabaseAny,
+  prepared: PreparedBlockImport[]
+): Promise<void> {
+  if (prepared.length === 0) return;
+  const touched: Array<{ id: string; slug: string }> = [];
+
+  for (const item of prepared) {
+    const writer =
+      item.action === "update" && item.targetId
+        ? supabase
+            .from("custom_block_definitions")
+            .update(item.payload as any)
+            .eq("id", item.targetId)
+            .select("id, slug")
+            .single()
+        : supabase
+            .from("custom_block_definitions")
+            .insert(item.payload as any)
+            .select("id, slug")
+            .single();
+
+    const { data, error } = await writer;
+    if (error || !data) {
+      throw new Error(
+        `Failed to ${item.action} custom block "${item.slug}": ${error?.message ?? "unknown error"}`
+      );
+    }
+    touched.push({ id: String((data as any).id), slug: String((data as any).slug) });
+  }
+
+  revalidateTag(CUSTOM_BLOCK_DEFINITIONS_CACHE_TAG, "max");
+  for (const item of touched) {
+    revalidateTag(getCustomBlockDefinitionCacheTag(item.id), "max");
+    revalidateTag(getCustomBlockDefinitionCacheTag(item.slug), "max");
+  }
+  revalidatePath("/cms/blocks");
+  revalidatePath("/cms/custom-blocks");
+}
+
+export async function exportBlocksLibraryBundle() {
+  const auth = await requireTransferUser(false);
+  const blocks = await exportCustomBlockRecords(auth.supabase);
+  return JSON.stringify(
+    {
+      type: BLOCKS_LIBRARY_BUNDLE_TYPE,
+      version: BLOCKS_LIBRARY_BUNDLE_VERSION,
+      exported_at: new Date().toISOString(),
+      blocks,
+    },
+    null,
+    2
+  );
+}
+
+export async function dryRunBlocksLibraryImport(params: {
+  bundleJson: string;
+  options: BlocksLibraryImportOptions;
+}) {
+  const auth = await requireTransferUser(false);
+  const records = extractBlocksLibraryRecords(params.bundleJson);
+  const { summary } = await prepareBlocksLibraryImport({
+    supabase: auth.supabase,
+    records,
+    options: params.options,
+  });
+  return summary;
+}
+
+export async function applyBlocksLibraryImport(params: {
+  bundleJson: string;
+  options: BlocksLibraryImportOptions;
+}) {
+  const auth = await requireTransferUser(false);
+  const records = extractBlocksLibraryRecords(params.bundleJson);
+  const { summary, prepared } = await prepareBlocksLibraryImport({
+    supabase: auth.supabase,
+    records,
+    options: params.options,
+  });
+  if (!summary.success) {
+    return summary;
+  }
+  await applyPreparedBlockImports(auth.supabase, prepared);
   return summary;
 }
