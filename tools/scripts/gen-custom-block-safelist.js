@@ -18,23 +18,51 @@ const colors = [
   'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose',
 ];
 
-// Balanced palette tier: drops the rarely-used 50/950 shades and the heaviest
-// variant combinations (ring colors, focus:, hover on text/border) to keep the
-// CSS lean while still covering what data-driven blocks actually use — solid and
-// hover backgrounds, text/border colors, gradients, and colored shadows.
-// To go leaner or fuller, edit `slots`/`shades` and regenerate.
-const shades = [100, 200, 300, 400, 500, 600, 700, 800, 900];
-
-// property -> which state variants to include
-const slots = [
-  { prop: 'bg', variants: ['', 'hover:'] },
-  { prop: 'text', variants: [''] },
-  { prop: 'border', variants: [''] },
-  { prop: 'shadow', variants: [''] },
-  { prop: 'from', variants: [''] },
-  { prop: 'via', variants: [''] },
-  { prop: 'to', variants: [''] },
-];
+// Safelist breadth tier. Override with SAFELIST_TIER=lean|balanced|full.
+// "Reduce unused CSS" is an UNSCORED Lighthouse diagnostic, so a bigger safelist
+// does not lower the Performance score — `full` is the default for maximum block
+// flexibility (any color/shade/variant renders instantly). Drop to balanced/lean
+// only if you specifically want to shrink transfer bytes.
+//   lean     ~792 classes  (~+5.5 KiB gz)  bg+hover, text, border; shades 100-900
+//   balanced ~1632 classes (~+15 KiB gz)   + gradients + colored shadows
+//   full     ~3146 classes (~+27 KiB gz)   + ring, focus:, hover on text/border, 50/950
+const TIER = process.env.SAFELIST_TIER || 'full';
+const TIERS = {
+  lean: {
+    shades: [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    slots: [
+      { prop: 'bg', variants: ['', 'hover:'] },
+      { prop: 'text', variants: [''] },
+      { prop: 'border', variants: [''] },
+    ],
+  },
+  balanced: {
+    shades: [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    slots: [
+      { prop: 'bg', variants: ['', 'hover:'] },
+      { prop: 'text', variants: [''] },
+      { prop: 'border', variants: [''] },
+      { prop: 'shadow', variants: [''] },
+      { prop: 'from', variants: [''] },
+      { prop: 'via', variants: [''] },
+      { prop: 'to', variants: [''] },
+    ],
+  },
+  full: {
+    shades: [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950],
+    slots: [
+      { prop: 'bg', variants: ['', 'hover:', 'focus:'] },
+      { prop: 'text', variants: ['', 'hover:'] },
+      { prop: 'border', variants: ['', 'hover:'] },
+      { prop: 'ring', variants: ['', 'focus:'] },
+      { prop: 'shadow', variants: [''] },
+      { prop: 'from', variants: [''] },
+      { prop: 'via', variants: [''] },
+      { prop: 'to', variants: [''] },
+    ],
+  },
+};
+const { shades, slots } = TIERS[TIER] || TIERS.full;
 
 // Gradient direction helpers + seed-content classes formerly forced via
 // app/force-styles.tsx (consolidated here; that component has been removed).
@@ -90,4 +118,4 @@ const contents = `${header}\n${body}`;
 // @nextblock-cms/ui from node_modules, which Tailwind does not scan).
 const outPath = path.join(repoRoot, 'apps/nextblock/lib/custom-block-safelist.ts');
 fs.writeFileSync(outPath, contents);
-console.log(`Wrote ${classes.length} safelist classes to ${path.relative(repoRoot, outPath)}`);
+console.log(`Wrote ${classes.length} safelist classes (tier: ${TIER}) to ${path.relative(repoRoot, outPath)}`);
