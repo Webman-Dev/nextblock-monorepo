@@ -27,7 +27,9 @@ The commerce schema spans:
 
 - Catalog: `products`, `product_media`, `product_attributes`,
   `product_attribute_terms`, `product_variants`,
-  `variant_attribute_mapping`
+  `variant_attribute_mapping`, `categories`, `product_categories`
+  (categories and their translations were added by migrations
+  `00000000000019` and `00000000000020`)
 - Inventory and licensing: `inventory_items`, `package_activations`,
   `freemius_plans`, `freemius_pricing`
 - Checkout and fulfillment: `orders`, `order_items`, `shipping_zones`,

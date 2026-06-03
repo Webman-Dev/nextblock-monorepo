@@ -72,7 +72,7 @@ Frontend components use the `visualEditing` context to render hover overlays.
 Top-level blocks are rendered using `BlockRenderer.tsx`. For each block, `buildVisualEditAttributes()` generates:
 * `data-vercel-edit-info`: Encodes document type, ID, slug, language, and block target (index/ID).
 * `data-vercel-edit-target`: Target parameters for nested block structures.
-* `data-nextblock-visual-edit`: UI identifier (e.g., `top-level:hero`).
+* `data-nextblock-visual-edit`: UI identifier (e.g., `top-level:section`).
 
 ### Product-Level Visual Editing
 Products support two kinds of visual editing:

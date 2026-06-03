@@ -123,6 +123,18 @@ Defined across `00000000000003` and `00000000000004`:
 - `tax_rates`
 - `currencies`
 
+### Post-baseline tables
+
+Added after the squashed baseline by later migrations:
+
+- `categories` and `product_categories` — catalog organization
+  (migration `00000000000019`; translated via `00000000000020`)
+- `custom_block_definitions` — data-driven custom block registry
+  (migration `00000000000023`; see [10-CUSTOM-BLOCKS.md](./10-CUSTOM-BLOCKS.md))
+- `ucp_cart_sessions` — persisted cart sessions (migration `00000000000024`)
+- a `blocks` JSONB column plus `product_id` link for block-based product
+  descriptions (migration `00000000000017`)
+
 ## Row Level Security Patterns
 
 `00000000000006_setup_rls_and_grants.sql` is the consolidated RLS file.
@@ -153,9 +165,11 @@ The current padded migration sequence in
 `libs/db/src/supabase/migrations` runs from:
 
 - `00000000000000`
-- through `00000000000016`
+- through `00000000000024`
 
-It does **not** currently run through `...23+`.
+The first files (`00000000000000` through `00000000000016`) are squashed,
+grouped baseline domains. Everything from `00000000000017` onward is an
+append-only forward migration added after the baseline.
 
 These files are already squashed and grouped. Several of them preserve older
 logical migration boundaries through embedded comment headers, so you will see
@@ -201,6 +215,14 @@ production or shared database change.
 | `00000000000014_setup_content_drafts.sql` | CMS, Editor | visual-editing content draft tables |
 | `00000000000015_setup_product_drafts.sql` | Commerce, Editor | product draft workflow support |
 | `00000000000016_add_feature_image_to_pages.sql` | CMS | optional page feature image media relationship |
+| `00000000000017_add_product_blocks.sql` | Commerce, Editor | block-based product descriptions (`blocks` JSONB column and `product_id` link) |
+| `00000000000018_setup_bot_protection_settings.sql` | CMS, Security | Turnstile/reCAPTCHA bot-protection settings for forms; sensitive site-settings key protection |
+| `00000000000019_add_product_categories.sql` | Commerce | `categories` and `product_categories` junction tables |
+| `00000000000020_add_category_translations.sql` | Commerce, i18n | `name_translations` / `description_translations` on categories |
+| `00000000000021_migrate_hero_blocks_to_sections.sql` | CMS, Editor | data migration converting legacy `hero` blocks into `section` blocks (`is_hero`) |
+| `00000000000022_seed_cortex_ai_guide_post.sql` | Seeds, AI | seeds the Cortex AI guide post |
+| `00000000000023_setup_custom_block_definitions.sql` | CMS, Editor | `custom_block_definitions` registry, validation functions, `duplicate_block_definition` RPC, and RLS (see [10-CUSTOM-BLOCKS.md](./10-CUSTOM-BLOCKS.md)) |
+| `00000000000024_setup_ucp_cart_sessions.sql` | Commerce | `ucp_cart_sessions` table and update trigger for persisted carts |
 
 ### How to read the folder
 

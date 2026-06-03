@@ -123,6 +123,9 @@ _The template docs are copied from the root docs through the sync pipeline, so t
 | [docs/05-DEVELOPER-GUIDE.md](./docs/05-DEVELOPER-GUIDE.md)                         | Local setup, scripts, db workflow, sandbox reset, and contributor operations             |
 | [docs/06-CLI-AND-SCAFFOLDING.md](./docs/06-CLI-AND-SCAFFOLDING.md)                 | `create-nextblock`, template sync, and generated-project behavior                        |
 | [docs/07-BLOCK-SDK-AND-EXTENSIBILITY.md](./docs/07-BLOCK-SDK-AND-EXTENSIBILITY.md) | SDK contract and extensibility model                                                     |
+| [docs/08-NEXTBLOCK-CORTEX-AI-ARCHITECTURE.md](./docs/08-NEXTBLOCK-CORTEX-AI-ARCHITECTURE.md) | Premium Cortex AI package: model routing, BYOK, inline editor and global agent tools |
+| [docs/09-LIVE-DRAFT-MODE.md](./docs/09-LIVE-DRAFT-MODE.md)                         | Real-time visual editing and non-destructive draft previewing                            |
+| [docs/10-CUSTOM-BLOCKS.md](./docs/10-CUSTOM-BLOCKS.md)                             | Data-driven custom blocks: schema, CRUD, dynamic rendering, and import/export            |
 | [docs/README.md](./docs/README.md)                                                 | Audience-based docs index                                                                |
 
 > **Under the hood note:** The migration folder under `libs/db/src/supabase/migrations` is the best source of truth for current platform capabilities.

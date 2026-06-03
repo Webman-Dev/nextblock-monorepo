@@ -57,6 +57,7 @@ Implemented:
   - `fetch_ecommerce_stats`
 - Multilingual navigation/footer tool arguments using either language codes or language names.
 - Guardrails against OpenRouter free-model rate limits, raw tool-call leakage, and stuck loading streams.
+- Custom-block "build widget" generation: `/api/ai/cortex/build-widget` and the custom-block agent tools (`apps/nextblock/lib/ai-global-agent-custom-block-tools.ts`) produce data-driven `custom_block_definitions` from a prompt. See [10-CUSTOM-BLOCKS.md](./10-CUSTOM-BLOCKS.md) for the block model.
 
 Known incomplete or future work:
 
@@ -800,7 +801,7 @@ Behavior:
 
 Purpose:
 
-- Update an existing nested block inside a current page/post `section` or `hero` block.
+- Update an existing nested block inside a current page/post `section` block.
 
 Input:
 
@@ -818,9 +819,10 @@ Behavior:
 
 - Requires current page/post `pageContext`.
 - Refuses to update parent blocks outside the current page/post.
-- Parent must be `section` or `hero`.
+- Parent must be a `section` block (the only nested-column parent type; legacy
+  `hero` blocks are now sections with an `is_hero` flag).
 - Validates nested content against the nested block type.
-- Validates final parent section/hero content before saving.
+- Validates final parent section content before saving.
 
 ### fetch_ecommerce_stats
 
@@ -1083,6 +1085,7 @@ Package scripts:
 npm run verify:cortex-ai-routing
 npm run verify:cortex-ai-generate-blocks
 npm run verify:cortex-ai-global-tools
+npm run verify:cortex-ai-build-widget
 npm run verify:editor-block-schema
 ```
 

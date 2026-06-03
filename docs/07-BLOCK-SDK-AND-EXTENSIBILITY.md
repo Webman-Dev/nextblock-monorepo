@@ -113,6 +113,26 @@ That means the current extensibility surface is not limited to editorial
 content. It already supports block types that render premium commerce
 components.
 
+## Data-Driven Custom Blocks
+
+There is now a third extensibility path that needs no code deploy at all.
+Editors can define block types at runtime from the CMS; each definition is a
+`custom_block_definitions` row (typed fields plus a recursive layout schema)
+rendered on the public site by a dynamic layout engine rather than a compiled
+React component.
+
+So the extensibility surface has three layers:
+
+- **Code-defined built-ins** — the app block registry plus React
+  editor/renderer files. Most flexible, requires a deploy.
+- **The typed SDK contract** (`libs/sdk`) — a small, typed authoring interface
+  for reusable or external blocks.
+- **Data-defined custom blocks** (`custom_block_definitions`) — full CRUD from
+  the CMS, no deploy, rendered from stored JSONB.
+
+Custom blocks are documented in detail in
+[10-CUSTOM-BLOCKS.md](./10-CUSTOM-BLOCKS.md).
+
 ## Practical Guidance
 
 - If you are building or refactoring built-in CMS blocks, start with the app
@@ -121,3 +141,6 @@ components.
   `libs/sdk`.
 - If you need both, keep the SDK contract small and typed, and let the app
   registry stay responsible for CMS-specific loading behavior.
+- If you want editors to create block types without a deploy, reach for
+  data-driven custom blocks (`custom_block_definitions`) instead of either of
+  the above.
