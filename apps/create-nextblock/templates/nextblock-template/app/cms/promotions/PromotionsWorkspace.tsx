@@ -254,7 +254,6 @@ export function PromotionsWorkspace({ isEcommerceActive }: PromotionsWorkspacePr
             <Button
               type="button"
               variant="outline"
-              size="sm"
               onClick={handleTemplate}
               disabled={isPending}
             >
@@ -263,7 +262,6 @@ export function PromotionsWorkspace({ isEcommerceActive }: PromotionsWorkspacePr
             <Button
               type="button"
               variant="outline"
-              size="sm"
               onClick={handleExport}
               disabled={isPending}
             >

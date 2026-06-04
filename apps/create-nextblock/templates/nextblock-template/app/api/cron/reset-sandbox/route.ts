@@ -57,10 +57,13 @@ type SeededLocale = {
   description: DescriptionContent;
 };
 
+type ApparelAccentName = 'amber' | 'sky' | 'rose';
+
 type ApparelProductSeed = {
   imageKey: string;
   baseSku: string;
   price: number;
+  accent: ApparelAccentName;
   variantStocks: Record<SizeSlug, number>;
   en: SeededLocale;
   fr: SeededLocale;
@@ -229,15 +232,199 @@ function getFolderFromObjectKey(objectKey: string) {
 
 
 
-function buildHtmlDescription(content: DescriptionContent): string {
-  const bulletsHtml = content.bullets.map((bullet) => `  <li>${bullet}</li>`).join('\n');
-  return `<h2>${content.headline}</h2>
-<p>${content.lead}</p>
-<h3>${content.whyHeading}</h3>
-<p>${content.whyParagraph}</p>
-<ul>
-${bulletsHtml}
-</ul>`;
+type ApparelAccentStyles = {
+  heroStops: Array<{ color: string; position: number }>;
+  ctaStops: Array<{ color: string; position: number }>;
+  eyebrow: string;
+  checkBadge: string;
+  cardHoverBorder: string;
+  ctaSubtext: string;
+};
+
+// Per-product accent palettes. The gradient `stops` are inline hex values so they
+// always render; the class strings are written here as literals so Tailwind's
+// content scanner (which includes this file) compiles them into the bundle.
+const APPAREL_ACCENTS: Record<ApparelAccentName, ApparelAccentStyles> = {
+  amber: {
+    heroStops: [
+      { color: '#451a03', position: 0 },
+      { color: '#78350f', position: 45 },
+      { color: '#0f172a', position: 100 },
+    ],
+    ctaStops: [
+      { color: '#78350f', position: 0 },
+      { color: '#451a03', position: 100 },
+    ],
+    eyebrow: 'text-amber-400',
+    checkBadge: 'bg-amber-950 text-amber-300',
+    cardHoverBorder: 'hover:border-amber-300 dark:hover:border-amber-500',
+    ctaSubtext: 'text-amber-100',
+  },
+  sky: {
+    heroStops: [
+      { color: '#082f49', position: 0 },
+      { color: '#0c4a6e', position: 40 },
+      { color: '#0f172a', position: 100 },
+    ],
+    ctaStops: [
+      { color: '#0c4a6e', position: 0 },
+      { color: '#082f49', position: 100 },
+    ],
+    eyebrow: 'text-sky-400',
+    checkBadge: 'bg-sky-950 text-sky-300',
+    cardHoverBorder: 'hover:border-sky-300 dark:hover:border-sky-500',
+    ctaSubtext: 'text-sky-100',
+  },
+  rose: {
+    heroStops: [
+      { color: '#4c0519', position: 0 },
+      { color: '#881337', position: 40 },
+      { color: '#0f172a', position: 100 },
+    ],
+    ctaStops: [
+      { color: '#881337', position: 0 },
+      { color: '#4c0519', position: 100 },
+    ],
+    eyebrow: 'text-rose-400',
+    checkBadge: 'bg-rose-950 text-rose-300',
+    cardHoverBorder: 'hover:border-rose-300 dark:hover:border-rose-500',
+    ctaSubtext: 'text-rose-100',
+  },
+};
+
+const APPAREL_COPY: Record<
+  'en' | 'fr',
+  { eyebrow: string; ctaHeadline: string; ctaLead: string; ctaButton: string; ctaUrl: string }
+> = {
+  en: {
+    eyebrow: 'NextBlock™ Apparel',
+    ctaHeadline: 'Part of the NextBlock™ demo store',
+    ctaLead:
+      'This is a mock product that showcases the commerce engine — multi-currency pricing, size variants, and fully block-based product pages.',
+    ctaButton: 'Browse the store',
+    ctaUrl: '/shop',
+  },
+  fr: {
+    eyebrow: 'Vêtements NextBlock™',
+    ctaHeadline: 'Au cœur de la boutique démo NextBlock™',
+    ctaLead:
+      "Un article fictif qui illustre le moteur e-commerce — prix multi-devises, variantes de taille et fiches produits entièrement en blocs.",
+    ctaButton: 'Voir la boutique',
+    ctaUrl: '/boutique',
+  },
+};
+
+// Build a rich, block-editor-native description (hero + feature cards + CTA) from the
+// structured locale copy, mirroring the digital products so physical seeds are both
+// editable in the block editor and visually on par with the rest of the catalog.
+function buildApparelDescriptionSections(
+  content: DescriptionContent,
+  accentName: ApparelAccentName,
+  localeCode: 'en' | 'fr'
+) {
+  const accent = APPAREL_ACCENTS[accentName];
+  const copy = APPAREL_COPY[localeCode];
+
+  // ── Section 0: Hero (gradient, two columns) ──
+  const hero = {
+    container_type: 'container',
+    background: {
+      type: 'gradient',
+      gradient: { type: 'linear', direction: '135deg', stops: accent.heroStops },
+    },
+    responsive_columns: { mobile: 1, tablet: 1, desktop: 2 },
+    column_gap: 'xl',
+    vertical_alignment: 'center',
+    padding: { top: 'xl', bottom: 'xl' },
+    column_blocks: [
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<p class="text-xs uppercase tracking-[0.3em] ${accent.eyebrow} font-semibold mb-4">${copy.eyebrow}</p>
+<h2 class="text-3xl md:text-5xl font-extrabold text-white leading-tight mb-5">${content.headline}</h2>
+<p class="text-base md:text-lg text-slate-200 leading-relaxed">${content.lead}</p>`,
+          },
+        },
+      ],
+      [
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<div class="rounded-2xl border border-slate-700 bg-slate-950 p-6 shadow-xl sm:p-8">
+<h3 class="text-lg font-bold text-white mb-3">${content.whyHeading}</h3>
+<p class="text-sm leading-relaxed text-slate-300">${content.whyParagraph}</p>
+</div>`,
+          },
+        },
+      ],
+    ],
+  };
+
+  // ── Section 1: Feature cards (one per bullet) ──
+  const featureCard = (bullet: string) => ({
+    block_type: 'text',
+    content: {
+      html_content: `<div class="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-colors ${accent.cardHoverBorder} hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950 sm:p-7">
+<div class="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-full ${accent.checkBadge} text-sm font-bold">✓</div>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">${bullet}</p>
+</div>`,
+    },
+  });
+
+  const features = {
+    container_type: 'container',
+    background: { type: 'none' },
+    responsive_columns: { mobile: 1, tablet: 2, desktop: 3 },
+    column_gap: 'lg',
+    padding: { top: 'xl', bottom: 'xl' },
+    vertical_alignment: 'stretch',
+    column_blocks: content.bullets.map((bullet) => [featureCard(bullet)]),
+  };
+
+  // ── Section 2: CTA (accent gradient) ──
+  const cta = {
+    container_type: 'container',
+    background: {
+      type: 'gradient',
+      gradient: { type: 'linear', direction: '135deg', stops: accent.ctaStops },
+    },
+    responsive_columns: { mobile: 1, tablet: 1, desktop: 1 },
+    column_gap: 'none',
+    padding: { top: 'xl', bottom: 'xl' },
+    vertical_alignment: 'center',
+    column_blocks: [
+      [
+        {
+          block_type: 'heading',
+          content: {
+            level: 2,
+            text_content: copy.ctaHeadline,
+            textAlign: 'center',
+            textColor: 'background',
+          },
+        },
+        {
+          block_type: 'text',
+          content: {
+            html_content: `<p class="text-center ${accent.ctaSubtext} max-w-xl mx-auto mt-2 mb-6">${copy.ctaLead}</p>`,
+          },
+        },
+        {
+          block_type: 'button',
+          content: {
+            text: copy.ctaButton,
+            url: copy.ctaUrl,
+            variant: 'secondary',
+            size: 'lg',
+            position: 'center',
+          },
+        },
+      ],
+    ],
+  };
+
+  return [hero, features, cta];
 }
 
 
@@ -246,6 +433,7 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
     imageKey: 'images/t-shirt.webp',
     baseSku: 'NB-STUDIO-TEE',
     price: 3200,
+    accent: 'amber',
     variantStocks: { small: 8, medium: 12, large: 6 },
     en: {
       title: 'NextBlock™ Studio Tee (Mock Item)',
@@ -290,6 +478,7 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
     imageKey: 'images/cap.webp',
     baseSku: 'NB-SIGNAL-CAP',
     price: 2600,
+    accent: 'sky',
     variantStocks: { small: 6, medium: 10, large: 6 },
     en: {
       title: 'NextBlock™ Signal Cap (Mock Item)',
@@ -334,6 +523,7 @@ const APPAREL_PRODUCT_SEEDS: ApparelProductSeed[] = [
     imageKey: 'images/pants.webp',
     baseSku: 'NB-UTILITY-PANTS',
     price: 6800,
+    accent: 'rose',
     variantStocks: { small: 5, medium: 8, large: 5 },
     en: {
       title: 'NextBlock™ Utility Pants (Mock Item)',
@@ -1780,9 +1970,11 @@ async function upsertSeededCatalogProduct(params: {
   productId?: string;
   translationGroupId: string;
   languageId: LanguageId;
+  localeCode: 'en' | 'fr';
   locale: SeededLocale;
   baseSku: string;
   price: number;
+  accent: ApparelAccentName;
   mediaId: string;
   variantStocks: Record<SizeSlug, number>;
   sizeTermIds: Record<SizeSlug, string>;
@@ -1802,7 +1994,11 @@ async function upsertSeededCatalogProduct(params: {
     seed_source: 'sandbox-reset',
     seed_type: 'physical-apparel',
   };
-  const htmlContent = buildHtmlDescription(params.locale.description);
+  const descriptionSections = buildApparelDescriptionSections(
+    params.locale.description,
+    params.accent,
+    params.localeCode
+  );
 
   let seededProductId = params.productId;
 
@@ -1905,12 +2101,14 @@ async function upsertSeededCatalogProduct(params: {
 
   await attachProductMedia(params.sql, seededProductId, params.mediaId);
 
-  // Set description blocks
+  // Set description blocks (rich section layout, editable in the block editor)
   await params.sql`DELETE FROM public.blocks WHERE product_id = ${seededProductId}`;
-  await params.sql`
-    INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
-    VALUES (${seededProductId}, ${params.languageId}, 'text', ${params.sql.json({ html_content: htmlContent })}, 0)
-  `;
+  for (let i = 0; i < descriptionSections.length; i++) {
+    await params.sql`
+      INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
+      VALUES (${seededProductId}, ${params.languageId}, 'section', ${params.sql.json(descriptionSections[i] as any)}, ${i})
+    `;
+  }
 
   await params.sql`
     DELETE FROM public.variant_attribute_mapping
@@ -2018,9 +2216,11 @@ async function seedApparelCatalog(params: {
       productId: existingEnProduct?.id as string | undefined,
       translationGroupId,
       languageId: params.enLangId,
+      localeCode: 'en',
       locale: productSeed.en,
       baseSku: productSeed.baseSku,
       price: productSeed.price,
+      accent: productSeed.accent,
       mediaId,
       variantStocks: productSeed.variantStocks,
       sizeTermIds,
@@ -2031,9 +2231,11 @@ async function seedApparelCatalog(params: {
       productId: existingFrProduct?.id as string | undefined,
       translationGroupId,
       languageId: params.frLangId,
+      localeCode: 'fr',
       locale: productSeed.fr,
       baseSku: productSeed.baseSku,
       price: productSeed.price,
+      accent: productSeed.accent,
       mediaId,
       variantStocks: productSeed.variantStocks,
       sizeTermIds,
