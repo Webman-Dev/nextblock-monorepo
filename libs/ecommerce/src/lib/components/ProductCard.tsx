@@ -6,6 +6,7 @@ import { cn, formatPrice, majorUnitAmountToMinor, useTranslations } from '@nextb
 import Link from 'next/link';
 import { useCurrency } from '../CurrencyProvider';
 import {
+  resolveEffectivePriceForCurrency,
   resolvePriceForCurrency,
   resolvePriceRangeForCurrency,
 } from '../currency';
@@ -31,11 +32,16 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
     currencies,
   });
   const hasVariantPriceRange = Boolean(product.has_variants && variantRange);
-  const resolvedPrice = resolvePriceForCurrency({
+  const resolvedPrice = resolveEffectivePriceForCurrency({
     prices: product.prices,
     salePrices: product.sale_prices,
     fallbackPrice: product.price,
     fallbackSalePrice: product.sale_price,
+    saleStartAt: product.sale_start_at,
+    saleEndAt: product.sale_end_at,
+    scheduledPrice: product.scheduled_price,
+    scheduledPrices: product.scheduled_prices,
+    scheduledPriceAt: product.scheduled_price_at,
     currencyCode: activeCurrencyCode,
     currencies,
   });
@@ -49,7 +55,38 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
           )}`
       : formatPrice(resolvedPrice.sale_price ?? resolvedPrice.price, activeCurrencyCode);
 
+  // Only flag "On Sale" when an effective (schedule-active) sale price exists —
+  // for a variant product, when any variant is currently on sale.
+  const variantSaleEntries =
+    product.variants?.length
+      ? product.variants
+      : product.product_variants?.length
+        ? product.product_variants
+        : [];
+  const onSale = hasVariantPriceRange
+    ? variantSaleEntries.some(
+        (variant) =>
+          resolveEffectivePriceForCurrency({
+            prices: variant.prices,
+            salePrices: variant.sale_prices,
+            fallbackPrice: variant.price,
+            fallbackSalePrice: variant.sale_price,
+            saleStartAt: variant.sale_start_at,
+            saleEndAt: variant.sale_end_at,
+            scheduledPrice: variant.scheduled_price,
+            scheduledPrices: variant.scheduled_prices,
+            scheduledPriceAt: variant.scheduled_price_at,
+            currencyCode: activeCurrencyCode,
+            currencies,
+          }).sale_price != null
+      )
+    : resolvedPrice.sale_price != null;
+
   const { t, lang } = useTranslations();
+  // `t` returns the key itself when a translation is missing, so fall back to a
+  // readable label until `ecommerce.on_sale` is seeded (migration …026).
+  const onSaleLabelRaw = t('ecommerce.on_sale');
+  const onSaleLabel = onSaleLabelRaw === 'ecommerce.on_sale' ? 'On Sale' : onSaleLabelRaw;
   const trialSummary = getTrialSummary(product);
 
   // Freemius pricing resolution
@@ -94,6 +131,11 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
   return (
     <div className={cn("group relative flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm transition-all hover:shadow-md", className)}>
       <Link href={`/product/${product.slug}`} className="relative aspect-square overflow-hidden bg-muted">
+        {onSale && (
+          <span className="absolute left-3 top-3 z-10 rounded-full bg-destructive px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-destructive-foreground shadow-sm">
+            {onSaleLabel}
+          </span>
+        )}
         {product.image_url ? (
           <img
             src={product.image_url}

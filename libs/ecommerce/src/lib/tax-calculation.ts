@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { normalizeCountryCode } from './countries';
 import type { CurrencyRecord } from './currency';
-import { resolvePriceForCurrency } from './currency';
+import { resolveEffectivePriceForCurrency } from './currency';
 import { getEcommerceInventorySettings } from './inventory-settings';
 import { normalizeSubdivisionCode } from './states';
 import type { CartItem, TaxCalculationResult, TaxRate } from './types';
@@ -61,11 +61,16 @@ export async function buildCheckoutTaxableItemsFromCart(
       return accumulator;
     }
 
-    const resolvedPrice = resolvePriceForCurrency({
+    const resolvedPrice = resolveEffectivePriceForCurrency({
       prices: cartItem.prices,
       salePrices: cartItem.sale_prices,
       fallbackPrice: cartItem.price,
       fallbackSalePrice: cartItem.sale_price,
+      saleStartAt: cartItem.sale_start_at,
+      saleEndAt: cartItem.sale_end_at,
+      scheduledPrice: cartItem.scheduled_price,
+      scheduledPrices: cartItem.scheduled_prices,
+      scheduledPriceAt: cartItem.scheduled_price_at,
       currencyCode,
       currencies,
     });

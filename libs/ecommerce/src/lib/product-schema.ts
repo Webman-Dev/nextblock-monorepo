@@ -18,6 +18,31 @@ const currencySalePriceMapSchema = z.record(
   z.coerce.number().min(0, 'Sale prices must be non-negative').nullable()
 );
 
+// Optional ISO date/time string for sale-schedule fields. Accepts undefined,
+// null, or an empty string (all normalized to null) and any value parseable by
+// Date. The form stores these as ISO-8601 UTC strings.
+const scheduleDateTimeSchema = z
+  .string()
+  .trim()
+  .refine((value) => value === '' || !Number.isNaN(Date.parse(value)), {
+    message: 'Must be a valid date and time',
+  })
+  .transform((value) => (value === '' ? null : value))
+  .nullable()
+  .optional();
+
+function isSaleWindowOrdered(start?: string | null, end?: string | null) {
+  if (!start || !end) {
+    return true;
+  }
+  const startMs = Date.parse(start);
+  const endMs = Date.parse(end);
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+    return true;
+  }
+  return startMs < endMs;
+}
+
 const selectedOptionSchema = z.object({
   attribute_id: z.string().uuid(),
   attribute_name: z.string(),
@@ -35,6 +60,8 @@ const variantDraftSchema = z.object({
   prices: currencyPriceMapSchema.default({}),
   sale_price: z.coerce.number().min(0, 'Variant sale price must be non-negative').optional().nullable(),
   sale_prices: currencySalePriceMapSchema.default({}),
+  sale_start_at: scheduleDateTimeSchema,
+  sale_end_at: scheduleDateTimeSchema,
   stock_quantity: z.coerce.number().int().min(0, 'Variant stock must be a non-negative integer'),
   main_media_id: z.string().uuid().optional().nullable(),
   main_image_url: z.string().optional().nullable(),
@@ -61,6 +88,12 @@ const variantDraftSchema = z.object({
     message: 'Variant sale prices cannot exceed regular prices',
     path: ['sale_prices'],
   }
+).refine(
+  (variant) => isSaleWindowOrdered(variant.sale_start_at, variant.sale_end_at),
+  {
+    message: 'Sale end must be after the sale start',
+    path: ['sale_end_at'],
+  }
 );
 
 const variationAttributeSchema = z.object({
@@ -82,6 +115,8 @@ export const productSchema = z.object({
   prices: currencyPriceMapSchema.default({}),
   sale_price: z.coerce.number().min(0, 'Sale price must be non-negative').optional().nullable(),
   sale_prices: currencySalePriceMapSchema.default({}),
+  sale_start_at: scheduleDateTimeSchema,
+  sale_end_at: scheduleDateTimeSchema,
   stock: z.coerce.number().int().min(0, 'Stock must be a non-negative integer'),
   meta_title: z.string().optional().nullable(),
   meta_description: z.string().optional().nullable(),
@@ -126,6 +161,12 @@ export const productSchema = z.object({
   {
     message: 'Sale prices cannot exceed regular prices',
     path: ['sale_prices'],
+  }
+).refine(
+  (product) => isSaleWindowOrdered(product.sale_start_at, product.sale_end_at),
+  {
+    message: 'Sale end must be after the sale start',
+    path: ['sale_end_at'],
   }
 );
 

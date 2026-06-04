@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 import { type CartItem, isDigitalItem } from './types';
 import { useCurrency } from './CurrencyProvider';
-import { resolvePriceForCurrency } from './currency';
+import { resolveEffectivePriceForCurrency } from './currency';
 import type { AppliedCouponState } from './coupons';
 
 export interface AddItemResult {
@@ -198,11 +198,16 @@ export function getCartItemActivePrice(item: CartItem, params: {
   currencyCode: string;
   currencies: ReturnType<typeof useCurrency>['currencies'];
 }) {
-  return resolvePriceForCurrency({
+  return resolveEffectivePriceForCurrency({
     prices: item.prices,
     salePrices: item.sale_prices,
     fallbackPrice: item.price,
     fallbackSalePrice: item.sale_price,
+    saleStartAt: item.sale_start_at,
+    saleEndAt: item.sale_end_at,
+    scheduledPrice: item.scheduled_price,
+    scheduledPrices: item.scheduled_prices,
+    scheduledPriceAt: item.scheduled_price_at,
     currencyCode: params.currencyCode,
     currencies: params.currencies,
   });

@@ -16,7 +16,7 @@ import {
   normalizeCurrencyRecord,
   normalizePriceMap,
   normalizeSalePriceMap,
-  resolvePriceForCurrency,
+  resolveEffectivePriceForCurrency,
 } from './currency';
 
 type SupabaseLikeClient = SupabaseClient<any>;
@@ -47,6 +47,14 @@ type TrustedCartLine = {
   freemius_plan_id?: string | null;
 };
 
+type TrustedScheduleColumns = {
+  sale_start_at?: string | null;
+  sale_end_at?: string | null;
+  scheduled_price?: number | null;
+  scheduled_prices?: Record<string, unknown> | null;
+  scheduled_price_at?: string | null;
+};
+
 type TrustedProductRow = {
   id: string;
   title: string;
@@ -58,7 +66,7 @@ type TrustedProductRow = {
   payment_provider?: string | null;
   freemius_product_id?: string | null;
   freemius_plan_id?: string | null;
-};
+} & TrustedScheduleColumns;
 
 type TrustedVariantRow = {
   id: string;
@@ -67,7 +75,7 @@ type TrustedVariantRow = {
   prices?: Record<string, unknown> | null;
   sale_price?: number | null;
   sale_prices?: Record<string, unknown> | null;
-};
+} & TrustedScheduleColumns;
 
 function toDate(value?: string | null) {
   if (!value) {
@@ -138,13 +146,13 @@ async function buildTrustedCartLines(input: {
     (client as any)
       .from('products')
       .select(
-        'id, title, price, prices, sale_price, sale_prices, product_type, payment_provider, freemius_product_id, freemius_plan_id'
+        'id, title, price, prices, sale_price, sale_prices, sale_start_at, sale_end_at, scheduled_price, scheduled_prices, scheduled_price_at, product_type, payment_provider, freemius_product_id, freemius_plan_id'
       )
       .in('id', productIds),
     variantIds.length
       ? (client as any)
           .from('product_variants')
-          .select('id, product_id, price, prices, sale_price, sale_prices')
+          .select('id, product_id, price, prices, sale_price, sale_prices, sale_start_at, sale_end_at, scheduled_price, scheduled_prices, scheduled_price_at')
           .in('id', variantIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
@@ -179,11 +187,16 @@ async function buildTrustedCartLines(input: {
       (product.product_type === 'digital' ? 'freemius' : 'stripe');
     const variant = item.variant_id ? variantMap.get(item.variant_id) : null;
     const priceSource = variant && variant.product_id === product.id ? variant : product;
-    const resolvedPrice = resolvePriceForCurrency({
+    const resolvedPrice = resolveEffectivePriceForCurrency({
       prices: normalizePriceMap(priceSource.prices),
       salePrices: normalizeSalePriceMap(priceSource.sale_prices),
       fallbackPrice: priceSource.price,
       fallbackSalePrice: priceSource.sale_price,
+      saleStartAt: priceSource.sale_start_at,
+      saleEndAt: priceSource.sale_end_at,
+      scheduledPrice: priceSource.scheduled_price,
+      scheduledPrices: normalizePriceMap(priceSource.scheduled_prices),
+      scheduledPriceAt: priceSource.scheduled_price_at,
       currencyCode: selectedCurrency.code,
       currencies,
     });

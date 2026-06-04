@@ -22,6 +22,7 @@ import { ProductMediaManager } from './ProductMediaManager';
 import { SyncFreemiusPricingButton } from './SyncFreemiusPricingButton';
 import { VariationsEditor } from './VariationsEditor';
 import { CurrencyPriceFields } from './CurrencyPriceFields';
+import { SaleScheduleFields } from './SaleScheduleFields';
 import { ProductCategorySelector } from './ProductCategorySelector';
 import {
   getStoreManagedPriceCurrencyCodes,
@@ -339,6 +340,11 @@ export function ProductForm({
   } = form;
 
   const isFirstRender = useRef(true);
+  // Serialized snapshot of the last successfully-autosaved values. Comparing
+  // against this (instead of calling reset() to clear the dirty flag) lets us
+  // stop the autosave from re-firing in a loop WITHOUT re-rendering the form —
+  // re-rendering mid-edit would reset native inputs like the datetime pickers.
+  const lastSavedSnapshotRef = useRef<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -350,13 +356,19 @@ export function ProductForm({
 
     if (isFirstRender.current) {
       isFirstRender.current = false;
+      lastSavedSnapshotRef.current = JSON.stringify(allValues);
       return;
     }
 
     if (!isDirty) return;
 
+    const snapshot = JSON.stringify(allValues);
+    // Nothing has changed since the last autosave — don't re-fire.
+    if (snapshot === lastSavedSnapshotRef.current) return;
+
     const timer = setTimeout(() => {
       if (!isSubmitting) {
+        lastSavedSnapshotRef.current = snapshot;
         handleSubmit(onSubmit)();
       }
     }, 1000);
@@ -736,6 +748,10 @@ export function ProductForm({
       if (isEdit && updateAction) {
         await updateAction(sanitizedData);
         setLastSaved(new Date());
+        // NOTE: do not call reset() here. The autosave loop is prevented by the
+        // snapshot comparison in the autosave effect, so we avoid re-rendering
+        // the form mid-edit (which would reset native inputs like the datetime
+        // pickers — e.g. clearing the sale start while picking the sale end).
       } else if (createAction) {
         await createAction(sanitizedData);
       } else {
@@ -988,6 +1004,18 @@ export function ProductForm({
                       ? 'Parent prices stay as a fallback, but active variants define the live shopper price.'
                       : undefined
                   }
+                  trailing={
+                    <SaleScheduleFields
+                      idPrefix="product"
+                      startAt={watch('sale_start_at') as string | null | undefined}
+                      endAt={watch('sale_end_at') as string | null | undefined}
+                      onChange={(field, value) =>
+                        setValue(field, value, { shouldDirty: true, shouldValidate: true })
+                      }
+                      error={errors.sale_end_at?.message as string | undefined}
+                      bare
+                    />
+                  }
                 />
                 {errors.price && (
                   <p className="text-destructive text-sm mt-1">{errors.price.message as string}</p>
@@ -1070,7 +1098,7 @@ export function ProductForm({
                   <input type="hidden" {...register('trial_period_days', { valueAsNumber: true })} />
                 </div>
 
-                <div className="w-full p-4 pt-3">
+                <div className="w-full p-4 pt-3 space-y-2">
                   <CurrencyPriceFields
                     idPrefix="product"
                     currencies={currencies}
@@ -1081,7 +1109,23 @@ export function ProductForm({
                     onSalePriceChange={handleProductSalePriceChange}
                     onAutoFill={handleAutoFillProductPrices}
                     readOnly={true}
+                    trailing={
+                      <SaleScheduleFields
+                        idPrefix="product"
+                        startAt={watch('sale_start_at') as string | null | undefined}
+                        endAt={watch('sale_end_at') as string | null | undefined}
+                        onChange={(field, value) =>
+                          setValue(field, value, { shouldDirty: true, shouldValidate: true })
+                        }
+                        error={errors.sale_end_at?.message as string | undefined}
+                        bare
+                      />
+                    }
                   />
+                  <p className="text-[10px] leading-snug text-muted-foreground">
+                    Scheduling a sale on a Freemius product generates a time-bounded Freemius
+                    coupon so the discount is enforced at Freemius checkout.
+                  </p>
                 </div>
               </div>
             </div>

@@ -2,11 +2,12 @@
 
 import { createClient, getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
 import { ProductFormValues } from '../../../product-schema';
-import { 
-  createProduct as createProductLib, 
+import {
+  createProduct as createProductLib,
   deleteProduct as deleteProductLib,
   syncCategoriesForTranslationGroup
 } from '../../../product-actions';
+import { syncProductSaleCouponToFreemius } from '../../../freemius-coupons';
 import { normalizeCurrencyRecord } from '../../../currency';
 import { sanitizeProductFormValuesForStoreManagedCurrencies } from './product-price-sync';
 import { revalidatePath } from 'next/cache';
@@ -36,7 +37,19 @@ export async function createProductAction(data: ProductFormValues) {
     (currencies || []).map((currency) => normalizeCurrencyRecord(currency))
   );
 
-  await createProductLib(supabase, sanitizedData);
+  const createdProduct = await createProductLib(supabase, sanitizedData);
+
+  if (sanitizedData.payment_provider === 'freemius' && createdProduct?.id) {
+    try {
+      await syncProductSaleCouponToFreemius({
+        productId: createdProduct.id,
+        client: getServiceRoleSupabaseClient(),
+      });
+    } catch (couponError) {
+      console.error('Failed to sync Freemius sale coupon on create:', couponError);
+    }
+  }
+
   revalidatePath('/cms/products');
   redirect('/cms/products');
 }
@@ -76,8 +89,11 @@ export async function updateProductAction(id: string, data: ProductFormValues) {
     throw new Error(`Failed to save product draft: ${upsertError.message}`);
   }
 
-  revalidatePath('/cms/products');
-  revalidatePath(`/cms/products/${id}/edit`);
+  // NOTE: do NOT revalidate the edit route here. This is a debounced autosave
+  // that only writes a draft; revalidating refetches the page and re-initializes
+  // the form (the variations editor re-emits onChange and re-dirties the form),
+  // which re-triggers autosave in an infinite loop. The draft is read fresh on
+  // the next real navigation/load, so no revalidation is needed for autosave.
   return { success: true };
 }
 

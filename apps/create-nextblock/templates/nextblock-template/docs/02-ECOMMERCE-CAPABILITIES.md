@@ -86,6 +86,59 @@ The CMS product editor respects that distinction. Store-managed currencies can
 be displayed in forms, but their saved overrides are stripped before
 persisting.
 
+### Scheduled sales, price changes, and promotions
+
+Products and variants carry a scheduled-pricing layer (migration
+`00000000000025_add_sale_schedule_columns.sql`):
+
+- `sale_start_at` / `sale_end_at` — the time window during which `sale_price` /
+  `sale_prices` apply. Both null = always-on (back-compat with static sales).
+- `scheduled_price` / `scheduled_prices` / `scheduled_price_at` — a pending,
+  permanent regular-price change applied once `scheduled_price_at` passes
+  (bulk/Stripe-oriented; Freemius regular prices are owned by Freemius).
+- `product_freemius_sale_coupons` — maps a product to an auto-generated,
+  time-bounded Freemius coupon so a scheduled Freemius sale is actually enforced
+  at Freemius-hosted checkout (Freemius enforces the coupon's start/end dates).
+
+**Enforcement is read-time, not cron-driven.** The helpers in
+`libs/ecommerce/src/lib/currency.ts` decide what applies *now*:
+
+- `isSaleWindowActive({ saleStartAt, saleEndAt, now })`
+- `resolveEffectivePriceForCurrency({ ..., saleStartAt, saleEndAt, scheduledPrice*, now })`
+  — wraps `resolvePriceForCurrency`, gating the sale by its window and swapping in
+  a due scheduled price. A sale outside its window resolves to `sale_price: null`.
+
+Every place that computes a payable or displayed amount goes through the
+window-aware helper: checkout providers (`providers/stripe.ts`,
+`providers/freemius.ts`), cart/tax/coupon math, and storefront components
+(`ProductCard`, `FeaturedProduct`, `ProductDetailsLayout`, UCP). The CMS edit
+form exposes the window per-product and per-variant (`SaleScheduleFields`); the
+bulk **Promotions** admin (`/cms/promotions`, `apps/nextblock/lib/promotions/`)
+imports/exports sales and price changes via CSV.
+
+> **Gotchas for future agents (these caused real revert/display bugs):**
+>
+> 1. **`generateVariantDrafts` (`variation-utils.ts`) must carry over every
+>    per-variant field**, including `sale_start_at`/`sale_end_at`. It re-runs on
+>    editor mount/attribute change; an omitted field resets to null and is then
+>    autosaved away ("dates revert after publish").
+> 2. **Storefront block mappers must pass the window through** on *both* the
+>    product and each variant — `ProductGridBlock`, `FeaturedProductBlock`,
+>    `app/product/[slug]/page.tsx`. If the window is dropped, `isSaleWindowActive`
+>    sees both bounds null and treats the sale as always-on, so an inactive sale
+>    price shows (e.g. a "$25 – $32" range before the sale starts).
+> 3. **`getVariantEffectivePriceRange` is window-aware** — pass
+>    `sale_start_at`/`sale_end_at` per variant or it ignores the schedule.
+> 4. **Persisting on save/publish does not rely on the RPC.** Products are
+>    written via `upsert_product_with_variants`, but some databases run a stale
+>    copy of that function. `persistProductSaleSchedule` (`product-actions.ts`)
+>    writes the window columns with a direct `update` right after the RPC (same
+>    pattern as `persistProductTaxability`), matching variants by SKU.
+> 5. **Autosave must not `reset()` the form or revalidate the edit route.** The
+>    edit-form autosave (`ProductForm.tsx`) uses a serialized-snapshot guard to
+>    avoid a render loop; `updateProductAction` writes only the draft (no
+>    `revalidatePath`). Re-rendering mid-edit resets native datetime inputs.
+
 ### FX sync and rebasing
 
 `libs/ecommerce/src/lib/currency-sync.ts` implements two separate operations:

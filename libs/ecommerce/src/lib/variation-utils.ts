@@ -7,7 +7,7 @@ import {
   type SalePriceMap,
   type TranslationMap,
 } from './types';
-import { normalizePriceMap, normalizeSalePriceMap } from './currency';
+import { isSaleWindowActive, normalizePriceMap, normalizeSalePriceMap } from './currency';
 
 type AttributeAccumulator = ProductAttribute & {
   terms: ProductAttributeTerm[];
@@ -29,6 +29,8 @@ export interface ProductVariantDraft {
   prices: PriceMap;
   sale_price?: number | null;
   sale_prices: SalePriceMap;
+  sale_start_at?: string | null;
+  sale_end_at?: string | null;
   stock_quantity: number;
   main_media_id?: string | null;
   main_image_url?: string | null;
@@ -185,6 +187,14 @@ export function generateVariantDrafts(params: {
       prices: previous?.prices ?? normalizePriceMap(basePrices),
       sale_price: previous?.sale_price ?? baseSalePrice,
       sale_prices: previous?.sale_prices ?? normalizeSalePriceMap(baseSalePrices),
+      // IMPORTANT (future agents): every per-variant field a user can edit MUST
+      // be carried over from `previous` here. This function re-runs whenever the
+      // variations editor mounts or attributes/base prices change, replacing the
+      // draft list. If a field is omitted, it silently resets to null on the next
+      // regenerate and then gets autosaved away — which is exactly how the sale
+      // window (sale_start_at/sale_end_at) used to "revert after publish".
+      sale_start_at: previous?.sale_start_at ?? null,
+      sale_end_at: previous?.sale_end_at ?? null,
       stock_quantity: previous?.stock_quantity ?? 0,
       main_media_id: previous?.main_media_id ?? null,
       main_image_url: previous?.main_image_url ?? null,
@@ -389,6 +399,11 @@ export function mapRawVariantRelations(rawVariants: any[] = [], languageCode?: s
         prices: normalizePriceMap(variant.prices),
         sale_price: variant.sale_price ?? null,
         sale_prices: normalizeSalePriceMap(variant.sale_prices),
+        sale_start_at: variant.sale_start_at ?? null,
+        sale_end_at: variant.sale_end_at ?? null,
+        scheduled_price: variant.scheduled_price ?? null,
+        scheduled_prices: normalizePriceMap(variant.scheduled_prices),
+        scheduled_price_at: variant.scheduled_price_at ?? null,
         stock_quantity: variant.stock_quantity ?? 0,
         main_media_id: variant.main_media_id ?? null,
         image_url: resolveMediaUrl(
@@ -423,15 +438,26 @@ export function mapRawVariantRelations(rawVariants: any[] = [], languageCode?: s
 }
 
 export function getVariantEffectivePriceRange(
-  variants: Array<Pick<ProductVariant, 'price' | 'sale_price'>>
+  variants: Array<
+    Pick<ProductVariant, 'price' | 'sale_price' | 'sale_start_at' | 'sale_end_at'>
+  >,
+  now?: Date
 ) {
   if (!variants.length) {
     return null;
   }
 
-  const effectivePrices = variants.map((variant) =>
-    typeof variant.sale_price === 'number' ? variant.sale_price : variant.price
-  );
+  const effectivePrices = variants.map((variant) => {
+    // Only treat the sale price as effective while its schedule window is active.
+    const saleActive = isSaleWindowActive({
+      saleStartAt: variant.sale_start_at,
+      saleEndAt: variant.sale_end_at,
+      now,
+    });
+    return saleActive && typeof variant.sale_price === 'number'
+      ? variant.sale_price
+      : variant.price;
+  });
 
   return {
     min: Math.min(...effectivePrices),

@@ -32,7 +32,7 @@ import {
   convertMinorUnitAmount,
   getDefaultCurrency,
   normalizePriceMap,
-  resolvePriceForCurrency,
+  resolveEffectivePriceForCurrency,
 } from '../currency';
 import { buildOrderTaxDetailsFromCalculation } from '../order-tax-details';
 import { isDigitalItem, PaymentProvider, TranslationMap } from '../types';
@@ -253,7 +253,7 @@ export class StripeProvider implements PaymentProvider {
       .filter((variantId): variantId is string => Boolean(variantId));
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, title, sku, price, prices, sale_price, sale_prices, stock, is_taxable')
+      .select('id, title, sku, price, prices, sale_price, sale_prices, sale_start_at, sale_end_at, scheduled_price, scheduled_prices, scheduled_price_at, stock, is_taxable')
       .in('id', productIds);
 
     if (productsError || !products) {
@@ -264,7 +264,7 @@ export class StripeProvider implements PaymentProvider {
     const { data: variants, error: variantsError } = variantIds.length
       ? await supabase
           .from('product_variants')
-          .select('id, product_id, sku, price, prices, sale_price, sale_prices, stock_quantity')
+          .select('id, product_id, sku, price, prices, sale_price, sale_prices, sale_start_at, sale_end_at, scheduled_price, scheduled_prices, scheduled_price_at, stock_quantity')
           .in('id', variantIds)
       : { data: [], error: null };
 
@@ -415,11 +415,16 @@ export class StripeProvider implements PaymentProvider {
         };
       }
 
-      const productPrice = resolvePriceForCurrency({
+      const productPrice = resolveEffectivePriceForCurrency({
         prices: normalizePriceMap(product.prices),
         salePrices: product.sale_prices || {},
         fallbackPrice: product.price,
         fallbackSalePrice: product.sale_price,
+        saleStartAt: product.sale_start_at,
+        saleEndAt: product.sale_end_at,
+        scheduledPrice: product.scheduled_price,
+        scheduledPrices: normalizePriceMap(product.scheduled_prices),
+        scheduledPriceAt: product.scheduled_price_at,
         currencyCode: selectedCurrency.code,
         currencies,
       });
@@ -449,11 +454,16 @@ export class StripeProvider implements PaymentProvider {
           };
         }
 
-        const variantPrice = resolvePriceForCurrency({
+        const variantPrice = resolveEffectivePriceForCurrency({
           prices: normalizePriceMap(variant.prices),
           salePrices: variant.sale_prices || {},
           fallbackPrice: variant.price,
           fallbackSalePrice: variant.sale_price,
+          saleStartAt: variant.sale_start_at,
+          saleEndAt: variant.sale_end_at,
+          scheduledPrice: variant.scheduled_price,
+          scheduledPrices: normalizePriceMap(variant.scheduled_prices),
+          scheduledPriceAt: variant.scheduled_price_at,
           currencyCode: selectedCurrency.code,
           currencies,
         });

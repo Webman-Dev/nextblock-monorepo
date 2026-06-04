@@ -8,7 +8,7 @@ import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
-  ExternalLink, Paintbrush, Brain, TicketPercent, ShieldAlert, Folder, DatabaseBackup, Boxes,
+  ExternalLink, Paintbrush, Brain, TicketPercent, ShieldAlert, Folder, DatabaseBackup, Boxes, Tag,
 } from "lucide-react"
 import { Button } from "@nextblock-cms/ui"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
@@ -337,6 +337,9 @@ export default function CmsClientLayout({
                   </NavItem>
                   <NavItem href="/cms/coupons" icon={TicketPercent} isActive={pathname.startsWith("/cms/coupons")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Coupons
+                  </NavItem>
+                  <NavItem href="/cms/promotions" icon={Tag} isActive={pathname.startsWith("/cms/promotions")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                    Bulk Price & Sales
                   </NavItem>
                   <NavItem href="/cms/shipping" icon={Package} isActive={pathname.startsWith("/cms/shipping")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Shipping

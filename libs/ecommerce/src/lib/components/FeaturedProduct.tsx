@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useTranslations } from '@nextblock-cms/utils';
 import { useCurrency } from '../CurrencyProvider';
 import {
-  resolvePriceForCurrency,
+  resolveEffectivePriceForCurrency,
   resolvePriceRangeForCurrency,
 } from '../currency';
 import { getTrialSummary } from '../trials';
@@ -33,11 +33,16 @@ export const FeaturedProduct = ({ product, className, imagePosition = 'left' }: 
     currencies,
   });
   const hasVariantPriceRange = Boolean(product.has_variants && variantRange);
-  const resolvedPrice = resolvePriceForCurrency({
+  const resolvedPrice = resolveEffectivePriceForCurrency({
     prices: product.prices,
     salePrices: product.sale_prices,
     fallbackPrice: product.price,
     fallbackSalePrice: product.sale_price,
+    saleStartAt: product.sale_start_at,
+    saleEndAt: product.sale_end_at,
+    scheduledPrice: product.scheduled_price,
+    scheduledPrices: product.scheduled_prices,
+    scheduledPriceAt: product.scheduled_price_at,
     currencyCode: activeCurrencyCode,
     currencies,
   });

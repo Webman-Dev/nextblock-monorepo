@@ -441,25 +441,134 @@ export function resolvePriceForCurrency(params: {
   };
 }
 
+/**
+ * Returns whether a scheduled sale window is active at `now` (defaults to the
+ * current instant). A null bound means "open ended"; both bounds null means the
+ * sale is always-on (preserves the behaviour of pre-schedule static sales).
+ * Window is [start, end): inclusive start, exclusive end. All comparisons are
+ * absolute instants, so this is timezone-safe.
+ */
+export function isSaleWindowActive(params: {
+  saleStartAt?: string | null;
+  saleEndAt?: string | null;
+  now?: Date;
+}): boolean {
+  const nowMs = (params.now ?? new Date()).getTime();
+
+  if (params.saleStartAt) {
+    const startMs = new Date(params.saleStartAt).getTime();
+    if (Number.isFinite(startMs) && nowMs < startMs) {
+      return false;
+    }
+  }
+
+  if (params.saleEndAt) {
+    const endMs = new Date(params.saleEndAt).getTime();
+    if (Number.isFinite(endMs) && nowMs >= endMs) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Returns whether a pending regular-price change has reached its effective time.
+ */
+export function isScheduledPriceDue(params: {
+  scheduledPriceAt?: string | null;
+  now?: Date;
+}): boolean {
+  if (!params.scheduledPriceAt) {
+    return false;
+  }
+  const dueMs = new Date(params.scheduledPriceAt).getTime();
+  if (!Number.isFinite(dueMs)) {
+    return false;
+  }
+  return (params.now ?? new Date()).getTime() >= dueMs;
+}
+
+/**
+ * Window-aware wrapper around {@link resolvePriceForCurrency}. Resolves the
+ * effective regular/sale price for a product or variant at `now`:
+ *   - a due scheduled regular-price change replaces the regular price inputs;
+ *   - the sale price only applies while its window is active.
+ * The existing `sale_price <= regularPrice` guard is preserved by delegating to
+ * `resolvePriceForCurrency`, so an out-of-window or invalid sale returns null.
+ */
+export function resolveEffectivePriceForCurrency(params: {
+  prices?: PriceMap | null;
+  salePrices?: SalePriceMap | null;
+  fallbackPrice?: number | null;
+  fallbackSalePrice?: number | null;
+  saleStartAt?: string | null;
+  saleEndAt?: string | null;
+  scheduledPrice?: number | null;
+  scheduledPrices?: PriceMap | null;
+  scheduledPriceAt?: string | null;
+  currencyCode?: string | null;
+  currencies: CurrencyRecord[];
+  now?: Date;
+}) {
+  const now = params.now ?? new Date();
+
+  const priceChangeDue = isScheduledPriceDue({
+    scheduledPriceAt: params.scheduledPriceAt,
+    now,
+  });
+  const effectivePrices = priceChangeDue ? params.scheduledPrices : params.prices;
+  const effectiveFallbackPrice = priceChangeDue
+    ? params.scheduledPrice
+    : params.fallbackPrice;
+
+  const saleActive = isSaleWindowActive({
+    saleStartAt: params.saleStartAt,
+    saleEndAt: params.saleEndAt,
+    now,
+  });
+
+  return resolvePriceForCurrency({
+    prices: effectivePrices,
+    salePrices: saleActive ? params.salePrices : null,
+    fallbackPrice: effectiveFallbackPrice,
+    fallbackSalePrice: saleActive ? params.fallbackSalePrice : null,
+    currencyCode: params.currencyCode,
+    currencies: params.currencies,
+  });
+}
+
 export function resolvePriceRangeForCurrency(params: {
   entries: Array<{
     price: number;
     prices?: PriceMap | null;
     sale_price?: number | null;
     sale_prices?: SalePriceMap | null;
+    sale_start_at?: string | null;
+    sale_end_at?: string | null;
+    scheduled_price?: number | null;
+    scheduled_prices?: PriceMap | null;
+    scheduled_price_at?: string | null;
   }>;
   currencyCode?: string | null;
   currencies: CurrencyRecord[];
+  now?: Date;
 }) {
   const effectivePrices = params.entries
     .map((entry) =>
-      resolvePriceForCurrency({
+      resolveEffectivePriceForCurrency({
         prices: entry.prices,
         salePrices: entry.sale_prices,
         fallbackPrice: entry.price,
         fallbackSalePrice: entry.sale_price,
+        saleStartAt: entry.sale_start_at,
+        saleEndAt: entry.sale_end_at,
+        scheduledPrice: entry.scheduled_price,
+        scheduledPrices: entry.scheduled_prices,
+        scheduledPriceAt: entry.scheduled_price_at,
         currencyCode: params.currencyCode,
         currencies: params.currencies,
+        now: params.now,
       })
     )
     .map((entry) => entry.sale_price ?? entry.price)

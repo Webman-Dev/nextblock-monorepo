@@ -7,6 +7,11 @@ import Image from 'next/image';
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 const resolveMediaUrl = (path: string) => {
+  // Guard empty paths so we never build "<base>/" (which 404s).
+  if (!path) {
+    return '';
+  }
+
   if (path.startsWith('http')) {
     return path;
   }
@@ -145,13 +150,19 @@ export const ProductMediaManager = ({ initialMedia, onUpdate, mediaPickerNode }:
                  <GripVertical className="w-4 h-4 text-white drop-shadow-md" />
             </div>
 
-            <Image
-              src={resolveMediaUrl(item.file_path)}
-              alt={item.alt}
-              fill
-              className="object-cover"
-              sizes="(max-width: 768px) 50vw, 33vw"
-            />
+            {resolveMediaUrl(item.file_path) ? (
+              <Image
+                src={resolveMediaUrl(item.file_path)}
+                alt={item.alt}
+                fill
+                className="object-cover"
+                sizes="(max-width: 768px) 50vw, 33vw"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                <ImageIcon className="w-8 h-8 opacity-30" />
+              </div>
+            )}
           </div>
         ))}
 

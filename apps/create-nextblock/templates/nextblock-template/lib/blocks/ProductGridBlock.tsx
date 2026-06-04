@@ -70,6 +70,8 @@ export const ProductGridBlock = async ({
         (p.product_variants || []).map((variant: any) => ({
           price: variant.price,
           sale_price: variant.sale_price,
+          sale_start_at: variant.sale_start_at ?? null,
+          sale_end_at: variant.sale_end_at ?? null,
         }))
       );
 
@@ -83,6 +85,11 @@ export const ProductGridBlock = async ({
         prices: normalizePriceMap(p.prices),
         sale_price: typeof p.sale_price === 'number' ? p.sale_price : undefined,
         sale_prices: normalizeSalePriceMap(p.sale_prices),
+        sale_start_at: p.sale_start_at ?? null,
+        sale_end_at: p.sale_end_at ?? null,
+        scheduled_price: typeof p.scheduled_price === 'number' ? p.scheduled_price : undefined,
+        scheduled_prices: normalizePriceMap(p.scheduled_prices),
+        scheduled_price_at: p.scheduled_price_at ?? null,
         is_taxable: p.is_taxable ?? true,
         product_type: productRecord.product_type ?? undefined,
         payment_provider: productRecord.payment_provider ?? undefined,
@@ -106,6 +113,11 @@ export const ProductGridBlock = async ({
           prices: normalizePriceMap(variant.prices),
           sale_price: variant.sale_price,
           sale_prices: normalizeSalePriceMap(variant.sale_prices),
+          sale_start_at: variant.sale_start_at ?? null,
+          sale_end_at: variant.sale_end_at ?? null,
+          scheduled_price: variant.scheduled_price ?? null,
+          scheduled_prices: normalizePriceMap(variant.scheduled_prices),
+          scheduled_price_at: variant.scheduled_price_at ?? null,
         })),
       };
   });

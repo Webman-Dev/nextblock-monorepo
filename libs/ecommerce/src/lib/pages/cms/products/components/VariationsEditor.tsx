@@ -15,6 +15,7 @@ import {
 } from '../../../../variation-utils';
 import { ProductAttribute } from '../../../../types';
 import { CurrencyPriceFields } from './CurrencyPriceFields';
+import { SaleScheduleFields, type SaleScheduleField } from './SaleScheduleFields';
 import {
   convertMinorUnitAmount,
   normalizePriceMap,
@@ -237,6 +238,20 @@ export function VariationsEditor({
           [field]: Number.isFinite(numericValue) ? numericValue : 0,
         };
       })
+    );
+  };
+
+  const handleVariantScheduleChange = (
+    combinationKey: string,
+    field: SaleScheduleField,
+    value: string | null
+  ) => {
+    setVariantDrafts((currentDrafts) =>
+      currentDrafts.map((variant) =>
+        variant.combination_key === combinationKey
+          ? { ...variant, [field]: value }
+          : variant
+      )
     );
   };
 
@@ -555,6 +570,17 @@ export function VariationsEditor({
                     storeManagedPriceCurrencyCodes.length > 0
                       ? `Store-managed currencies derive from ${defaultCurrency?.code || 'the base currency'}.`
                       : undefined
+                  }
+                  trailing={
+                    <SaleScheduleFields
+                      idPrefix={`variant-${variant.combination_key}`}
+                      startAt={variant.sale_start_at}
+                      endAt={variant.sale_end_at}
+                      onChange={(field, value) =>
+                        handleVariantScheduleChange(variant.combination_key, field, value)
+                      }
+                      bare
+                    />
                   }
                 />
 

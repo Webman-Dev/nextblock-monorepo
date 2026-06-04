@@ -35,6 +35,8 @@ function serializeVariantsForRpc(variants?: ProductFormValues['variants']) {
         : null,
     prices: serializePriceMap(variant.prices),
     sale_prices: serializePriceMap(variant.sale_prices),
+    sale_start_at: variant.sale_start_at ?? null,
+    sale_end_at: variant.sale_end_at ?? null,
     stock_quantity: variant.stock_quantity,
     main_media_id: variant.main_media_id ?? null,
     attribute_term_ids: variant.attribute_term_ids,
@@ -68,6 +70,8 @@ function buildProductRpcPayload(data: ProductFormValues, id?: string) {
         : null,
     prices: serializePriceMap(data.prices),
     sale_prices: serializePriceMap(data.sale_prices),
+    sale_start_at: data.sale_start_at ?? null,
+    sale_end_at: data.sale_end_at ?? null,
     freemius_plan_id: data.freemius_plan_id ?? null,
     freemius_product_id: data.freemius_product_id ?? null,
     trial_period_days: trialPeriodDays,
@@ -98,6 +102,95 @@ async function persistProductTaxability(
   }
 }
 
+/**
+ * Persists the scheduled sale (price + window) directly, keyed by SKU so it
+ * applies to every product row sharing the SKU — e.g. translations in other
+ * languages (`products` is UNIQUE on `(language_id, sku)`, so the same SKU spans
+ * languages). A sale belongs to the item (SKU), not a single language row or
+ * product id. This also covers the case where the `upsert_product_with_variants`
+ * RPC predates these columns (migration 00000000000025) on some databases.
+ *
+ * Canonical minor-unit sale amounts are read back from the just-saved product
+ * row (written by the RPC) and copied across the SKU group; the schedule window
+ * comes from the submitted form data. Variant propagation is scoped to the SKU
+ * group's products to avoid touching unrelated products that reuse a SKU.
+ */
+async function persistProductSaleSchedule(
+  supabase: SupabaseClient<Database>,
+  productId: string,
+  data: ProductFormValues
+) {
+  const now = new Date().toISOString();
+
+  // Canonical (already minor-unit) sale values from the just-saved product row.
+  const { data: saved } = await supabase
+    .from('products')
+    .select('sku, sale_price, sale_prices')
+    .eq('id', productId)
+    .maybeSingle();
+  const sku = saved?.sku ?? data.sku;
+
+  // The SKU group: every product row (any language) that shares this SKU.
+  const { data: groupRows } = await supabase
+    .from('products')
+    .select('id')
+    .eq('sku', sku);
+  const groupProductIds = (groupRows ?? []).map((row) => row.id);
+  if (groupProductIds.length === 0) {
+    groupProductIds.push(productId);
+  }
+
+  const { error } = await supabase
+    .from('products')
+    .update({
+      sale_price: saved?.sale_price ?? null,
+      sale_prices: saved?.sale_prices ?? null,
+      sale_start_at: data.sale_start_at ?? null,
+      sale_end_at: data.sale_end_at ?? null,
+      updated_at: now,
+    })
+    .in('id', groupProductIds);
+
+  if (error) {
+    throw error;
+  }
+
+  const variants = data.variants ?? [];
+  if (variants.length === 0) {
+    return;
+  }
+
+  // Canonical variant sale amounts from the just-saved (edited) product variants.
+  const { data: variantRows } = await supabase
+    .from('product_variants')
+    .select('sku, sale_price, sale_prices')
+    .eq('product_id', productId);
+  const savedVariantBySku = new Map(
+    (variantRows ?? []).map((row) => [row.sku, row])
+  );
+
+  for (const variant of variants) {
+    const savedVariant = savedVariantBySku.get(variant.sku);
+    if (!savedVariant) {
+      continue;
+    }
+    const { error: variantError } = await supabase
+      .from('product_variants')
+      .update({
+        sale_price: savedVariant.sale_price ?? null,
+        sale_prices: savedVariant.sale_prices ?? null,
+        sale_start_at: variant.sale_start_at ?? null,
+        sale_end_at: variant.sale_end_at ?? null,
+        updated_at: now,
+      })
+      .eq('sku', variant.sku)
+      .in('product_id', groupProductIds);
+    if (variantError) {
+      throw variantError;
+    }
+  }
+}
+
 export async function getProducts(
   supabase: SupabaseClient<Database>,
   {
@@ -120,7 +213,7 @@ export async function getProducts(
   let query = supabase
     .from('products')
     .select(
-      'id, title, sku, upc, price, prices, sale_price, sale_prices, is_taxable, product_type, payment_provider, short_description, stock, status, slug, language_id, translation_group_id, freemius_product_id, freemius_plan_id, trial_period_days, trial_requires_payment_method, product_media(media(file_path, object_key)), product_variants(id, price, prices, sale_price, sale_prices), freemius_plans(id, name, title, freemius_pricing(id, license_quota, api_monthly_price, api_annual_price, api_lifetime_price, override_monthly_price, override_annual_price, override_lifetime_price, is_active)), product_categories(category:categories(id, name, slug, description, name_translations, description_translations))',
+      'id, title, sku, upc, price, prices, sale_price, sale_prices, sale_start_at, sale_end_at, scheduled_price, scheduled_prices, scheduled_price_at, is_taxable, product_type, payment_provider, short_description, stock, status, slug, language_id, translation_group_id, freemius_product_id, freemius_plan_id, trial_period_days, trial_requires_payment_method, product_media(media(file_path, object_key)), product_variants(id, price, prices, sale_price, sale_prices, sale_start_at, sale_end_at, scheduled_price, scheduled_prices, scheduled_price_at), freemius_plans(id, name, title, freemius_pricing(id, license_quota, api_monthly_price, api_annual_price, api_lifetime_price, override_monthly_price, override_annual_price, override_lifetime_price, is_active)), product_categories(category:categories(id, name, slug, description, name_translations, description_translations))',
       { count: 'exact' }
     )
     .range(start, end)
@@ -189,6 +282,11 @@ export async function getProduct(supabase: SupabaseClient<Database>, id: string)
         prices,
         sale_price,
         sale_prices,
+        sale_start_at,
+        sale_end_at,
+        scheduled_price,
+        scheduled_prices,
+        scheduled_price_at,
         stock_quantity,
         media:main_media_id (
           id,
@@ -283,6 +381,11 @@ export async function getProductBySlug(
         prices,
         sale_price,
         sale_prices,
+        sale_start_at,
+        sale_end_at,
+        scheduled_price,
+        scheduled_prices,
+        scheduled_price_at,
         stock_quantity,
         media:main_media_id (
           id,
@@ -403,6 +506,8 @@ export async function createProduct(supabase: SupabaseClient<Database>, data: Pr
 
   await persistProductTaxability(supabase, productId, data.is_taxable);
 
+  await persistProductSaleSchedule(supabase, productId, data);
+
   await syncSharedInventoryForSavedProduct(productId, data);
 
   if (data.category_ids !== undefined) {
@@ -448,7 +553,9 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
 
   await persistProductTaxability(supabase, productId, data.is_taxable);
 
-  const newMediaIds = data.product_media 
+  await persistProductSaleSchedule(supabase, productId, data);
+
+  const newMediaIds = data.product_media
     ? data.product_media.map(m => m.media_id)
     : (data.media_id ? [data.media_id] : []);
     
@@ -638,12 +745,17 @@ export async function fetchTranslatedProductsForCartInternal(
       id, 
       title, 
       sku, 
-      price, 
+      price,
       prices,
-      sale_price, 
+      sale_price,
       sale_prices,
+      sale_start_at,
+      sale_end_at,
+      scheduled_price,
+      scheduled_prices,
+      scheduled_price_at,
       stock,
-      slug, 
+      slug,
       language_id,
       product_type,
       payment_provider,
@@ -667,6 +779,11 @@ export async function fetchTranslatedProductsForCartInternal(
         prices,
         sale_price,
         sale_prices,
+        sale_start_at,
+        sale_end_at,
+        scheduled_price,
+        scheduled_prices,
+        scheduled_price_at,
         stock_quantity,
         media:main_media_id (
           file_path,

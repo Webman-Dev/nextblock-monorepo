@@ -78,6 +78,11 @@ export interface ProductVariant {
   prices?: PriceMap | null;
   sale_price?: number | null;
   sale_prices?: SalePriceMap | null;
+  sale_start_at?: string | null;
+  sale_end_at?: string | null;
+  scheduled_price?: number | null;
+  scheduled_prices?: PriceMap | null;
+  scheduled_price_at?: string | null;
   stock_quantity: number;
   attribute_term_ids: string[];
   selected_options: ProductVariantOption[];
@@ -106,6 +111,11 @@ export interface Product {
   prices?: PriceMap | null;
   sale_price?: number | null;
   sale_prices?: SalePriceMap | null;
+  sale_start_at?: string | null;
+  sale_end_at?: string | null;
+  scheduled_price?: number | null;
+  scheduled_prices?: PriceMap | null;
+  scheduled_price_at?: string | null;
   is_taxable?: boolean;
   product_type?: ProductType;
   payment_provider?: EcommercePaymentProvider;
@@ -137,6 +147,11 @@ export interface Product {
     prices?: PriceMap | null;
     sale_price?: number | null;
     sale_prices?: SalePriceMap | null;
+    sale_start_at?: string | null;
+    sale_end_at?: string | null;
+    scheduled_price?: number | null;
+    scheduled_prices?: PriceMap | null;
+    scheduled_price_at?: string | null;
   }>;
   freemius_plans?: Array<{
     id: string;

@@ -305,6 +305,182 @@ export async function syncCouponToFreemius(input: {
   };
 }
 
+type ProductSaleRow = {
+  id: string;
+  sku: string | null;
+  price: number | null;
+  sale_price: number | null;
+  sale_start_at: string | null;
+  sale_end_at: string | null;
+  payment_provider: string | null;
+  freemius_product_id: string | number | null;
+  freemius_plan_id: string | number | null;
+};
+
+function buildSaleCouponCode(input: { sku?: string | null; productId: string }) {
+  const fromSku = (input.sku || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (fromSku) {
+    return `SALE${fromSku}`.slice(0, 32);
+  }
+  const fromId = input.productId.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  return `SALE${fromId}`.slice(0, 32);
+}
+
+function computeSaleDiscountPercent(
+  price?: number | null,
+  salePrice?: number | null
+) {
+  if (typeof price !== 'number' || price <= 0) {
+    return null;
+  }
+  if (typeof salePrice !== 'number' || salePrice < 0 || salePrice >= price) {
+    return null;
+  }
+  const percent = Math.round((1 - salePrice / price) * 100);
+  if (percent <= 0 || percent > 100) {
+    return null;
+  }
+  return percent;
+}
+
+/**
+ * Reconciles the auto-generated, time-bounded Freemius sale coupon for a single
+ * product with the product's current scheduled-sale configuration. Creating the
+ * coupon with the sale window's start/end dates lets Freemius enforce the window
+ * natively at its hosted checkout. Safe to call repeatedly (idempotent upsert
+ * keyed by product_id). Never throws — failures are recorded on the mapping row.
+ */
+export async function syncProductSaleCouponToFreemius(input: {
+  productId: string;
+  client: SupabaseLikeClient;
+}) {
+  const { data: product, error } = await (input.client as any)
+    .from('products')
+    .select(
+      'id, sku, price, sale_price, sale_start_at, sale_end_at, payment_provider, freemius_product_id, freemius_plan_id'
+    )
+    .eq('id', input.productId)
+    .maybeSingle();
+
+  if (error || !product) {
+    return { success: false, error: error?.message || 'Product not found' };
+  }
+
+  const row = product as ProductSaleRow;
+  const freemiusProductId = String(row.freemius_product_id || '').trim();
+
+  if (row.payment_provider !== 'freemius' || !freemiusProductId) {
+    return { success: true, skipped: true, reason: 'not_a_freemius_product' };
+  }
+
+  const discountPercent = computeSaleDiscountPercent(row.price, row.sale_price);
+  const saleConfigured = discountPercent !== null;
+
+  const { data: existing } = await (input.client as any)
+    .from('product_freemius_sale_coupons')
+    .select('id, freemius_coupon_id, freemius_coupon_code, discount_percent, is_active')
+    .eq('product_id', row.id)
+    .maybeSingle();
+
+  // No sale and no remote coupon ever created → nothing to push to Freemius.
+  if (!saleConfigured && !existing?.freemius_coupon_id) {
+    if (existing?.id) {
+      await (input.client as any)
+        .from('product_freemius_sale_coupons')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('id', existing.id);
+    }
+    return { success: true, active: false };
+  }
+
+  const couponCode =
+    existing?.freemius_coupon_code ||
+    buildSaleCouponCode({ sku: row.sku, productId: row.id });
+  const planIds = row.freemius_plan_id ? [String(row.freemius_plan_id)] : [];
+  // When deactivating, keep a valid discount value so Freemius accepts the PUT.
+  const payloadDiscount = discountPercent ?? existing?.discount_percent ?? 1;
+
+  const couponRow: CouponRow = {
+    id: row.id,
+    code: couponCode,
+    name: `Scheduled sale ${row.sku || row.id}`,
+    provider_scope: 'freemius',
+    discount_type: 'percent',
+    discount_amount: payloadDiscount,
+    is_active: saleConfigured,
+    starts_at: row.sale_start_at,
+    ends_at: row.sale_end_at,
+    redemption_limit: null,
+  };
+  const target: FreemiusTarget = {
+    freemiusProductId,
+    productId: row.id,
+    planIds,
+  };
+  const payload = buildFreemiusCouponPayload(couponRow, target);
+
+  try {
+    const remotePayload = await freemiusCouponRequest({
+      productId: freemiusProductId,
+      method: existing?.freemius_coupon_id ? 'PUT' : 'POST',
+      couponId: existing?.freemius_coupon_id ?? null,
+      body: payload,
+    });
+    const remoteCoupon = remotePayload?.coupon ?? remotePayload;
+
+    await (input.client as any)
+      .from('product_freemius_sale_coupons')
+      .upsert(
+        {
+          id: existing?.id,
+          product_id: row.id,
+          freemius_product_id: freemiusProductId,
+          freemius_plan_id: row.freemius_plan_id ? String(row.freemius_plan_id) : null,
+          freemius_coupon_id: remoteCoupon?.id
+            ? String(remoteCoupon.id)
+            : existing?.freemius_coupon_id ?? null,
+          freemius_coupon_code: couponCode,
+          discount_percent: discountPercent,
+          starts_at: row.sale_start_at,
+          ends_at: row.sale_end_at,
+          is_active: saleConfigured,
+          sync_status: 'synced',
+          sync_error: null,
+          remote_payload: remotePayload,
+          last_synced_at: new Date().toISOString(),
+        },
+        { onConflict: 'product_id' }
+      );
+
+    return { success: true, active: saleConfigured, code: couponCode };
+  } catch (syncError: any) {
+    await (input.client as any)
+      .from('product_freemius_sale_coupons')
+      .upsert(
+        {
+          id: existing?.id,
+          product_id: row.id,
+          freemius_product_id: freemiusProductId,
+          freemius_plan_id: row.freemius_plan_id ? String(row.freemius_plan_id) : null,
+          freemius_coupon_id: existing?.freemius_coupon_id ?? null,
+          freemius_coupon_code: couponCode,
+          discount_percent: discountPercent,
+          starts_at: row.sale_start_at,
+          ends_at: row.sale_end_at,
+          is_active: saleConfigured,
+          sync_status: 'failed',
+          sync_error: syncError.message || 'Freemius sale coupon sync failed',
+          last_synced_at: new Date().toISOString(),
+        },
+        { onConflict: 'product_id' }
+      );
+    return {
+      success: false,
+      error: syncError.message || 'Freemius sale coupon sync failed',
+    };
+  }
+}
+
 export async function deleteCouponFromFreemius(input: {
   couponId: string;
   client: SupabaseLikeClient;

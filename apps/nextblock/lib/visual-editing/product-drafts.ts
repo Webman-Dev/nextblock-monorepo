@@ -1,8 +1,8 @@
 import "server-only";
 
 import type { Json } from "@nextblock-cms/db";
-import { createClient } from "@nextblock-cms/db/server";
-import { updateProduct } from "@nextblock-cms/ecommerce/server";
+import { createClient, getServiceRoleSupabaseClient } from "@nextblock-cms/db/server";
+import { updateProduct, syncProductSaleCouponToFreemius } from "@nextblock-cms/ecommerce/server";
 import { getCurrentUserCanEdit, normalizeDraftBlocks } from "./draft-content";
 import {
   formatVisualEditingError,
@@ -382,6 +382,16 @@ export async function publishProductVisualEditingDraft(
 
     if (hasFullProductFormValues) {
       await updateProduct(auth.supabase as any, productId, draft.meta as any);
+      if ((draft.meta as any)?.payment_provider === "freemius") {
+        try {
+          await syncProductSaleCouponToFreemius({
+            productId,
+            client: getServiceRoleSupabaseClient() as any,
+          });
+        } catch (couponError) {
+          console.error("Failed to sync Freemius sale coupon on publish:", couponError);
+        }
+      }
     } else {
       const productUpdate: Record<string, unknown> = {};
       addStringUpdate(productUpdate, draft, "title");

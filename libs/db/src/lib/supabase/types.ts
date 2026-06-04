@@ -1401,6 +1401,71 @@ export type Database = {
           },
         ]
       }
+      product_freemius_sale_coupons: {
+        Row: {
+          created_at: string
+          discount_percent: number | null
+          ends_at: string | null
+          freemius_coupon_code: string
+          freemius_coupon_id: string | null
+          freemius_plan_id: string | null
+          freemius_product_id: string
+          id: string
+          is_active: boolean
+          last_synced_at: string | null
+          product_id: string
+          remote_payload: Json | null
+          starts_at: string | null
+          sync_error: string | null
+          sync_status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          discount_percent?: number | null
+          ends_at?: string | null
+          freemius_coupon_code: string
+          freemius_coupon_id?: string | null
+          freemius_plan_id?: string | null
+          freemius_product_id: string
+          id?: string
+          is_active?: boolean
+          last_synced_at?: string | null
+          product_id: string
+          remote_payload?: Json | null
+          starts_at?: string | null
+          sync_error?: string | null
+          sync_status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          discount_percent?: number | null
+          ends_at?: string | null
+          freemius_coupon_code?: string
+          freemius_coupon_id?: string | null
+          freemius_plan_id?: string | null
+          freemius_product_id?: string
+          id?: string
+          is_active?: boolean
+          last_synced_at?: string | null
+          product_id?: string
+          remote_payload?: Json | null
+          starts_at?: string | null
+          sync_error?: string | null
+          sync_status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_freemius_sale_coupons_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: true
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_variants: {
         Row: {
           created_at: string | null
@@ -1410,8 +1475,13 @@ export type Database = {
           price_adjustment: number
           prices: Json
           product_id: string
+          sale_end_at: string | null
           sale_price: number | null
           sale_prices: Json | null
+          sale_start_at: string | null
+          scheduled_price: number | null
+          scheduled_price_at: string | null
+          scheduled_prices: Json | null
           sku: string
           stock_quantity: number
           upc: string | null
@@ -1425,8 +1495,13 @@ export type Database = {
           price_adjustment?: number
           prices?: Json
           product_id: string
+          sale_end_at?: string | null
           sale_price?: number | null
           sale_prices?: Json | null
+          sale_start_at?: string | null
+          scheduled_price?: number | null
+          scheduled_price_at?: string | null
+          scheduled_prices?: Json | null
           sku: string
           stock_quantity?: number
           upc?: string | null
@@ -1440,8 +1515,13 @@ export type Database = {
           price_adjustment?: number
           prices?: Json
           product_id?: string
+          sale_end_at?: string | null
           sale_price?: number | null
           sale_prices?: Json | null
+          sale_start_at?: string | null
+          scheduled_price?: number | null
+          scheduled_price_at?: string | null
+          scheduled_prices?: Json | null
           sku?: string
           stock_quantity?: number
           upc?: string | null
@@ -1480,8 +1560,13 @@ export type Database = {
           price: number
           prices: Json
           product_type: string
+          sale_end_at: string | null
           sale_price: number | null
           sale_prices: Json | null
+          sale_start_at: string | null
+          scheduled_price: number | null
+          scheduled_price_at: string | null
+          scheduled_prices: Json | null
           short_description: string | null
           sku: string
           slug: string
@@ -1509,8 +1594,13 @@ export type Database = {
           price: number
           prices?: Json
           product_type: string
+          sale_end_at?: string | null
           sale_price?: number | null
           sale_prices?: Json | null
+          sale_start_at?: string | null
+          scheduled_price?: number | null
+          scheduled_price_at?: string | null
+          scheduled_prices?: Json | null
           short_description?: string | null
           sku: string
           slug: string
@@ -1538,8 +1628,13 @@ export type Database = {
           price?: number
           prices?: Json
           product_type?: string
+          sale_end_at?: string | null
           sale_price?: number | null
           sale_prices?: Json | null
+          sale_start_at?: string | null
+          scheduled_price?: number | null
+          scheduled_price_at?: string | null
+          scheduled_prices?: Json | null
           short_description?: string | null
           sku?: string
           slug?: string

@@ -124,10 +124,44 @@ export default async function EditProductPage({
     category_ids: assignedCategories.map((c: any) => c.id),
   };
   if (draftData && draftData.meta && typeof draftData.meta === 'object') {
+    const meta = draftData.meta as any;
+
+    // Drafts store product_media as { media_id } only, so the gallery loses the
+    // file_path/object_key needed to render thumbnails. Re-hydrate from the
+    // media table so the main image (and the rest of the gallery) still loads.
+    let hydratedProductMedia = meta.product_media;
+    if (Array.isArray(meta.product_media) && meta.product_media.length > 0) {
+      const draftMediaIds = meta.product_media
+        .map((pm: any) => pm?.media_id)
+        .filter(Boolean);
+      if (draftMediaIds.length > 0) {
+        const { data: mediaRows } = await supabase
+          .from('media')
+          .select('id, file_path, object_key, file_name, description')
+          .in('id', draftMediaIds);
+        const mediaById = new Map((mediaRows || []).map((m: any) => [m.id, m]));
+        hydratedProductMedia = meta.product_media.map((pm: any, index: number) => {
+          const media = mediaById.get(pm?.media_id);
+          return {
+            media_id: pm?.media_id,
+            sort_order: pm?.sort_order ?? index,
+            media: media
+              ? {
+                  file_path: media.file_path,
+                  object_key: media.object_key,
+                  alt_text: media.description || media.file_name || '',
+                }
+              : pm?.media ?? null,
+          };
+        });
+      }
+    }
+
     normalizedInitialData = {
-      ...(draftData.meta as any),
+      ...meta,
       id: product.id,
-      category_ids: (draftData.meta as any).category_ids ?? assignedCategories.map((c: any) => c.id),
+      product_media: hydratedProductMedia,
+      category_ids: meta.category_ids ?? assignedCategories.map((c: any) => c.id),
     };
   }
 

@@ -21,7 +21,7 @@ import {
   resolveTranslatedText,
 } from '../variation-utils';
 import { useCurrency } from '../CurrencyProvider';
-import { resolvePriceForCurrency } from '../currency';
+import { resolveEffectivePriceForCurrency } from '../currency';
 import { isDigitalProduct } from '../types';
 import { getTrialSummary } from '../trials';
 
@@ -214,21 +214,31 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
     return findMatchingVariant(variants, normalizedSelections);
   }, [hasVariants, normalizedSelections, variants]);
 
-  const resolvedBasePrice = resolvePriceForCurrency({
+  const resolvedBasePrice = resolveEffectivePriceForCurrency({
     prices: product.prices,
     salePrices: product.sale_prices,
     fallbackPrice: product.price,
     fallbackSalePrice: product.sale_price,
+    saleStartAt: product.sale_start_at,
+    saleEndAt: product.sale_end_at,
+    scheduledPrice: product.scheduled_price,
+    scheduledPrices: product.scheduled_prices,
+    scheduledPriceAt: product.scheduled_price_at,
     currencyCode: activeCurrencyCode,
     currencies,
   });
   const resolvedVariantPrice =
     hasVariants && selectedVariant
-      ? resolvePriceForCurrency({
+      ? resolveEffectivePriceForCurrency({
           prices: selectedVariant.prices,
           salePrices: selectedVariant.sale_prices,
           fallbackPrice: selectedVariant.price,
           fallbackSalePrice: selectedVariant.sale_price,
+          saleStartAt: selectedVariant.sale_start_at,
+          saleEndAt: selectedVariant.sale_end_at,
+          scheduledPrice: selectedVariant.scheduled_price,
+          scheduledPrices: selectedVariant.scheduled_prices,
+          scheduledPriceAt: selectedVariant.scheduled_price_at,
           currencyCode: activeCurrencyCode,
           currencies,
         })

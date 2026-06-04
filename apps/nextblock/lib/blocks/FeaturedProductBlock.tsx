@@ -33,6 +33,8 @@ export const FeaturedProductBlock = async ({ content }: { content: FeaturedProdu
     ((product as any).product_variants || []).map((variant: any) => ({
       price: variant.price,
       sale_price: variant.sale_price,
+      sale_start_at: variant.sale_start_at ?? null,
+      sale_end_at: variant.sale_end_at ?? null,
     }))
   );
   const uiProduct = {
@@ -46,6 +48,12 @@ export const FeaturedProductBlock = async ({ content }: { content: FeaturedProdu
     sale_price:
       typeof productRecord.sale_price === 'number' ? productRecord.sale_price : undefined,
     sale_prices: normalizeSalePriceMap(productRecord.sale_prices),
+    sale_start_at: productRecord.sale_start_at ?? null,
+    sale_end_at: productRecord.sale_end_at ?? null,
+    scheduled_price:
+      typeof productRecord.scheduled_price === 'number' ? productRecord.scheduled_price : undefined,
+    scheduled_prices: normalizePriceMap(productRecord.scheduled_prices),
+    scheduled_price_at: productRecord.scheduled_price_at ?? null,
     is_taxable: productRecord.is_taxable ?? true,
     product_type: productRecord.product_type ?? undefined,
     payment_provider: productRecord.payment_provider ?? undefined,
@@ -68,6 +76,11 @@ export const FeaturedProductBlock = async ({ content }: { content: FeaturedProdu
       prices: normalizePriceMap(variant.prices),
       sale_price: variant.sale_price,
       sale_prices: normalizeSalePriceMap(variant.sale_prices),
+      sale_start_at: variant.sale_start_at ?? null,
+      sale_end_at: variant.sale_end_at ?? null,
+      scheduled_price: variant.scheduled_price ?? null,
+      scheduled_prices: normalizePriceMap(variant.scheduled_prices),
+      scheduled_price_at: variant.scheduled_price_at ?? null,
     })),
   };
 

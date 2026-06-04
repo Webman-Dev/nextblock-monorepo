@@ -11,7 +11,8 @@ import {
 } from '../customer-addresses';
 import {
   getDefaultCurrency,
-  resolvePriceForCurrency,
+  isSaleWindowActive,
+  resolveEffectivePriceForCurrency,
 } from '../currency';
 
 export type FreemiusCheckoutCredentialEntry = {
@@ -294,30 +295,42 @@ export class FreemiusProvider implements PaymentProvider {
       const item = cartItems[0];
       const { data: product, error: productError } = await supabase
         .from('products')
-        .select('id, title, price, prices, sale_price, sale_prices, freemius_plan_id, freemius_product_id, trial_period_days, trial_requires_payment_method')
+        .select('id, title, price, prices, sale_price, sale_prices, sale_start_at, sale_end_at, scheduled_price, scheduled_prices, scheduled_price_at, freemius_plan_id, freemius_product_id, trial_period_days, trial_requires_payment_method')
         .eq('id', item.product_id)
         .single();
-        
+
       if (productError || !product) {
           return { error: 'Product not found', url: null };
       }
-      
+
       const freemiusPlanId = product.freemius_plan_id;
       const freemiusProductId = product.freemius_product_id;
-      
+
       if (!freemiusPlanId || !freemiusProductId) {
           return { error: 'Product is not configured for Freemius checkout (missing Plan ID or Product ID)', url: null };
       }
-      
-      const resolvedPrice = resolvePriceForCurrency({
+
+      const resolvedPrice = resolveEffectivePriceForCurrency({
         prices: product.prices || {},
         salePrices: product.sale_prices || {},
         fallbackPrice: product.price,
         fallbackSalePrice: product.sale_price,
+        saleStartAt: product.sale_start_at,
+        saleEndAt: product.sale_end_at,
+        scheduledPrice: product.scheduled_price,
+        scheduledPrices: product.scheduled_prices || {},
+        scheduledPriceAt: product.scheduled_price_at,
         currencyCode: selectedCurrency.code,
         currencies,
       });
       const unitAmount = resolvedPrice.sale_price ?? resolvedPrice.price;
+      // The locally recorded order price reflects the sale; the real Freemius
+      // charge is enforced by an auto-generated, time-bounded coupon (see
+      // syncProductSaleCouponToFreemius) appended to the checkout URL below.
+      const productSaleActive = isSaleWindowActive({
+        saleStartAt: product.sale_start_at,
+        saleEndAt: product.sale_end_at,
+      });
       const totalAmount = unitAmount * item.quantity;
       let couponQuote: CouponQuote | null = null;
       let discountTotal = 0;
@@ -556,9 +569,28 @@ export class FreemiusProvider implements PaymentProvider {
       }
       if (couponQuote) {
           url.searchParams.append('coupon', couponQuote.code);
+      } else if (productSaleActive) {
+          // No user coupon: apply the auto-generated sale coupon so the
+          // scheduled discount is enforced on the Freemius-hosted checkout.
+          const { data: saleCoupon } = await supabase
+            .from('product_freemius_sale_coupons')
+            .select('freemius_coupon_code, is_active, starts_at, ends_at, sync_status')
+            .eq('product_id', product.id)
+            .maybeSingle();
+          if (
+            saleCoupon?.is_active &&
+            saleCoupon.sync_status === 'synced' &&
+            saleCoupon.freemius_coupon_code &&
+            isSaleWindowActive({
+              saleStartAt: saleCoupon.starts_at,
+              saleEndAt: saleCoupon.ends_at,
+            })
+          ) {
+              url.searchParams.append('coupon', saleCoupon.freemius_coupon_code);
+          }
       }
-      
-      return { 
+
+      return {
           url: url.toString(),
           customProps: {
               provider: 'freemius',

@@ -7,7 +7,7 @@ import {
   normalizeCurrencyRecord,
   normalizePriceMap,
   normalizeSalePriceMap,
-  resolvePriceForCurrency,
+  resolveEffectivePriceForCurrency,
   type CurrencyRecord,
 } from '@nextblock-cms/ecommerce/currency';
 import { mapRawVariantRelations } from '@nextblock-cms/ecommerce/variation-utils';
@@ -69,6 +69,11 @@ const PRODUCT_SELECT = `
     prices,
     sale_price,
     sale_prices,
+    sale_start_at,
+    sale_end_at,
+    scheduled_price,
+    scheduled_prices,
+    scheduled_price_at,
     stock_quantity,
     media:main_media_id (
       id,
@@ -571,14 +576,24 @@ function resolveEffectivePrice(params: {
   prices?: unknown;
   salePrice?: number | null;
   salePrices?: unknown;
+  saleStartAt?: string | null;
+  saleEndAt?: string | null;
+  scheduledPrice?: number | null;
+  scheduledPrices?: unknown;
+  scheduledPriceAt?: string | null;
   currencyCode: string;
   currencies: CurrencyRecord[];
 }) {
-  const resolvedPrice = resolvePriceForCurrency({
+  const resolvedPrice = resolveEffectivePriceForCurrency({
     prices: normalizePriceMap(params.prices),
     salePrices: normalizeSalePriceMap(params.salePrices),
     fallbackPrice: params.price,
     fallbackSalePrice: params.salePrice,
+    saleStartAt: params.saleStartAt,
+    saleEndAt: params.saleEndAt,
+    scheduledPrice: params.scheduledPrice,
+    scheduledPrices: normalizePriceMap(params.scheduledPrices),
+    scheduledPriceAt: params.scheduledPriceAt,
     currencyCode: params.currencyCode,
     currencies: params.currencies,
   });
@@ -599,6 +614,11 @@ function getProductPriceRange(product: any, variants: ProductVariant[], options:
           prices: variant.prices,
           sale_price: variant.sale_price,
           sale_prices: variant.sale_prices,
+          sale_start_at: variant.sale_start_at,
+          sale_end_at: variant.sale_end_at,
+          scheduled_price: variant.scheduled_price,
+          scheduled_prices: variant.scheduled_prices,
+          scheduled_price_at: variant.scheduled_price_at,
         }))
       : [
           {
@@ -606,6 +626,11 @@ function getProductPriceRange(product: any, variants: ProductVariant[], options:
             prices: product.prices,
             sale_price: product.sale_price,
             sale_prices: product.sale_prices,
+            sale_start_at: product.sale_start_at,
+            sale_end_at: product.sale_end_at,
+            scheduled_price: product.scheduled_price,
+            scheduled_prices: product.scheduled_prices,
+            scheduled_price_at: product.scheduled_price_at,
           },
         ];
 
@@ -615,6 +640,11 @@ function getProductPriceRange(product: any, variants: ProductVariant[], options:
       prices: entry.prices,
       salePrice: entry.sale_price,
       salePrices: entry.sale_prices,
+      saleStartAt: entry.sale_start_at,
+      saleEndAt: entry.sale_end_at,
+      scheduledPrice: entry.scheduled_price,
+      scheduledPrices: entry.scheduled_prices,
+      scheduledPriceAt: entry.scheduled_price_at,
       currencyCode: options.currencyCode,
       currencies: options.currencies,
     }).amount
@@ -702,6 +732,11 @@ function buildDefaultVariant(product: any, options: ProductMapOptions): ProductV
     prices: normalizePriceMap(product.prices),
     sale_price: product.sale_price ?? null,
     sale_prices: normalizeSalePriceMap(product.sale_prices),
+    sale_start_at: product.sale_start_at ?? null,
+    sale_end_at: product.sale_end_at ?? null,
+    scheduled_price: product.scheduled_price ?? null,
+    scheduled_prices: normalizePriceMap(product.scheduled_prices),
+    scheduled_price_at: product.scheduled_price_at ?? null,
     stock_quantity:
       typeof product.stock === 'number'
         ? product.stock
@@ -746,6 +781,11 @@ function mapVariantToUcp(
     prices: variant.prices ?? product.prices,
     salePrice: variant.sale_price ?? product.sale_price ?? null,
     salePrices: variant.sale_prices ?? product.sale_prices,
+    saleStartAt: variant.sale_start_at ?? product.sale_start_at,
+    saleEndAt: variant.sale_end_at ?? product.sale_end_at,
+    scheduledPrice: variant.scheduled_price ?? product.scheduled_price,
+    scheduledPrices: variant.scheduled_prices ?? product.scheduled_prices,
+    scheduledPriceAt: variant.scheduled_price_at ?? product.scheduled_price_at,
     currencyCode: options.currencyCode,
     currencies: options.currencies,
   });
@@ -1539,6 +1579,11 @@ async function buildCartFromRequest(body: unknown): Promise<CartBuildResult> {
       prices: resolved.variant.prices ?? resolved.product.prices,
       salePrice: resolved.variant.sale_price ?? resolved.product.sale_price ?? null,
       salePrices: resolved.variant.sale_prices ?? resolved.product.sale_prices,
+      saleStartAt: resolved.variant.sale_start_at ?? resolved.product.sale_start_at,
+      saleEndAt: resolved.variant.sale_end_at ?? resolved.product.sale_end_at,
+      scheduledPrice: resolved.variant.scheduled_price ?? resolved.product.scheduled_price,
+      scheduledPrices: resolved.variant.scheduled_prices ?? resolved.product.scheduled_prices,
+      scheduledPriceAt: resolved.variant.scheduled_price_at ?? resolved.product.scheduled_price_at,
       currencyCode,
       currencies,
     });

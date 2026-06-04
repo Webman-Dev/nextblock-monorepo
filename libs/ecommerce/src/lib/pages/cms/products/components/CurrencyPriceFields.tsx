@@ -1,5 +1,7 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import { Input, Label } from '@nextblock-cms/ui';
 
 import {
@@ -18,6 +20,8 @@ interface CurrencyPriceFieldsProps {
   onAutoFill?: () => void;
   readOnly?: boolean;
   helperText?: string;
+  /** Rendered inline at the end of the default-currency row (e.g. a sale schedule). */
+  trailing?: ReactNode;
 }
 
 export function CurrencyPriceFields({
@@ -30,6 +34,7 @@ export function CurrencyPriceFields({
   onSalePriceChange,
   readOnly = false,
   helperText,
+  trailing,
 }: CurrencyPriceFieldsProps) {
   const defaultCurrency = currencies.find((currency) => currency.is_default) ?? currencies[0];
   const managedCurrencyCodeSet = new Set(managedCurrencyCodes);
@@ -54,10 +59,10 @@ export function CurrencyPriceFields({
         return (
           <div
             key={normalizedCurrency.code}
-            className="flex flex-wrap items-center gap-4 py-3 first:pt-0 last:pb-0"
+            className="flex flex-wrap items-stretch gap-4 py-3 first:pt-0 last:pb-0"
           >
             {/* Currency Identity */}
-            <div className="flex items-center gap-2 w-[180px] shrink-0 border-r border-border/50 pr-4 py-1">
+            <div className="flex items-center gap-2 w-[160px] shrink-0 self-stretch border-r border-border/50 pr-4">
                 <span className="text-sm font-black tracking-tighter text-foreground">{normalizedCurrency.code}</span>
                 <span className="text-[11px] text-muted-foreground font-medium">{normalizedCurrency.symbol}</span>
                 {normalizedCurrency.is_default ? (
@@ -72,16 +77,17 @@ export function CurrencyPriceFields({
                 )}
             </div>
 
-            {/* Inputs Grid */}
-            <div className="flex-1 grid grid-cols-2 gap-4">
-              <div className="flex items-center gap-3">
+            {/* Four equal-width columns: Price · Sale · Sale starts · Sale ends */}
+            <div className="grid flex-1 grid-cols-2 items-end gap-3 sm:grid-cols-4">
+              {/* Price */}
+              <div className="min-w-0 space-y-1">
                 <Label
                   htmlFor={`${idPrefix}-price-${normalizedCurrency.code}`}
-                  className="text-xs uppercase font-bold text-muted-foreground tracking-widest shrink-0"
+                  className="block text-[10px] uppercase font-bold text-muted-foreground tracking-widest"
                 >
                   Price
                 </Label>
-                <div className="relative flex-1">
+                <div className="relative">
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-bold pointer-events-none">
                     {normalizedCurrency.symbol}
                   </span>
@@ -92,7 +98,7 @@ export function CurrencyPriceFields({
                     min="0"
                     value={prices[normalizedCurrency.code] ?? ''}
                     disabled={isInputDisabled}
-                    className="h-8 text-sm pl-6"
+                    className="h-8 w-full text-sm pl-6"
                     onChange={(event) =>
                       onPriceChange(
                         normalizedCurrency.code,
@@ -103,14 +109,15 @@ export function CurrencyPriceFields({
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              {/* Sale */}
+              <div className="min-w-0 space-y-1">
                 <Label
                   htmlFor={`${idPrefix}-sale-price-${normalizedCurrency.code}`}
-                  className="text-xs uppercase font-bold text-muted-foreground tracking-widest shrink-0"
+                  className="block text-[10px] uppercase font-bold text-muted-foreground tracking-widest"
                 >
                   Sale
                 </Label>
-                <div className="relative flex-1">
+                <div className="relative">
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-bold pointer-events-none">
                     {normalizedCurrency.symbol}
                   </span>
@@ -122,7 +129,7 @@ export function CurrencyPriceFields({
                     value={salePrices[normalizedCurrency.code] ?? ''}
                     disabled={isInputDisabled}
                     placeholder={isStoreManaged ? 'Auto' : '—'}
-                    className="h-8 text-sm pl-6"
+                    className="h-8 w-full text-sm pl-6"
                     onChange={(event) =>
                       onSalePriceChange(
                         normalizedCurrency.code,
@@ -134,6 +141,9 @@ export function CurrencyPriceFields({
                   />
                 </div>
               </div>
+
+              {/* Sale schedule (two equal cells) on the default-currency row */}
+              {trailing && normalizedCurrency.is_default ? trailing : null}
             </div>
           </div>
         );

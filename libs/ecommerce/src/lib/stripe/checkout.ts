@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { type CartItem } from '../types';
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { resolveShippingOptions, type ShippingDestination } from '../shipping/resolver';
-import { getDefaultCurrency, resolvePriceForCurrency } from '../currency';
+import { getDefaultCurrency, resolveEffectivePriceForCurrency } from '../currency';
 
 export const createCheckoutSession = async (
   cartItems: CartItem[],
@@ -52,7 +52,7 @@ export const createCheckoutSession = async (
   
   const { data: products, error: productsError } = await supabase
     .from('products')
-    .select('id, title, price, prices, sale_price, sale_prices')
+    .select('id, title, price, prices, sale_price, sale_prices, sale_start_at, sale_end_at, scheduled_price, scheduled_prices, scheduled_price_at')
     .in('id', productIds);
 
   if (productsError || !products) {
@@ -79,11 +79,16 @@ export const createCheckoutSession = async (
     // Verify price
     // Note: Stripe expects amount in cents for 'usd'. 
     // The DB stores price in cents (integer), so we use it directly.
-    const resolvedPrice = resolvePriceForCurrency({
+    const resolvedPrice = resolveEffectivePriceForCurrency({
       prices: product.prices || {},
       salePrices: product.sale_prices || {},
       fallbackPrice: product.price,
       fallbackSalePrice: product.sale_price,
+      saleStartAt: product.sale_start_at,
+      saleEndAt: product.sale_end_at,
+      scheduledPrice: product.scheduled_price,
+      scheduledPrices: product.scheduled_prices || {},
+      scheduledPriceAt: product.scheduled_price_at,
       currencyCode: selectedCurrency.code,
       currencies,
     });
