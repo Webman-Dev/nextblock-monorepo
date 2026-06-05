@@ -209,36 +209,6 @@ export type Database = {
           },
         ]
       }
-      custom_block_definitions: {
-        Row: {
-          description: string
-          fields: Json
-          id: string
-          is_original: boolean
-          layout_schema: Json
-          name: string
-          slug: string
-        }
-        Insert: {
-          description?: string
-          fields?: Json
-          id?: string
-          is_original?: boolean
-          layout_schema: Json
-          name: string
-          slug: string
-        }
-        Update: {
-          description?: string
-          fields?: Json
-          id?: string
-          is_original?: boolean
-          layout_schema?: Json
-          name?: string
-          slug?: string
-        }
-        Relationships: []
-      }
       coupon_freemius_mappings: {
         Row: {
           coupon_id: string
@@ -494,6 +464,63 @@ export type Database = {
           rounding_mode?: string
           symbol?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      custom_block_definitions: {
+        Row: {
+          description: string
+          fields: Json
+          id: string
+          is_original: boolean
+          layout_schema: Json
+          name: string
+          slug: string
+        }
+        Insert: {
+          description?: string
+          fields?: Json
+          id?: string
+          is_original?: boolean
+          layout_schema: Json
+          name: string
+          slug: string
+        }
+        Update: {
+          description?: string
+          fields?: Json
+          id?: string
+          is_original?: boolean
+          layout_schema?: Json
+          name?: string
+          slug?: string
+        }
+        Relationships: []
+      }
+      email_2fa_challenges: {
+        Row: {
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          token_hash: string
+          user_id: string
+        }
+        Insert: {
+          consumed_at?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          token_hash: string
+          user_id: string
+        }
+        Update: {
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          token_hash?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -1225,6 +1252,33 @@ export type Database = {
           },
         ]
       }
+      privacy_consent_logs: {
+        Row: {
+          categories: Json
+          consent_token: string
+          created_at: string
+          id: string
+          ip_masked: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          categories?: Json
+          consent_token: string
+          created_at?: string
+          id?: string
+          ip_masked?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          categories?: Json
+          consent_token?: string
+          created_at?: string
+          id?: string
+          ip_masked?: string | null
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       product_attribute_terms: {
         Row: {
           attribute_id: string
@@ -1368,39 +1422,6 @@ export type Database = {
           },
         ]
       }
-      product_media: {
-        Row: {
-          media_id: string
-          product_id: string
-          sort_order: number | null
-        }
-        Insert: {
-          media_id: string
-          product_id: string
-          sort_order?: number | null
-        }
-        Update: {
-          media_id?: string
-          product_id?: string
-          sort_order?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "product_media_media_id_fkey"
-            columns: ["media_id"]
-            isOneToOne: false
-            referencedRelation: "media"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "product_media_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       product_freemius_sale_coupons: {
         Row: {
           created_at: string
@@ -1461,6 +1482,39 @@ export type Database = {
             foreignKeyName: "product_freemius_sale_coupons_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: true
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_media: {
+        Row: {
+          media_id: string
+          product_id: string
+          sort_order: number | null
+        }
+        Insert: {
+          media_id: string
+          product_id: string
+          sort_order?: number | null
+        }
+        Update: {
+          media_id?: string
+          product_id?: string
+          sort_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_media_media_id_fkey"
+            columns: ["media_id"]
+            isOneToOne: false
+            referencedRelation: "media"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_media_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -1871,6 +1925,60 @@ export type Database = {
         }
         Relationships: []
       }
+      ucp_cart_sessions: {
+        Row: {
+          attribution: Json
+          buyer_identity: Json
+          checkout_url: string | null
+          context: Json
+          created_at: string
+          currency: string
+          expires_at: string
+          id: string
+          line_items: Json
+          locale: string | null
+          metadata: Json
+          signals: Json
+          status: string
+          totals: Json
+          updated_at: string
+        }
+        Insert: {
+          attribution?: Json
+          buyer_identity?: Json
+          checkout_url?: string | null
+          context?: Json
+          created_at?: string
+          currency?: string
+          expires_at?: string
+          id?: string
+          line_items?: Json
+          locale?: string | null
+          metadata?: Json
+          signals?: Json
+          status?: string
+          totals?: Json
+          updated_at?: string
+        }
+        Update: {
+          attribution?: Json
+          buyer_identity?: Json
+          checkout_url?: string | null
+          context?: Json
+          created_at?: string
+          currency?: string
+          expires_at?: string
+          id?: string
+          line_items?: Json
+          locale?: string | null
+          metadata?: Json
+          signals?: Json
+          status?: string
+          totals?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_addresses: {
         Row: {
           address_type: string
@@ -1930,6 +2038,54 @@ export type Database = {
           },
         ]
       }
+      user_security_settings: {
+        Row: {
+          mfa_enabled: boolean
+          mfa_type: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          mfa_enabled?: boolean
+          mfa_type?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          mfa_enabled?: boolean
+          mfa_type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_trusted_devices: {
+        Row: {
+          browser_metadata: string | null
+          created_at: string
+          device_hash: string
+          expires_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          browser_metadata?: string | null
+          created_at?: string
+          device_hash: string
+          expires_at: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          browser_metadata?: string | null
+          created_at?: string
+          device_hash?: string
+          expires_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       variant_attribute_mapping: {
         Row: {
           attribute_term_id: string
@@ -1982,7 +2138,21 @@ export type Database = {
       }
       duplicate_block_definition: {
         Args: { target_id: string }
-        Returns: Database["public"]["Tables"]["custom_block_definitions"]["Row"]
+        Returns: {
+          description: string
+          fields: Json
+          id: string
+          is_original: boolean
+          layout_schema: Json
+          name: string
+          slug: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "custom_block_definitions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       format_order_invoice_number: {
         Args: { p_value: number }

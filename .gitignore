@@ -62,6 +62,7 @@ supabase/.temp
 nextblock-cms
 .claude/worktrees
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 .nx/polygraph
 .nx/self-healing
 

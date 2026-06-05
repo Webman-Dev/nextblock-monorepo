@@ -9,6 +9,7 @@ import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
   ExternalLink, Paintbrush, Brain, TicketPercent, ShieldAlert, Folder, DatabaseBackup, Boxes, Tag,
+  ShieldCheck, Cookie,
 } from "lucide-react"
 import { Button } from "@nextblock-cms/ui"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
@@ -227,6 +228,8 @@ export default function CmsClientLayout({
   else if (pathname.startsWith("/cms/settings/taxes")) pageTitle = "Tax Settings";
   else if (pathname.startsWith("/cms/settings/cortex-ai")) pageTitle = "Cortex AI";
   else if (pathname.startsWith("/cms/settings/bot-protection")) pageTitle = "Bot Protection";
+  else if (pathname.startsWith("/cms/settings/privacy")) pageTitle = "Privacy & Consent";
+  else if (pathname.startsWith("/cms/settings/security")) pageTitle = "Security & 2FA";
   else if (pathname.startsWith("/cms/payments")) pageTitle = "Payment Settings";
 
   else if (pathname.startsWith("/cms/settings/packages")) pageTitle = "Packages";
@@ -305,6 +308,9 @@ export default function CmsClientLayout({
               </NavItem>
               <NavItem href="/cms/navigation" icon={ListTree} isActive={pathname.startsWith("/cms/navigation")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Navigation
+              </NavItem>
+              <NavItem href="/cms/settings/security" icon={ShieldCheck} isActive={pathname.startsWith("/cms/settings/security")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                Security
               </NavItem>
 
               {isEcommerceActive && (
@@ -390,6 +396,9 @@ export default function CmsClientLayout({
                     </NavItem>
                     <NavItem href="/cms/settings/bot-protection" icon={ShieldAlert} isActive={pathname.startsWith("/cms/settings/bot-protection")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Bot Protection
+                    </NavItem>
+                    <NavItem href="/cms/settings/privacy" icon={Cookie} isActive={pathname.startsWith("/cms/settings/privacy")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Privacy &amp; Consent
                     </NavItem>
                     <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Extra Translations

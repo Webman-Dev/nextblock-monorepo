@@ -10,7 +10,10 @@ import { DeferredCartDrawer } from '../components/DeferredCartDrawer';
 import { CURRENCY_COOKIE_NAME } from '@nextblock-cms/ecommerce/currency-constants';
 import { ToasterProvider } from './ToasterProvider';
 import { AppShell } from '../components/AppShell';
-import { DeferredGoogleTagManager } from '../components/DeferredGoogleTagManager';
+import { ConsentGatedAnalytics } from '../components/privacy/ConsentGatedAnalytics';
+import { ConsentBanner } from '../components/privacy/ConsentBanner';
+import { getPrivacySettings } from '../lib/privacy/settings';
+import { DEFAULT_PRIVACY_SETTINGS } from '../lib/privacy/types';
 import { DeferredSpeedInsights } from '../components/DeferredSpeedInsights';
 import { NextblockVisualEditing } from '../components/visual-editing/NextblockVisualEditing';
 import {
@@ -254,6 +257,7 @@ async function loadLayoutData() {
     globalCssResult,
     translationsResult,
     isEcommerceActive,
+    privacySettings,
   ] = await Promise.all([
     supabase.auth.getUser(),
     getCachedLanguages().catch(() => getActiveLanguagesServerSide().catch(() => [])),
@@ -264,6 +268,7 @@ async function loadLayoutData() {
     getCachedGlobalCss().catch(() => ''),
     getCachedTranslations().catch(() => []),
     verifyPackageOnline('ecommerce').catch(() => false),
+    getPrivacySettings().catch(() => DEFAULT_PRIVACY_SETTINGS),
   ]);
 
   const availableLanguages: Language[] = availableLanguagesResult;
@@ -320,6 +325,7 @@ async function loadLayoutData() {
     siteTitle,
     isEcommerceActive,
     globalCss,
+    privacySettings,
   };
 }
 
@@ -395,8 +401,10 @@ export default async function RootLayout({
     siteTitle,
     isEcommerceActive,
     globalCss,
+    privacySettings,
   } = await loadLayoutData();
   const draft = await draftMode();
+  const resolvedGtmId = privacySettings.gtm_id || process.env.NEXT_PUBLIC_GTM_ID || '';
   const visualEditingEnabled =
     draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
   const isVercelDeployment = process.env.VERCEL === '1';
@@ -436,6 +444,11 @@ export default async function RootLayout({
           <AppShell
             canAccessCms={canAccessCms}
             copyrightText={copyrightText}
+            corporateFooter={{
+              legalName: privacySettings.corporate.legal_name,
+              address: privacySettings.corporate.address,
+              supportEmail: privacySettings.corporate.support_email,
+            }}
             footerNavItems={footerNavItems}
             hasSupabaseEnv={hasSupabaseEnv}
             headerNavItems={headerNavItems}
@@ -450,9 +463,14 @@ export default async function RootLayout({
           {isEcommerceActive && <DeferredCartDrawer />}
           {visualEditingEnabled && <NextblockVisualEditing />}
           {Toolbar && <Toolbar nonce={nonce} />}
+          {privacySettings.banner_enabled && <ConsentBanner />}
         </Providers>
         <DeferredSpeedInsights />
-        <DeferredGoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID} nonce={nonce} />
+        <ConsentGatedAnalytics
+          gtmId={resolvedGtmId}
+          customScripts={privacySettings.custom_scripts}
+          nonce={nonce}
+        />
       </body>
     </html>
   );

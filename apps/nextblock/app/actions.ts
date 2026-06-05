@@ -5,6 +5,9 @@ import { createClient } from "@nextblock-cms/db/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { resolvePostAuthRedirect } from "../lib/auth-redirects";
+import { createEmailChallenge, evaluateTwoFactor } from "../lib/auth/twoFactor";
+import { REMEMBER_INTENT_COOKIE, setSecureCookie } from "../lib/auth/cookies";
+import { sendTwoFactorCodeEmail } from "./actions/twoFactorEmail";
 
 export const signUpAction = async (formData: FormData) => {
   const email = formData.get("email")?.toString();
@@ -67,6 +70,9 @@ export const signInAction = async (formData: FormData) => {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
   const requestedRedirect = formData.get("redirect")?.toString();
+  const rememberDevice =
+    formData.get("remember_device") === "on" ||
+    formData.get("remember_device") === "true";
   const supabase = await createClient();
 
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -86,7 +92,30 @@ export const signInAction = async (formData: FormData) => {
       .single();
 
     const nextPath = resolvePostAuthRedirect(profile ?? null, requestedRedirect);
-    return redirect(`/post-sign-in?redirect_to=${encodeURIComponent(nextPath)}`);
+
+    // Decide whether a second factor is still owed. A live trusted device, or
+    // an account without MFA, resolves to "satisfied" and skips the challenge.
+    const evaluation = await evaluateTwoFactor();
+    if (evaluation.status === "satisfied" || evaluation.status === "not_required") {
+      return redirect(`/post-sign-in?redirect_to=${encodeURIComponent(nextPath)}`);
+    }
+
+    // Carry the "remember this device" intent through the 2FA challenge.
+    if (rememberDevice) {
+      await setSecureCookie(REMEMBER_INTENT_COOKIE, "1", 15 * 60);
+    }
+
+    // Email factor: send the first code now so the challenge page has one waiting.
+    if (evaluation.status === "email_required" && data.user.email) {
+      try {
+        const code = await createEmailChallenge(data.user.id);
+        await sendTwoFactorCodeEmail(data.user.email, code);
+      } catch (sendError) {
+        console.error("Failed to send 2FA email code:", sendError);
+      }
+    }
+
+    return redirect(`/two-factor?redirect_to=${encodeURIComponent(nextPath)}`);
   }
 
   return redirect("/post-sign-in");

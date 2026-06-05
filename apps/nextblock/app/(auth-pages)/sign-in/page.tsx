@@ -76,6 +76,14 @@ export default function Login() {
             placeholder={t('your_password')}
             required
           />
+          <label className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              name="remember_device"
+              className="h-4 w-4 rounded border-input accent-primary"
+            />
+            {t('remember_this_device') || 'Remember this device'}
+          </label>
           <SubmitButton pendingText={t('signing_in_pending')} formAction={signInAction}>
             {t('sign_in')}
           </SubmitButton>

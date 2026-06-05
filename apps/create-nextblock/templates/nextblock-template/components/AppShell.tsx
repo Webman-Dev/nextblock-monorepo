@@ -3,6 +3,7 @@
 import type { Database } from '@nextblock-cms/db';
 import { cn } from '@nextblock-cms/utils';
 import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import Header from './Header';
 import FooterNavigation from './FooterNavigation';
@@ -30,10 +31,17 @@ export function useAppBranding() {
   return useContext(AppBrandingContext);
 }
 
+type CorporateFooter = {
+  legalName: string;
+  address: string;
+  supportEmail: string;
+};
+
 type AppShellProps = {
   canAccessCms: boolean;
   children: ReactNode;
   copyrightText: string;
+  corporateFooter?: CorporateFooter;
   footerNavItems: NavigationItem[];
   hasSupabaseEnv: boolean;
   headerNavItems: NavigationItem[];
@@ -47,6 +55,7 @@ export function AppShell({
   canAccessCms,
   children,
   copyrightText,
+  corporateFooter,
   footerNavItems,
   hasSupabaseEnv,
   headerNavItems,
@@ -101,11 +110,38 @@ export function AppShell({
             {children}
           </main>
           {!isCmsRequest && (
-            <footer className="w-full border-t py-8">
+            <footer className="w-full border-t py-6">
               <div className="mx-auto flex flex-col items-center justify-center gap-6 text-center text-xs">
                 <FooterNavigation navItems={footerNavItems} />
-                <div className="flex flex-row items-center gap-2">
+                {corporateFooter &&
+                  (corporateFooter.legalName ||
+                    corporateFooter.address ||
+                    corporateFooter.supportEmail) && (
+                    <p className="max-w-2xl text-[11px] leading-relaxed text-muted-foreground/80">
+                      {[corporateFooter.legalName, corporateFooter.address]
+                        .filter(Boolean)
+                        .join(' · ')}
+                      {corporateFooter.supportEmail && (
+                        <>
+                          {(corporateFooter.legalName || corporateFooter.address) && ' · '}
+                          <a
+                            href={`mailto:${corporateFooter.supportEmail}`}
+                            className="hover:underline"
+                          >
+                            {corporateFooter.supportEmail}
+                          </a>
+                        </>
+                      )}
+                    </p>
+                  )}
+                <div className="flex flex-row items-center gap-4">
                   <p className="text-muted-foreground">{copyrightText}</p>
+                  <Link href="/privacy-policy" className="hover:underline">
+                    Privacy Policy
+                  </Link>
+                  <Link href="/terms-of-service" className="hover:underline">
+                    Terms of Service
+                  </Link>
                   <ThemeSwitcher />
                 </div>
               </div>

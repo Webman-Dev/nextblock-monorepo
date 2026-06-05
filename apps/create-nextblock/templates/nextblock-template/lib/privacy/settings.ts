@@ -1,0 +1,103 @@
+// Server-only read/write for the `privacy_settings` and `security_settings`
+// rows in the site_settings key-value table. Mirrors the copyright/bot-protection
+// pattern (createClient + RLS for writes; revalidatePath handled by callers).
+import { createClient } from '@nextblock-cms/db/server';
+import {
+  DEFAULT_PRIVACY_SETTINGS,
+  DEFAULT_SECURITY_SETTINGS,
+  MAX_TRUSTED_DEVICE_DAYS,
+  MIN_TRUSTED_DEVICE_DAYS,
+  type CorporateIdentity,
+  type PrivacySettings,
+  type SecuritySettings,
+} from './types';
+
+const PRIVACY_KEY = 'privacy_settings';
+const SECURITY_KEY = 'security_settings';
+
+function asString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function asBool(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value === 'true' || value === 'on';
+  return fallback;
+}
+
+function normalizePrivacy(value: unknown): PrivacySettings {
+  const raw = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  const corporateRaw = (raw.corporate && typeof raw.corporate === 'object'
+    ? raw.corporate
+    : {}) as Record<string, unknown>;
+  const corporate: CorporateIdentity = {
+    legal_name: asString(corporateRaw.legal_name),
+    address: asString(corporateRaw.address),
+    support_email: asString(corporateRaw.support_email),
+  };
+  return {
+    banner_enabled: asBool(raw.banner_enabled, DEFAULT_PRIVACY_SETTINGS.banner_enabled),
+    gtm_id: asString(raw.gtm_id),
+    ga_measurement_id: asString(raw.ga_measurement_id),
+    custom_scripts: asString(raw.custom_scripts),
+    corporate,
+  };
+}
+
+function clampTrustDays(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number.parseInt(asString(value), 10);
+  if (!Number.isFinite(n)) return DEFAULT_SECURITY_SETTINGS.trusted_device_days;
+  return Math.min(MAX_TRUSTED_DEVICE_DAYS, Math.max(MIN_TRUSTED_DEVICE_DAYS, Math.round(n)));
+}
+
+function normalizeSecurity(value: unknown): SecuritySettings {
+  const raw = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  return {
+    trusted_device_days: clampTrustDays(raw.trusted_device_days),
+    enforce_staff_2fa: asBool(raw.enforce_staff_2fa, DEFAULT_SECURITY_SETTINGS.enforce_staff_2fa),
+  };
+}
+
+export async function getPrivacySettings(): Promise<PrivacySettings> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('site_settings')
+    .select('value')
+    .eq('key', PRIVACY_KEY)
+    .maybeSingle();
+  return normalizePrivacy(data?.value);
+}
+
+export async function getSecuritySettings(): Promise<SecuritySettings> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('site_settings')
+    .select('value')
+    .eq('key', SECURITY_KEY)
+    .maybeSingle();
+  return normalizeSecurity(data?.value);
+}
+
+export async function savePrivacySettings(input: PrivacySettings): Promise<void> {
+  const supabase = createClient();
+  const value = normalizePrivacy(input);
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ key: PRIVACY_KEY, value });
+  if (error) {
+    console.error('Error saving privacy settings:', error.message);
+    throw new Error('Failed to save privacy settings.');
+  }
+}
+
+export async function saveSecuritySettings(input: SecuritySettings): Promise<void> {
+  const supabase = createClient();
+  const value = normalizeSecurity(input);
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ key: SECURITY_KEY, value });
+  if (error) {
+    console.error('Error saving security settings:', error.message);
+    throw new Error('Failed to save security settings.');
+  }
+}
