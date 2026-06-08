@@ -342,7 +342,7 @@ function renderFieldNode(
   // resolved record (e.g. show a product's price or title), overriding the
   // field's default display_column.
   const relationColumn = typeof node.column === 'string' && node.column ? node.column : undefined;
-  let value =
+  const value =
     field.type === 'db_relation'
       ? getResolvedRelationLabel(field, context.data, relationColumn) || context.data[field.key]
       : context.data[field.key];

@@ -120,7 +120,6 @@ function useResolvedRelations(definition: EditorDefinition | null, content: Reco
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [definition, relationSignature]);
 
   return resolvedRelations;

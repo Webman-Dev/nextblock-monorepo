@@ -110,7 +110,9 @@ export const SvgNode = Node.create<SvgNodeOptions>({
     }
     
     return {
-        dom: svg
+        // SVG root element; ProseMirror renders any DOM node, but its DOMOutputSpec
+        // type (prosemirror-model >=1.25.5) narrows `dom` to HTMLElement.
+        dom: svg as unknown as HTMLElement
     };
   },
   

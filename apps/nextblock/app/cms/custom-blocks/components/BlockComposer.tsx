@@ -832,7 +832,6 @@ export function BlockComposer({ initialData, mode }: BlockComposerProps) {
         ordered.length === prev.length && ordered.every((field, index) => field === prev[index]);
       return unchanged ? prev : ordered;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutFieldRefs]);
 
   return (

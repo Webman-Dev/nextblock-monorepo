@@ -35,6 +35,12 @@ export default [
         {
           enforceBuildableLibDependency: true,
           allow: [],
+          // @nextblock-cms/utils is intentionally lazy-imported in
+          // apps/nextblock/lib/ai-global-agent-custom-block-tools.ts (to keep that
+          // module light and to allow partial-export test mocks). Exempt it from the
+          // "static imports of lazy-loaded libraries" check; the scope depConstraints
+          // and buildable-lib checks below still apply.
+          checkDynamicDependenciesExceptions: ['^@nextblock-cms/utils$'],
           depConstraints: [
             {
               sourceTag: 'scope:public',

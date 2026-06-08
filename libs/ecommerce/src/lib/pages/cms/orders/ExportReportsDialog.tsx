@@ -20,14 +20,12 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@nextblock-cms/ui';
-import { RadioGroup, RadioGroupItem } from '@nextblock-cms/ui';
 import { Download, FileDown, Loader2, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchOrderReportData, ReportType } from './export-actions';
 import { 
-  generateCSV, 
-  generateXLSX, 
-  mapGeneralSalesLedger, 
+  generateCSV,
+  mapGeneralSalesLedger,
   mapTaxLiabilitySummary, 
   mapMultiCurrencyRevenue 
 } from '../../../export-helpers';
@@ -38,7 +36,6 @@ export function ExportReportsDialog() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [reportType, setReportType] = useState<ReportType>('general_ledger');
-  const [format, setFormat] = useState<'csv' | 'xlsx'>('csv');
 
   const handleDownload = async () => {
     if (!startDate || !endDate) {
@@ -72,11 +69,7 @@ export function ExportReportsDialog() {
           break;
       }
 
-      if (format === 'csv') {
-        generateCSV(mappedData, `${filename}.csv`);
-      } else {
-        generateXLSX(mappedData, `${filename}.xlsx`);
-      }
+      generateCSV(mappedData, `${filename}.csv`);
 
       toast.success('Download complete!');
       setOpen(false);
@@ -158,26 +151,6 @@ export function ExportReportsDialog() {
                 <SelectItem value="currency_summary">Multi-Currency Revenue Summary</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label className="text-xs font-semibold uppercase text-gray-500 tracking-wider">
-              Export Format
-            </Label>
-            <RadioGroup 
-              value={format} 
-              onValueChange={(value) => setFormat(value as 'csv' | 'xlsx')}
-              className="flex gap-4"
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="csv" id="format-csv" />
-                <Label htmlFor="format-csv" className="cursor-pointer">CSV</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="xlsx" id="format-xlsx" />
-                <Label htmlFor="format-xlsx" className="cursor-pointer">Excel (XLSX)</Label>
-              </div>
-            </RadioGroup>
           </div>
         </div>
 

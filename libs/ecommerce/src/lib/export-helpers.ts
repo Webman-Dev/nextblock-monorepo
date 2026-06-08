@@ -1,5 +1,4 @@
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
 
 export interface ReportData {
   id: string;
@@ -33,13 +32,6 @@ export function generateCSV(data: any[], filename: string) {
     link.click();
     document.body.removeChild(link);
   }
-}
-
-export function generateXLSX(data: any[], filename: string) {
-  const worksheet = XLSX.utils.json_to_sheet(data);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Report');
-  XLSX.writeFile(workbook, filename);
 }
 
 export function mapGeneralSalesLedger(orders: ReportData[]) {

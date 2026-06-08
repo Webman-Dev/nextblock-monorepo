@@ -1,0 +1,2980 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "@cypress/request": {
+      "name": "@cypress/request",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "qs",
+        "uuid"
+      ],
+      "effects": [
+        "verdaccio"
+      ],
+      "range": "<=4.0.0",
+      "nodes": [
+        "node_modules/@cypress/request"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "@nx/esbuild": {
+      "name": "@nx/esbuild",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nx/js"
+      ],
+      "effects": [],
+      "range": "22.7.0-beta.0 - 22.7.3 || >=23.0.0-beta.0",
+      "nodes": [
+        "node_modules/@nx/esbuild"
+      ],
+      "fixAvailable": {
+        "name": "@nx/esbuild",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "@nx/eslint": {
+      "name": "@nx/eslint",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nx/jest",
+        "@nx/js"
+      ],
+      "effects": [
+        "@nx/vitest"
+      ],
+      "range": "22.7.0-beta.0 - 22.7.3 || >=23.0.0-beta.0",
+      "nodes": [
+        "node_modules/@nx/eslint"
+      ],
+      "fixAvailable": {
+        "name": "@nx/vitest",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "@nx/eslint-plugin": {
+      "name": "@nx/eslint-plugin",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nx/js"
+      ],
+      "effects": [],
+      "range": "22.7.0-beta.0 - 22.7.3 || >=23.0.0-beta.0",
+      "nodes": [
+        "node_modules/@nx/eslint-plugin"
+      ],
+      "fixAvailable": {
+        "name": "@nx/eslint-plugin",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "@nx/jest": {
+      "name": "@nx/jest",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@nx/js"
+      ],
+      "effects": [],
+      "range": "22.7.0-beta.0 - 22.7.3 || >=23.0.0-beta.0",
+      "nodes": [
+        "node_modules/@nx/jest"
+      ],
+      "fixAvailable": true
+    },
+    "@nx/js": {
+      "name": "@nx/js",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nx/workspace"
+      ],
+      "effects": [
+        "@nx/esbuild",
+        "@nx/eslint",
+        "@nx/eslint-plugin",
+        "@nx/jest",
+        "@nx/module-federation",
+        "@nx/next",
+        "@nx/node",
+        "@nx/react",
+        "@nx/rollup",
+        "@nx/vite",
+        "@nx/vitest",
+        "@nx/web",
+        "@nx/webpack"
+      ],
+      "range": "22.7.0-beta.0 - 22.7.3 || >=23.0.0-beta.0",
+      "nodes": [
+        "node_modules/@nx/js"
+      ],
+      "fixAvailable": {
+        "name": "@nx/vitest",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "@nx/module-federation": {
+      "name": "@nx/module-federation",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@nx/js",
+        "@nx/web"
+      ],
+      "effects": [],
+      "range": "22.7.0-beta.0 - 22.7.3 || >=23.0.0-beta.0",
+      "nodes": [
+        "node_modules/@nx/module-federation"
+      ],
+      "fixAvailable": true
+    },
+    "@nx/next": {
+      "name": "@nx/next",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nx/eslint",
+        "@nx/js",
+        "@nx/react",
+        "@nx/web",
+        "@nx/webpack"
+      ],
+      "effects": [],
+      "range": "<=0.0.0-pr-34253-d811c6c || 17.0.4 - 17.0.5 || >=18.0.3",
+      "nodes": [
+        "node_modules/@nx/next"
+      ],
+      "fixAvailable": {
+        "name": "@nx/next",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "@nx/node": {
+      "name": "@nx/node",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nx/eslint",
+        "@nx/jest",
+        "@nx/js"
+      ],
+      "effects": [],
+      "range": "22.7.0-beta.0 - 22.7.3 || >=23.0.0-beta.0",
+      "nodes": [
+        "node_modules/@nx/node"
+      ],
+      "fixAvailable": {
+        "name": "@nx/node",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "@nx/react": {
+      "name": "@nx/react",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nx/eslint",
+        "@nx/js",
+        "@nx/module-federation",
+        "@nx/rollup",
+        "@nx/vite",
+        "@nx/web"
+      ],
+      "effects": [],
+      "range": "22.7.0-beta.0 - 22.7.3 || >=23.0.0-beta.0",
+      "nodes": [
+        "node_modules/@nx/react"
+      ],
+      "fixAvailable": {
+        "name": "@nx/react",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "@nx/rollup": {
+      "name": "@nx/rollup",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@nx/js"
+      ],
+      "effects": [],
+      "range": "22.7.0-beta.0 - 22.7.3 || >=23.0.0-beta.0",
+      "nodes": [
+        "node_modules/@nx/rollup"
+      ],
+      "fixAvailable": true
+    },
+    "@nx/vite": {
+      "name": "@nx/vite",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nx/js",
+        "@nx/vitest"
+      ],
+      "effects": [],
+      "range": "22.7.0-beta.0 - 22.7.3 || >=23.0.0-beta.0",
+      "nodes": [
+        "node_modules/@nx/vite"
+      ],
+      "fixAvailable": {
+        "name": "@nx/vite",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "@nx/vitest": {
+      "name": "@nx/vitest",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nx/eslint",
+        "@nx/js"
+      ],
+      "effects": [],
+      "range": "<=0.0.1-alpha.0 || 22.7.0-beta.0 - 22.7.3 || >=23.0.0-beta.0",
+      "nodes": [
+        "node_modules/@nx/vitest"
+      ],
+      "fixAvailable": {
+        "name": "@nx/vitest",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "@nx/web": {
+      "name": "@nx/web",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nx/eslint",
+        "@nx/jest",
+        "@nx/js",
+        "@nx/vite",
+        "@nx/webpack"
+      ],
+      "effects": [],
+      "range": ">=22.7.0-beta.0",
+      "nodes": [
+        "node_modules/@nx/web"
+      ],
+      "fixAvailable": {
+        "name": "@nx/web",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "@nx/webpack": {
+      "name": "@nx/webpack",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@nx/js",
+        "webpack-dev-server"
+      ],
+      "effects": [
+        "@nx/next",
+        "@nx/web"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@nx/webpack"
+      ],
+      "fixAvailable": {
+        "name": "@nx/web",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "@nx/workspace": {
+      "name": "@nx/workspace",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "nx"
+      ],
+      "effects": [
+        "@nx/js"
+      ],
+      "range": "22.7.0-beta.0 - 22.7.3 || >=23.0.0-beta.0",
+      "nodes": [
+        "node_modules/@nx/workspace"
+      ],
+      "fixAvailable": {
+        "name": "@nx/vitest",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "@swc/cli": {
+      "name": "@swc/cli",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@xhmikosr/bin-wrapper"
+      ],
+      "effects": [],
+      "range": "0.5.1 - 0.8.0",
+      "nodes": [
+        "node_modules/@swc/cli"
+      ],
+      "fixAvailable": {
+        "name": "@swc/cli",
+        "version": "0.8.1",
+        "isSemVerMajor": true
+      }
+    },
+    "@tootallnate/once": {
+      "name": "@tootallnate/once",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1119438,
+          "name": "@tootallnate/once",
+          "dependency": "@tootallnate/once",
+          "title": "@tootallnate/once vulnerable to Incorrect Control Flow Scoping",
+          "url": "https://github.com/advisories/GHSA-vpq2-c234-7xj6",
+          "severity": "low",
+          "cwe": [
+            "CWE-705"
+          ],
+          "cvss": {
+            "score": 3.3,
+            "vectorString": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": "<2.0.1"
+        }
+      ],
+      "effects": [
+        "@vercel/fun"
+      ],
+      "range": "<2.0.1",
+      "nodes": [
+        "node_modules/@tootallnate/once"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/backends": {
+      "name": "@vercel/backends",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/build-utils",
+        "path-to-regexp",
+        "srvx"
+      ],
+      "effects": [
+        "@vercel/cervel",
+        "vercel"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@vercel/backends"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/build-utils": {
+      "name": "@vercel/build-utils",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/python-analysis"
+      ],
+      "effects": [
+        "@vercel/backends",
+        "@vercel/gatsby-plugin-vercel-builder",
+        "@vercel/node",
+        "vercel"
+      ],
+      "range": ">=13.3.1",
+      "nodes": [
+        "node_modules/@vercel/build-utils"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/cervel": {
+      "name": "@vercel/cervel",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/backends"
+      ],
+      "effects": [
+        "@vercel/express"
+      ],
+      "range": ">=0.0.12",
+      "nodes": [
+        "node_modules/@vercel/cervel"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/elysia": {
+      "name": "@vercel/elysia",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/node",
+        "@vercel/static-config"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@vercel/elysia"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/express": {
+      "name": "@vercel/express",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/cervel",
+        "@vercel/node",
+        "@vercel/static-config",
+        "path-to-regexp"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@vercel/express"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/fastify": {
+      "name": "@vercel/fastify",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/node",
+        "@vercel/static-config"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@vercel/fastify"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/fun": {
+      "name": "@vercel/fun",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@tootallnate/once",
+        "path-to-regexp",
+        "tar"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@vercel/fun"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/gatsby-plugin-vercel-builder": {
+      "name": "@vercel/gatsby-plugin-vercel-builder",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/build-utils"
+      ],
+      "effects": [
+        "@vercel/static-build"
+      ],
+      "range": ">=2.0.130",
+      "nodes": [
+        "node_modules/@vercel/gatsby-plugin-vercel-builder"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/h3": {
+      "name": "@vercel/h3",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/node",
+        "@vercel/static-config"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@vercel/h3"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/hono": {
+      "name": "@vercel/hono",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/node",
+        "@vercel/static-config",
+        "path-to-regexp"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@vercel/hono"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/hydrogen": {
+      "name": "@vercel/hydrogen",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@vercel/static-config"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": ">=1.0.1",
+      "nodes": [
+        "node_modules/@vercel/hydrogen"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/koa": {
+      "name": "@vercel/koa",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/node",
+        "@vercel/static-config"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@vercel/koa"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/nestjs": {
+      "name": "@vercel/nestjs",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/node",
+        "@vercel/static-config"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@vercel/nestjs"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/node": {
+      "name": "@vercel/node",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/build-utils",
+        "@vercel/static-config",
+        "path-to-regexp",
+        "undici"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": ">=2.1.1-canary.0",
+      "nodes": [
+        "node_modules/@vercel/node"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/python": {
+      "name": "@vercel/python",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/python-analysis"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": "6.11.0 - 6.12.0 || >=6.14.1",
+      "nodes": [
+        "node_modules/@vercel/python"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/python-analysis": {
+      "name": "@vercel/python-analysis",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "minimatch",
+        "smol-toml"
+      ],
+      "effects": [
+        "@vercel/build-utils",
+        "@vercel/python"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@vercel/python-analysis"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/redwood": {
+      "name": "@vercel/redwood",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@vercel/static-config"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": ">=2.1.0",
+      "nodes": [
+        "node_modules/@vercel/redwood"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/remix-builder": {
+      "name": "@vercel/remix-builder",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/static-config",
+        "path-to-regexp"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@vercel/remix-builder"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/rust": {
+      "name": "@vercel/rust",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "smol-toml"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": ">=1.0.6",
+      "nodes": [
+        "node_modules/@vercel/rust"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/static-build": {
+      "name": "@vercel/static-build",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@vercel/gatsby-plugin-vercel-builder",
+        "@vercel/static-config"
+      ],
+      "effects": [
+        "vercel"
+      ],
+      "range": "1.3.31 || >=2.0.7",
+      "nodes": [
+        "node_modules/@vercel/static-build"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/static-config": {
+      "name": "@vercel/static-config",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "ajv"
+      ],
+      "effects": [
+        "@vercel/elysia",
+        "@vercel/express",
+        "@vercel/fastify",
+        "@vercel/h3",
+        "@vercel/hono",
+        "@vercel/hydrogen",
+        "@vercel/koa",
+        "@vercel/nestjs",
+        "@vercel/node",
+        "@vercel/redwood",
+        "@vercel/remix-builder",
+        "@vercel/static-build"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@vercel/static-config"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@verdaccio/auth": {
+      "name": "@verdaccio/auth",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/config",
+        "@verdaccio/core",
+        "@verdaccio/loaders",
+        "@verdaccio/signature",
+        "verdaccio-htpasswd"
+      ],
+      "effects": [
+        "verdaccio"
+      ],
+      "range": "<=8.0.0-next-8.38",
+      "nodes": [
+        "node_modules/@verdaccio/auth"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "@verdaccio/config": {
+      "name": "@verdaccio/config",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/core"
+      ],
+      "effects": [],
+      "range": "<=8.0.0-next-8.38",
+      "nodes": [
+        "node_modules/@verdaccio/config"
+      ],
+      "fixAvailable": true
+    },
+    "@verdaccio/core": {
+      "name": "@verdaccio/core",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "ajv",
+        "minimatch"
+      ],
+      "effects": [
+        "@verdaccio/auth",
+        "@verdaccio/config",
+        "@verdaccio/hooks",
+        "@verdaccio/loaders",
+        "@verdaccio/local-storage-legacy",
+        "@verdaccio/logger-commons",
+        "@verdaccio/middleware",
+        "@verdaccio/package-filter",
+        "@verdaccio/signature",
+        "@verdaccio/tarball",
+        "@verdaccio/url",
+        "@verdaccio/utils",
+        "verdaccio",
+        "verdaccio-audit",
+        "verdaccio-htpasswd"
+      ],
+      "range": "<=8.0.0-next-8.38",
+      "nodes": [
+        "node_modules/@verdaccio/core",
+        "node_modules/@verdaccio/local-storage-legacy/node_modules/@verdaccio/core"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "@verdaccio/hooks": {
+      "name": "@verdaccio/hooks",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/core",
+        "@verdaccio/logger"
+      ],
+      "effects": [
+        "verdaccio"
+      ],
+      "range": "<=8.0.0-next-8.38",
+      "nodes": [
+        "node_modules/@verdaccio/hooks"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "@verdaccio/loaders": {
+      "name": "@verdaccio/loaders",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/core"
+      ],
+      "effects": [
+        "verdaccio"
+      ],
+      "range": "<=8.0.0-next-8.28",
+      "nodes": [
+        "node_modules/@verdaccio/loaders"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "@verdaccio/local-storage-legacy": {
+      "name": "@verdaccio/local-storage-legacy",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/core",
+        "lodash"
+      ],
+      "effects": [
+        "verdaccio"
+      ],
+      "range": "<=11.3.1",
+      "nodes": [
+        "node_modules/@verdaccio/local-storage-legacy"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "@verdaccio/logger": {
+      "name": "@verdaccio/logger",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/logger-commons"
+      ],
+      "effects": [
+        "verdaccio"
+      ],
+      "range": "<=8.0.0-next-8.38",
+      "nodes": [
+        "node_modules/@verdaccio/logger"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "@verdaccio/logger-commons": {
+      "name": "@verdaccio/logger-commons",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/core"
+      ],
+      "effects": [
+        "@verdaccio/logger"
+      ],
+      "range": "<=8.0.0-next-8.38",
+      "nodes": [
+        "node_modules/@verdaccio/logger-commons"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "@verdaccio/middleware": {
+      "name": "@verdaccio/middleware",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/config",
+        "@verdaccio/core",
+        "@verdaccio/url",
+        "express"
+      ],
+      "effects": [
+        "verdaccio"
+      ],
+      "range": "<=9.0.0-next-9.0",
+      "nodes": [
+        "node_modules/@verdaccio/middleware"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "@verdaccio/package-filter": {
+      "name": "@verdaccio/package-filter",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/core"
+      ],
+      "effects": [
+        "verdaccio"
+      ],
+      "range": "<=13.0.0-next-8.6",
+      "nodes": [
+        "node_modules/@verdaccio/package-filter"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "@verdaccio/signature": {
+      "name": "@verdaccio/signature",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/config",
+        "@verdaccio/core"
+      ],
+      "effects": [
+        "verdaccio"
+      ],
+      "range": "<=8.0.0-next-8.30",
+      "nodes": [
+        "node_modules/@verdaccio/signature"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "@verdaccio/tarball": {
+      "name": "@verdaccio/tarball",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/core",
+        "@verdaccio/url"
+      ],
+      "effects": [],
+      "range": "<=13.0.0-next-8.38",
+      "nodes": [
+        "node_modules/@verdaccio/tarball"
+      ],
+      "fixAvailable": true
+    },
+    "@verdaccio/url": {
+      "name": "@verdaccio/url",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/core"
+      ],
+      "effects": [],
+      "range": "<=13.0.0-next-8.38",
+      "nodes": [
+        "node_modules/@verdaccio/url"
+      ],
+      "fixAvailable": true
+    },
+    "@verdaccio/utils": {
+      "name": "@verdaccio/utils",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/core"
+      ],
+      "effects": [
+        "verdaccio"
+      ],
+      "range": "<=8.1.0-next-8.38",
+      "nodes": [
+        "node_modules/@verdaccio/utils"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "@xhmikosr/archive-type": {
+      "name": "@xhmikosr/archive-type",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "file-type"
+      ],
+      "effects": [
+        "@xhmikosr/downloader"
+      ],
+      "range": "6.0.0 - 7.1.0",
+      "nodes": [
+        "node_modules/@xhmikosr/archive-type"
+      ],
+      "fixAvailable": {
+        "name": "@swc/cli",
+        "version": "0.8.1",
+        "isSemVerMajor": true
+      }
+    },
+    "@xhmikosr/bin-wrapper": {
+      "name": "@xhmikosr/bin-wrapper",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@xhmikosr/downloader"
+      ],
+      "effects": [
+        "@swc/cli"
+      ],
+      "range": "10.0.0 - 13.2.0",
+      "nodes": [
+        "node_modules/@xhmikosr/bin-wrapper"
+      ],
+      "fixAvailable": {
+        "name": "@swc/cli",
+        "version": "0.8.1",
+        "isSemVerMajor": true
+      }
+    },
+    "@xhmikosr/decompress": {
+      "name": "@xhmikosr/decompress",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@xhmikosr/decompress-tar",
+        "@xhmikosr/decompress-tarbz2",
+        "@xhmikosr/decompress-targz",
+        "@xhmikosr/decompress-unzip"
+      ],
+      "effects": [],
+      "range": "8.0.0 - 10.2.1",
+      "nodes": [
+        "node_modules/@xhmikosr/decompress"
+      ],
+      "fixAvailable": true
+    },
+    "@xhmikosr/decompress-tar": {
+      "name": "@xhmikosr/decompress-tar",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "file-type"
+      ],
+      "effects": [
+        "@xhmikosr/decompress",
+        "@xhmikosr/decompress-tarbz2",
+        "@xhmikosr/decompress-targz"
+      ],
+      "range": "6.0.0 - 8.1.0",
+      "nodes": [
+        "node_modules/@xhmikosr/decompress-tar"
+      ],
+      "fixAvailable": true
+    },
+    "@xhmikosr/decompress-tarbz2": {
+      "name": "@xhmikosr/decompress-tarbz2",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@xhmikosr/decompress-tar",
+        "file-type"
+      ],
+      "effects": [],
+      "range": "6.0.0 - 9.0.0",
+      "nodes": [
+        "node_modules/@xhmikosr/decompress-tarbz2"
+      ],
+      "fixAvailable": true
+    },
+    "@xhmikosr/decompress-targz": {
+      "name": "@xhmikosr/decompress-targz",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@xhmikosr/decompress-tar",
+        "file-type"
+      ],
+      "effects": [],
+      "range": "6.0.0 - 9.0.0",
+      "nodes": [
+        "node_modules/@xhmikosr/decompress-targz"
+      ],
+      "fixAvailable": true
+    },
+    "@xhmikosr/decompress-unzip": {
+      "name": "@xhmikosr/decompress-unzip",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "file-type"
+      ],
+      "effects": [],
+      "range": "6.0.0 - 7.1.0",
+      "nodes": [
+        "node_modules/@xhmikosr/decompress-unzip"
+      ],
+      "fixAvailable": true
+    },
+    "@xhmikosr/downloader": {
+      "name": "@xhmikosr/downloader",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@xhmikosr/archive-type",
+        "@xhmikosr/decompress",
+        "file-type"
+      ],
+      "effects": [
+        "@xhmikosr/bin-wrapper"
+      ],
+      "range": "10.0.0 - 10.0.1 || 12.0.0 - 15.2.0",
+      "nodes": [
+        "node_modules/@xhmikosr/downloader"
+      ],
+      "fixAvailable": {
+        "name": "@swc/cli",
+        "version": "0.8.1",
+        "isSemVerMajor": true
+      }
+    },
+    "ajv": {
+      "name": "ajv",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1113715,
+          "name": "ajv",
+          "dependency": "ajv",
+          "title": "ajv has ReDoS when using `$data` option",
+          "url": "https://github.com/advisories/GHSA-2g4f-4pwh-qvx6",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400",
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=7.0.0-alpha.0 <8.18.0"
+        }
+      ],
+      "effects": [
+        "@vercel/static-config",
+        "@verdaccio/core"
+      ],
+      "range": "7.0.0-alpha.0 - 8.17.1",
+      "nodes": [
+        "node_modules/@vercel/static-config/node_modules/ajv",
+        "node_modules/@verdaccio/local-storage-legacy/node_modules/ajv"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "axios": {
+      "name": "axios",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1117574,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios: Authentication Bypass via Prototype Pollution Gadget in `validateStatus` Merge Strategy",
+          "url": "https://github.com/advisories/GHSA-w9j2-pvgh-6h63",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-287",
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 4.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N"
+          },
+          "range": ">=1.0.0 <1.15.1"
+        },
+        {
+          "source": 1117576,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios: Incomplete Fix for CVE-2025-62718 — NO_PROXY Protection Bypassed via RFC 1122 Loopback Subnet (127.0.0.0/8) in Axios 1.15.0",
+          "url": "https://github.com/advisories/GHSA-pmwg-cvhr-8vh7",
+          "severity": "high",
+          "cwe": [
+            "CWE-183",
+            "CWE-441",
+            "CWE-918"
+          ],
+          "cvss": {
+            "score": 7.2,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:L/A:N"
+          },
+          "range": ">=1.0.0 <1.15.1"
+        },
+        {
+          "source": 1117577,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios: Invisible JSON Response Tampering via Prototype Pollution Gadget in `parseReviver`",
+          "url": "https://github.com/advisories/GHSA-3w6x-2g7m-8v23",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-915",
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:H/A:N"
+          },
+          "range": ">=1.0.0 <1.15.2"
+        },
+        {
+          "source": 1117580,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios: Null Byte Injection via Reverse-Encoding in AxiosURLSearchParams",
+          "url": "https://github.com/advisories/GHSA-xhjh-pmcv-23jw",
+          "severity": "low",
+          "cwe": [
+            "CWE-116",
+            "CWE-626"
+          ],
+          "cvss": {
+            "score": 3.7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+          },
+          "range": ">=1.0.0 <1.15.1"
+        },
+        {
+          "source": 1117581,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios: CRLF Injection in multipart/form-data body via unsanitized blob.type in formDataToStream",
+          "url": "https://github.com/advisories/GHSA-445q-vr5w-6q77",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-93"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+          },
+          "range": ">=1.0.0 <1.15.1"
+        },
+        {
+          "source": 1117583,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios: no_proxy bypass via IP alias allows SSRF",
+          "url": "https://github.com/advisories/GHSA-m7pr-hjqh-92cm",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-918"
+          ],
+          "cvss": {
+            "score": 6.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:N/A:N"
+          },
+          "range": ">=1.0.0 <1.15.1"
+        },
+        {
+          "source": 1117585,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios: unbounded recursion in toFormData causes DoS via deeply nested request data",
+          "url": "https://github.com/advisories/GHSA-62hf-57xw-28j9",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-674"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=1.0.0 <1.15.1"
+        },
+        {
+          "source": 1117587,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios' HTTP adapter-streamed uploads bypass maxBodyLength when maxRedirects: 0",
+          "url": "https://github.com/advisories/GHSA-5c9x-8gcm-mpgx",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=1.0.0 <1.15.1"
+        },
+        {
+          "source": 1117589,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios: HTTP adapter streamed responses bypass maxContentLength",
+          "url": "https://github.com/advisories/GHSA-vf2m-468p-8v99",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=1.0.0 <1.15.1"
+        },
+        {
+          "source": 1117591,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios: Prototype Pollution Gadgets - Response Tampering, Data Exfiltration, and Request Hijacking",
+          "url": "https://github.com/advisories/GHSA-pf86-5x62-jrwf",
+          "severity": "high",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 7.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+          },
+          "range": ">=1.0.0 <1.15.1"
+        },
+        {
+          "source": 1117593,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios: Header Injection via Prototype Pollution",
+          "url": "https://github.com/advisories/GHSA-6chq-wfr3-2hj9",
+          "severity": "high",
+          "cwe": [
+            "CWE-113",
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 7.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+          },
+          "range": ">=1.0.0 <1.15.1"
+        },
+        {
+          "source": 1117595,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios: XSRF Token Cross-Origin Leakage via Prototype Pollution Gadget in `withXSRFToken` Boolean Coercion",
+          "url": "https://github.com/advisories/GHSA-xx6v-rp6x-q39c",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-183",
+            "CWE-201"
+          ],
+          "cvss": {
+            "score": 5.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N"
+          },
+          "range": ">=1.0.0 <1.15.1"
+        },
+        {
+          "source": 1118607,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios has prototype pollution read-side gadgets in HTTP adapter that allow credential injection and request hijacking",
+          "url": "https://github.com/advisories/GHSA-q8qp-cvcw-x6jj",
+          "severity": "high",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 7.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+          },
+          "range": ">=1.0.0 <1.15.2"
+        },
+        {
+          "source": 1119667,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "axios's shouldBypassProxy does not recognize IPv4-mapped IPv6 addresses, allowing NO_PROXY bypass (incomplete fix for CVE-2025-62718)",
+          "url": "https://github.com/advisories/GHSA-pjwm-pj3p-43mv",
+          "severity": "high",
+          "cwe": [
+            "CWE-918"
+          ],
+          "cvss": {
+            "score": 8.6,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:N/A:N"
+          },
+          "range": ">=1.0.0 <1.16.0"
+        },
+        {
+          "source": 1119669,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "axios has DoS & Header Injection via Prototype Pollution Read-Side Gadgets in axios merge functions",
+          "url": "https://github.com/advisories/GHSA-898c-q2cr-xwhg",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 4.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:L"
+          },
+          "range": ">=1.0.0 <1.16.0"
+        },
+        {
+          "source": 1119674,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "axios Vulnerable to Credential Theft and Response Hijacking via Prototype Pollution Gadget in Config Merge",
+          "url": "https://github.com/advisories/GHSA-3g43-6gmg-66jw",
+          "severity": "high",
+          "cwe": [
+            "CWE-94",
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:L/A:L"
+          },
+          "range": ">=1.0.0 <1.15.2"
+        },
+        {
+          "source": 1119675,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "axios Vulnerable to Full Man-in-the-Middle via Prototype Pollution Gadget in `config.proxy`",
+          "url": "https://github.com/advisories/GHSA-35jp-ww65-95wh",
+          "severity": "high",
+          "cwe": [
+            "CWE-441",
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 8.7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:H/A:N"
+          },
+          "range": ">=1.0.0 <1.16.0"
+        }
+      ],
+      "effects": [
+        "nx"
+      ],
+      "range": "1.0.0 - 1.15.2",
+      "nodes": [
+        "node_modules/axios"
+      ],
+      "fixAvailable": {
+        "name": "@nx/vitest",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "brace-expansion": {
+      "name": "brace-expansion",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1115543,
+          "name": "brace-expansion",
+          "dependency": "brace-expansion",
+          "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+          "url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=4.0.0 <5.0.5"
+        },
+        {
+          "source": 1119088,
+          "name": "brace-expansion",
+          "dependency": "brace-expansion",
+          "title": "brace-expansion: Large numeric range defeats documented `max` DoS protection",
+          "url": "https://github.com/advisories/GHSA-jxxr-4gwj-5jf2",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=5.0.0 <5.0.6"
+        }
+      ],
+      "effects": [
+        "nx"
+      ],
+      "range": "4.0.0 - 5.0.5",
+      "nodes": [
+        "node_modules/nx/node_modules/brace-expansion"
+      ],
+      "fixAvailable": {
+        "name": "@nx/vitest",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "express": {
+      "name": "express",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "qs"
+      ],
+      "effects": [
+        "@verdaccio/middleware",
+        "verdaccio",
+        "verdaccio-audit"
+      ],
+      "range": "4.21.0 - 4.22.1 || 5.0.0-alpha.1 - 5.0.1",
+      "nodes": [
+        "node_modules/express"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "file-type": {
+      "name": "file-type",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1114301,
+          "name": "file-type",
+          "dependency": "file-type",
+          "title": "file-type affected by infinite loop in ASF parser on malformed input with zero-size sub-header",
+          "url": "https://github.com/advisories/GHSA-5v7r-6r5c-r473",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-835"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=13.0.0 <21.3.1"
+        },
+        {
+          "source": 1114726,
+          "name": "file-type",
+          "dependency": "file-type",
+          "title": "file-type: ZIP Decompression Bomb DoS via [Content_Types].xml entry",
+          "url": "https://github.com/advisories/GHSA-j47w-4g3g-c36v",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400",
+            "CWE-409"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=20.0.0 <=21.3.1"
+        }
+      ],
+      "effects": [
+        "@xhmikosr/archive-type",
+        "@xhmikosr/decompress-tar",
+        "@xhmikosr/decompress-tarbz2",
+        "@xhmikosr/decompress-targz",
+        "@xhmikosr/decompress-unzip",
+        "@xhmikosr/downloader"
+      ],
+      "range": "13.0.0 - 21.3.1",
+      "nodes": [
+        "node_modules/file-type"
+      ],
+      "fixAvailable": {
+        "name": "@swc/cli",
+        "version": "0.8.1",
+        "isSemVerMajor": true
+      }
+    },
+    "follow-redirects": {
+      "name": "follow-redirects",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1116560,
+          "name": "follow-redirects",
+          "dependency": "follow-redirects",
+          "title": "follow-redirects leaks Custom Authentication Headers to Cross-Domain Redirect Targets",
+          "url": "https://github.com/advisories/GHSA-r4q5-vmmm-2653",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-200"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=1.15.11"
+        }
+      ],
+      "effects": [
+        "nx"
+      ],
+      "range": "<=1.15.11",
+      "nodes": [
+        "node_modules/nx/node_modules/follow-redirects"
+      ],
+      "fixAvailable": {
+        "name": "@nx/vitest",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "lodash": {
+      "name": "lodash",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1112455,
+          "name": "lodash",
+          "dependency": "lodash",
+          "title": "Lodash has Prototype Pollution Vulnerability in `_.unset` and `_.omit` functions",
+          "url": "https://github.com/advisories/GHSA-xxjr-mmjv-4gpg",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L"
+          },
+          "range": ">=4.0.0 <=4.17.22"
+        },
+        {
+          "source": 1115806,
+          "name": "lodash",
+          "dependency": "lodash",
+          "title": "lodash vulnerable to Code Injection via `_.template` imports key names",
+          "url": "https://github.com/advisories/GHSA-r5fr-rjxr-66jc",
+          "severity": "high",
+          "cwe": [
+            "CWE-94"
+          ],
+          "cvss": {
+            "score": 8.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H"
+          },
+          "range": ">=4.0.0 <=4.17.23"
+        },
+        {
+          "source": 1115810,
+          "name": "lodash",
+          "dependency": "lodash",
+          "title": "lodash vulnerable to Prototype Pollution via array path bypass in `_.unset` and `_.omit`",
+          "url": "https://github.com/advisories/GHSA-f23m-r3pf-42rh",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L"
+          },
+          "range": "<=4.17.23"
+        }
+      ],
+      "effects": [
+        "@verdaccio/local-storage-legacy"
+      ],
+      "range": "<=4.17.23",
+      "nodes": [
+        "node_modules/@verdaccio/local-storage-legacy/node_modules/lodash"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "minimatch": {
+      "name": "minimatch",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1113463,
+          "name": "minimatch",
+          "dependency": "minimatch",
+          "title": "minimatch has a ReDoS via repeated wildcards with non-matching literal in pattern",
+          "url": "https://github.com/advisories/GHSA-3ppc-4f35-3m26",
+          "severity": "high",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=7.0.0 <7.4.7"
+        },
+        {
+          "source": 1113466,
+          "name": "minimatch",
+          "dependency": "minimatch",
+          "title": "minimatch has a ReDoS via repeated wildcards with non-matching literal in pattern",
+          "url": "https://github.com/advisories/GHSA-3ppc-4f35-3m26",
+          "severity": "high",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=10.0.0 <10.2.1"
+        },
+        {
+          "source": 1113542,
+          "name": "minimatch",
+          "dependency": "minimatch",
+          "title": "minimatch has ReDoS: matchOne() combinatorial backtracking via multiple non-adjacent GLOBSTAR segments",
+          "url": "https://github.com/advisories/GHSA-7r86-cg39-jmmj",
+          "severity": "high",
+          "cwe": [
+            "CWE-407"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=7.0.0 <7.4.8"
+        },
+        {
+          "source": 1113545,
+          "name": "minimatch",
+          "dependency": "minimatch",
+          "title": "minimatch has ReDoS: matchOne() combinatorial backtracking via multiple non-adjacent GLOBSTAR segments",
+          "url": "https://github.com/advisories/GHSA-7r86-cg39-jmmj",
+          "severity": "high",
+          "cwe": [
+            "CWE-407"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=10.0.0 <10.2.3"
+        },
+        {
+          "source": 1113550,
+          "name": "minimatch",
+          "dependency": "minimatch",
+          "title": "minimatch ReDoS: nested *() extglobs generate catastrophically backtracking regular expressions",
+          "url": "https://github.com/advisories/GHSA-23c5-xmqv-rm74",
+          "severity": "high",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=7.0.0 <7.4.8"
+        },
+        {
+          "source": 1113553,
+          "name": "minimatch",
+          "dependency": "minimatch",
+          "title": "minimatch ReDoS: nested *() extglobs generate catastrophically backtracking regular expressions",
+          "url": "https://github.com/advisories/GHSA-23c5-xmqv-rm74",
+          "severity": "high",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=10.0.0 <10.2.3"
+        }
+      ],
+      "effects": [
+        "@vercel/python-analysis",
+        "@verdaccio/core"
+      ],
+      "range": "7.0.0 - 7.4.7 || 10.0.0 - 10.2.2",
+      "nodes": [
+        "node_modules/@vercel/python-analysis/node_modules/minimatch",
+        "node_modules/@verdaccio/local-storage-legacy/node_modules/minimatch"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "next": {
+      "name": "next",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        {
+          "source": 1117930,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js Vulnerable to Denial of Service with Server Components",
+          "url": "https://github.com/advisories/GHSA-8h8q-6873-q5fj",
+          "severity": "high",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=16.0.0 <16.2.5"
+        },
+        {
+          "source": 1118938,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js has a Middleware / Proxy bypass in App Router applications via segment-prefetch routes - Incomplete Fix Follow-Up",
+          "url": "https://github.com/advisories/GHSA-26hh-7cqf-hhc6",
+          "severity": "high",
+          "cwe": [
+            "CWE-288"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+          },
+          "range": ">=16.0.0 <16.2.6"
+        },
+        {
+          "source": 1118941,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js's Middleware / Proxy redirects can be cache-poisoned",
+          "url": "https://github.com/advisories/GHSA-3g8h-86w9-wvmq",
+          "severity": "low",
+          "cwe": [
+            "CWE-349"
+          ],
+          "cvss": {
+            "score": 3.7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=16.0.0 <16.2.5"
+        },
+        {
+          "source": 1118943,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js vulnerable to cross-site scripting in App Router applications using CSP nonces",
+          "url": "https://github.com/advisories/GHSA-ffhc-5mcf-pf4q",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 4.7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:L/I:L/A:N"
+          },
+          "range": ">=16.0.0 <16.2.5"
+        },
+        {
+          "source": 1118945,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js vulnerable to cache poisoning via collisions in React Server Component cache-busting",
+          "url": "https://github.com/advisories/GHSA-vfv6-92ff-j949",
+          "severity": "low",
+          "cwe": [
+            "CWE-328"
+          ],
+          "cvss": {
+            "score": 3.7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+          },
+          "range": ">=16.0.0 <16.2.5"
+        },
+        {
+          "source": 1118947,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js has cross-site scripting in beforeInteractive scripts with untrusted input",
+          "url": "https://github.com/advisories/GHSA-gx5p-jg67-6x7h",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 6.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+          },
+          "range": ">=16.0.0 <16.2.5"
+        },
+        {
+          "source": 1118949,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js vulnerable to Denial of Service via connection exhaustion in applications using Cache Components",
+          "url": "https://github.com/advisories/GHSA-mg66-mrh9-m8jx",
+          "severity": "high",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=16.0.0 <16.2.5"
+        },
+        {
+          "source": 1118951,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js has a Denial of Service in the Image Optimization API",
+          "url": "https://github.com/advisories/GHSA-h64f-5h5j-jqjh",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 5.9,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=16.0.0 <16.2.5"
+        },
+        {
+          "source": 1118953,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js vulnerable to server-side request forgery in applications using WebSocket upgrades",
+          "url": "https://github.com/advisories/GHSA-c4j6-fc7j-m34r",
+          "severity": "high",
+          "cwe": [
+            "CWE-918"
+          ],
+          "cvss": {
+            "score": 8.6,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:N/A:N"
+          },
+          "range": ">=16.0.0 <16.2.5"
+        },
+        {
+          "source": 1118955,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js has a Middleware / Proxy bypass through dynamic route parameter injection",
+          "url": "https://github.com/advisories/GHSA-492v-c6pp-mqqv",
+          "severity": "high",
+          "cwe": [
+            "CWE-288"
+          ],
+          "cvss": {
+            "score": 8.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N"
+          },
+          "range": ">=16.0.0 <16.2.5"
+        },
+        {
+          "source": 1118957,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js vulnerable to cache poisoning in React Server Component responses",
+          "url": "https://github.com/advisories/GHSA-wfc6-r584-vfw7",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-436"
+          ],
+          "cvss": {
+            "score": 5.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:N/I:L/A:L"
+          },
+          "range": ">=16.0.0 <16.2.5"
+        },
+        {
+          "source": 1118959,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js has a Middleware / Proxy bypass in App Router applications via segment-prefetch routes",
+          "url": "https://github.com/advisories/GHSA-267c-6grr-h53f",
+          "severity": "high",
+          "cwe": [
+            "CWE-288"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+          },
+          "range": ">=16.0.0 <16.2.5"
+        },
+        {
+          "source": 1118961,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js has a Middleware / Proxy bypass in Pages Router applications using i18n",
+          "url": "https://github.com/advisories/GHSA-36qx-fr4f-26g5",
+          "severity": "high",
+          "cwe": [
+            "CWE-863"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+          },
+          "range": ">=16.0.0 <16.2.5"
+        },
+        "postcss"
+      ],
+      "effects": [],
+      "range": "9.3.4-canary.0 - 16.3.0-canary.5",
+      "nodes": [
+        "node_modules/next"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.7",
+        "isSemVerMajor": false
+      }
+    },
+    "nodemailer": {
+      "name": "nodemailer",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        {
+          "source": 1115470,
+          "name": "nodemailer",
+          "dependency": "nodemailer",
+          "title": "Nodemailer has SMTP command injection due to unsanitized `envelope.size` parameter",
+          "url": "https://github.com/advisories/GHSA-c7w3-x93f-qmm8",
+          "severity": "low",
+          "cwe": [
+            "CWE-93"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<8.0.4"
+        },
+        {
+          "source": 1116270,
+          "name": "nodemailer",
+          "dependency": "nodemailer",
+          "title": "Nodemailer Vulnerable to SMTP Command Injection via CRLF in Transport name Option (EHLO/HELO) ",
+          "url": "https://github.com/advisories/GHSA-vvjj-xcjg-gr5g",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-93"
+          ],
+          "cvss": {
+            "score": 4.9,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:H/A:N"
+          },
+          "range": "<=8.0.4"
+        }
+      ],
+      "effects": [],
+      "range": "<=8.0.4",
+      "nodes": [
+        "node_modules/nodemailer"
+      ],
+      "fixAvailable": {
+        "name": "nodemailer",
+        "version": "8.0.10",
+        "isSemVerMajor": true
+      }
+    },
+    "nx": {
+      "name": "nx",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "axios",
+        "brace-expansion",
+        "follow-redirects",
+        "tmp",
+        "yaml"
+      ],
+      "effects": [
+        "@nx/workspace"
+      ],
+      "range": "10.0.7-beta.2 - 10.0.7-beta.5 || 22.6.4 - 22.7.4 || >=23.0.0-beta.0",
+      "nodes": [
+        "node_modules/nx"
+      ],
+      "fixAvailable": {
+        "name": "@nx/vitest",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "path-to-regexp": {
+      "name": "path-to-regexp",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1101846,
+          "name": "path-to-regexp",
+          "dependency": "path-to-regexp",
+          "title": "path-to-regexp outputs backtracking regular expressions",
+          "url": "https://github.com/advisories/GHSA-9wv6-86v2-598j",
+          "severity": "high",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=4.0.0 <6.3.0"
+        },
+        {
+          "source": 1115573,
+          "name": "path-to-regexp",
+          "dependency": "path-to-regexp",
+          "title": "path-to-regexp vulnerable to Denial of Service via sequential optional groups",
+          "url": "https://github.com/advisories/GHSA-j3q9-mxjg-w52f",
+          "severity": "high",
+          "cwe": [
+            "CWE-400",
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=8.0.0 <8.4.0"
+        },
+        {
+          "source": 1115582,
+          "name": "path-to-regexp",
+          "dependency": "path-to-regexp",
+          "title": "path-to-regexp vulnerable to Regular Expression Denial of Service via multiple wildcards",
+          "url": "https://github.com/advisories/GHSA-27v5-c462-wpq7",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 5.9,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=8.0.0 <8.4.0"
+        }
+      ],
+      "effects": [
+        "@vercel/backends",
+        "@vercel/express",
+        "@vercel/fun",
+        "@vercel/hono",
+        "@vercel/node",
+        "@vercel/remix-builder"
+      ],
+      "range": "4.0.0 - 6.2.2 || 8.0.0 - 8.3.0",
+      "nodes": [
+        "node_modules/@vercel/backends/node_modules/path-to-regexp",
+        "node_modules/@vercel/express/node_modules/path-to-regexp",
+        "node_modules/@vercel/fun/node_modules/path-to-regexp",
+        "node_modules/@vercel/hono/node_modules/path-to-regexp",
+        "node_modules/@vercel/node/node_modules/path-to-regexp",
+        "node_modules/@vercel/remix-builder/node_modules/path-to-regexp"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "postcss": {
+      "name": "postcss",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1117015,
+          "name": "postcss",
+          "dependency": "postcss",
+          "title": "PostCSS has XSS via Unescaped </style> in its CSS Stringify Output",
+          "url": "https://github.com/advisories/GHSA-qx2v-qp2m-jg93",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 6.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+          },
+          "range": "<8.5.10"
+        }
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "<8.5.10",
+      "nodes": [
+        "node_modules/next/node_modules/postcss"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.7",
+        "isSemVerMajor": false
+      }
+    },
+    "qs": {
+      "name": "qs",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1119502,
+          "name": "qs",
+          "dependency": "qs",
+          "title": "qs has a remotely triggerable DoS: qs.stringify crashes with TypeError on null/undefined entries in comma-format arrays when encodeValuesOnly is set",
+          "url": "https://github.com/advisories/GHSA-q8mj-m7cp-5q26",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-476"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=6.11.1 <=6.15.1"
+        }
+      ],
+      "effects": [
+        "@cypress/request",
+        "express"
+      ],
+      "range": "6.11.1 - 6.15.1",
+      "nodes": [
+        "node_modules/qs"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "smol-toml": {
+      "name": "smol-toml",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1115393,
+          "name": "smol-toml",
+          "dependency": "smol-toml",
+          "title": "smol-toml: Denial of Service via TOML documents containing thousands of consecutive commented lines",
+          "url": "https://github.com/advisories/GHSA-v3rj-xjv7-4jmq",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-674"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": "<1.6.1"
+        }
+      ],
+      "effects": [
+        "@vercel/rust",
+        "vercel"
+      ],
+      "range": "<1.6.1",
+      "nodes": [
+        "node_modules/@vercel/python-analysis/node_modules/smol-toml",
+        "node_modules/@vercel/rust/node_modules/smol-toml",
+        "node_modules/vercel/node_modules/smol-toml"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "sockjs": {
+      "name": "sockjs",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "uuid"
+      ],
+      "effects": [
+        "webpack-dev-server"
+      ],
+      "range": ">=0.3.17",
+      "nodes": [
+        "node_modules/sockjs"
+      ],
+      "fixAvailable": {
+        "name": "@nx/web",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "srvx": {
+      "name": "srvx",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1115537,
+          "name": "srvx",
+          "dependency": "srvx",
+          "title": "srvx is vulnerable to middleware bypass via absolute URI in request line ",
+          "url": "https://github.com/advisories/GHSA-p36q-q72m-gchr",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-706"
+          ],
+          "cvss": {
+            "score": 4.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N"
+          },
+          "range": "<0.11.13"
+        }
+      ],
+      "effects": [
+        "@vercel/backends"
+      ],
+      "range": "<0.11.13",
+      "nodes": [
+        "node_modules/srvx"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "tar": {
+      "name": "tar",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1113375,
+          "name": "tar",
+          "dependency": "tar",
+          "title": "Arbitrary File Read/Write via Hardlink Target Escape Through Symlink Chain in node-tar Extraction",
+          "url": "https://github.com/advisories/GHSA-83g3-92jg-28cx",
+          "severity": "high",
+          "cwe": [
+            "CWE-22"
+          ],
+          "cvss": {
+            "score": 7.1,
+            "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:N"
+          },
+          "range": "<7.5.8"
+        },
+        {
+          "source": 1114200,
+          "name": "tar",
+          "dependency": "tar",
+          "title": "tar has Hardlink Path Traversal via Drive-Relative Linkpath",
+          "url": "https://github.com/advisories/GHSA-qffp-2rhf-9h96",
+          "severity": "high",
+          "cwe": [
+            "CWE-22",
+            "CWE-59"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=7.5.9"
+        },
+        {
+          "source": 1114302,
+          "name": "tar",
+          "dependency": "tar",
+          "title": "node-tar Symlink Path Traversal via Drive-Relative Linkpath",
+          "url": "https://github.com/advisories/GHSA-9ppj-qmqm-q256",
+          "severity": "high",
+          "cwe": [
+            "CWE-22"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=7.5.10"
+        }
+      ],
+      "effects": [],
+      "range": "<=7.5.10",
+      "nodes": [
+        "node_modules/@vercel/fun/node_modules/tar"
+      ],
+      "fixAvailable": true
+    },
+    "tmp": {
+      "name": "tmp",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1119610,
+          "name": "tmp",
+          "dependency": "tmp",
+          "title": "tmp has Path Traversal via unsanitized prefix/postfix that enables directory escape",
+          "url": "https://github.com/advisories/GHSA-ph9p-34f9-6g65",
+          "severity": "high",
+          "cwe": [
+            "CWE-22"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<0.2.6"
+        }
+      ],
+      "effects": [
+        "nx"
+      ],
+      "range": "<0.2.6",
+      "nodes": [
+        "node_modules/tmp"
+      ],
+      "fixAvailable": {
+        "name": "@nx/vitest",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "undici": {
+      "name": "undici",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1101610,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "Use of Insufficiently Random Values in undici",
+          "url": "https://github.com/advisories/GHSA-c76h-2ccp-4975",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-330"
+          ],
+          "cvss": {
+            "score": 6.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:N"
+          },
+          "range": ">=4.5.0 <5.28.5"
+        },
+        {
+          "source": 1112496,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "Undici has an unbounded decompression chain in HTTP responses on Node.js Fetch API via Content-Encoding leads to resource exhaustion",
+          "url": "https://github.com/advisories/GHSA-g9mf-h72j-4rw9",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 5.9,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<6.23.0"
+        },
+        {
+          "source": 1113069,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "undici Denial of Service attack via bad certificate data",
+          "url": "https://github.com/advisories/GHSA-cxrh-j4jr-qwg3",
+          "severity": "low",
+          "cwe": [
+            "CWE-401"
+          ],
+          "cvss": {
+            "score": 3.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": "<5.29.0"
+        },
+        {
+          "source": 1114594,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "Undici has an HTTP Request/Response Smuggling issue",
+          "url": "https://github.com/advisories/GHSA-2mjp-6q6p-2qxm",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-444"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L"
+          },
+          "range": "<6.24.0"
+        },
+        {
+          "source": 1114638,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "Undici has Unbounded Memory Consumption in WebSocket permessage-deflate Decompression",
+          "url": "https://github.com/advisories/GHSA-vrm6-8vpv-qv8q",
+          "severity": "high",
+          "cwe": [
+            "CWE-409"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<6.24.0"
+        },
+        {
+          "source": 1114640,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "Undici has Unhandled Exception in WebSocket Client Due to Invalid server_max_window_bits Validation",
+          "url": "https://github.com/advisories/GHSA-v9p9-hfj2-hcw8",
+          "severity": "high",
+          "cwe": [
+            "CWE-248"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<6.24.0"
+        },
+        {
+          "source": 1114642,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "Undici has CRLF Injection in undici via `upgrade` option",
+          "url": "https://github.com/advisories/GHSA-4992-7rv2-5pvq",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-93"
+          ],
+          "cvss": {
+            "score": 4.6,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:L/I:L/A:N"
+          },
+          "range": "<6.24.0"
+        }
+      ],
+      "effects": [
+        "@vercel/node"
+      ],
+      "range": "<=6.23.0",
+      "nodes": [
+        "node_modules/@vercel/node/node_modules/undici"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "uuid": {
+      "name": "uuid",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1119441,
+          "name": "uuid",
+          "dependency": "uuid",
+          "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+          "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-787",
+            "CWE-1285"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+          },
+          "range": "<11.1.1"
+        }
+      ],
+      "effects": [
+        "@cypress/request",
+        "sockjs"
+      ],
+      "range": "<11.1.1",
+      "nodes": [
+        "node_modules/uuid"
+      ],
+      "fixAvailable": {
+        "name": "@nx/web",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "vercel": {
+      "name": "vercel",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "@vercel/backends",
+        "@vercel/build-utils",
+        "@vercel/elysia",
+        "@vercel/express",
+        "@vercel/fastify",
+        "@vercel/fun",
+        "@vercel/h3",
+        "@vercel/hono",
+        "@vercel/hydrogen",
+        "@vercel/koa",
+        "@vercel/nestjs",
+        "@vercel/node",
+        "@vercel/python",
+        "@vercel/redwood",
+        "@vercel/remix-builder",
+        "@vercel/rust",
+        "@vercel/static-build",
+        "smol-toml"
+      ],
+      "effects": [],
+      "range": "28.12.3 || >=28.17.0",
+      "nodes": [
+        "node_modules/vercel"
+      ],
+      "fixAvailable": {
+        "name": "vercel",
+        "version": "50.41.0",
+        "isSemVerMajor": true
+      }
+    },
+    "verdaccio": {
+      "name": "verdaccio",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@cypress/request",
+        "@verdaccio/auth",
+        "@verdaccio/config",
+        "@verdaccio/core",
+        "@verdaccio/hooks",
+        "@verdaccio/loaders",
+        "@verdaccio/local-storage-legacy",
+        "@verdaccio/logger",
+        "@verdaccio/middleware",
+        "@verdaccio/package-filter",
+        "@verdaccio/signature",
+        "@verdaccio/tarball",
+        "@verdaccio/url",
+        "@verdaccio/utils",
+        "express",
+        "verdaccio-audit",
+        "verdaccio-htpasswd"
+      ],
+      "effects": [],
+      "range": "5.20.1 - 8.0.0-next-8.32",
+      "nodes": [
+        "node_modules/verdaccio"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "verdaccio-audit": {
+      "name": "verdaccio-audit",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/config",
+        "@verdaccio/core",
+        "express"
+      ],
+      "effects": [
+        "verdaccio"
+      ],
+      "range": "11.0.0-6-next.5 - 14.0.0-next-9.0",
+      "nodes": [
+        "node_modules/verdaccio-audit"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "verdaccio-htpasswd": {
+      "name": "verdaccio-htpasswd",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@verdaccio/core"
+      ],
+      "effects": [
+        "verdaccio"
+      ],
+      "range": "11.0.0-6-next.7 - 13.0.0-next-8.38",
+      "nodes": [
+        "node_modules/verdaccio-htpasswd"
+      ],
+      "fixAvailable": {
+        "name": "verdaccio",
+        "version": "6.7.2",
+        "isSemVerMajor": false
+      }
+    },
+    "webpack-dev-server": {
+      "name": "webpack-dev-server",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "sockjs"
+      ],
+      "effects": [
+        "@nx/webpack"
+      ],
+      "range": ">=2.0.0-beta",
+      "nodes": [
+        "node_modules/webpack-dev-server"
+      ],
+      "fixAvailable": {
+        "name": "@nx/web",
+        "version": "22.7.5",
+        "isSemVerMajor": false
+      }
+    },
+    "xlsx": {
+      "name": "xlsx",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        {
+          "source": 1108110,
+          "name": "xlsx",
+          "dependency": "xlsx",
+          "title": "Prototype Pollution in sheetJS",
+          "url": "https://github.com/advisories/GHSA-4r6h-8v6p-xvw6",
+          "severity": "high",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 7.8,
+            "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H"
+          },
+          "range": "<0.19.3"
+        },
+        {
+          "source": 1108111,
+          "name": "xlsx",
+          "dependency": "xlsx",
+          "title": "SheetJS Regular Expression Denial of Service (ReDoS)",
+          "url": "https://github.com/advisories/GHSA-5pgg-2g8v-p4x9",
+          "severity": "high",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<0.20.2"
+        }
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/xlsx"
+      ],
+      "fixAvailable": false
+    },
+    "yaml": {
+      "name": "yaml",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1115556,
+          "name": "yaml",
+          "dependency": "yaml",
+          "title": "yaml is vulnerable to Stack Overflow via deeply nested YAML collections",
+          "url": "https://github.com/advisories/GHSA-48c2-rrv3-qjmp",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-674"
+          ],
+          "cvss": {
+            "score": 4.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=2.0.0 <2.8.3"
+        }
+      ],
+      "effects": [],
+      "range": "2.0.0 - 2.8.2",
+      "nodes": [
+        "node_modules/yaml"
+      ],
+      "fixAvailable": true
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 1,
+      "moderate": 59,
+      "high": 29,
+      "critical": 0,
+      "total": 89
+    },
+    "dependencies": {
+      "prod": 746,
+      "dev": 1950,
+      "optional": 428,
+      "peer": 1,
+      "peerOptional": 0,
+      "total": 2985
+    }
+  }
+}
