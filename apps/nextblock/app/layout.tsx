@@ -1,6 +1,4 @@
 import '@nextblock-cms/ui/styles/globals.css';
-// eslint-disable-next-line @nx/enforce-module-boundaries
-import '@nextblock-cms/editor/styles/editor.css';
 // app/layout.tsx
 
 import type { Metadata } from 'next';
@@ -15,7 +13,7 @@ import { ConsentBanner } from '../components/privacy/ConsentBanner';
 import { getPrivacySettings } from '../lib/privacy/settings';
 import { DEFAULT_PRIVACY_SETTINGS } from '../lib/privacy/types';
 import { DeferredSpeedInsights } from '../components/DeferredSpeedInsights';
-import { NextblockVisualEditing } from '../components/visual-editing/NextblockVisualEditing';
+import { DeferredVisualEditing } from '../components/visual-editing/DeferredVisualEditing';
 import {
   createClient as createSupabaseServerClient,
   getProfileWithRoleServerSide,
@@ -461,7 +459,7 @@ export default async function RootLayout({
           </AppShell>
 
           {isEcommerceActive && <DeferredCartDrawer />}
-          {visualEditingEnabled && <NextblockVisualEditing />}
+          {visualEditingEnabled && <DeferredVisualEditing />}
           {Toolbar && <Toolbar nonce={nonce} />}
           {privacySettings.banner_enabled && <ConsentBanner />}
         </Providers>

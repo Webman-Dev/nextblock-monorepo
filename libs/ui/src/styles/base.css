@@ -304,3 +304,15 @@
     margin: 2rem 0;
   }
 }
+
+/* Custom text selection style (ported from editor.css so it survives the
+   removal of the global editor.css import from the public layout). */
+::selection {
+  background: rgba(59, 130, 246, 0.3); /* blue-500 with opacity */
+  color: inherit;
+}
+
+::-moz-selection {
+  background: rgba(59, 130, 246, 0.3);
+  color: inherit;
+}

@@ -1594,7 +1594,6 @@ async function sanitizeLayout(projectDir) {
 
   const requiredImports = [
     "import '@nextblock-cms/ui/styles/globals.css';",
-    "import '@nextblock-cms/editor/styles/editor.css';",
   ];
 
   const content = await fs.readFile(layoutPath, 'utf8');

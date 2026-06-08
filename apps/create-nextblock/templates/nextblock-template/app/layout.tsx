@@ -1,6 +1,4 @@
 import '@nextblock-cms/ui/styles/globals.css';
-// eslint-disable-next-line @nx/enforce-module-boundaries
-import '@nextblock-cms/editor/styles/editor.css';
 // app/layout.tsx
 
 import type { Metadata } from 'next';

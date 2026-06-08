@@ -9,7 +9,7 @@ import AlertWidgetRenderer from "./inline/AlertWidgetRenderer";
 import CtaWidgetRenderer from "./inline/CtaWidgetRenderer";
 import type { TextBlockContent } from "./TextBlockRenderer";
 import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
-import { SimpleTiptapRenderer } from "@nextblock-cms/ecommerce";
+import { SimpleTiptapRenderer } from "@nextblock-cms/ecommerce/components/SimpleTiptapRenderer";
 
 interface ClientTextBlockRendererProps {
   content: TextBlockContent;

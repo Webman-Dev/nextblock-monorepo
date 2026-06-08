@@ -1,7 +1,11 @@
-last 2 versions
+chrome >= 109
+edge >= 109
+firefox >= 115
+safari >= 15.4
+ios_saf >= 15.4
+and_chr >= 109
+and_ff >= 115
+samsung >= 21
+opera >= 95
 not dead
-> 0.2%
-not safari < 15.4
-not ios_saf < 15.4
-not ie <= 11
 not op_mini all
