@@ -5,7 +5,23 @@
 The root developer workflow is defined by the workspace `package.json` and the
 setup helper in `tools/scripts/setup.mjs`.
 
-Recommended flow:
+### Prerequisites
+
+`npm run setup` is interactive and asks for credentials from three services, so
+create them first:
+
+1. **Supabase project** (https://supabase.com/dashboard) — Reference ID
+   (Project Settings → General), connection string (Connect → Direct connection →
+   URI), anon + service_role keys (Project Settings → API Keys), and a Personal
+   Access Token (Account → Access Tokens → Generate new token).
+2. **Cloudflare R2 bucket** (https://dash.cloudflare.com → R2) — create a bucket,
+   enable its Public Development URL (Bucket → Settings → General), and create an
+   Account API token (R2 → Manage API Tokens) with Object Read & Write. Copy the
+   Access Key ID and Secret Access Key (the secret is shown only once).
+3. **SMTP credentials** (SMTP2GO works very well) — required so Supabase can send
+   the confirmation email the first admin needs to sign in.
+
+### Run it
 
 ```bash
 npm install
@@ -13,17 +29,30 @@ npm run setup
 npx nx serve nextblock
 ```
 
-What that does:
+What `npm run setup` does:
 
-- installs workspace dependencies
 - creates `.env.local` from `.env.exemple` if needed
-- prompts for Supabase project credentials
-- optionally captures R2 and SMTP values
-- links the local Supabase CLI workdir to your project
-- optionally pushes the schema and config to the linked database
+- prompts for Supabase, Cloudflare R2, and SMTP details (all required)
+- writes `NEXT_PUBLIC_URL` and auto-generates `CRON_SECRET`,
+  `DRAFT_MODE_SECRET`, and `REVALIDATE_SECRET_TOKEN`
+- links the local Supabase CLI workdir to your project (`npm run db:link`)
+- applies the full schema baseline to the new database
+  (`npm run db:migrate:fresh`)
+- syncs hosted Supabase Auth — custom SMTP and branded email templates
+  (`npm run configure:supabase-auth`)
 
-If you skip `npm run setup`, the misspelled root sample file
-`.env.exemple` is the current reference template for manual environment setup.
+If you skip `npm run setup`, the misspelled root sample file `.env.exemple` is
+the reference template for manual environment setup.
+
+### First login
+
+`npx nx serve nextblock` serves the app at **http://localhost:4200** (the
+`@nx/next:server` default port). Open `/sign-up` and register: the **first**
+account to sign up is automatically promoted to **ADMIN** by a database trigger
+(`handle_new_user`). Email confirmation is enabled by default, so click the
+confirmation link (delivered through the SMTP you configured) — or confirm the
+user manually in Supabase → Authentication → Users. After signing in you land in
+the CMS at `/cms/dashboard`. Every later sign-up gets the `USER` role.
 
 ## Common Commands
 
@@ -76,13 +105,19 @@ repo expects at least:
 - `SUPABASE_PROJECT_ID` for Supabase CLI migration tooling
 - `SUPABASE_ACCESS_TOKEN` for Supabase CLI linking
 - `POSTGRES_URL` or `DATABASE_URL` for SQL fallback paths and db tooling
-- `NEXT_PUBLIC_URL`
-- `CRON_SECRET` for cron routes
+- `NEXT_PUBLIC_URL` — written by `npm run setup`
+- `CRON_SECRET`, `DRAFT_MODE_SECRET`, `REVALIDATE_SECRET_TOKEN` — auto-generated
+  by `npm run setup`
 
-Optional but commonly needed:
+Captured by `npm run setup` and needed for a complete CMS:
 
-- R2 credentials for media storage
-- SMTP credentials for hosted auth email configuration
+- R2 credentials for media storage. The app builds and serves without them, but
+  uploads, image processing, and full-site backups return 500 until R2 is set.
+- SMTP credentials for hosted auth email — required to deliver the first admin's
+  sign-up confirmation on hosted Supabase.
+
+Optional, per feature:
+
 - Stripe keys for physical-product checkout
 - Freemius keys for digital-product checkout and product sync
 

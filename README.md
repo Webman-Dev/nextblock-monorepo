@@ -85,7 +85,13 @@ This will run the `create-nextblock` CLI which acts as a scaffolding CLI and tem
 
 ### ⚡ Developer Quickstart
 
-To quickly get the monorepo running locally:
+**Prerequisites** — create these three things first; `npm run setup` will ask for their keys:
+
+1. **Supabase project** ([dashboard](https://supabase.com/dashboard)) — you'll need the **Reference ID** (Project Settings → General), the **connection string** (Connect → Direct connection → URI), the **anon** + **service_role** keys (Project Settings → API Keys), and a **Personal Access Token** (Account → Access Tokens → Generate new token).
+2. **Cloudflare R2 bucket** ([dashboard](https://dash.cloudflare.com) → R2) — create a bucket, enable its **Public Development URL** (Bucket → Settings → General), then create an **Account API token** (R2 → Manage API Tokens) with _Object Read & Write_. Copy the **Access Key ID** and **Secret Access Key** — the secret is shown only once.
+3. **SMTP credentials** ([SMTP2GO](https://www.smtp2go.com) works very well) — required so Supabase can email the confirmation link your first admin needs to sign in.
+
+Then run:
 
 ```bash
 git clone https://github.com/nextblock-cms/nextblock.git
@@ -95,7 +101,9 @@ npm run setup
 npx nx serve nextblock
 ```
 
-The interactive `setup` wizard will help you automatically configure your `.env.local` and seamlessly link your Supabase project instance.
+The interactive `setup` wizard writes your `.env.local` (Supabase, R2, SMTP, and auto-generated secrets), links the Supabase CLI, and applies the database schema.
+
+**First login:** the dev server runs at **http://localhost:4200**. Open `/sign-up` and create your account — the **first** account to register automatically becomes the **ADMIN**. Click the confirmation email (or confirm the user in Supabase → Authentication → Users), then sign in to reach the CMS at `/cms/dashboard`.
 
 ### 🛠️ Useful Commands
 

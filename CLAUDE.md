@@ -103,7 +103,7 @@ Subsystems that span many files (each has a doc):
   reorder, squash, or delete applied files. Run `npm run db:migrate:check` before
   `npm run db:migrate`. Never run `db:reset`, `sandbox:reset`, `db:push:sandbox`,
   or `db:migrate:fresh` against a shared/production database. The migration folder
-  (currently `00000000000000`–`00000000000024`) is the schema source of truth.
+  (currently `00000000000000`–`00000000000029`) is the schema source of truth.
   Read `AGENTS.md` and `docs/04`/`docs/05` before touching migrations.
 
 - **After schema/seed changes**, regenerate types and the sandbox payload:
