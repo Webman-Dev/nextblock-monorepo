@@ -13,7 +13,7 @@ import { ConsentBanner } from '../components/privacy/ConsentBanner';
 import { getPrivacySettings } from '../lib/privacy/settings';
 import { DEFAULT_PRIVACY_SETTINGS } from '../lib/privacy/types';
 import { DeferredSpeedInsights } from '../components/DeferredSpeedInsights';
-import { NextblockVisualEditing } from '../components/visual-editing/NextblockVisualEditing';
+import { DeferredVisualEditing } from '../components/visual-editing/DeferredVisualEditing';
 import {
   createClient as createSupabaseServerClient,
   getProfileWithRoleServerSide,
@@ -371,7 +371,11 @@ export async function generateMetadata(): Promise<Metadata> {
       apple: [{ url: '/favicon/apple-touch-icon.png' }],
     },
     manifest: '/favicon/site.webmanifest',
-    robots: isSandbox ? { index: false, follow: false } : { index: true, follow: true },
+    // Sandbox is a copy of production, so keep it out of the index. Use
+    // `noindex, follow` (not nofollow) so Googlebot still follows internal links,
+    // recrawls every page, and drops them all — paired with an allow-crawl
+    // robots.txt (see app/robots.txt/route.ts) so the noindex is actually seen.
+    robots: isSandbox ? { index: false, follow: true } : { index: true, follow: true },
   };
 }
 
@@ -459,7 +463,7 @@ export default async function RootLayout({
           </AppShell>
 
           {isEcommerceActive && <DeferredCartDrawer />}
-          {visualEditingEnabled && <NextblockVisualEditing />}
+          {visualEditingEnabled && <DeferredVisualEditing />}
           {Toolbar && <Toolbar nonce={nonce} />}
           {privacySettings.banner_enabled && <ConsentBanner />}
         </Providers>
