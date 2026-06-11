@@ -69,9 +69,6 @@
   },
   "private": true,
   "devDependencies": {
-    "@angular-devkit/architect": "^0.2102.9",
-    "@angular-devkit/core": "^20.3.24",
-    "@angular-devkit/schematics": "^20.3.24",
     "@aws-sdk/client-s3": "^3.1039.0",
     "@aws-sdk/s3-request-presigner": "^3.1039.0",
     "@babel/core": "^7.29.0",

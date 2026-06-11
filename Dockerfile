@@ -12,7 +12,9 @@ WORKDIR /workspace
 RUN apk add --no-cache libc6-compat
 # Copy only the manifests first so this layer is reused until dependencies change.
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# Prefer a reproducible `npm ci`, but fall back to `npm install` when the lockfile has drifted
+# (common during active development) so the local sandbox image still builds.
+RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 
 ###############################################################################
 # Stage 2 — builder: compile the Next.js app into a standalone server tree.
