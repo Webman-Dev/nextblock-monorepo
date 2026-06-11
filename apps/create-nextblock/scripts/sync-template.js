@@ -13,6 +13,9 @@ const TARGET_DIR = resolve(PROJECT_ROOT, 'templates/nextblock-template');
 const REPO_ROOT = resolve(PROJECT_ROOT, '..', '..');
 const ROOT_DOCS_DIR = resolve(REPO_ROOT, 'docs');
 const ROOT_PACKAGE_JSON = resolve(REPO_ROOT, 'package.json');
+// Hand-maintained standalone Docker assets (Dockerfile, docker-compose.yml, docker/**, the
+// zero-dep scripts/docker-setup.mjs) that ship into every generated project for Docker mode.
+const DOCKER_TEMPLATE_DIR = resolve(PROJECT_ROOT, 'docker-template');
 const UI_GLOBALS_SOURCE = resolve(
   PROJECT_ROOT,
   '../../libs/ui/src/styles/globals.css',
@@ -96,6 +99,7 @@ async function ensureTemplateSync() {
   await ensureUiProxies();
   await removeBackups();
   await syncPackageVersions();
+  await ensureDockerAssets();
   await removeTemplateProjectJson();
 
   console.log(chalk.green('Template sync complete.'));
@@ -333,6 +337,31 @@ async function removeBackups() {
 async function removeTemplateProjectJson() {
   const projectJsonPath = resolve(TARGET_DIR, 'project.json');
   await fs.remove(projectJsonPath).catch(() => undefined);
+}
+
+// Copy the standalone Docker assets into the template and register the docker:* npm scripts so a
+// generated project can run `npm run docker:setup` for the one-click local self-hosted sandbox.
+async function ensureDockerAssets() {
+  if (!(await fs.pathExists(DOCKER_TEMPLATE_DIR))) {
+    return;
+  }
+
+  console.log(chalk.blue('Adding Docker self-hosted assets to the template'));
+  await fs.copy(DOCKER_TEMPLATE_DIR, TARGET_DIR, {
+    overwrite: true,
+    dereference: true,
+  });
+
+  const pkgPath = resolve(TARGET_DIR, 'package.json');
+  if (await fs.pathExists(pkgPath)) {
+    const pkg = await fs.readJson(pkgPath);
+    pkg.scripts = pkg.scripts || {};
+    pkg.scripts['docker:setup'] = 'node scripts/docker-setup.mjs';
+    pkg.scripts['docker:up'] = 'docker compose up -d --build';
+    pkg.scripts['docker:down'] = 'docker compose down';
+    pkg.scripts['docker:logs'] = 'docker compose logs -f nextblock-cms';
+    await fs.writeJson(pkgPath, pkg, { spaces: 2 });
+  }
 }
 
 async function syncPackageVersions() {

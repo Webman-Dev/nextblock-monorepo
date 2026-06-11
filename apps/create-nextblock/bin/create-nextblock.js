@@ -83,9 +83,30 @@ async function handleCommand(projectDirectory, options) {
   try {
     console.log(chalk.bold.cyan(`\n🧱 create-nextblock v${CLI_VERSION}\n`));
 
+    // Pick the hosting profile up front (interactive only). Cloud = Vercel + Supabase Cloud;
+    // Docker = a fully local self-hosted sandbox that needs no cloud accounts.
+    let hostingMode = 'cloud';
+    if (!yes) {
+      const modeChoice = await clack.select({
+        message: 'Select your target hosting environment profile:',
+        options: [
+          { value: 'cloud', label: 'Managed Cloud Mode (Vercel + Supabase Cloud)' },
+          {
+            value: 'docker',
+            label: 'Local Self-Hosted Docker Mode (One-Click Local Sandbox)',
+          },
+        ],
+        initialValue: 'cloud',
+      });
+      if (clack.isCancel(modeChoice)) {
+        handleWizardCancel('Setup cancelled.');
+      }
+      hostingMode = modeChoice;
+    }
+
     // Prerequisites gate (interactive only) — shown BEFORE we ask for a name, scaffold, or
     // install, so anyone who isn't ready can cancel without creating anything.
-    if (!yes) {
+    if (!yes && hostingMode === 'cloud') {
       clack.note(
         [
           '1. A Supabase project   https://supabase.com/dashboard',
@@ -115,6 +136,35 @@ async function handleCommand(projectDirectory, options) {
       if (!ready) {
         clack.note(
           'No problem — nothing was created. Gather the items above, then run\n`npm create nextblock` again. Full guide: docs/05-DEVELOPER-GUIDE.md',
+          'Come back when ready',
+        );
+        return;
+      }
+    } else if (!yes && hostingMode === 'docker') {
+      clack.note(
+        [
+          'Local Self-Hosted Docker Mode runs everything on your machine — no cloud accounts needed.',
+          '',
+          'Requirement:',
+          '  • Docker Desktop installed and running  (https://www.docker.com/products/docker-desktop)',
+          '',
+          'Optional (you can skip both at the prompts):',
+          '  • Cloudflare Turnstile keys (bot protection)',
+          '  • SMTP credentials (otherwise sign-ups auto-confirm with no email)',
+        ].join('\n'),
+        'One-click local sandbox',
+      );
+
+      const ready = await clack.confirm({
+        message: 'Is Docker Desktop installed and running?',
+        initialValue: true,
+      });
+      if (clack.isCancel(ready)) {
+        handleWizardCancel('Setup cancelled.');
+      }
+      if (!ready) {
+        clack.note(
+          'No problem — nothing was created. Install & start Docker Desktop, then run\n`npm create nextblock` again.',
           'Come back when ready',
         );
         return;
@@ -214,11 +264,15 @@ async function handleCommand(projectDirectory, options) {
       console.log(chalk.yellow('Skipping dependency installation.'));
     }
 
-    // Run the setup wizard after dependencies are installed so package assets are available.
-    // When it runs, its own "next steps" outro (cd + npm run dev) is the final message, so we
-    // don't print a second closing block here — the whole flow completes in this one command.
+    // Run the setup flow after dependencies are installed so package assets are available.
+    // When it runs, its own "next steps" outro is the final message, so we don't print a second
+    // closing block here — the whole flow completes in this one command.
     if (!yes) {
-      await runSetupWizard(projectDir, projectName);
+      if (hostingMode === 'docker') {
+        await runDockerSetup(projectDir, projectName);
+      } else {
+        await runSetupWizard(projectDir, projectName);
+      }
     } else {
       // Non-interactive path: nothing was configured, so point the user at their env file.
       console.log(
@@ -895,6 +949,34 @@ async function runSetupWizard(projectDir, projectName) {
       '  3. Confirm your email:  click the link sent to your inbox',
       `  4. Sign in — you'll land in the CMS at ${siteUrl}/cms/dashboard`,
     ].join('\n'),
+  );
+}
+
+// Local Self-Hosted Docker Mode: materialize the supabase migrations out of the installed
+// @nextblock-cms/db package (the migration-runner container applies them on boot), then hand off
+// to the project's own zero-dependency Docker setup script (prompts + .env + `docker compose up`).
+async function runDockerSetup(projectDir, projectName) {
+  const projectPath = resolve(projectDir);
+  process.chdir(projectPath);
+
+  clack.intro('🐳 NextBlock™ CMS — Local Self-Hosted Docker setup');
+
+  await ensureSupabaseAssets(projectPath, { required: true });
+
+  const setupScript = resolve(projectPath, 'scripts', 'docker-setup.mjs');
+  if (!(await fs.pathExists(setupScript))) {
+    clack.note(
+      'scripts/docker-setup.mjs is missing from the template. Run `npm run sync:create-nextblock` and try again.',
+      'Docker setup unavailable',
+    );
+    return;
+  }
+
+  // The script drives docker compose interactively; inherit stdio so its prompts work.
+  await runCommand('node', ['scripts/docker-setup.mjs'], { cwd: projectPath });
+
+  clack.outro(
+    `🎉 Your NextBlock™ project ${projectName ? `"${projectName}" ` : ''}is running in Docker.\nApp: http://localhost:3000   (first sign-up becomes ADMIN)`,
   );
 }
 
@@ -1924,7 +2006,11 @@ function buildNextConfigContent(editorUtilNames) {
     '/**',
     " * @type {import('next').NextConfig}",
     ' **/',
+    // Self-hosted Docker builds emit a standalone server (`node server.js`); gated on
+    // DOCKER_BUILD so a normal `next build` / Vercel deploy is unaffected.
+    "const isDockerStandalone = process.env.DOCKER_BUILD === 'true';",
     'const nextConfig = {',
+    "  ...(isDockerStandalone ? { output: 'standalone' } : {}),",
     '  outputFileTracingRoot: path.join(__dirname),',
     '  env: {',
     '    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,',

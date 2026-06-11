@@ -14,13 +14,20 @@ if (typeof window !== 'undefined') {
 }
 
 let cachedClient: S3Client | null = null;
+let cachedPresignClient: S3Client | null = null;
 let warnedMissingEnv = false;
 
-function buildClient(): S3Client | null {
+// When `preferPublicEndpoint` is true, sign against R2_S3_PUBLIC_ENDPOINT if provided.
+// This only matters for self-hosted MinIO, where the server reaches storage internally at
+// R2_S3_ENDPOINT (http://minio:9000) but presigned URLs must be signed for the browser-facing
+// host (http://localhost:9000). On Cloudflare R2 both overrides are unset, so behaviour is
+// unchanged. R2_FORCE_PATH_STYLE='true' enables path-style addressing (required by MinIO).
+function buildClient(preferPublicEndpoint = false): S3Client | null {
   const accountId = process.env.R2_ACCOUNT_ID;
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
   const endpoint =
+    (preferPublicEndpoint ? process.env.R2_S3_PUBLIC_ENDPOINT : undefined) ||
     process.env.R2_S3_ENDPOINT ||
     (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : undefined);
 
@@ -37,6 +44,7 @@ function buildClient(): S3Client | null {
   return new S3Client({
     region: process.env.R2_REGION || "auto",
     endpoint,
+    forcePathStyle: process.env.R2_FORCE_PATH_STYLE === "true",
     credentials: {
       accessKeyId,
       secretAccessKey,
@@ -49,6 +57,21 @@ export async function getS3Client(): Promise<S3Client | null> {
     cachedClient = buildClient();
   }
   return cachedClient;
+}
+
+/**
+ * S3 client used ONLY to sign upload URLs handed to the browser. Identical to getS3Client()
+ * on Cloudflare R2; when R2_S3_PUBLIC_ENDPOINT is set (self-hosted MinIO) it signs URLs for
+ * the browser-reachable host so direct-from-browser PUT uploads succeed.
+ */
+export async function getS3PresignClient(): Promise<S3Client | null> {
+  if (!process.env.R2_S3_PUBLIC_ENDPOINT) {
+    return getS3Client();
+  }
+  if (!cachedPresignClient) {
+    cachedPresignClient = buildClient(true);
+  }
+  return cachedPresignClient;
 }
 
 export async function deleteMediaFiles(keys: string[]) {

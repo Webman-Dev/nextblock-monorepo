@@ -1,0 +1,23 @@
+# Keep the build context lean; deps are reinstalled in the image and secrets stay out.
+node_modules
+.git
+.github
+.next
+out
+dist
+coverage
+tmp
+backup
+backups
+*.log
+npm-debug.log*
+
+# Secrets never enter the image (NEXT_PUBLIC_* arrive as build args).
+.env
+.env.*
+!.env.docker.example
+
+# Not needed inside the app image (mounted/used by other compose services instead).
+docker
+supabase/.branches
+supabase/.temp

@@ -36,6 +36,31 @@ async function main() {
   );
   console.log('');
 
+  // Branch first: managed cloud (this wizard) or a one-click local self-hosted Docker sandbox.
+  const { hostingMode } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'hostingMode',
+      message: 'Select your target hosting environment profile:',
+      choices: [
+        { name: 'Managed Cloud Mode (Vercel + Supabase Cloud)', value: 'cloud' },
+        {
+          name: 'Local Self-Hosted Docker Mode (One-Click Local Sandbox)',
+          value: 'docker',
+        },
+      ],
+      default: 'cloud',
+    },
+  ]);
+
+  if (hostingMode === 'docker') {
+    // Docker mode skips ALL cloud credential prompts. Hand off to the single root hook, which
+    // generates the container .env (internal routes + generated keys) and boots the stack.
+    console.log(chalk.gray('\nLaunching the local self-hosted Docker setup...\n'));
+    await execa('npm', ['run', 'docker:setup'], { stdio: 'inherit', cwd: REPO_ROOT });
+    return;
+  }
+
   // 0. Prerequisites — make sure the developer has everything BEFORE we start prompting.
   console.log(
     chalk.bold.cyan('Before you continue, have all of the following ready:')
@@ -279,6 +304,25 @@ async function main() {
     },
   ]);
 
+  // 4b. Cloudflare Turnstile (optional) — bot protection for public forms. Skippable.
+  console.log('');
+  console.log(
+    chalk.bold('Cloudflare Turnstile') +
+      chalk.gray('   optional — protects public forms (press Enter to skip)')
+  );
+  const turnstileValues = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'siteKey',
+      message: 'Turnstile Site Key [NEXT_PUBLIC_TURNSTILE_SITE_KEY] (Enter to skip):',
+    },
+    {
+      type: 'input',
+      name: 'secretKey',
+      message: 'Turnstile Secret Key [TURNSTILE_SECRET_KEY] (Enter to skip):',
+    },
+  ]);
+
   // 5. Update .env.local with everything we collected.
   console.log(chalk.blue('\nUpdating .env.local...'));
 
@@ -314,6 +358,17 @@ async function main() {
     'SMTP_PASS=': `SMTP_PASS=${smtpValues.pass}`,
     'SMTP_FROM_EMAIL=': `SMTP_FROM_EMAIL=${smtpValues.fromEmail}`,
     'SMTP_FROM_NAME=': `SMTP_FROM_NAME=${smtpValues.fromName}`,
+    // Turnstile is optional — only write the keys when the developer actually provided them.
+    ...(turnstileValues.siteKey.trim()
+      ? {
+          'NEXT_PUBLIC_TURNSTILE_SITE_KEY=': `NEXT_PUBLIC_TURNSTILE_SITE_KEY=${turnstileValues.siteKey.trim()}`,
+        }
+      : {}),
+    ...(turnstileValues.secretKey.trim()
+      ? {
+          'TURNSTILE_SECRET_KEY=': `TURNSTILE_SECRET_KEY=${turnstileValues.secretKey.trim()}`,
+        }
+      : {}),
   };
 
   const appliedKeys = new Set();

@@ -12,7 +12,10 @@ export const updateSession = async (request: NextRequest) => {
       },
     });
 
-    const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+    // Prefer the internal container URL (self-hosted Docker) for this server-side client;
+    // falls back to the public URL on Vercel / Supabase Cloud where the override is unset.
+    const supabaseUrl =
+      process.env['SUPABASE_INTERNAL_URL'] || process.env['NEXT_PUBLIC_SUPABASE_URL'];
     const supabaseAnonKey = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
     
     if (!supabaseUrl || !supabaseAnonKey) {

@@ -1,0 +1,6 @@
+# Docker assets are mounted into Linux containers — keep them LF even on Windows checkouts,
+# otherwise the shell scripts (CRLF shebang) and psql/kong configs break inside the container.
+*.sh text eol=lf
+docker/** text eol=lf
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf

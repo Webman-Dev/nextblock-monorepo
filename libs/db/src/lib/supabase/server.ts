@@ -20,9 +20,15 @@ type SupabaseCookiePayload = {
   options: CookieOptions;
 };
 
+// Server-side code may reach Supabase over an internal container network (self-hosted
+// Docker) via SUPABASE_INTERNAL_URL while the browser keeps using NEXT_PUBLIC_SUPABASE_URL.
+// On Vercel / Supabase Cloud SUPABASE_INTERNAL_URL is unset, so this is a no-op.
+const getServerSupabaseUrl = () =>
+  process.env['SUPABASE_INTERNAL_URL'] || process.env['NEXT_PUBLIC_SUPABASE_URL'];
+
 // This is the standard server client creation function from the Vercel example
 export const createClient = () => {
-  const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+  const supabaseUrl = getServerSupabaseUrl();
   const supabaseAnonKey = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
   
   if (!supabaseUrl || !supabaseAnonKey) {
@@ -101,7 +107,7 @@ export async function getActiveLanguagesServerSide(): Promise<Language[]> {
  * MUST ONLY be used in secure server-side contexts (Server Actions/Route Handlers).
  */
 export const getServiceRoleSupabaseClient = () => {
-  const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+  const supabaseUrl = getServerSupabaseUrl();
   const supabaseServiceKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
 
   if (!supabaseUrl || !supabaseServiceKey) {

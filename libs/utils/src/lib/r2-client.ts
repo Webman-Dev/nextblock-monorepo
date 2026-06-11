@@ -10,13 +10,16 @@ if (typeof window !== 'undefined') {
 import { S3Client, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 
 let cachedClient: S3Client | null = null;
+let cachedPresignClient: S3Client | null = null;
 let warnedMissingEnv = false;
 
-function buildClient(): S3Client | null {
+// See libs/utils/src/server.ts for the rationale behind preferPublicEndpoint / forcePathStyle.
+function buildClient(preferPublicEndpoint = false): S3Client | null {
   const accountId = process.env.R2_ACCOUNT_ID;
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
   const endpoint =
+    (preferPublicEndpoint ? process.env.R2_S3_PUBLIC_ENDPOINT : undefined) ||
     process.env.R2_S3_ENDPOINT ||
     (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : undefined);
 
@@ -33,6 +36,7 @@ function buildClient(): S3Client | null {
   return new S3Client({
     region: process.env.R2_REGION || "auto",
     endpoint,
+    forcePathStyle: process.env.R2_FORCE_PATH_STYLE === "true",
     credentials: {
       accessKeyId,
       secretAccessKey,
@@ -45,6 +49,16 @@ export async function getS3Client(): Promise<S3Client | null> {
     cachedClient = buildClient();
   }
   return cachedClient;
+}
+
+export async function getS3PresignClient(): Promise<S3Client | null> {
+  if (!process.env.R2_S3_PUBLIC_ENDPOINT) {
+    return getS3Client();
+  }
+  if (!cachedPresignClient) {
+    cachedPresignClient = buildClient(true);
+  }
+  return cachedPresignClient;
 }
 
 export async function deleteMediaFiles(keys: string[]) {

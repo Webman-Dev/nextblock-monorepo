@@ -1,6 +1,6 @@
 {
   "name": "@nextblock/source",
-  "version": "0.8.11",
+  "version": "0.9.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -61,7 +61,11 @@
     "verify:editor-block-schema": "npx tsx apps/nextblock/scripts/validate-editor-block-schema.ts",
     "sandbox:reset": "node tools/scripts/reset-sandbox.js",
     "stripe": "stripe listen --forward-to localhost:4200/api/webhooks/stripe",
-    "setup": "node tools/scripts/setup.mjs"
+    "setup": "node tools/scripts/setup.mjs",
+    "docker:setup": "node tools/scripts/docker-setup.mjs",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f nextblock-cms"
   },
   "private": true,
   "devDependencies": {

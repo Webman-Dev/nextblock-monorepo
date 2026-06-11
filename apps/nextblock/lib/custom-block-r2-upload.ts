@@ -2,7 +2,7 @@ import 'server-only';
 
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { getS3Client } from '@nextblock-cms/utils/server';
+import { getS3PresignClient } from '@nextblock-cms/utils/server';
 
 import { resolveMediaUrl } from './media/resolveMediaUrl';
 import {
@@ -35,7 +35,7 @@ export async function createR2PresignedUpload(
     throw new R2PresignedUploadError('File uploads are not configured on this server.', 500);
   }
 
-  const s3Client = await getS3Client();
+  const s3Client = await getS3PresignClient();
   if (!s3Client) {
     throw new R2PresignedUploadError('File uploads are not configured on this server.', 500);
   }

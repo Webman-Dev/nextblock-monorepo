@@ -1,0 +1,30 @@
+# Keep the Docker build context lean — deps are reinstalled in the image, secrets stay out.
+node_modules
+**/node_modules
+.git
+.github
+.next
+**/.next
+dist
+**/dist
+out
+**/out
+tmp
+**/tmp
+coverage
+**/coverage
+.nx
+.vercel
+backup
+backups
+*.log
+npm-debug.log*
+
+# Never ship local env files into the image (NEXT_PUBLIC_* arrive as build args instead).
+.env
+.env.*
+!.env.docker.example
+
+# The generated CLI template is a copy of apps/nextblock — not needed for the monorepo image.
+apps/create-nextblock/templates
+apps/create-nextblock/node_modules

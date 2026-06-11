@@ -1,7 +1,7 @@
 // app/api/upload/presigned-url/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@nextblock-cms/db/server"; // Server client for auth
-import { getS3Client } from "@nextblock-cms/utils/server";
+import { getS3PresignClient } from "@nextblock-cms/utils/server";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const s3Client = await getS3Client();
+    const s3Client = await getS3PresignClient();
     if (!s3Client) {
       console.error('R2 client is not configured. Check your R2 environment variables.');
       return NextResponse.json({ error: 'File uploads are not configured on this server.' }, { status: 500 });

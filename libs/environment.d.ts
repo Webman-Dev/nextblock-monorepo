@@ -2,10 +2,21 @@ declare namespace NodeJS {
   interface ProcessEnv {
     NEXT_PUBLIC_SUPABASE_URL: string;
     NEXT_PUBLIC_SUPABASE_ANON_KEY: string;
+    // Optional server-only override. When set (self-hosted Docker), server-side
+    // Supabase clients reach Kong over the internal container network (http://kong:8000)
+    // while the browser keeps using NEXT_PUBLIC_SUPABASE_URL (http://localhost:8000).
+    // Unset on Vercel/Supabase Cloud — behaviour is then identical to before.
+    SUPABASE_INTERNAL_URL?: string;
     R2_ACCOUNT_ID: string;
     R2_ACCESS_KEY_ID: string;
     R2_SECRET_ACCESS_KEY: string;
     R2_S3_ENDPOINT: string;
+    // Optional browser-facing S3 endpoint used ONLY when signing upload URLs. With local
+    // MinIO the server reaches it at http://minio:9000 (R2_S3_ENDPOINT) but the browser must
+    // PUT to http://localhost:9000, so presigned URLs are signed for this host. Unset on R2.
+    R2_S3_PUBLIC_ENDPOINT?: string;
+    // Set to 'true' for path-style S3 addressing (required by MinIO). Unset/false for R2.
+    R2_FORCE_PATH_STYLE?: string;
     R2_REGION: string;
     SMTP_HOST: string;
     SMTP_PORT: string;

@@ -1,6 +1,6 @@
 {
   "name": "@nextblock-cms/template",
-  "version": "0.8.11",
+  "version": "0.9.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -8,7 +8,11 @@
     "start": "next start",
     "lint": "next lint",
     "deploy:supabase": "node tools/deploy-supabase.js",
-    "configure:supabase-auth": "node tools/configure-supabase-auth.js"
+    "configure:supabase-auth": "node tools/configure-supabase-auth.js",
+    "docker:setup": "node scripts/docker-setup.mjs",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f nextblock-cms"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.42",

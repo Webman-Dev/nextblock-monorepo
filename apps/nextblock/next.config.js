@@ -81,8 +81,17 @@ const securityHeaders = [
   },
 ];
 
+// Self-hosted Docker images build a standalone server (`node apps/nextblock/server.js`) instead
+// of `next start` + a full node_modules tree. Gated on DOCKER_BUILD so Vercel/cloud builds are
+// completely untouched. outputFileTracingRoot is pinned to the monorepo root so the standalone
+// output nests predictably under apps/nextblock (see the root Dockerfile runner stage).
+const isDockerStandalone = process.env.DOCKER_BUILD === 'true';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  ...(isDockerStandalone
+    ? { output: 'standalone', outputFileTracingRoot: path.join(__dirname, '../../') }
+    : {}),
   experimental: {
     optimizePackageImports: ['@nextblock-cms/ui', '@nextblock-cms/utils'],
   },

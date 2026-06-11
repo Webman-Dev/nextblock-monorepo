@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 const mocks = vi.hoisted(() => ({
-  getS3ClientMock: vi.fn(),
+  getS3PresignClientMock: vi.fn(),
   getSignedUrlMock: vi.fn(),
   getUserMock: vi.fn(),
   profileSingleMock: vi.fn(),
@@ -28,7 +28,7 @@ vi.mock('@nextblock-cms/db/server', () => ({
 }));
 
 vi.mock('@nextblock-cms/utils/server', () => ({
-  getS3Client: mocks.getS3ClientMock,
+  getS3PresignClient: mocks.getS3PresignClientMock,
 }));
 
 vi.mock('@aws-sdk/client-s3', () => ({
@@ -82,7 +82,7 @@ describe('custom block R2 presigned upload flow', () => {
     );
 
     expect(response.status).toBe(401);
-    expect(mocks.getS3ClientMock).not.toHaveBeenCalled();
+    expect(mocks.getS3PresignClientMock).not.toHaveBeenCalled();
   });
 
   it('rejects oversized files for authorized writers', async () => {
@@ -103,13 +103,13 @@ describe('custom block R2 presigned upload flow', () => {
 
     expect(response.status).toBe(400);
     expect(payload.error).toContain('10 MB');
-    expect(mocks.getS3ClientMock).not.toHaveBeenCalled();
+    expect(mocks.getS3PresignClientMock).not.toHaveBeenCalled();
   });
 
   it('returns a direct PUT upload space for authorized writers', async () => {
     mocks.getUserMock.mockResolvedValueOnce({ data: { user: { id: 'user-1' } }, error: null });
     mocks.profileSingleMock.mockResolvedValueOnce({ data: { role: 'ADMIN' }, error: null });
-    mocks.getS3ClientMock.mockResolvedValueOnce({ send: vi.fn() });
+    mocks.getS3PresignClientMock.mockResolvedValueOnce({ send: vi.fn() });
     mocks.getSignedUrlMock.mockResolvedValueOnce('https://r2.example.test/presigned-put');
 
     const response = await POST(
