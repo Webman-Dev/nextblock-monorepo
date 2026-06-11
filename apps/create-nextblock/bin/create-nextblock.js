@@ -11,7 +11,6 @@ import { execa } from 'execa';
 import { program } from 'commander';
 import chalk from 'chalk';
 import fs from 'fs-extra';
-import open from 'open';
 
 const DEFAULT_PROJECT_NAME = 'nextblock-cms';
 const __filename = fileURLToPath(import.meta.url);
@@ -20,6 +19,7 @@ const TEMPLATE_DIR = resolve(__dirname, '../templates/nextblock-template');
 const REPO_ROOT = resolve(__dirname, '../../..');
 const EDITOR_UTILS_SOURCE_DIR = resolve(REPO_ROOT, 'libs/editor/src/lib/utils');
 const IS_WINDOWS = process.platform === 'win32';
+const CLI_VERSION = createRequire(import.meta.url)('../package.json').version;
 
 const UI_PROXY_MODULES = [
   'avatar',
@@ -53,7 +53,10 @@ const PACKAGE_VERSION_SOURCES = {
   '@nextblock-cms/sdk': resolve(REPO_ROOT, 'libs/sdk/package.json'),
 };
 
-program.name('create-nextblock').description('NextBlock™ CMS CLI');
+program
+  .name('create-nextblock')
+  .description('NextBlock™ CMS CLI')
+  .version(CLI_VERSION, '-v, --version');
 
 program
   .command('create [project-directory]', { isDefault: true })
@@ -78,6 +81,46 @@ async function handleCommand(projectDirectory, options) {
   const { skipInstall, yes } = options;
 
   try {
+    console.log(chalk.bold.cyan(`\n🧱 create-nextblock v${CLI_VERSION}\n`));
+
+    // Prerequisites gate (interactive only) — shown BEFORE we ask for a name, scaffold, or
+    // install, so anyone who isn't ready can cancel without creating anything.
+    if (!yes) {
+      clack.note(
+        [
+          '1. A Supabase project   https://supabase.com/dashboard',
+          '   • Reference ID             — Project Settings > General > "Reference ID"',
+          '   • Connection string        — Connect (top bar) > Direct connection > URI',
+          '   • anon + service_role keys — Project Settings > API Keys',
+          '   • Personal Access Token    — Account > Access Tokens > Generate new token',
+          '',
+          '2. A Cloudflare R2 bucket   https://dash.cloudflare.com  > R2',
+          '   • Create a bucket, then enable its Public Development URL (Bucket > Settings > General)',
+          '   • Create an R2 API token (Object Read & Write); copy the Access Key ID + Secret (shown once)',
+          '',
+          '3. SMTP credentials   SMTP2GO works very well: https://www.smtp2go.com',
+          '   • Required so Supabase can email the confirmation link your first admin needs to sign in',
+        ].join('\n'),
+        'Before you continue, have all of the following ready',
+      );
+
+      const ready = await clack.confirm({
+        message:
+          'Do you have your Supabase, Cloudflare R2, and SMTP details ready?',
+        initialValue: true,
+      });
+      if (clack.isCancel(ready)) {
+        handleWizardCancel('Setup cancelled.');
+      }
+      if (!ready) {
+        clack.note(
+          'No problem — nothing was created. Gather the items above, then run\n`npm create nextblock` again. Full guide: docs/05-DEVELOPER-GUIDE.md',
+          'Come back when ready',
+        );
+        return;
+      }
+    }
+
     let projectName = projectDirectory;
 
     if (!projectName) {
@@ -163,32 +206,35 @@ async function handleCommand(projectDirectory, options) {
     await ensurePublicNpmrc(projectDir);
     console.log(chalk.green('Enforced public registry for initial install.'));
 
+    await initializeGit(projectDir);
+
     if (!skipInstall) {
       await installDependencies(projectDir);
     } else {
       console.log(chalk.yellow('Skipping dependency installation.'));
     }
 
-    // Run setup wizard after dependencies are installed so package assets are available
+    // Run the setup wizard after dependencies are installed so package assets are available.
+    // When it runs, its own "next steps" outro (cd + npm run dev) is the final message, so we
+    // don't print a second closing block here — the whole flow completes in this one command.
     if (!yes) {
       await runSetupWizard(projectDir, projectName);
     } else {
+      // Non-interactive path: nothing was configured, so point the user at their env file.
       console.log(
-        chalk.yellow(
-          'Skipping interactive setup wizard because --yes was provided.',
+        chalk.green(
+          `\nSuccess! Your NextBlock™ CMS project "${projectName}" is scaffolded.\n`,
         ),
       );
+      console.log(chalk.cyan('Next steps:'));
+      console.log(chalk.cyan(`  1. cd ${projectName}`));
+      console.log(
+        chalk.gray(
+          '  2. Add your Supabase / R2 / SMTP values to .env.local (template in .env.example)',
+        ),
+      );
+      console.log(chalk.cyan('  3. npm run dev'));
     }
-
-    await initializeGit(projectDir);
-
-    console.log(
-      chalk.green(
-        `\nSuccess! Your NextBlock™ CMS project "${projectName}" is ready.\n`,
-      ),
-    );
-    console.log(chalk.cyan('Next step:'));
-    console.log(chalk.cyan(`  cd ${projectName} && npm run dev`));
   } catch (error) {
     console.error(
       chalk.red(
@@ -482,423 +528,349 @@ export async function POST(req: Request) {
   );
 }
 
+// clack validator that rejects empty/whitespace-only input with a labelled message.
+function requiredValue(label) {
+  return (value) =>
+    value && String(value).trim() ? undefined : `${label} is required`;
+}
+
+// Read the current value of a `KEY=` line from an .env file body (handles quotes),
+// so re-runs can reuse already-generated secrets instead of regenerating them.
+function readEnvValue(envContent, key) {
+  for (const line of envContent.split(/\r?\n/)) {
+    if (line.startsWith(key)) {
+      return line.slice(key.length).trim().replace(/^"(.*)"$/, '$1');
+    }
+  }
+  return '';
+}
+
+function generateSecret() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
 async function runSetupWizard(projectDir, projectName) {
   const projectPath = resolve(projectDir);
   process.chdir(projectPath);
 
-  clack.intro('🚀 Welcome to the NextBlock™ setup wizard!');
+  // Prerequisites + readiness were already confirmed up front in handleCommand (before any
+  // scaffolding), so the wizard goes straight to collecting configuration.
+  clack.intro('🚀 NextBlock™ CMS setup');
 
-  const supabaseDir = resolve(projectPath, 'supabase');
-  await fs.ensureDir(supabaseDir);
-  await resetSupabaseProjectRef(projectPath);
+  await fs.ensureDir(resolve(projectPath, 'supabase'));
 
-  clack.note(
-    'Before proceeding, ensure you have a Supabase project ready.\n\n' +
-      '1. Supabase Cloud: Create a project at https://supabase.com/dashboard\n' +
-      '2. Vercel Storage: If created via Vercel > Storage, check your .env.local snippet on Vercel for keys.',
-    'Supabase Prerequisites',
-  );
-
-  clack.note('Connecting to Supabase...');
-  clack.note('I will now open your browser to log into Supabase.');
-  await runSupabaseCli(['login'], { cwd: projectPath });
-
-  clack.note('Now, please select your NextBlock™ project when prompted.');
-  await runSupabaseCli(['link'], { cwd: projectPath });
-  if (process.stdin.isTTY) {
-    try {
-      process.stdin.setRawMode(false);
-    } catch {
-      // ignore
-    }
-    process.stdin.setEncoding('utf8');
-    process.stdin.resume();
-  }
-
-  let projectId = await readSupabaseProjectRef(projectPath);
-
-  if (!projectId) {
-    clack.note('I could not detect your Supabase project ref automatically.');
-    const manual = await clack.text({
-      message:
-        'Enter your Supabase project ref (from the Supabase dashboard URL or the link output, e.g., abcdefghijklmnopqrstu):',
-      validate: (val) => (!val ? 'Project ref is required' : undefined),
-    });
-    if (clack.isCancel(manual)) {
-      handleWizardCancel('Setup cancelled.');
-    }
-    projectId = manual.trim();
-  }
-  await ensureSupabaseAssets(projectPath, { required: true });
-
-  const siteUrlPrompt = await clack.text({
-    message: 'What is the public URL of your site? (NEXT_PUBLIC_URL)',
-    initialValue: 'http://localhost:3000',
-    validate: (val) => (!val ? 'URL is required' : undefined),
-  });
-  if (clack.isCancel(siteUrlPrompt)) {
-    handleWizardCancel('Setup cancelled.');
-  }
-  const siteUrl = siteUrlPrompt.trim();
-
-  clack.note(
-    'Please go to your Supabase project dashboard to get the following secrets.\n' +
-      'Note: For "Access Token", go to Account > Access Tokens > Generate New Token.',
-  );
-  const supabaseKeys = await clack.group(
+  // 1. Supabase — same questions/order as setup.mjs. Nothing is masked: you are pasting
+  //    keys you just copied, and seeing them makes paste mistakes easy to spot.
+  clack.note('Get these from https://supabase.com/dashboard', 'Supabase project');
+  const supabase = await clack.group(
     {
+      projectId: () =>
+        clack.text({
+          message: 'Project ID (Project Settings > General > "Reference ID"):',
+          validate: requiredValue('Project Reference ID'),
+        }),
       postgresUrl: () =>
         clack.text({
           message:
-            'What is your Connection String? (Supabase: Project Dashboard > Connect (Top Left) > Connection String > URI | Vercel: POSTGRES_URL)',
+            'Connection String (Connect > Direct connection > URI — replace [YOUR-PASSWORD] with your DB password):',
           placeholder: 'postgresql://...',
-          validate: (val) =>
-            !val ? 'Connection string is required' : undefined,
+          validate: requiredValue('Connection string'),
         }),
       anonKey: () =>
-        clack.password({
-          message:
-            'What is your Project API Key (anon key)? (Supabase: Project Settings > API Keys > Project Legacy API Keys | Vercel: SUPABASE_ANON_KEY)',
-          validate: (val) => (!val ? 'Anon Key is required' : undefined),
+        clack.text({
+          message: 'Project API Key — anon / public (Project Settings > API Keys):',
+          validate: requiredValue('Anon key'),
         }),
       serviceKey: () =>
-        clack.password({
-          message:
-            'What is your Service Role Key (service_role key)? (Supabase: Project Settings > API Keys > Project Legacy API Keys | Vercel: SUPABASE_SERVICE_ROLE_KEY)',
-          validate: (val) =>
-            !val ? 'Service Role Key is required' : undefined,
+        clack.text({
+          message: 'Service Role Key — service_role (Project Settings > API Keys):',
+          validate: requiredValue('Service role key'),
         }),
       accessToken: () =>
-        clack.password({
+        clack.text({
           message:
-            'What is your Personal Access Token? (Supabase: Account > Access Tokens). Required for deployment.',
-          validate: (val) =>
-            !val ? 'Access Token is required for deployment' : undefined,
+            'Personal Access Token (Account > Access Tokens > Generate new token):',
+          validate: requiredValue('Access token'),
+        }),
+      siteUrl: () =>
+        clack.text({
+          // Standalone `npm run dev` is plain `next dev` on :3000 (NOT `nx serve` on :4200),
+          // so the local default differs from the monorepo setup wizard on purpose.
+          message: 'Public site URL [NEXT_PUBLIC_URL]:',
+          initialValue: 'http://localhost:3000',
+          validate: requiredValue('Site URL'),
         }),
     },
     { onCancel: () => handleWizardCancel('Setup cancelled.') },
   );
 
-  clack.note('Generating local secrets...');
-  const revalidationToken = crypto.randomBytes(32).toString('hex');
+  const projectId = supabase.projectId.trim();
+  const postgresUrl = supabase.postgresUrl.trim();
+  const siteUrl = supabase.siteUrl.trim().replace(/\/+$/, '');
   const supabaseUrl = `https://${projectId}.supabase.co`;
 
-  const postgresUrl = supabaseKeys.postgresUrl;
+  // Extract the database password from the connection string; prompt if it is missing
+  // or still the [YOUR-PASSWORD] placeholder.
   let dbPassword = '';
   try {
-    const parsedUrl = new URL(postgresUrl);
-    dbPassword = parsedUrl.password;
+    dbPassword = decodeURIComponent(new URL(postgresUrl).password);
   } catch {
-    // Fallback if URL parsing fails, though validation above checks for non-empty
+    // Fall through to the manual prompt below.
   }
-
-  if (!dbPassword) {
-    const passwordPrompt = await clack.password({
+  if (!dbPassword || /YOUR-PASSWORD/i.test(dbPassword)) {
+    const passwordPrompt = await clack.text({
       message:
-        'Could not extract password from URL. What is your Database Password?',
-      validate: (val) => (!val ? 'Password is required' : undefined),
+        'Could not read the DB password from the URI. Enter your Postgres database password:',
+      validate: requiredValue('Database password'),
     });
     if (clack.isCancel(passwordPrompt)) {
       handleWizardCancel('Setup cancelled.');
     }
-    dbPassword = passwordPrompt;
+    dbPassword = passwordPrompt.trim();
   }
 
-  const envPath = resolve(projectPath, '.env');
-  const appendEnvBlock = async (label, lines) => {
-    const normalized = lines.join('\n');
-    const blockContent = normalized.endsWith('\n')
-      ? normalized
-      : `${normalized}\n`;
-    if (canWriteEnv) {
-      await fs.appendFile(envPath, blockContent);
-    } else {
-      clack.note(
-        `Add the following ${label} values to your existing .env:\n${blockContent}`,
-      );
-    }
+  // 2. Cloudflare R2 — required. Powers media uploads, image processing, and backups.
+  clack.note('https://dash.cloudflare.com  > R2', 'Cloudflare R2 storage');
+  const r2 = await clack.group(
+    {
+      accountId: () =>
+        clack.text({
+          message: 'R2 Account ID (R2 overview > Account details):',
+          validate: requiredValue('R2 Account ID'),
+        }),
+      bucketName: () =>
+        clack.text({
+          message: 'R2 Bucket Name:',
+          validate: requiredValue('R2 Bucket Name'),
+        }),
+      publicBaseUrl: () =>
+        clack.text({
+          message:
+            'R2 Public Development URL (Bucket > Settings > Public Development URL, e.g. https://pub-xxxx.r2.dev):',
+          validate: requiredValue('R2 Public Development URL'),
+        }),
+      accessKey: () =>
+        clack.text({
+          message: 'R2 Access Key ID (R2 > Manage API Tokens):',
+          validate: requiredValue('R2 Access Key ID'),
+        }),
+      secretKey: () =>
+        clack.text({
+          message:
+            'R2 Secret Access Key (shown only once when the token is created):',
+          validate: requiredValue('R2 Secret Access Key'),
+        }),
+    },
+    { onCancel: () => handleWizardCancel('Setup cancelled.') },
+  );
+
+  // 3. SMTP — required. Sends the sign-up confirmation email your first admin needs.
+  clack.note('SMTP2GO works very well: https://www.smtp2go.com', 'SMTP email');
+  const smtp = await clack.group(
+    {
+      host: () =>
+        clack.text({
+          message: 'SMTP Host (e.g. mail.smtp2go.com):',
+          validate: requiredValue('SMTP Host'),
+        }),
+      port: () =>
+        clack.text({
+          message: 'SMTP Port (465 = SSL, 587 = STARTTLS):',
+          initialValue: '465',
+          validate: requiredValue('SMTP Port'),
+        }),
+      user: () =>
+        clack.text({
+          message: 'SMTP User:',
+          validate: requiredValue('SMTP User'),
+        }),
+      pass: () =>
+        clack.text({
+          message: 'SMTP Password:',
+          validate: requiredValue('SMTP Password'),
+        }),
+      fromEmail: () =>
+        clack.text({
+          message: 'From Email (the address confirmation emails are sent from):',
+          validate: requiredValue('From Email'),
+        }),
+      fromName: () =>
+        clack.text({
+          message: 'From Name (e.g. NextBlock):',
+          validate: requiredValue('From Name'),
+        }),
+    },
+    { onCancel: () => handleWizardCancel('Setup cancelled.') },
+  );
+
+  const smtpValues = {
+    host: smtp.host,
+    port: smtp.port,
+    user: smtp.user,
+    pass: smtp.pass,
+    fromEmail: smtp.fromEmail,
+    fromName: smtp.fromName,
   };
-  const envLines = [
-    `NEXT_PUBLIC_URL=${siteUrl}`,
-    '# Vercel / Supabase',
-    `SUPABASE_PROJECT_ID=${projectId}`,
-    `NEXT_PUBLIC_SUPABASE_URL=${supabaseUrl}`,
-    `NEXT_PUBLIC_SUPABASE_ANON_KEY=${supabaseKeys.anonKey}`,
-    `SUPABASE_SERVICE_ROLE_KEY=${supabaseKeys.serviceKey}`,
-    `SUPABASE_ACCESS_TOKEN=${supabaseKeys.accessToken}`,
-    `POSTGRES_URL=${postgresUrl}`,
-    '',
-    '# Revalidation',
-    `REVALIDATE_SECRET_TOKEN=${revalidationToken}`,
-    '',
-  ];
 
-  let canWriteEnv = true;
+  // 4. Write .env.local with everything we collected. Mirror setup.mjs: seed from the
+  //    template .env.example when present, replace keys line-by-line, append any missing,
+  //    and reuse already-generated secrets so re-runs are idempotent. .env.local is what
+  //    `next dev` loads first and is covered by the generated .gitignore.
+  clack.note('Writing .env.local...');
+  const envPath = resolve(projectPath, '.env.local');
+  const envExamplePath = resolve(projectPath, '.env.example');
+  let envContent = '';
   if (await fs.pathExists(envPath)) {
-    const overwrite = await clack.confirm({
-      message: '.env already exists. Overwrite with generated values?',
-      initialValue: false,
-    });
-    if (clack.isCancel(overwrite)) {
-      handleWizardCancel('Setup cancelled.');
+    envContent = await fs.readFile(envPath, 'utf8');
+  } else if (await fs.pathExists(envExamplePath)) {
+    envContent = await fs.readFile(envExamplePath, 'utf8');
+  }
+
+  const cronSecret = readEnvValue(envContent, 'CRON_SECRET=') || generateSecret();
+  const draftSecret =
+    readEnvValue(envContent, 'DRAFT_MODE_SECRET=') || generateSecret();
+  const revalidateSecret =
+    readEnvValue(envContent, 'REVALIDATE_SECRET_TOKEN=') || generateSecret();
+
+  const replacements = {
+    'SUPABASE_PROJECT_ID=': `SUPABASE_PROJECT_ID=${projectId}`,
+    'POSTGRES_URL=': `POSTGRES_URL=${postgresUrl}`,
+    'POSTGRES_PASSWORD=': `POSTGRES_PASSWORD="${dbPassword}"`,
+    'NEXT_PUBLIC_SUPABASE_URL=': `NEXT_PUBLIC_SUPABASE_URL=${supabaseUrl}`,
+    'NEXT_PUBLIC_SUPABASE_ANON_KEY=': `NEXT_PUBLIC_SUPABASE_ANON_KEY=${supabase.anonKey}`,
+    'SUPABASE_SERVICE_ROLE_KEY=': `SUPABASE_SERVICE_ROLE_KEY=${supabase.serviceKey}`,
+    'SUPABASE_ACCESS_TOKEN=': `SUPABASE_ACCESS_TOKEN=${supabase.accessToken}`,
+    'NEXT_PUBLIC_URL=': `NEXT_PUBLIC_URL=${siteUrl}`,
+    'CRON_SECRET=': `CRON_SECRET=${cronSecret}`,
+    'DRAFT_MODE_SECRET=': `DRAFT_MODE_SECRET=${draftSecret}`,
+    'REVALIDATE_SECRET_TOKEN=': `REVALIDATE_SECRET_TOKEN=${revalidateSecret}`,
+    // The R2 public URL is consumed under two names (next/image remotePatterns + CSP, and
+    // media URL resolution) — write the same value to both, matching setup.mjs.
+    'NEXT_PUBLIC_R2_PUBLIC_URL=': `NEXT_PUBLIC_R2_PUBLIC_URL=${r2.publicBaseUrl}`,
+    'NEXT_PUBLIC_R2_BASE_URL=': `NEXT_PUBLIC_R2_BASE_URL=${r2.publicBaseUrl}`,
+    'R2_ACCOUNT_ID=': `R2_ACCOUNT_ID=${r2.accountId}`,
+    'R2_BUCKET_NAME=': `R2_BUCKET_NAME=${r2.bucketName}`,
+    'R2_ACCESS_KEY_ID=': `R2_ACCESS_KEY_ID=${r2.accessKey}`,
+    'R2_SECRET_ACCESS_KEY=': `R2_SECRET_ACCESS_KEY=${r2.secretKey}`,
+    'SMTP_HOST=': `SMTP_HOST=${smtpValues.host}`,
+    'SMTP_PORT=': `SMTP_PORT=${smtpValues.port}`,
+    'SMTP_USER=': `SMTP_USER=${smtpValues.user}`,
+    'SMTP_PASS=': `SMTP_PASS=${smtpValues.pass}`,
+    'SMTP_FROM_EMAIL=': `SMTP_FROM_EMAIL=${smtpValues.fromEmail}`,
+    'SMTP_FROM_NAME=': `SMTP_FROM_NAME=${smtpValues.fromName}`,
+    'SUPABASE_AUTH_RATE_LIMIT_EMAIL_SENT=':
+      'SUPABASE_AUTH_RATE_LIMIT_EMAIL_SENT=30',
+  };
+
+  const appliedKeys = new Set();
+  const updatedLines = envContent.split(/\r?\n/).map((line) => {
+    for (const [key, value] of Object.entries(replacements)) {
+      if (line.startsWith(key)) {
+        appliedKeys.add(key);
+        return value;
+      }
     }
-    if (!overwrite) {
-      canWriteEnv = false;
-      clack.note(
-        'Keeping existing .env. Add/merge the generated values manually.',
-      );
+    return line;
+  });
+
+  // Append any keys missing from the seed so nothing is silently dropped.
+  for (const [key, value] of Object.entries(replacements)) {
+    if (!appliedKeys.has(key)) {
+      updatedLines.push(value);
     }
   }
 
-  if (canWriteEnv) {
-    await fs.writeFile(envPath, envLines.join('\n'));
-    clack.note('Supabase configuration saved to .env');
+  await fs.writeFile(envPath, updatedLines.join('\n'), 'utf8');
+  clack.note(
+    'Supabase, R2, SMTP, site URL, and generated secrets saved to .env.local',
+  );
+
+  // 5. Materialize Supabase assets (migrations, config.toml, branded auth email
+  //    templates) out of the installed @nextblock-cms/db package.
+  await ensureSupabaseAssets(projectPath, { required: true });
+
+  // 6. Link the project and apply the schema. These are the standalone equivalents of the
+  //    monorepo `npm run db:link` + `npm run db:migrate:fresh` (which do not exist in a
+  //    generated project): we drive the Supabase CLI directly, authenticating with the
+  //    access token so no browser login is required.
+  const supabaseBin = await getSupabaseBinary(projectPath);
+  const command = supabaseBin === 'npx' ? 'npx' : supabaseBin;
+  // `--yes` skips npx's "Ok to proceed?" install prompt if it ever falls back to npx
+  // (i.e. the supabase devDependency somehow isn't installed) so it can't hang the wizard.
+  const sbArgs = (args) =>
+    supabaseBin === 'npx' ? ['--yes', 'supabase', ...args] : args;
+  const supabaseEnv = {
+    ...process.env,
+    SUPABASE_ACCESS_TOKEN: supabase.accessToken,
+    SUPABASE_DB_PASSWORD: dbPassword,
+    POSTGRES_URL: postgresUrl,
+  };
+
+  const applySchema = await clack.confirm({
+    message:
+      'Apply the database schema to the linked project now? (Safe for a new database; does not delete existing data.)',
+    initialValue: true,
+  });
+  if (clack.isCancel(applySchema)) {
+    handleWizardCancel('Setup cancelled.');
   }
 
-  clack.note('Setting up your database...');
-
-  const dbPushSpinner = clack.spinner();
-  dbPushSpinner.start('Pushing database schema...');
+  // Stream the Supabase CLI's own output (stdio: inherit) instead of hiding it behind a
+  // spinner — link/push are long-running and a spinner over inherited output looks frozen.
+  clack.log.step('Linking to your Supabase project...');
   try {
-    process.env.POSTGRES_URL = postgresUrl;
-    const migrationsDir = resolve(projectPath, 'supabase', 'migrations');
-    const hasMigrations = async () =>
-      (await fs.pathExists(migrationsDir)) &&
-      (await fs.readdir(migrationsDir)).some((name) => name.endsWith('.sql'));
+    await execa(
+      command,
+      sbArgs(['link', '--project-ref', projectId, '--password', dbPassword]),
+      { stdio: 'inherit', cwd: projectPath, env: supabaseEnv },
+    );
 
-    if (!(await hasMigrations())) {
-      await ensureSupabaseAssets(projectPath);
-    }
-
-    if (!(await hasMigrations())) {
-      dbPushSpinner.stop(
-        `No migrations found in ${migrationsDir}; skipping db push. Ensure @nextblock-cms/db includes supabase/migrations.`,
+    if (applySchema) {
+      clack.log.step(
+        'Applying the database schema — this can take a minute on a fresh project...',
       );
-    } else {
-      const supabaseBin = await getSupabaseBinary(projectPath);
-      const command = supabaseBin === 'npx' ? 'npx' : supabaseBin;
-
-      // 1. Link the project explicitly
-      dbPushSpinner.message('Linking to Supabase project...');
-      const linkArgs = supabaseBin === 'npx' ? ['supabase', 'link'] : ['link'];
-      linkArgs.push('--project-ref', projectId);
-      linkArgs.push('--password', dbPassword);
-
-      await execa(command, linkArgs, {
-        stdio: 'inherit',
-        cwd: projectPath,
-      });
-
-      // 2. Push the schema using the linked state
-      dbPushSpinner.message('Pushing database schema...');
-      const pushArgs =
-        supabaseBin === 'npx' ? ['supabase', 'db', 'push'] : ['db', 'push'];
-      pushArgs.push('--include-all');
-
-      await execa(command, pushArgs, {
+      await execa(command, sbArgs(['db', 'push', '--include-all']), {
         stdio: ['pipe', 'inherit', 'inherit'],
         cwd: projectPath,
         input: 'y\n', // Auto-confirm the push prompt
-        env: {
-          ...process.env,
-          SUPABASE_DB_PASSWORD: dbPassword,
-        },
+        env: supabaseEnv,
       });
 
-      // 3. Push the config (for Auth settings like site_url)
-      dbPushSpinner.message('Pushing Supabase config (auth settings)...');
-      const configPushArgs =
-        supabaseBin === 'npx'
-          ? ['supabase', 'config', 'push']
-          : ['config', 'push'];
-
-      await execa(command, configPushArgs, {
-        stdio: ['pipe', 'inherit', 'inherit'],
-        cwd: projectPath,
-        env: {
-          ...process.env,
-          SUPABASE_DB_PASSWORD: dbPassword,
-          // Ensure NEXT_PUBLIC_URL is available for env() substitution in config.toml
-          NEXT_PUBLIC_URL: siteUrl,
-        },
-      });
-
-      dbPushSpinner.stop('Database schema and config pushed successfully!');
+      clack.log.success('Database schema applied.');
+    } else {
+      clack.log.info(
+        'Linked. Skipped schema push — run `npx supabase db push --include-all` when ready.',
+      );
     }
   } catch (error) {
-    dbPushSpinner.stop(
-      'Database push failed. Please run `npx supabase db push` manually.',
+    clack.log.warn(
+      'Database setup failed. You can run `npx supabase db push --include-all` manually.',
     );
     if (error instanceof Error) {
       clack.note(error.message);
     }
   }
 
-  clack.note(
-    'Optional Cloudflare R2 Setup:\nHave your Account ID, API token (Access + Secret), bucket name, and public bucket URL handy if you want media storage ready now.',
-  );
-  const setupR2 = await clack.confirm({
-    message:
-      'Do you want to set up Cloudflare R2 for media storage now? (Optional > populate .env keys)',
+  // 7. Configure hosted Supabase Auth via the Management API: site URL + custom SMTP +
+  //    branded email templates. This is the same mechanism as `npm run configure:supabase-auth`
+  //    in the monorepo, and it's what lets Supabase email your first admin's confirmation link.
+  //    (We deliberately do NOT `supabase config push` the whole config.toml — that pushes
+  //    local-only/unset values like env(TARGET_URL) and isn't what the monorepo does.)
+  await configureHostedSupabaseAuth(projectPath, {
+    projectId,
+    siteUrl,
+    accessToken: supabase.accessToken,
+    smtpValues,
   });
-  if (clack.isCancel(setupR2)) {
-    handleWizardCancel('Setup cancelled.');
-  }
 
-  let r2Values = {
-    publicBaseUrl: '',
-    accountId: '',
-    bucketName: '',
-    accessKey: '',
-    secretKey: '',
-  };
-
-  if (setupR2) {
-    clack.note(
-      'I will open your browser to the R2 dashboard.\nYou need to create a bucket and an R2 API Token.',
-    );
-    await open('https://dash.cloudflare.com/?to=/:account/r2', { wait: false });
-
-    const r2Keys = await clack.group(
-      {
-        accountId: () =>
-          clack.text({
-            message:
-              'R2: Paste your Cloudflare Account ID (Overview > Account Details - Bottom right):',
-            validate: (val) => (!val ? 'Account ID is required' : undefined),
-          }),
-        bucketName: () =>
-          clack.text({
-            message: 'R2: Paste your Bucket Name:',
-            validate: (val) => (!val ? 'Bucket name is required' : undefined),
-          }),
-        accessKey: () =>
-          clack.password({
-            message: 'R2: Paste your Access Key ID (create API tokens):',
-            validate: (val) => (!val ? 'Access Key ID is required' : undefined),
-          }),
-        secretKey: () =>
-          clack.password({
-            message: 'R2: Paste your Secret Access Key:',
-            validate: (val) =>
-              !val ? 'Secret Access Key is required' : undefined,
-          }),
-        publicBaseUrl: () =>
-          clack.text({
-            message:
-              'R2: Public Base URL (Bucket > Settings > Public Development URL-Enable: e.g., https://pub-xxx.r2.dev)',
-            validate: (val) =>
-              !val ? 'Public base URL is required' : undefined,
-          }),
-      },
-      { onCancel: () => handleWizardCancel('Setup cancelled.') },
-    );
-
-    r2Values = {
-      publicBaseUrl: r2Keys.publicBaseUrl,
-      accountId: r2Keys.accountId,
-      bucketName: r2Keys.bucketName,
-      accessKey: r2Keys.accessKey,
-      secretKey: r2Keys.secretKey,
-    };
-  }
-
-  await appendEnvBlock('Cloudflare R2', [
-    '',
-    '# Cloudflare',
-    `NEXT_PUBLIC_R2_BASE_URL=${r2Values.publicBaseUrl}`,
-    `R2_ACCOUNT_ID=${r2Values.accountId}`,
-    `R2_BUCKET_NAME=${r2Values.bucketName}`,
-    `R2_ACCESS_KEY_ID=${r2Values.accessKey}`,
-    `R2_SECRET_ACCESS_KEY=${r2Values.secretKey}`,
-    '',
-  ]);
-  if (setupR2) {
-    clack.note('Cloudflare R2 configuration saved!');
-  } else if (canWriteEnv) {
-    clack.note(
-      'Cloudflare R2 placeholders added to .env. Configure them later when ready.',
-    );
-  }
-
-  clack.note(
-    'Optional SMTP Setup:\nProvide the host, port, credentials, and from details for your email provider (e.g., Resend, Postmark) to send transactional emails immediately. If Supabase is already configured, we will also sync branded Auth emails for you.',
-  );
-  const setupSMTP = await clack.confirm({
-    message: 'Do you want to set up an SMTP server for emails now? (Optional)',
-  });
-  if (clack.isCancel(setupSMTP)) {
-    handleWizardCancel('Setup cancelled.');
-  }
-
-  let smtpValues = {
-    host: '',
-    port: '',
-    user: '',
-    pass: '',
-    fromEmail: '',
-    fromName: '',
-  };
-
-  if (setupSMTP) {
-    const smtpKeys = await clack.group(
-      {
-        host: () =>
-          clack.text({
-            message: 'SMTP: Host (e.g., smtp.resend.com):',
-            validate: (val) => (!val ? 'SMTP host is required' : undefined),
-          }),
-        port: () =>
-          clack.text({
-            message: 'SMTP: Port (e.g., 465):',
-            validate: (val) => (!val ? 'SMTP port is required' : undefined),
-          }),
-        user: () =>
-          clack.text({
-            message: 'SMTP: User (e.g., apikey):',
-            validate: (val) => (!val ? 'SMTP user is required' : undefined),
-          }),
-        pass: () =>
-          clack.password({
-            message: 'SMTP: Password:',
-            validate: (val) => (!val ? 'SMTP password is required' : undefined),
-          }),
-        fromEmail: () =>
-          clack.text({
-            message: 'SMTP: From Email (e.g., onboarding@my.site):',
-            validate: (val) => (!val ? 'From email is required' : undefined),
-          }),
-        fromName: () =>
-          clack.text({
-            message: 'SMTP: From Name (e.g., NextBlock™):',
-            validate: (val) => (!val ? 'From name is required' : undefined),
-          }),
-      },
-      { onCancel: () => handleWizardCancel('Setup cancelled.') },
-    );
-
-    smtpValues = {
-      host: smtpKeys.host,
-      port: smtpKeys.port,
-      user: smtpKeys.user,
-      pass: smtpKeys.pass,
-      fromEmail: smtpKeys.fromEmail,
-      fromName: smtpKeys.fromName,
-    };
-  }
-
-  clack.note(
-    'Optional Premium Module Setup:\nIf you have a nextblock license, you can install the premium modules now.',
-  );
+  // 8. Optional premium modules (CLI-specific; requires a license + registry access).
   const setupPremium = await clack.confirm({
-    message: 'Do you want to install premium modules now?',
+    message: 'Do you have a license and want to install premium modules now?',
     initialValue: false,
   });
-
   if (clack.isCancel(setupPremium)) {
     handleWizardCancel('Setup cancelled.');
   }
-
   if (setupPremium) {
     clack.note('Installing @nextblock-cms/ecommerce...');
     await execa(
@@ -912,77 +884,17 @@ async function runSetupWizard(projectDir, projectName) {
     clack.note('Premium module installed!');
   }
 
-  await appendEnvBlock('SMTP', [
-    '',
-    '# Email SMTP Configuration',
-    `SMTP_HOST=${smtpValues.host}`,
-    `SMTP_PORT=${smtpValues.port}`,
-    `SMTP_USER=${smtpValues.user}`,
-    `SMTP_PASS=${smtpValues.pass}`,
-    `SMTP_FROM_EMAIL=${smtpValues.fromEmail}`,
-    `SMTP_FROM_NAME=${smtpValues.fromName}`,
-    'SUPABASE_AUTH_RATE_LIMIT_EMAIL_SENT=30',
-    '',
-  ]);
-  if (setupSMTP) {
-    clack.note('SMTP configuration saved!');
-    await enableSupabaseSmtpConfig(projectPath);
-    await configureHostedSupabaseAuth(projectPath, {
-      projectId,
-      siteUrl,
-      accessToken: supabaseKeys.accessToken,
-      smtpValues,
-    });
-  } else if (canWriteEnv) {
-    clack.note(
-      'SMTP placeholders added to .env. Configure them later when ready.',
-    );
-  }
-
   clack.outro(
-    `🎉 Your NextBlock™ project ${projectName ? `"${projectName}" ` : ''}is ready!`,
-  );
-}
-
-async function enableSupabaseSmtpConfig(projectDir) {
-  const configPath = resolve(projectDir, 'supabase', 'config.toml');
-
-  if (!(await fs.pathExists(configPath))) {
-    return;
-  }
-
-  const smtpBlock = `# [auth.email.smtp]
-# host = "env(SMTP_HOST)"
-# port = 587
-# user = "env(SMTP_USER)"
-# pass = "env(SMTP_PASS)"
-# admin_email = "env(SMTP_FROM_EMAIL)"
-# sender_name = "env(SMTP_FROM_NAME)"`;
-
-  const enabledSmtpBlock = `[auth.email.smtp]
-host = "env(SMTP_HOST)"
-port = 587
-user = "env(SMTP_USER)"
-pass = "env(SMTP_PASS)"
-admin_email = "env(SMTP_FROM_EMAIL)"
-sender_name = "env(SMTP_FROM_NAME)"`;
-
-  const configContents = await fs.readFile(configPath, 'utf8');
-
-  if (configContents.includes(enabledSmtpBlock)) {
-    return;
-  }
-
-  if (!configContents.includes(smtpBlock)) {
-    throw new Error(
-      `Could not find the SMTP placeholder block in ${configPath}.`,
-    );
-  }
-
-  await fs.writeFile(
-    configPath,
-    configContents.replace(smtpBlock, enabledSmtpBlock),
-    'utf8',
+    [
+      `🎉 Your NextBlock™ project ${projectName ? `"${projectName}" ` : ''}is ready!`,
+      '',
+      'Next steps:',
+      `  1. Start the app:       cd ${projectName} && npm run dev   → ${siteUrl}`,
+      `  2. Create your account: open ${siteUrl}/sign-up`,
+      '     The FIRST account to sign up automatically becomes the ADMIN.',
+      '  3. Confirm your email:  click the link sent to your inbox',
+      `  4. Sign in — you'll land in the CMS at ${siteUrl}/cms/dashboard`,
+    ].join('\n'),
   );
 }
 
@@ -1234,21 +1146,28 @@ async function ensureEnvExample(projectDir) {
 
   const placeholder = `# Environment variables for NextBlock™ CMS
 NEXT_PUBLIC_URL=
-# Vercel / Supabase
+
+# Supabase  —  the setup wizard fills this whole block.
 SUPABASE_PROJECT_ID=
 POSTGRES_URL=
+POSTGRES_PASSWORD=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_ACCESS_TOKEN=
 
-# Cloudflare
+# Auto-generated by the setup wizard.
+CRON_SECRET=
+DRAFT_MODE_SECRET=
+REVALIDATE_SECRET_TOKEN=
+
+# Cloudflare R2  —  setup writes the public URL to both keys.
+NEXT_PUBLIC_R2_PUBLIC_URL=
 NEXT_PUBLIC_R2_BASE_URL=
+R2_ACCOUNT_ID=
+R2_BUCKET_NAME=
 R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=
-R2_ACCOUNT_ID=
-
-REVALIDATE_SECRET_TOKEN=
 
 # Email SMTP Configuration
 SMTP_HOST=
@@ -1257,6 +1176,7 @@ SMTP_USER=
 SMTP_PASS=
 SMTP_FROM_EMAIL=
 SMTP_FROM_NAME=
+SUPABASE_AUTH_RATE_LIMIT_EMAIL_SENT=30
 `;
 
   await fs.writeFile(destination, placeholder);
@@ -1304,6 +1224,19 @@ async function ensureSupabaseAssets(projectDir, options = {}) {
       errorOnExist: false,
     });
     migrationsCopied = true;
+  }
+
+  // Branded Auth email templates. configure-supabase-auth.js resolves the supabase dir by
+  // requiring a templates/ subdir, and uploads these via the Management API. Without them
+  // the hosted-auth + SMTP sync silently skips and the first admin never gets a
+  // confirmation email — so copy them alongside config.toml + migrations.
+  const sourceTemplates = resolve(packageSupabaseDir, 'templates');
+  const destTemplates = resolve(destSupabaseDir, 'templates');
+  if (await fs.pathExists(sourceTemplates)) {
+    await fs.copy(sourceTemplates, destTemplates, {
+      overwrite: true,
+      errorOnExist: false,
+    });
   }
 
   if (required) {
@@ -1382,32 +1315,6 @@ async function resolvePackageSupabaseDir(projectDir) {
   }
 
   return { dir: null, triedPaths };
-}
-
-async function readSupabaseProjectRef(projectDir) {
-  const projectRefPath = resolve(
-    projectDir,
-    'supabase',
-    '.temp',
-    'project-ref',
-  );
-  if (await fs.pathExists(projectRefPath)) {
-    const value = (await fs.readFile(projectRefPath, 'utf8')).trim();
-    if (/^[a-z0-9]{20,}$/i.test(value)) {
-      return value;
-    }
-  }
-
-  return null;
-}
-
-async function resetSupabaseProjectRef(projectDir) {
-  const tempDir = resolve(projectDir, 'supabase', '.temp');
-  await fs.ensureDir(tempDir);
-  const projectRefPath = resolve(tempDir, 'project-ref');
-  if (await fs.pathExists(projectRefPath)) {
-    await fs.remove(projectRefPath);
-  }
 }
 
 async function ensureClientComponents(projectDir) {
@@ -1770,6 +1677,9 @@ async function normalizeTsconfig(projectDir) {
     '**/*.js',
     '**/*.jsx',
     '.next/types/**/*.ts',
+    // Next 16 (Turbopack dev) auto-adds this on first `next dev`; pre-include it so the
+    // "we reconfigured your tsconfig" message never appears.
+    '.next/dev/types/**/*.ts',
   ]);
 
   if (Array.isArray(tsconfig.include)) {
@@ -1797,6 +1707,9 @@ async function normalizeTsconfig(projectDir) {
     ...(tsconfig.compilerOptions ?? {}),
     baseUrl: '.',
     skipLibCheck: true,
+    // Next 16 sets this on first run (React automatic runtime); pre-set it to avoid the
+    // "mandatory changes were made to your tsconfig" message.
+    jsx: 'react-jsx',
   };
 
   const compilerOptions = tsconfig.compilerOptions;
@@ -1864,6 +1777,60 @@ async function transformPackageJson(projectDir) {
     }
   }
 
+  // Mirror the monorepo's defensive dependency overrides into the generated project so a
+  // fresh `npm install` reproduces the "0 vulnerabilities" posture and silences deprecated
+  // transitive deps (e.g. uuid@10). Read live from the repo root when available (local dev /
+  // `npm run test-create`); fall back to this baked-in set in the published CLI where the
+  // monorepo root is not on disk. Keep the fallback in sync with the root package.json.
+  const FALLBACK_OVERRIDES = {
+    postcss: '^8.5.12',
+    qs: '^6.15.2',
+    uuid: '^11.1.1',
+    glob: '^10.4.5',
+    'whatwg-encoding': 'npm:@exodus/bytes@latest',
+    'node-domexception': 'npm:domexception@latest',
+    keygrip: 'npm:keygrip@latest',
+  };
+  let rootOverrides = FALLBACK_OVERRIDES;
+  let supabaseCliVersion = '^2.95.6'; // keep in sync with the repo root devDependency
+  try {
+    const rootPkg = await fs.readJSON(resolve(REPO_ROOT, 'package.json'));
+    if (rootPkg?.overrides && Object.keys(rootPkg.overrides).length > 0) {
+      rootOverrides = rootPkg.overrides;
+    }
+    const rootSupabase =
+      rootPkg?.devDependencies?.supabase ?? rootPkg?.dependencies?.supabase;
+    if (rootSupabase) {
+      supabaseCliVersion = rootSupabase;
+    }
+  } catch {
+    // Published CLI: repo root package.json not present — keep the baked-in fallbacks.
+  }
+  // Project-specific overrides (if any) win over the inherited defaults.
+  packageJson.overrides = { ...rootOverrides, ...(packageJson.overrides ?? {}) };
+
+  // Ship the Supabase CLI as a devDependency so setup / link / db push use a locally-installed
+  // binary. Without it, `npx supabase` downloads the CLI (~40MB) and shows an "Ok to proceed?"
+  // prompt mid-wizard that looks like a hang.
+  packageJson.devDependencies = packageJson.devDependencies ?? {};
+  if (!packageJson.devDependencies.supabase) {
+    packageJson.devDependencies.supabase = supabaseCliVersion;
+  }
+
+  // npm throws EOVERRIDE when a package is BOTH a direct dependency and has an override with a
+  // different spec (e.g. dependencies.uuid ^11.0.4 vs overrides.uuid ^11.1.1). Align any such
+  // direct (dev)dependency to the override value so they share the exact same spec — which is
+  // also what lets the override dedupe that package's transitive copies.
+  for (const [name, spec] of Object.entries(packageJson.overrides)) {
+    if (typeof spec !== 'string') continue;
+    if (packageJson.dependencies?.[name] !== undefined) {
+      packageJson.dependencies[name] = spec;
+    }
+    if (packageJson.devDependencies?.[name] !== undefined) {
+      packageJson.devDependencies[name] = spec;
+    }
+  }
+
   await fs.writeJSON(packageJsonPath, packageJson, { spaces: 2 });
 }
 
@@ -1910,35 +1877,6 @@ function runCommand(command, args, options = {}) {
         resolve();
       } else {
         reject(new Error(`${command} exited with code ${code}`));
-      }
-    });
-  });
-}
-
-async function runSupabaseCli(args, options = {}) {
-  const { cwd } = options;
-  const supabaseBin = await getSupabaseBinary(cwd);
-  const command = supabaseBin === 'npx' ? 'npx' : supabaseBin;
-  const cmdArgs = supabaseBin === 'npx' ? ['supabase', ...args] : args;
-
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, cmdArgs, {
-      cwd,
-      shell: IS_WINDOWS,
-      stdio: 'inherit',
-    });
-
-    child.on('error', (error) => {
-      reject(error);
-    });
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(
-          new Error(`supabase ${args.join(' ')} exited with code ${code}`),
-        );
       }
     });
   });
@@ -1996,27 +1934,26 @@ function buildNextConfigContent(editorUtilNames) {
     "    formats: ['image/avif', 'image/webp'],",
     '    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384, 512],',
     '    deviceSizes: [320, 480, 640, 750, 828, 1080, 1200, 1440, 1920, 2048, 2560],',
+    // Next 16 requires every next/image `quality` value to be whitelisted here; the app uses
+    // both 60 and 75, so without this the quality="60" images warn on every render.
+    '    qualities: [60, 75],',
     '    minimumCacheTTL: 31536000,',
     '    dangerouslyAllowSVG: false,',
     "    contentSecurityPolicy: \"default-src 'self'; script-src 'none'; sandbox;\",",
-    '    remotePatterns: [',
-    "      { protocol: 'https', hostname: 'pub-a31e3f1a87d144898aeb489a8221f92e.r2.dev' },",
-    "      { protocol: 'https', hostname: 'e260676f72b0b18314b868f136ed72ae.r2.cloudflarestorage.com' },",
-    '      ...(process.env.NEXT_PUBLIC_URL',
-    '        ? [',
-    '            {',
-    "              protocol: /** @type {'http' | 'https'} */ (new URL(process.env.NEXT_PUBLIC_URL).protocol.slice(0, -1)),",
-    '              hostname: new URL(process.env.NEXT_PUBLIC_URL).hostname,',
-    '            },',
-    '          ]',
-    '        : []),',
-    '    ],',
+    '    remotePatterns: getRemotePatterns(),',
     '  },',
     '  experimental: {',
-    '    optimizeCss: true,',
+    // NOTE: optimizeCss is intentionally omitted — Next implements it via require("critters"),
+    // which the generated project does not install (it ships beasties). Leaving it on caused
+    // "Cannot find module 'critters'" at dev/build time.
     "    cssChunking: 'strict',",
     '  },',
-    "  transpilePackages: ['@nextblock-cms/utils', '@nextblock-cms/ui', '@nextblock-cms/editor'],",
+    // Transpile ALL @nextblock-cms packages so Next applies React Server Component layer
+    // semantics to them (the react-server condition for 'server-only', 'use client'/'use
+    // server' directives). Without db/sdk/ecommerce here, db/server's `import 'server-only'`
+    // throws even from a Server Component, because Next treats the prebuilt package as an
+    // external and skips the server-layer processing the monorepo gets for free from source.
+    "  transpilePackages: ['@nextblock-cms/utils', '@nextblock-cms/ui', '@nextblock-cms/editor', '@nextblock-cms/db', '@nextblock-cms/sdk', '@nextblock-cms/ecommerce'],",
     '  webpack: (config, { isServer }) => {',
     '    config.resolve = config.resolve || {};',
     '    config.resolve.alias = {',
@@ -2092,6 +2029,34 @@ function buildNextConfigContent(editorUtilNames) {
     '};',
     '',
     'module.exports = nextConfig;',
+    '',
+    'function getRemotePatterns() {',
+    '  /** @type {Array<{ protocol: "http" | "https", hostname: string, pathname: string }>} */',
+    '  const patterns = [];',
+    '  // Whitelist this project R2 public/base URLs and the site URL for next/image.',
+    '  const sources = [',
+    '    process.env.NEXT_PUBLIC_R2_PUBLIC_URL,',
+    '    process.env.NEXT_PUBLIC_R2_BASE_URL,',
+    '    process.env.NEXT_PUBLIC_URL,',
+    '  ];',
+    '  for (const value of sources) {',
+    '    if (!value) continue;',
+    '    try {',
+    '      const parsed = new URL(value);',
+    "      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') continue;",
+    '      const hostname = parsed.hostname;',
+    '      if (patterns.some((pattern) => pattern.hostname === hostname)) continue;',
+    '      patterns.push({',
+    "        protocol: parsed.protocol === 'https:' ? 'https' : 'http',",
+    '        hostname,',
+    "        pathname: '/**',",
+    '      });',
+    '    } catch {',
+    '      // ignore malformed value',
+    '    }',
+    '  }',
+    '  return patterns;',
+    '}',
   );
 
   return lines.join('\n');

@@ -39,6 +39,12 @@ export default defineConfig({
           dependencies: {
             'clsx': '^2.1.1',
             'tailwind-merge': '^3.0.0',
+            // Externalized bare deps the published output imports by name — declare them
+            // so a consumer that installs @nextblock-cms/utils gets them resolved.
+            'zod': '^4.3.6',
+            'zod-to-json-schema': '^3.25.2',
+            '@aws-sdk/client-s3': '^3.1039.0',
+            '@aws-sdk/s3-request-presigner': '^3.1039.0',
           },
         };
 
@@ -48,43 +54,56 @@ export default defineConfig({
           JSON.stringify(packageJson, null, 2)
         );
 
-        const ensureClientDirective = (fileName: string) => {
-          const filePath = path.join(outputDir, fileName);
-          if (!fs.existsSync(filePath)) {
-            return;
-          }
-
-          const contents = fs.readFileSync(filePath, 'utf8');
-          if (contents.includes("'use client'") || contents.includes('"use client"')) {
-            return;
-          }
-
-          const directive = "'use client';\n";
-          const strictPatterns = [
-            "'use strict';\r\n",
-            "'use strict';\n",
-            "'use strict';",
-            '"use strict";\r\n',
-            '"use strict";\n',
-            '"use strict";',
-          ];
-
-          for (const pattern of strictPatterns) {
-            if (contents.startsWith(pattern)) {
-              const suffix = contents.slice(pattern.length);
-              const lineBreak = pattern.endsWith('\n') || pattern.endsWith('\r\n') ? '' : '\n';
-              fs.writeFileSync(filePath, `${pattern}${lineBreak}${directive}${suffix}`);
-              return;
+        // Re-apply 'use client'/'use server' directives the bundler strips, by mapping each
+        // emitted module back to its source file (path-agnostic, so it survives output-layout
+        // changes — a hardcoded path list silently broke when preserveModules collapsed the
+        // output dir). Without 'use client' on translations-context, importing the barrel from
+        // a Server Component throws "createContext only works in Client Components".
+        const srcDir = path.resolve(__dirname, 'src');
+        const directiveForModule = (relNoExt: string): string | null => {
+          for (const ext of ['.tsx', '.ts', '.jsx', '.js']) {
+            const srcFile = path.join(srcDir, relNoExt + ext);
+            if (fs.existsSync(srcFile)) {
+              const head = fs
+                .readFileSync(srcFile, 'utf8')
+                .replace(/^﻿/, '')
+                .trimStart();
+              if (/^['"]use client['"]/.test(head)) return "'use client';";
+              if (/^['"]use server['"]/.test(head)) return "'use server';";
+              return null;
             }
           }
-
-          fs.writeFileSync(filePath, `${directive}${contents}`);
+          return null;
         };
-
-        ensureClientDirective('libs/utils/src/lib/translations-context.es.js');
-        ensureClientDirective('libs/utils/src/lib/translations-context.cjs.js');
-        ensureClientDirective('libs/utils/src/lib/client-utils.es.js');
-        ensureClientDirective('libs/utils/src/lib/client-utils.cjs.js');
+        const reapplyDirectives = (dir: string) => {
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              reapplyDirectives(full);
+              continue;
+            }
+            const match = entry.name.match(/^(.*)\.(es|cjs)\.js$/);
+            if (!match) continue;
+            const relNoExt = path
+              .relative(outputDir, path.join(dir, match[1]))
+              .split(path.sep)
+              .join('/');
+            const directive = directiveForModule(relNoExt);
+            if (!directive) continue;
+            const contents = fs.readFileSync(full, 'utf8');
+            const trimmed = contents.replace(/^﻿/, '').trimStart();
+            if (
+              trimmed.startsWith("'use client'") ||
+              trimmed.startsWith('"use client"') ||
+              trimmed.startsWith("'use server'") ||
+              trimmed.startsWith('"use server"')
+            ) {
+              continue;
+            }
+            fs.writeFileSync(full, `${directive}\n${contents}`);
+          }
+        };
+        reapplyDirectives(outputDir);
 
         const serverSharedHelper = `
 const missingEnvMessage = 'R2 client environment variables are missing. File uploads will not work. Needed: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_S3_ENDPOINT (or construct from R2_ACCOUNT_ID)';
@@ -306,19 +325,19 @@ export declare function hasEnvVars(): Promise<boolean>;
         preserveModulesRoot: 'src',
       },
       external: (id) => {
-        if (id === 'react' || id === 'react-dom' || id === 'react/jsx-runtime') {
-          return true;
+        // Bundle only our own source. Relative imports are ours -> bundle. Resolved
+        // absolute paths are ours unless they point into node_modules -> bundle/external
+        // accordingly. Everything else is a bare specifier (zod, clsx, tailwind-merge,
+        // react, next/*, @aws-sdk/*, ...) -> externalize so the published package imports
+        // it by name and the consumer resolves it. (Previously zod was NOT externalized,
+        // so preserveModules emitted a dangling ../../../../node_modules/zod/... path.)
+        if (id.startsWith('.')) {
+          return false;
         }
-        if (id === 'clsx' || id === 'tailwind-merge') {
-          return true;
+        if (path.isAbsolute(id)) {
+          return id.includes('node_modules');
         }
-        if (id.startsWith('next/')) {
-          return true;
-        }
-        if (id.includes('node_modules/next/')) {
-          return true;
-        }
-        return false;
+        return true;
       },
     },
   },

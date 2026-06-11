@@ -31,8 +31,29 @@ export default defineConfig({
               require: './index.js',
             },
             './styles/*': './styles/*',
+            './package.json': './package.json',
+            // Map every component subpath (@nextblock-cms/ui/button, /card, /sheet, ...) to the
+            // barrel. Consumers like @nextblock-cms/ecommerce import these subpaths, but this is
+            // a single bundled lib with no per-component files — the barrel re-exports them all.
+            // (`.`/`./styles/*`/`./package.json` are more specific and win over this wildcard.)
+            './*': {
+              types: './index.d.ts',
+              import: './index.mjs',
+              require: './index.js',
+            },
           },
-          files: ['index.mjs', 'index.js', 'index.d.ts', 'styles', 'lib'],
+          // `index-*.mjs`/`index-*.js` ship the content-hashed code-split chunks (e.g. the
+          // lazily-imported SketchPicker). Without these globs the chunks are emitted but
+          // excluded from the tarball, so the consumer hits "Can't resolve ./index-*.mjs".
+          files: [
+            'index.mjs',
+            'index.js',
+            'index.d.ts',
+            'index-*.mjs',
+            'index-*.js',
+            'styles',
+            'lib',
+          ],
         };
 
         fs.writeFileSync(

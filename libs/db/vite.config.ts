@@ -21,6 +21,12 @@ export default defineConfig({
           main: 'index.cjs.js',
           module: 'index.es.js',
           types: 'index.d.ts',
+          // Enables tree-shaking so a client importing the browser `createClient` from
+          // '@nextblock-cms/db' does NOT drag in the server module (next/headers + the
+          // typeof-window guard). db uses a runtime guard, not a 'use client'/'use server'
+          // directive, so without this the unused server module is kept and throws in the
+          // client bundle ("cannot be imported from a Client Component module").
+          sideEffects: false,
           exports: {
             '.': {
               types: './index.d.ts',
@@ -67,14 +73,26 @@ export default defineConfig({
       },
     },
     rollupOptions: {
-      external: [
-        '@supabase/ssr',
-        '@supabase/supabase-js',
-        'next/headers',
-        'next/server',
-        '@nextblock-cms/utils',
-        '@nextblock-cms/utils/server'
-      ],
+      output: {
+        // Emit one file per source module (no merged shared chunks). db mixes a client
+        // browser-createClient with server modules that use next/headers + a server guard;
+        // bundling merged them so importing db dragged server-only code (next/headers) into
+        // the client graph. preserveModules keeps them separate and tree-shakeable, so a
+        // client import of `createClient` no longer pulls next/headers.
+        preserveModules: true,
+        preserveModulesRoot: 'src',
+      },
+      external: (id) => {
+        // Externalize every bare specifier (@supabase/*, next/*, @nextblock-cms/*, ...) so
+        // preserveModules keeps them as bare imports and the consumer resolves them.
+        if (id.startsWith('.')) {
+          return false;
+        }
+        if (path.isAbsolute(id)) {
+          return id.includes('node_modules');
+        }
+        return true;
+      },
     },
   },
 });

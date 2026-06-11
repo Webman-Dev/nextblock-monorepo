@@ -1,6 +1,6 @@
 {
   "name": "@nextblock-cms/utils",
-  "version": "0.2.13",
+  "version": "0.8.11",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {

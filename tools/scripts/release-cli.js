@@ -5,7 +5,20 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const args = process.argv.slice(2);
-const releaseType = ['major', 'minor', 'patch'].includes(args[0]) ? args[0] : 'patch';
+
+// Accepts an npm bump keyword (patch/minor/major) OR an explicit semver (e.g. 0.8.0).
+function isVersionSpec(value) {
+  return (
+    typeof value === 'string' &&
+    (['major', 'minor', 'patch', 'premajor', 'preminor', 'prepatch', 'prerelease'].includes(
+      value,
+    ) ||
+      /^\d+\.\d+\.\d+([-+].+)?$/.test(value))
+  );
+}
+
+const versionArg = args.find((a) => !a.startsWith('--'));
+const versionSpec = isVersionSpec(versionArg) ? versionArg : 'patch';
 const dryRun = args.includes('--dry-run');
 
 const workspaceRoot = process.cwd();
@@ -25,7 +38,7 @@ function run(command, options = {}) {
 }
 
 try {
-  console.log(`\n🚀 Releasing create-nextblock CLI (${releaseType})`);
+  console.log(`\n🚀 Releasing create-nextblock CLI (${versionSpec})`);
   if (dryRun) console.log('⚠️  DRY RUN MODE');
 
   // 1. Bump Versions
@@ -35,7 +48,9 @@ try {
     console.log(`  Bumping ${path.relative(workspaceRoot, pkgPath)}`);
     // Use npm version to handle semver bumping reliably
     // --no-git-tag-version to avoid creating tags/commits for each individual bump
-    run(`npm version ${releaseType} --no-git-tag-version`, { cwd: dir });
+    run(`npm version ${versionSpec} --no-git-tag-version --allow-same-version`, {
+      cwd: dir,
+    });
   }
 
   // 2. Sync Template

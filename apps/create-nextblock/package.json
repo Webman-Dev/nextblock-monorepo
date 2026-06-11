@@ -1,6 +1,6 @@
 {
   "name": "create-nextblock",
-  "version": "0.2.78",
+  "version": "0.8.11",
   "description": "",
   "main": "index.js",
   "bin": {
@@ -23,7 +23,6 @@
     "execa": "^9.3.0",
     "fs-extra": "^11.3.2",
     "inquirer": "^12.10.0",
-    "open": "^10.1.0",
     "ora": "^8.0.1",
     "picocolors": "^1.1.1"
   }
