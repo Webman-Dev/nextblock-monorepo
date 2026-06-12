@@ -29,7 +29,7 @@ export const signUpAction = async (formData: FormData) => {
     );
   }
 
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -57,13 +57,21 @@ export const signUpAction = async (formData: FormData) => {
     }
 
     return encodedRedirect("error", "/sign-up", error.message);
-  } else {
-    return encodedRedirect(
-      "success",
-      "/sign-up",
-      "auth.signup_check_email_profile",
-    );
   }
+
+  // When sign-up returns a session, the account is already confirmed — self-hosted GoTrue with
+  // autoconfirm (no SMTP), or any project without email confirmation. The user is already signed
+  // in, so send them into the app instead of telling them to check an email that was never sent.
+  // (The first account becomes ADMIN and lands in the dashboard; everyone else routes normally.)
+  if (data.session) {
+    return redirect("/post-sign-in");
+  }
+
+  return encodedRedirect(
+    "success",
+    "/sign-up",
+    "auth.signup_check_email_profile",
+  );
 };
 
 export const signInAction = async (formData: FormData) => {
