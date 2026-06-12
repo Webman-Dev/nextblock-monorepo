@@ -83,7 +83,9 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
-    NODE_OPTIONS=--dns-result-order=ipv4first
+    # ipv4first so localhost resolves to the socat IPv4 listener; the larger header limit absorbs
+    # Supabase auth cookies (on localhost they aren't port-scoped, so they pile onto every request).
+    NODE_OPTIONS="--dns-result-order=ipv4first --max-http-header-size=65536"
 
 COPY --from=builder --chown=nextjs:nodejs /runtime ./
 

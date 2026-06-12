@@ -115,6 +115,9 @@ services:
       KONG_PLUGINS: request-transformer,cors,key-auth,acl
       KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
       KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+      # localhost cookies aren't port-scoped, so the app's Supabase auth cookies are also sent to
+      # Kong on every supabase-js request — give nginx room so they don't 431.
+      KONG_NGINX_HTTP_LARGE_CLIENT_HEADER_BUFFERS: 8 32k
       SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
     volumes:

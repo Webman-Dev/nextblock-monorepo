@@ -25,6 +25,11 @@ import { getRequestOrigin } from '../../../lib/visual-editing/edit-info';
 
 export const dynamicParams = true;
 export const revalidate = 3600;
+// Render per-request: the shared root layout reads cookies()/headers()/draftMode() (auth + locale),
+// so attempting a statically-cached render throws DYNAMIC_SERVER_USAGE (500). Matches the sibling
+// content routes /[slug] and /product/[slug], which already force dynamic for the same reason.
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
 
 interface ResolvedPostParams {
   slug: string;
