@@ -203,6 +203,25 @@ async function main() {
   );
 
   // 3. Build + start.
+  // A brand-new .env means brand-new secrets. Postgres only runs its init scripts (which set the
+  // role passwords) on an EMPTY volume, so a leftover volume from a previous install would still
+  // hold the old credentials — and GoTrue/PostgREST could not log in. Reset volumes in that case.
+  if (!existing) {
+    console.log(
+      chalk.gray(
+        'Fresh configuration — clearing any previous local sandbox volume so the database matches the new credentials...',
+      ),
+    );
+    try {
+      await execa(compose.cmd, [...compose.args, 'down', '-v'], {
+        cwd: REPO_ROOT,
+        stdio: 'inherit',
+      });
+    } catch {
+      /* nothing to tear down — fine */
+    }
+  }
+
   console.log(
     chalk.blue(
       '\nBuilding and starting the stack (first run pulls images + builds the app — give it a few minutes)...',

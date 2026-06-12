@@ -204,6 +204,18 @@ async function main() {
   await writeFile(ENV_PATH, nextEnv, 'utf8');
   console.log('✓ Wrote .env (Postgres, JWT secret + signed anon/service keys, MinIO, app secrets).\n');
 
+  // A brand-new .env means brand-new secrets. Postgres only runs its init scripts (which set role
+  // passwords) on an EMPTY volume, so a leftover volume from a previous install would keep the old
+  // credentials and GoTrue/PostgREST could not log in. Reset volumes when the config is fresh.
+  if (!existing) {
+    console.log('Fresh configuration — clearing any previous local sandbox volume so the database matches the new credentials...');
+    try {
+      await run(compose.cmd, [...compose.args, 'down', '-v'], { cwd: PROJECT_ROOT });
+    } catch {
+      /* nothing to tear down */
+    }
+  }
+
   console.log('Building and starting the stack (first run pulls images + builds the app — a few minutes)...');
   await run(compose.cmd, [...compose.args, 'up', '-d', '--build'], { cwd: PROJECT_ROOT });
 
