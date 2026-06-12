@@ -207,9 +207,10 @@ services:
       NODE_ENV: production
       PORT: 3000
       HOSTNAME: 0.0.0.0
-      # Browser uses the public Kong URL; server-side code reaches Kong internally.
+      # Browser AND server both use localhost:8000; the in-container loopback proxy (see Dockerfile)
+      # forwards it to Kong. One URL keeps the Supabase auth cookie key (host-derived) consistent,
+      # so the session set in the browser is readable during SSR.
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-http://localhost:8000}
-      SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-http://kong:8000}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
       NEXT_PUBLIC_URL: ${NEXT_PUBLIC_URL:-http://localhost:3000}

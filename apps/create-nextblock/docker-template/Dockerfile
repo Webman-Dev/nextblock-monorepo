@@ -50,19 +50,34 @@ RUN npm run build
 ###############################################################################
 FROM node:22-alpine AS runner
 WORKDIR /app
-RUN apk add --no-cache libc6-compat \
+RUN apk add --no-cache libc6-compat socat \
     && addgroup -g 1001 -S nodejs \
     && adduser -u 1001 -S nextjs -G nodejs
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
-    HOSTNAME=0.0.0.0
+    HOSTNAME=0.0.0.0 \
+    NODE_OPTIONS=--dns-result-order=ipv4first
 
 # A single-app project traces to its own root, so server.js sits at the top of .next/standalone.
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
+# Loopback proxy: the browser-facing localhost URLs (Supabase :8000, MinIO :9000) are inlined into
+# the build, but server-side code + next/image run INSIDE this container. Forward those ports to the
+# compose services so SSR + image optimization work, and so the Supabase auth cookie key (derived
+# from the URL host) matches between browser and server. Override targets with LOOPBACK_PROXIES.
+RUN printf '%s\n' \
+  '#!/bin/sh' \
+  'set -e' \
+  ': "${LOOPBACK_PROXIES:=8000:kong:8000 9000:minio:9000}"' \
+  'for p in $LOOPBACK_PROXIES; do' \
+  '  socat "TCP4-LISTEN:${p%%:*},fork,reuseaddr,bind=127.0.0.1" "TCP:${p#*:}" 2>/dev/null &' \
+  'done' \
+  'exec node "$(cat .server-entry 2>/dev/null || echo server.js)"' \
+  > /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
+
 USER nextjs
 EXPOSE 3000
-CMD ["node", "server.js"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

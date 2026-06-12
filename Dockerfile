@@ -76,17 +76,33 @@ RUN set -eux; \
 ###############################################################################
 FROM node:22-alpine AS runner
 WORKDIR /app
-RUN apk add --no-cache libc6-compat \
+RUN apk add --no-cache libc6-compat socat \
     && addgroup -g 1001 -S nodejs \
     && adduser -u 1001 -S nextjs -G nodejs
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
-    HOSTNAME=0.0.0.0
+    HOSTNAME=0.0.0.0 \
+    NODE_OPTIONS=--dns-result-order=ipv4first
 
 COPY --from=builder --chown=nextjs:nodejs /runtime ./
 
+# Loopback proxy: in Docker the browser-facing localhost URLs (Supabase :8000 and MinIO :9000) get
+# inlined into the build, but server-side code + next/image run INSIDE this container where localhost
+# has nothing. Forward those ports to the compose services so SSR and image optimization work — and
+# so the Supabase auth cookie key (derived from the URL host) stays identical on browser and server,
+# which is what keeps the session readable server-side. Override targets with LOOPBACK_PROXIES.
+RUN printf '%s\n' \
+  '#!/bin/sh' \
+  'set -e' \
+  ': "${LOOPBACK_PROXIES:=8000:kong:8000 9000:minio:9000}"' \
+  'for p in $LOOPBACK_PROXIES; do' \
+  '  socat "TCP4-LISTEN:${p%%:*},fork,reuseaddr,bind=127.0.0.1" "TCP:${p#*:}" 2>/dev/null &' \
+  'done' \
+  'exec node "$(cat .server-entry 2>/dev/null || echo server.js)"' \
+  > /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
+
 USER nextjs
 EXPOSE 3000
-# .server-entry holds the standalone server path resolved at build time (e.g. apps/nextblock/server.js).
-CMD ["sh", "-c", "node \"$(cat .server-entry)\""]
+# Starts the loopback proxies, then the standalone server (.server-entry = apps/nextblock/server.js).
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
