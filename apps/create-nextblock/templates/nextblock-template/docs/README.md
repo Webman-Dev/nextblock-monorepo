@@ -16,6 +16,7 @@ library surfaces rather than historical planning notes.
 - Cortex AI architecture: [08-NEXTBLOCK-CORTEX-AI-ARCHITECTURE.md](./08-NEXTBLOCK-CORTEX-AI-ARCHITECTURE.md)
 - Live draft (visual editing) mode: [09-LIVE-DRAFT-MODE.md](./09-LIVE-DRAFT-MODE.md)
 - Custom blocks (data-driven CRUD): [10-CUSTOM-BLOCKS.md](./10-CUSTOM-BLOCKS.md)
+- Self-hosted local Docker stack: [11-SELF-HOSTED-DOCKER.md](./11-SELF-HOSTED-DOCKER.md)
 
 ## Audience Guide
 
@@ -25,6 +26,7 @@ library surfaces rather than historical planning notes.
 - Custom block work: read `03`, then `10`.
 - AI / Cortex work: read `08`.
 - CLI or template work: read `06`.
+- Running everything locally without cloud accounts: read `11`.
 - AI agents: start with this index, then move directly to the subsystem file that
   matches the task. Treat `apps/nextblock`, `libs/*`, and
   `libs/db/src/supabase/migrations` as the final authority if a doc and code ever

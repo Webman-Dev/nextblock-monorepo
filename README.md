@@ -65,6 +65,8 @@ npm create nextblock@latest
 
 This will run the `create-nextblock` CLI which acts as a scaffolding CLI and template sync pipeline, setting you up with the canonical application.
 
+> **Want a fully local, zero-config sandbox?** The CLI (and `npm run setup`) now offer a **Local Self-Hosted Docker Mode** — one command spins up the entire stack (Supabase engines + S3 storage + the app) on your own machine, with **no cloud accounts**. See [docs/11-SELF-HOSTED-DOCKER.md](./docs/11-SELF-HOSTED-DOCKER.md).
+
 ---
 
 ## 🏗️ For Contributors: The Factory
@@ -105,6 +107,19 @@ The interactive `setup` wizard writes your `.env.local` (Supabase, R2, SMTP, and
 
 **First login:** the dev server runs at **http://localhost:4200**. Open `/sign-up` and create your account — the **first** account to register automatically becomes the **ADMIN**. Click the confirmation email (or confirm the user in Supabase → Authentication → Users), then sign in to reach the CMS at `/cms/dashboard`.
 
+#### 🐳 Or: one-click local stack (no cloud accounts)
+
+Prefer to run everything on your machine? With **Docker Desktop** running:
+
+```bash
+git clone https://github.com/nextblock-cms/nextblock.git
+cd nextblock
+npm install
+npm run docker:setup     # or: npm run setup → pick "Local Self-Hosted Docker Mode"
+```
+
+This builds and boots the full self-hosted stack (Postgres + GoTrue + PostgREST + Kong, MinIO for media, and the app) and applies migrations automatically — the only prompts are optional Turnstile and SMTP. The app runs at **http://localhost:3000** and the first sign-up becomes ADMIN (auto-confirmed, no email step). Manage it with `npm run docker:up` / `docker:down` / `docker:logs`. Full guide: [docs/11-SELF-HOSTED-DOCKER.md](./docs/11-SELF-HOSTED-DOCKER.md).
+
 ### 🛠️ Useful Commands
 
 - `npx nx serve nextblock` - Start the local development server for the CMS
@@ -134,6 +149,7 @@ _The template docs are copied from the root docs through the sync pipeline, so t
 | [docs/08-NEXTBLOCK-CORTEX-AI-ARCHITECTURE.md](./docs/08-NEXTBLOCK-CORTEX-AI-ARCHITECTURE.md) | Premium Cortex AI package: model routing, BYOK, inline editor and global agent tools |
 | [docs/09-LIVE-DRAFT-MODE.md](./docs/09-LIVE-DRAFT-MODE.md)                         | Real-time visual editing and non-destructive draft previewing                            |
 | [docs/10-CUSTOM-BLOCKS.md](./docs/10-CUSTOM-BLOCKS.md)                             | Data-driven custom blocks: schema, CRUD, dynamic rendering, and import/export            |
+| [docs/11-SELF-HOSTED-DOCKER.md](./docs/11-SELF-HOSTED-DOCKER.md)                   | One-click local self-hosted Docker stack: Supabase engines, MinIO storage, migration runner, and how it maps to cloud |
 | [docs/README.md](./docs/README.md)                                                 | Audience-based docs index                                                                |
 
 > **Under the hood note:** The migration folder under `libs/db/src/supabase/migrations` is the best source of truth for current platform capabilities.
