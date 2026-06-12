@@ -177,10 +177,14 @@ async function main() {
     R2_ACCOUNT_ID: 'R2_ACCOUNT_ID=minio',
     R2_REGION: 'R2_REGION=us-east-1',
     R2_S3_ENDPOINT: 'R2_S3_ENDPOINT=http://minio:9000',
-    R2_S3_PUBLIC_ENDPOINT: 'R2_S3_PUBLIC_ENDPOINT=http://localhost:9000',
+    // Storage URLs use 127.0.0.1 (NOT localhost) on purpose: on localhost, cookies aren't
+    // port-scoped, so the browser would send the app's Supabase auth cookies to MinIO too — and
+    // MinIO rejects oversized header sets (MetadataTooLarge), breaking image display once cookies
+    // grow. 127.0.0.1 is a different cookie host, so the browser never sends them there.
+    R2_S3_PUBLIC_ENDPOINT: 'R2_S3_PUBLIC_ENDPOINT=http://127.0.0.1:9000',
     R2_FORCE_PATH_STYLE: 'R2_FORCE_PATH_STYLE=true',
-    NEXT_PUBLIC_R2_BASE_URL: `NEXT_PUBLIC_R2_BASE_URL=http://localhost:9000/${bucket}`,
-    NEXT_PUBLIC_R2_PUBLIC_URL: `NEXT_PUBLIC_R2_PUBLIC_URL=http://localhost:9000/${bucket}`,
+    NEXT_PUBLIC_R2_BASE_URL: `NEXT_PUBLIC_R2_BASE_URL=http://127.0.0.1:9000/${bucket}`,
+    NEXT_PUBLIC_R2_PUBLIC_URL: `NEXT_PUBLIC_R2_PUBLIC_URL=http://127.0.0.1:9000/${bucket}`,
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: `NEXT_PUBLIC_TURNSTILE_SITE_KEY=${turnstileSiteKey}`,
     TURNSTILE_SECRET_KEY: `TURNSTILE_SECRET_KEY=${turnstileSecretKey}`,
     GOTRUE_MAILER_AUTOCONFIRM: `GOTRUE_MAILER_AUTOCONFIRM=${mailerAutoconfirm}`,
