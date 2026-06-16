@@ -25,6 +25,7 @@ import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { unstable_cache } from 'next/cache';
 import { createStaticSupabaseClient, getSiteSettings } from './lib/site-settings';
 import { DEFAULT_OG_IMAGE } from './lib/seo';
+import { isSupabaseConfigured } from '../lib/setup/env-status';
 
 const defaultUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
 
@@ -230,11 +231,40 @@ const getCachedActiveLogo = unstable_cache(
 );
 
 async function loadLayoutData() {
-  const supabase = createSupabaseServerClient();
-
   const headerList = await headers();
-  const cookieStore = await cookies();
   const nonce = headerList.get('x-nonce') || '';
+  const requestPath = headerList.get('x-nextblock-path') || '';
+
+  // Skip the public-chrome data loading when there's nothing to render it on: an
+  // unconfigured instance, OR the standalone /setup wizard. On /setup, AppShell shows no
+  // header/footer anyway, and the DB schema may not exist yet (configured-but-pre-migrate)
+  // — querying it just produces noisy "table not found" errors for data nobody displays.
+  if (!isSupabaseConfigured() || requestPath.startsWith('/setup')) {
+    return {
+      user: null,
+      profile: null,
+      serverDeterminedLocale: DEFAULT_LOCALE_FOR_LAYOUT,
+      availableCurrencies: [] as StoreCurrency[],
+      serverCurrencyCode: null,
+      availableLanguages: [] as Language[],
+      defaultLanguage: null,
+      translations: [] as Awaited<ReturnType<typeof getCachedTranslations>>,
+      copyrightText: '',
+      nonce,
+      hasSupabaseEnv: false,
+      headerNavItems: [] as NavigationItem[],
+      footerNavItems: [] as NavigationItem[],
+      logo: null as HeaderLogo | null,
+      canAccessCms: false,
+      siteTitle: 'NextBlock',
+      isEcommerceActive: false,
+      globalCss: '',
+      privacySettings: DEFAULT_PRIVACY_SETTINGS,
+    };
+  }
+
+  const supabase = createSupabaseServerClient();
+  const cookieStore = await cookies();
 
   const xUserLocaleHeader = headerList.get('x-user-locale');
   const nextUserLocaleCookie = cookieStore.get('NEXT_USER_LOCALE')?.value;
@@ -417,6 +447,22 @@ export default async function RootLayout({
     ? (await import('@vercel/toolbar/next')).VercelToolbar
     : null;
 
+  // Expose the PUBLIC Supabase values (url + anon key — both safe to ship to the
+  // browser) at runtime. In production the client uses the build-time-inlined
+  // NEXT_PUBLIC_* and ignores this; it only matters in local dev, where the wizard
+  // writes those vars at runtime and the already-loaded browser bundle would otherwise
+  // hold stale empties until a dev-server restart. Read from server process.env here,
+  // so it's always fresh.
+  const publicEnvBootstrap = (() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+    if (!url || !anonKey) return '';
+    return `window.__NEXTBLOCK_PUBLIC_ENV__=${JSON.stringify({ url, anonKey }).replace(
+      /</g,
+      '\\u003c',
+    )};`;
+  })();
+
   return (
     <html lang={serverDeterminedLocale} suppressHydrationWarning>
       <head>
@@ -424,6 +470,14 @@ export default async function RootLayout({
         {globalCss && <style dangerouslySetInnerHTML={{ __html: globalCss }} />}
       </head>
       <body className="min-h-screen">
+        {publicEnvBootstrap && (
+          <Script
+            id="nextblock-public-env"
+            strategy={TRUSTED_TYPES_SCRIPT_STRATEGY}
+            nonce={nonce}
+            dangerouslySetInnerHTML={{ __html: publicEnvBootstrap }}
+          />
+        )}
         {/* In development this loads after hydration to avoid browser-hidden nonce comparisons. */}
         <Script
           id="trusted-types-bootstrap"

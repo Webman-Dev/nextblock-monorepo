@@ -66,7 +66,19 @@ export function AppShell({
 }: AppShellProps) {
   const pathname = usePathname() || '';
   const isCmsRequest = pathname.startsWith('/cms');
+  const isSetupRequest = pathname === '/setup' || pathname.startsWith('/setup/');
   const branding = useMemo(() => ({ logo, siteTitle }), [logo, siteTitle]);
+
+  // The first-boot setup wizard renders on its own clean, chrome-free page: no header
+  // or footer, and crucially no EnvVarWarning — the whole point of /setup is to supply
+  // the very env vars that warning complains about.
+  if (isSetupRequest) {
+    return (
+      <AppBrandingContext.Provider value={branding}>
+        <main className="min-h-screen bg-background">{children}</main>
+      </AppBrandingContext.Provider>
+    );
+  }
 
   return (
     <AppBrandingContext.Provider value={branding}>

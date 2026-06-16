@@ -1874,6 +1874,27 @@ export type Database = {
         }
         Relationships: []
       }
+      system_configuration: {
+        Row: {
+          auto_accept_signups: boolean
+          id: number
+          settings: Json
+          updated_at: string
+        }
+        Insert: {
+          auto_accept_signups?: boolean
+          id?: number
+          settings?: Json
+          updated_at?: string
+        }
+        Update: {
+          auto_accept_signups?: boolean
+          id?: number
+          settings?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       tax_rates: {
         Row: {
           country_code: string

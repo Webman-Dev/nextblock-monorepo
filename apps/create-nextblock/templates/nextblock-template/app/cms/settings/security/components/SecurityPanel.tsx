@@ -28,6 +28,7 @@ import {
   revokeTrustedDeviceAction,
   sendEmailEnrollmentCode,
   startTotpEnrollment,
+  updateAutoAcceptSignups,
   updateGlobalSecuritySettings,
   verifyEmailEnrollment,
   verifyTotpEnrollment,
@@ -369,7 +370,75 @@ export default function SecurityPanel({ data }: { data: SecurityPanelData }) {
           onSave={(formData) => run(() => updateGlobalSecuritySettings(formData))}
         />
       )}
+
+      {/* Sign-up policy (admin only) */}
+      {data.isAdmin && (
+        <SignupPolicyCard
+          initial={data.autoAcceptSignups}
+          isPending={isPending}
+          onSave={(formData) => run(() => updateAutoAcceptSignups(formData))}
+        />
+      )}
     </>
+  );
+}
+
+function SignupPolicyCard({
+  initial,
+  isPending,
+  onSave,
+}: {
+  initial: boolean;
+  isPending: boolean;
+  onSave: (formData: FormData) => void;
+}) {
+  const [enabled, setEnabled] = useState(initial);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Sign-up Policy (Admin)</CardTitle>
+        <CardDescription>
+          Controls how new public registrations are handled across the whole site.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('auto_accept_signups', String(enabled));
+            onSave(formData);
+          }}
+          className="space-y-6"
+        >
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="auto_accept_signups"
+              checked={enabled}
+              onCheckedChange={(checked) => setEnabled(checked === true)}
+              className="mt-1"
+            />
+            <div className="space-y-1">
+              <Label htmlFor="auto_accept_signups">
+                Auto-approve registrations (skip outbound email verification)
+              </Label>
+              <p className="text-xs text-slate-500">
+                New accounts become active immediately, even without SMTP configured. Convenient
+                for local / self-hosted use; leave off for public production sites.
+              </p>
+            </div>
+          </div>
+
+          <Separator />
+
+          <Button type="submit" disabled={isPending}>
+            {isPending ? <Spinner className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Save Policy
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 

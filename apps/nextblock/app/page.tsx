@@ -63,6 +63,12 @@ async function getPreferredLocale() {
 }
 
 export async function generateMetadata(): Promise<Metadata> {
+  // Unconfigured instance (pre-/setup): skip all DB work so metadata generation
+  // can't crash the boot. The proxy redirects unconfigured traffic to /setup anyway.
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return { title: 'NextBlock' };
+  }
+
   const preferredLocale = await getPreferredLocale();
   const homepageSlug = await getHomepageSlugForLocale(preferredLocale);
   const pageData = await getPageDataBySlug(homepageSlug, preferredLocale);

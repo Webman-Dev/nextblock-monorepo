@@ -1,9 +1,7 @@
 'use client';
 
-import { hasPublicEnvVars } from "@nextblock-cms/utils";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar";
-import { Badge } from "@nextblock-cms/ui/badge";
 import { Button } from "@nextblock-cms/ui/button";
 import { signOutAction } from "../app/actions";
 import { useAuth } from "../context/AuthContext";
@@ -29,42 +27,6 @@ export default function AuthButton() {
     await signOutAction();
   };
 
-  if (!hasPublicEnvVars) {
-    return (
-      <>
-        <div className="flex gap-4 items-center">
-          <div>
-            <Badge
-              variant={"default"}
-              className="font-normal pointer-events-none"
-            >
-              {t('update_env_file_warning')}
-            </Badge>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              asChild
-              size="sm"
-              variant={"outline"}
-              disabled
-              className="opacity-75 cursor-none pointer-events-none"
-            >
-              <Link href="/sign-in">{t('sign_in')}</Link>
-            </Button>
-            <Button
-              asChild
-              size="sm"
-              variant={"default"}
-              disabled
-              className="opacity-75 cursor-none pointer-events-none"
-            >
-              <Link href="/sign-up">{t('sign_up')}</Link>
-            </Button>
-          </div>
-        </div>
-      </>
-    );
-  }
   return user ? (
     <div className="flex items-center gap-4">
       <DropdownMenu>

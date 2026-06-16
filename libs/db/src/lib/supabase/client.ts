@@ -6,10 +6,22 @@ import { Database } from './types'; // Import custom types
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type Language = Database['public']['Tables']['languages']['Row'];
 
-// This is the standard client creation function from the Vercel example
+// This is the standard client creation function from the Vercel example.
+//
+// Prefer the build-time-inlined NEXT_PUBLIC_* (always correct in production), and fall
+// back to runtime values injected by the root layout into window.__NEXTBLOCK_PUBLIC_ENV__.
+// The fallback only matters in local dev right after the /setup wizard writes the env at
+// runtime: the already-loaded browser bundle holds stale empties until a restart, so this
+// lets the client work immediately without one. (url + anon key are public values.)
 export const createClient = () => {
-  const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
-  const supabaseAnonKey = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
+  const runtime =
+    typeof window !== 'undefined'
+      ? (window as { __NEXTBLOCK_PUBLIC_ENV__?: { url?: string; anonKey?: string } })
+          .__NEXTBLOCK_PUBLIC_ENV__
+      : undefined;
+
+  const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'] || runtime?.url;
+  const supabaseAnonKey = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] || runtime?.anonKey;
 
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error(

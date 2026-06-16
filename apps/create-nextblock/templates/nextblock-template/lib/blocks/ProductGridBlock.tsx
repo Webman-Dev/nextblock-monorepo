@@ -62,7 +62,7 @@ export const ProductGridBlock = async ({
          } else if (process.env.NEXT_PUBLIC_R2_BASE_URL) {
            imageUrl = `${process.env.NEXT_PUBLIC_R2_BASE_URL}/${mediaItem.file_path}`;
          } else {
-           imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/media/${mediaItem.file_path}`;
+           imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''}/storage/v1/object/public/media/${mediaItem.file_path}`;
          }
       }
 

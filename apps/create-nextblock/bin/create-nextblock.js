@@ -104,43 +104,9 @@ async function handleCommand(projectDirectory, options) {
       hostingMode = modeChoice;
     }
 
-    // Prerequisites gate (interactive only) — shown BEFORE we ask for a name, scaffold, or
-    // install, so anyone who isn't ready can cancel without creating anything.
-    if (!yes && hostingMode === 'cloud') {
-      clack.note(
-        [
-          '1. A Supabase project   https://supabase.com/dashboard',
-          '   • Reference ID             — Project Settings > General > "Reference ID"',
-          '   • Connection string        — Connect (top bar) > Direct connection > URI',
-          '   • anon + service_role keys — Project Settings > API Keys',
-          '   • Personal Access Token    — Account > Access Tokens > Generate new token',
-          '',
-          '2. A Cloudflare R2 bucket   https://dash.cloudflare.com  > R2',
-          '   • Create a bucket, then enable its Public Development URL (Bucket > Settings > General)',
-          '   • Create an R2 API token (Object Read & Write); copy the Access Key ID + Secret (shown once)',
-          '',
-          '3. SMTP credentials   SMTP2GO works very well: https://www.smtp2go.com',
-          '   • Required so Supabase can email the confirmation link your first admin needs to sign in',
-        ].join('\n'),
-        'Before you continue, have all of the following ready',
-      );
-
-      const ready = await clack.confirm({
-        message:
-          'Do you have your Supabase, Cloudflare R2, and SMTP details ready?',
-        initialValue: true,
-      });
-      if (clack.isCancel(ready)) {
-        handleWizardCancel('Setup cancelled.');
-      }
-      if (!ready) {
-        clack.note(
-          'No problem — nothing was created. Gather the items above, then run\n`npm create nextblock` again. Full guide: docs/05-DEVELOPER-GUIDE.md',
-          'Come back when ready',
-        );
-        return;
-      }
-    } else if (!yes && hostingMode === 'docker') {
+    // Cloud / local configuration moved to the browser First-Boot Setup Wizard (/setup), so the
+    // CLI no longer asks for Supabase / R2 / SMTP credentials here. Docker still preflights below.
+    if (!yes && hostingMode === 'docker') {
       clack.note(
         [
           'Local Self-Hosted Docker Mode runs everything on your machine — no cloud accounts needed.',
@@ -264,30 +230,13 @@ async function handleCommand(projectDirectory, options) {
       console.log(chalk.yellow('Skipping dependency installation.'));
     }
 
-    // Run the setup flow after dependencies are installed so package assets are available.
-    // When it runs, its own "next steps" outro is the final message, so we don't print a second
-    // closing block here — the whole flow completes in this one command.
-    if (!yes) {
-      if (hostingMode === 'docker') {
-        await runDockerSetup(projectDir, projectName);
-      } else {
-        await runSetupWizard(projectDir, projectName);
-      }
+    // Run the post-scaffold flow after dependencies are installed so package assets are available.
+    // Docker boots the local stack; everything else just materializes Supabase assets and points
+    // the user at the browser First-Boot Setup Wizard at /setup (no terminal credential prompts).
+    if (!yes && hostingMode === 'docker') {
+      await runDockerSetup(projectDir, projectName);
     } else {
-      // Non-interactive path: nothing was configured, so point the user at their env file.
-      console.log(
-        chalk.green(
-          `\nSuccess! Your NextBlock™ CMS project "${projectName}" is scaffolded.\n`,
-        ),
-      );
-      console.log(chalk.cyan('Next steps:'));
-      console.log(chalk.cyan(`  1. cd ${projectName}`));
-      console.log(
-        chalk.gray(
-          '  2. Add your Supabase / R2 / SMTP values to .env.local (template in .env.example)',
-        ),
-      );
-      console.log(chalk.cyan('  3. npm run dev'));
+      await runCloudScaffold(projectDir, projectName);
     }
   } catch (error) {
     console.error(
@@ -955,6 +904,37 @@ async function runSetupWizard(projectDir, projectName) {
 // Local Self-Hosted Docker Mode: materialize the supabase migrations out of the installed
 // @nextblock-cms/db package (the migration-runner container applies them on boot), then hand off
 // to the project's own zero-dependency Docker setup script (prompts + .env + `docker compose up`).
+async function runCloudScaffold(projectDir, projectName) {
+  const projectPath = resolve(projectDir);
+
+  // Materialize the Supabase assets (migrations + config) so `npm run db:migrate` works later,
+  // then hand off entirely to the browser First-Boot Setup Wizard for configuration. No
+  // credentials are collected in the terminal.
+  try {
+    await ensureSupabaseAssets(projectPath, { required: false });
+  } catch {
+    // Non-fatal: the wizard still works; db:migrate just needs these assets present.
+  }
+
+  console.log(
+    chalk.green(
+      `\nSuccess! Your NextBlock™ CMS project "${projectName}" is scaffolded.\n`,
+    ),
+  );
+  console.log(chalk.cyan('Next steps:'));
+  console.log(chalk.cyan(`  1. cd ${projectName}`));
+  console.log(chalk.cyan('  2. npm run dev'));
+  console.log(
+    `  3. Open ${chalk.cyan('/setup')} ${chalk.gray('in your browser (the URL npm run dev prints, e.g. http://localhost:3000/setup)')}`,
+  );
+  console.log(
+    chalk.gray('     Connect Supabase, configure storage / email, and create your administrator.'),
+  );
+  console.log('');
+  console.log(chalk.gray('  Self-hosted Docker instead?   npm run docker:setup'));
+  console.log(chalk.gray('  One-click cloud deploy:       see docs/12-VERCEL-DEPLOYMENT.md'));
+}
+
 async function runDockerSetup(projectDir, projectName) {
   const projectPath = resolve(projectDir);
   process.chdir(projectPath);

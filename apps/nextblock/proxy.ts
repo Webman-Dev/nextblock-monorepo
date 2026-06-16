@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@nextblock-cms/db';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
@@ -40,6 +41,63 @@ function getRequiredRolesForPath(pathname: string): UserRole[] | null {
     }
   }
   return null;
+}
+
+/**
+ * Paths that must stay reachable while the instance is unprovisioned: the wizard,
+ * its server actions/APIs, the auth callback, and framework internals. Everything
+ * else is redirected to /setup until a first admin exists.
+ */
+function isSetupAllowlisted(pathname: string): boolean {
+  return (
+    pathname === '/setup' ||
+    pathname.startsWith('/setup/') ||
+    pathname.startsWith('/api/setup') ||
+    pathname.startsWith('/auth/') ||
+    pathname.startsWith('/_next/') ||
+    pathname.startsWith('/favicon')
+  );
+}
+
+// Module-level cache for the "has the first admin been created?" flag. Middleware
+// modules persist across requests in a worker, so this avoids a per-request DB hit.
+let provisionedAdminCache: { value: boolean; expires: number } | null = null;
+
+/**
+ * Returns true once the system has a first admin (site_settings.is_admin_created).
+ * `is_admin_created` is a non-sensitive, anon-readable key, so the request-scoped
+ * anon client can read it. Cached aggressively once true (it never reverts) and
+ * briefly while false (so the gate releases promptly after the wizard runs).
+ * Fail-open: any read error returns true so a hiccup never traps the whole site.
+ */
+async function hasProvisionedAdmin(supabase: SupabaseClient): Promise<boolean> {
+  const now = Date.now();
+  if (provisionedAdminCache && provisionedAdminCache.expires > now) {
+    return provisionedAdminCache.value;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'is_admin_created')
+      .maybeSingle();
+
+    if (error) {
+      return true;
+    }
+
+    const hasAdmin = data?.value === true || data?.value === 'true';
+    // Cache "provisioned" for a long time (it never reverts); keep the unprovisioned
+    // window short so the gate releases promptly once the wizard creates the admin.
+    provisionedAdminCache = {
+      value: hasAdmin,
+      expires: now + (hasAdmin ? 10 * 60_000 : 3_000),
+    };
+    return hasAdmin;
+  } catch {
+    return true;
+  }
 }
 
 function getHttpOrigin(value: string | undefined): string | null {
@@ -110,11 +168,21 @@ function createRedirectResponse(
   return applySecurityHeaders(NextResponse.redirect(url), contentSecurityPolicy);
 }
 
-function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string): string {
+function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string | undefined): string {
   const isDev = process.env.NODE_ENV !== 'production';
-  const parsedSupabaseUrl = new URL(supabaseUrl);
-  const supabaseOrigin = parsedSupabaseUrl.origin;
-  const supabaseRealtimeOrigin = `${parsedSupabaseUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${parsedSupabaseUrl.host}`;
+  // supabaseUrl is absent on an unconfigured instance (pre-/setup). Build the policy
+  // without Supabase origins in that case — uniqueSources() drops the null entries.
+  let supabaseOrigin: string | null = null;
+  let supabaseRealtimeOrigin: string | null = null;
+  if (supabaseUrl) {
+    try {
+      const parsedSupabaseUrl = new URL(supabaseUrl);
+      supabaseOrigin = parsedSupabaseUrl.origin;
+      supabaseRealtimeOrigin = `${parsedSupabaseUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${parsedSupabaseUrl.host}`;
+    } catch {
+      // malformed URL — treat as unconfigured for CSP purposes
+    }
+  }
   const assetSources = getAssetSources();
 
   const googleSources = [
@@ -238,20 +306,35 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string): s
 }
 
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Missing required Supabase environment variables');
-  }
+  const configured = Boolean(supabaseUrl && supabaseAnonKey);
+  process.env.NEXTBLOCK_UNCONFIGURED = configured ? 'false' : 'true';
 
   const requestHeaders = new Headers(request.headers);
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
   const contentSecurityPolicy = createContentSecurityPolicy(nonce, supabaseUrl);
 
   requestHeaders.set('x-nonce', nonce);
+  requestHeaders.set('x-nextblock-path', pathname);
   if (contentSecurityPolicy) {
     requestHeaders.set('Content-Security-Policy', contentSecurityPolicy);
+  }
+
+  const allowlisted = isSetupAllowlisted(pathname);
+
+  // First-boot setup gate (unconfigured): no Supabase env yet, so the browser /setup
+  // wizard is the only thing that can run. Let allowlisted paths render with the
+  // nonce/CSP applied; redirect everything else to /setup. No Supabase work happens.
+  if (!configured) {
+    if (allowlisted) {
+      return applySecurityHeaders(
+        NextResponse.next({ request: { headers: requestHeaders } }),
+        contentSecurityPolicy,
+      );
+    }
+    return createRedirectResponse(new URL('/setup', request.url), contentSecurityPolicy);
   }
 
   let response = NextResponse.next({
@@ -260,7 +343,7 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+  const supabase = createServerClient(supabaseUrl as string, supabaseAnonKey as string, {
     cookies: {
       get(name: string) {
         return request.cookies.get(name)?.value;
@@ -293,7 +376,18 @@ export async function proxy(request: NextRequest) {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
-  const { pathname } = request.nextUrl;
+
+  // First-boot setup gate (configured but no admin yet, and nobody signed in): funnel
+  // anonymous traffic to /setup so the wizard can create the first admin. A logged-in
+  // user is proof the system is provisioned, so never gate them — this also prevents a
+  // redirect loop in the moment right after the wizard signs the new admin in. Cached
+  // + fail-open so a transient status error can't trap the whole site.
+  if (!user && !allowlisted && !(await hasProvisionedAdmin(supabase))) {
+    return createRedirectResponse(
+      new URL('/setup', request.url),
+      contentSecurityPolicy,
+    );
+  }
 
   if (pathname.startsWith('/cms')) {
     if (userError || !user) {

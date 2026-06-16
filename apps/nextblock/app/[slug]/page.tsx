@@ -38,6 +38,11 @@ interface PageTranslation {
 }
 
 export async function generateStaticParams(): Promise<ResolvedPageParams[]> {
+  // Unconfigured instance (pre-/setup): no DB to read slugs from.
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return [];
+  }
+
   const supabase = getSsgSupabaseClient();
   const { data: pages, error } = await supabase
     .from("pages")

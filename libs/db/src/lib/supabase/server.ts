@@ -20,15 +20,20 @@ type SupabaseCookiePayload = {
   options: CookieOptions;
 };
 
-// This is the standard server client creation function from the Vercel example
+// This is the standard server client creation function from the Vercel example.
+//
+// When the app is unconfigured (no Supabase env yet — e.g. a fresh `git clone`
+// before the browser /setup wizard has run) we fall back to a harmless dummy host
+// instead of throwing, so the process can boot far enough to render `/setup`. Real
+// queries against the dummy host simply fail and are handled by callers (the
+// middleware redirects unconfigured traffic to /setup, so these clients are rarely
+// exercised in that state). This mirrors getSsgSupabaseClient's existing approach.
 export const createClient = () => {
-  const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
-  const supabaseAnonKey = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
-  
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Missing Supabase environment variables');
-  }
-  
+  const supabaseUrl =
+    process.env['NEXT_PUBLIC_SUPABASE_URL'] || 'https://dummy.supabase.co';
+  const supabaseAnonKey =
+    process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] || 'dummy-anon-key';
+
   return createServerClient(
     supabaseUrl,
     supabaseAnonKey,

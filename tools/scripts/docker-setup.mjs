@@ -1,16 +1,16 @@
 // `npm run docker:setup` — one entry point for the Local Self-Hosted Docker Mode.
 //
-// Preflights Docker, collects the two optional integrations (Cloudflare Turnstile + SMTP),
-// generates a root `.env` with secure random secrets and PROPERLY-SIGNED Supabase anon/service
-// keys, then builds and starts the full stack (Postgres + GoTrue + PostgREST + Kong + MinIO +
-// the migration runner + the Next.js app) via docker-compose.yml. Re-runnable: existing
-// generated secrets are reused so your data/keys stay stable across runs.
+// Non-interactive bootstrap: preflights Docker, generates a root `.env` with secure random
+// secrets and PROPERLY-SIGNED Supabase anon/service keys, then builds and starts the full stack
+// (Postgres + GoTrue + PostgREST + Kong + MinIO + the migration runner + the Next.js app) via
+// docker-compose.yml. Integrations (Cloudflare Turnstile, SMTP) and the first admin are now
+// configured in the browser First-Boot Setup Wizard at /setup — there are no terminal prompts.
+// Re-runnable: existing generated secrets are reused so your data/keys stay stable across runs.
 
 import fs from 'fs-extra';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execa } from 'execa';
-import inquirer from 'inquirer';
 import chalk from 'chalk';
 import {
   generateSecret,
@@ -80,62 +80,38 @@ async function main() {
     process.exit(1);
   }
 
-  // 1. Optional integrations (skippable) — shared by both hosting profiles.
-  console.log(
-    chalk.bold('Optional integrations') + chalk.gray('  (press Enter to skip any of these)'),
-  );
-  const { siteKey } = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'siteKey',
-      message: 'Cloudflare Turnstile Site Key (Enter to skip → developer sandbox test keys):',
-    },
-  ]);
-
-  let turnstileSiteKey = siteKey.trim();
-  let turnstileSecretKey = '';
-  if (turnstileSiteKey) {
-    const ans = await inquirer.prompt([
-      { type: 'input', name: 'secretKey', message: 'Cloudflare Turnstile Secret Key:' },
-    ]);
-    turnstileSecretKey = ans.secretKey.trim();
-  } else {
-    turnstileSiteKey = TURNSTILE_TEST_SITE_KEY;
-    turnstileSecretKey = TURNSTILE_TEST_SECRET_KEY;
-    console.log(chalk.gray('  → Using Cloudflare Turnstile test keys (always pass).'));
-  }
-
-  const { host } = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'host',
-      message: 'SMTP Host (Enter to skip → GoTrue auto-confirms sign-ups, no email sent):',
-    },
-  ]);
-  const smtp = { host: host.trim(), port: '', user: '', pass: '', fromEmail: '', fromName: '' };
-  let mailerAutoconfirm = 'true';
-  if (smtp.host) {
-    const rest = await inquirer.prompt([
-      { type: 'input', name: 'port', message: 'SMTP Port (465 = SSL, 587 = STARTTLS):', default: '587' },
-      { type: 'input', name: 'user', message: 'SMTP User:' },
-      { type: 'input', name: 'pass', message: 'SMTP Password:' },
-      { type: 'input', name: 'fromEmail', message: 'From Email:' },
-      { type: 'input', name: 'fromName', message: 'From Name:', default: 'NextBlock' },
-    ]);
-    Object.assign(smtp, rest);
-    mailerAutoconfirm = 'false';
-  } else {
-    console.log(
-      chalk.gray('  → No SMTP: new accounts are auto-confirmed so your first admin can sign in immediately.'),
-    );
-  }
-
-  // 2. Assemble .env, reusing already-generated secrets so re-runs are idempotent.
+  // 1. Read any existing .env first so we can preserve previously generated secrets AND any
+  //    integration values already set (idempotent re-runs).
   let existing = '';
   if (await fs.pathExists(ENV_PATH)) {
     existing = await fs.readFile(ENV_PATH, 'utf8');
-    console.log(chalk.blue('\n✓ Found existing .env — reusing previously generated secrets where present.'));
+    console.log(chalk.blue('✓ Found existing .env — reusing previously generated secrets where present.'));
   }
+
+  // Integrations (Cloudflare Turnstile, SMTP) and the first admin are configured later in the
+  // browser /setup wizard, not here. Default to Turnstile test keys (always pass) and no SMTP so
+  // the stack boots cleanly and the first admin can be created without an email round-trip
+  // (GoTrue auto-confirms). Existing .env values are preserved.
+  const turnstileSiteKey =
+    readEnvValue(existing, 'NEXT_PUBLIC_TURNSTILE_SITE_KEY') || TURNSTILE_TEST_SITE_KEY;
+  const turnstileSecretKey =
+    readEnvValue(existing, 'TURNSTILE_SECRET_KEY') || TURNSTILE_TEST_SECRET_KEY;
+  const smtp = {
+    host: readEnvValue(existing, 'SMTP_HOST'),
+    port: readEnvValue(existing, 'SMTP_PORT'),
+    user: readEnvValue(existing, 'SMTP_USER'),
+    pass: readEnvValue(existing, 'SMTP_PASS'),
+    fromEmail: readEnvValue(existing, 'SMTP_FROM_EMAIL'),
+    fromName: readEnvValue(existing, 'SMTP_FROM_NAME'),
+  };
+  const mailerAutoconfirm = smtp.host ? 'false' : 'true';
+  console.log(
+    chalk.gray(
+      '  → Turnstile test keys + no SMTP (auto-confirm). Configure real values later in /setup or CMS settings.',
+    ),
+  );
+
+  // 2. Assemble .env, reusing already-generated secrets so re-runs are idempotent.
   const reuse = (key, gen) => readEnvValue(existing, key) || gen();
 
   const postgresPassword = reuse('POSTGRES_PASSWORD', generateSecret);
@@ -248,13 +224,13 @@ async function main() {
   console.log(chalk.bold('Next steps:'));
   console.log(`  1. Open the app:    ${chalk.cyan('http://localhost:3000')}`);
   console.log(
-    `  2. Create account:  ${chalk.cyan('http://localhost:3000/sign-up')}  ${chalk.gray('(first sign-up becomes ADMIN)')}`,
+    `  2. Finish setup:    ${chalk.gray('it redirects to')} ${chalk.cyan('http://localhost:3000/setup')}`,
   );
-  if (mailerAutoconfirm === 'true') {
-    console.log(chalk.gray('     No SMTP configured → your account is auto-confirmed; just sign in.'));
-  } else {
-    console.log(chalk.gray('     Click the confirmation link emailed by your SMTP provider.'));
-  }
+  console.log(
+    chalk.gray(
+      '     The First-Boot Setup Wizard creates your first administrator (storage is pre-filled with MinIO).',
+    ),
+  );
   console.log(
     `  3. Supabase API:    ${chalk.cyan('http://localhost:8000')}   ${chalk.gray('MinIO console:')} ${chalk.cyan('http://localhost:9001')}`,
   );

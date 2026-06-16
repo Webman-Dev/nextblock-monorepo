@@ -52,8 +52,14 @@ out
 .env
 .env.local
 .env.development.local
+.env.sandbox
+.env.*.local
 vite.config.*.timestamp*
 vitest.config.*.timestamp*
+
+# Stray local secret/debug artifacts (never commit)
+*.repro
+.anon.repro
 
 # custom
 apps/nextblock/backups/

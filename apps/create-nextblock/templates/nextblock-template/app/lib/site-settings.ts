@@ -23,13 +23,16 @@ export interface SiteSettings {
  * route `generateMetadata` functions.
  */
 export function createStaticSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  // Fall back to a dummy host when unconfigured (fresh clone, pre-/setup) so the
+  // root layout can still render rather than crashing the whole app on boot. Callers
+  // (getSiteSettings + the getCached* helpers) already swallow failures and use
+  // fallbacks, and loadLayoutData short-circuits before reaching here when there is
+  // no Supabase env at all.
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supabase.co';
   const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing Supabase environment variables for public layout data');
-  }
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    'dummy-anon-key';
 
   return createSupabaseJsClient<Database>(supabaseUrl, supabaseKey, {
     auth: {
@@ -53,6 +56,13 @@ export const getSiteSettings = unstable_cache(
       siteKeywords: DEFAULT_SITE_KEYWORDS,
     };
 
+    // Unconfigured instance (pre-/setup): the static client would point at the dummy
+    // host, so the fetch fails with a noisy DNS error before falling back. Skip it and
+    // return SEO defaults directly. (generateMetadata calls this even on /setup.)
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return fallback;
+    }
+
     try {
       const supabase = createStaticSupabaseClient();
       const { data, error } = await supabase
@@ -61,7 +71,12 @@ export const getSiteSettings = unstable_cache(
         .in('key', ['site_title', 'site_description', 'site_keywords']);
 
       if (error || !data) {
-        console.error('Error fetching cached site settings:', error);
+        // PGRST205 = table not found: the schema isn't migrated yet (e.g. mid-setup,
+        // right after the connection is saved but before `npm run db:migrate`). That's an
+        // expected transient state — don't shout about it. Real errors still log.
+        if (error && error.code !== 'PGRST205') {
+          console.error('Error fetching cached site settings:', error);
+        }
         return fallback;
       }
 

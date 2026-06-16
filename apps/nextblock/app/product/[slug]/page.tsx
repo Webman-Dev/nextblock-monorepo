@@ -74,6 +74,11 @@ function resolveCategoryName(category: any, languageCode?: string | null) {
 }
 
 export async function generateStaticParams() {
+  // Unconfigured instance (pre-/setup): no DB to read product slugs from.
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return [];
+  }
+
   const supabase = getSsgSupabaseClient();
   const { data: products } = await getProducts(supabase);
   const productRows = ((products || []) as any[]).filter(

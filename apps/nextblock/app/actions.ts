@@ -1,13 +1,14 @@
 "use server";
 
 import { encodedRedirect } from "@nextblock-cms/utils/server";
-import { createClient } from "@nextblock-cms/db/server";
+import { createClient, getServiceRoleSupabaseClient } from "@nextblock-cms/db/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { resolvePostAuthRedirect } from "../lib/auth-redirects";
 import { createEmailChallenge, evaluateTwoFactor } from "../lib/auth/twoFactor";
 import { REMEMBER_INTENT_COOKIE, setSecureCookie } from "../lib/auth/cookies";
 import { sendTwoFactorCodeEmail } from "./actions/twoFactorEmail";
+import { getSystemConfiguration } from "../lib/setup/system-config";
 
 export const signUpAction = async (formData: FormData) => {
   const email = formData.get("email")?.toString();
@@ -27,6 +28,47 @@ export const signUpAction = async (formData: FormData) => {
       "/sign-up",
       "Email and password are required",
     );
+  }
+
+  // Auto-accept mode (system_configuration.auto_accept_signups): create an already-
+  // confirmed account via the service role so the user is active immediately, with no
+  // outbound verification email — regardless of SMTP / project email-confirmation
+  // settings. Falls through to the standard signUp flow if the service role isn't
+  // available. NOTE: keep supabase.auth calls outside any try/catch so the redirect
+  // they (and encodedRedirect) throw internally is never swallowed.
+  const { auto_accept_signups: autoAcceptSignups } = await getSystemConfiguration();
+  if (autoAcceptSignups) {
+    let admin: ReturnType<typeof getServiceRoleSupabaseClient> | null = null;
+    try {
+      admin = getServiceRoleSupabaseClient();
+    } catch {
+      admin = null; // service role missing — use the standard flow below
+    }
+
+    if (admin) {
+      const { error: createError } = await admin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      });
+
+      if (createError) {
+        if (createError.message.toLowerCase().includes("already")) {
+          return encodedRedirect("error", "/sign-up", "auth.signup_existing_account_hint");
+        }
+        return encodedRedirect("error", "/sign-up", createError.message);
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) {
+        return encodedRedirect("error", "/sign-in", signInError.message);
+      }
+
+      return redirect("/post-sign-in");
+    }
   }
 
   const { data, error } = await supabase.auth.signUp({

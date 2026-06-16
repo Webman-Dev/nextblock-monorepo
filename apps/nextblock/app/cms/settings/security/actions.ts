@@ -24,6 +24,10 @@ import {
   revokeTrustedDevice,
   type TrustedDeviceRow,
 } from '../../../../lib/auth/trustedDevices';
+import {
+  getSystemConfiguration,
+  updateSystemConfiguration,
+} from '../../../../lib/setup/system-config';
 
 export interface SecurityPanelData {
   email: string;
@@ -33,6 +37,7 @@ export interface SecurityPanelData {
   isAdmin: boolean;
   globalSettings: SecuritySettings;
   trustedDevices: TrustedDeviceRow[];
+  autoAcceptSignups: boolean;
 }
 
 async function requireUser() {
@@ -70,6 +75,31 @@ export async function getSecurityPanelData(): Promise<SecurityPanelData> {
     isAdmin: profile?.role === 'ADMIN',
     globalSettings: await readSecuritySettings(),
     trustedDevices: await listTrustedDevices(user.id),
+    autoAcceptSignups: (await getSystemConfiguration()).auto_accept_signups,
+  };
+}
+
+// --- Sign-up policy (admin only) ------------------------------------------------
+
+export async function updateAutoAcceptSignups(formData: FormData) {
+  const { supabase, user } = await requireUser();
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+  if (profile?.role !== 'ADMIN') {
+    throw new Error('Only administrators can change the sign-up policy.');
+  }
+
+  const enabled = formData.get('auto_accept_signups') === 'true';
+  await updateSystemConfiguration({ auto_accept_signups: enabled });
+  revalidatePath('/cms/settings/security');
+  return {
+    success: true,
+    message: enabled
+      ? 'New sign-ups will be auto-approved without email verification.'
+      : 'New sign-ups now require email verification.',
   };
 }
 
