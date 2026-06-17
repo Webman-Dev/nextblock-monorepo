@@ -65,7 +65,7 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
             <TranslationBridge translations={translations}>
               <ThemeProvider
                 attribute="class"
-                defaultTheme="system"
+                defaultTheme="light"
                 enableSystem
                 disableTransitionOnChange
                 nonce={nonce}
