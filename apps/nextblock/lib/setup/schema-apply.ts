@@ -141,6 +141,19 @@ const TRACKING_DDL =
   'create table if not exists supabase_migrations.schema_migrations ' +
   '(version text primary key, name text, statements text[]);';
 
+// Re-grant the Supabase API roles on everything in `public` after all migrations run.
+// Migration 06 grants ON ALL TABLES, but only covers tables that exist at that point;
+// later migrations (e.g. content_drafts in 14) rely on the schema's DEFAULT PRIVILEGES,
+// which a `DROP SCHEMA public CASCADE` reset wipes. This final, idempotent pass mirrors
+// migration 06's grants over the FINAL table set, so no table is left ungranted
+// ("permission denied"). RLS still governs row access on top of these base grants.
+const GRANTS_SQL =
+  'grant usage on schema public to anon, authenticated, service_role;' +
+  'grant select on all tables in schema public to anon;' +
+  'grant all on all tables in schema public to authenticated, service_role;' +
+  'grant all on all sequences in schema public to anon, authenticated, service_role;' +
+  'grant execute on all functions in schema public to anon, authenticated, service_role;';
+
 function recordSql(version: string, file: string): string {
   return (
     `insert into supabase_migrations.schema_migrations (version, name) ` +
@@ -300,6 +313,7 @@ async function applyViaManagementApi(
       applied += 1;
     }
 
+    await run(GRANTS_SQL);
     await run("notify pgrst, 'reload schema';");
     return { ok: true, applied };
   } catch (caught) {
@@ -349,9 +363,8 @@ async function applyViaPostgres(
       applied += 1;
     }
 
-    if (applied > 0) {
-      await db.unsafe("notify pgrst, 'reload schema';");
-    }
+    await db.unsafe(GRANTS_SQL);
+    await db.unsafe("notify pgrst, 'reload schema';");
     return { ok: true, applied };
   } catch (caught) {
     const message =
