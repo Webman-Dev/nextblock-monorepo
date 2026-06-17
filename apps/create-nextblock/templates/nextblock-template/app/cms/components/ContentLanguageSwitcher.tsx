@@ -67,7 +67,13 @@ export default function ContentLanguageSwitcher({
         .eq('translation_group_id', currentItem.translation_group_id);
 
       if (error) {
-        console.error(`Error fetching translations for ${itemType} group ${currentItem.translation_group_id}:`, error);
+        // Surface a useful message: a network "Failed to fetch" (e.g. the browser
+        // Supabase client before the runtime public env is in place) serializes to {},
+        // so log the message/code explicitly.
+        console.error(
+          `Error fetching translations for ${itemType} group ${currentItem.translation_group_id}:`,
+          error.message || error.code || JSON.stringify(error),
+        );
         setTranslations([]);
       } else if (data) {
         const mappedTranslations = data.map(item => {

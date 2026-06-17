@@ -182,8 +182,12 @@ export default function SetupWizard({
       put('R2_BUCKET_NAME', storage.bucket);
       put('R2_ACCESS_KEY_ID', storage.accessKeyId);
       put('R2_SECRET_ACCESS_KEY', storage.secretAccessKey);
+      // Both must hold the bucket's public read URL: image src is built from
+      // NEXT_PUBLIC_R2_BASE_URL, while next.config remotePatterns + CSP read
+      // NEXT_PUBLIC_R2_PUBLIC_URL. The wizard collects one URL and writes it to both
+      // (baseUrl only differs if a channel prefilled a separate custom domain).
       put('NEXT_PUBLIC_R2_PUBLIC_URL', storage.publicUrl);
-      put('NEXT_PUBLIC_R2_BASE_URL', storage.baseUrl);
+      put('NEXT_PUBLIC_R2_BASE_URL', storage.baseUrl || storage.publicUrl);
       put('SMTP_HOST', smtp.host);
       put('SMTP_PORT', smtp.port);
       put('SMTP_USER', smtp.user);
@@ -734,21 +738,19 @@ function StorageStep({
             onChange={(e) => setStorage({ ...storage, secretAccessKey: e.target.value })}
           />
         </Field>
-        <Field label="Public URL" htmlFor="r2Public">
-          <Input
-            id="r2Public"
-            value={storage.publicUrl}
-            onChange={(e) => setStorage({ ...storage, publicUrl: e.target.value })}
-          />
-        </Field>
-        <Field label="Custom domain (optional)" htmlFor="r2Base">
-          <Input
-            id="r2Base"
-            value={storage.baseUrl}
-            onChange={(e) => setStorage({ ...storage, baseUrl: e.target.value })}
-          />
-        </Field>
       </div>
+      <Field label="Public bucket URL" htmlFor="r2Public">
+        <Input
+          id="r2Public"
+          placeholder="https://pub-xxxx.r2.dev"
+          value={storage.publicUrl}
+          onChange={(e) => setStorage({ ...storage, publicUrl: e.target.value })}
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Your bucket&apos;s public URL (Cloudflare R2 → your bucket → Public Development URL)
+          or a custom domain. Used to serve all media on your site.
+        </p>
+      </Field>
     </div>
   );
 }

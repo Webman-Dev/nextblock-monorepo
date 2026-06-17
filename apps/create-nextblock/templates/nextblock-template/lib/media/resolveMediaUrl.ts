@@ -20,7 +20,15 @@ const BUNDLED_PUBLIC_MEDIA_KEYS = new Set([
 
 export function resolveMediaUrl(
   objectKey?: string | null,
-  baseUrl = process.env.NEXT_PUBLIC_R2_BASE_URL || ''
+  // On the client, NEXT_PUBLIC_R2_BASE_URL is inlined at build time, so a fresh-clone
+  // dev bundle built with no env holds an empty string; fall back to the runtime value
+  // injected by <PublicEnvBootstrap> (window.__NEXTBLOCK_PUBLIC_ENV__.r2Base). On the
+  // server, process.env is always current and the window branch is skipped.
+  baseUrl = process.env.NEXT_PUBLIC_R2_BASE_URL ||
+    (typeof window !== 'undefined'
+      ? (window as { __NEXTBLOCK_PUBLIC_ENV__?: { r2Base?: string } })
+          .__NEXTBLOCK_PUBLIC_ENV__?.r2Base || ''
+      : '')
 ) {
   if (!objectKey) return null;
 

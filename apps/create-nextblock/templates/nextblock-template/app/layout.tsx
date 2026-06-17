@@ -465,7 +465,11 @@ export default async function RootLayout({
       <body className="min-h-screen">
         {/* Sets window.__NEXTBLOCK_PUBLIC_ENV__ synchronously during render, before any
             descendant calls the browser Supabase client — the local-dev runtime fallback. */}
-        <PublicEnvBootstrap url={publicSupabaseUrl} anonKey={publicSupabaseAnonKey} />
+        <PublicEnvBootstrap
+          url={publicSupabaseUrl}
+          anonKey={publicSupabaseAnonKey}
+          r2Base={process.env.NEXT_PUBLIC_R2_BASE_URL || ''}
+        />
         {/* In development this loads after hydration to avoid browser-hidden nonce comparisons. */}
         <Script
           id="trusted-types-bootstrap"

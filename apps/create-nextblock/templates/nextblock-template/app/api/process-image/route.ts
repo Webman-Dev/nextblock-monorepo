@@ -127,7 +127,11 @@ export async function POST(request: NextRequest) {
         .toFormat(TARGET_FORMAT, { quality: 75 }) // Adjust quality as needed
         .toBuffer();
       
-      const newObjectKey = `${baseName}_${size.label}.${TARGET_FORMAT}`;
+      // size.label keeps its '_avif' suffix as the stored variantLabel (used for
+      // variant selection), but it's redundant in the filename since the extension is
+      // already .avif — strip it so keys read `..._large.avif`, not `..._large_avif.avif`.
+      const fileSuffix = size.label.replace(/_avif$/, '');
+      const newObjectKey = `${baseName}_${fileSuffix}.${TARGET_FORMAT}`;
       const newPublicUrl = `${R2_PUBLIC_URL_BASE}/${newObjectKey}`;
 
       const putObjectParams = {
