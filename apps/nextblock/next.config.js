@@ -151,6 +151,19 @@ function getRemotePatterns() {
   /** @type {RemotePattern[]} */
   const patterns = [];
 
+  // Well-known media/storage providers, allowlisted by wildcard. next.config.js is
+  // evaluated once at server start and is NOT re-read when .env.local changes, so on a
+  // fresh install (the /setup wizard writes the R2/storage env at runtime) the exact
+  // env-derived hosts below would be missing until a dev-server restart — which made
+  // next/image hard-crash with "hostname ... is not configured". These static patterns
+  // cover the common buckets (Cloudflare R2 public + S3 endpoints, Supabase Storage)
+  // regardless of env timing. Custom domains are still picked up from env below.
+  patterns.push(
+    { protocol: 'https', hostname: '**.r2.dev', pathname: '/**' },
+    { protocol: 'https', hostname: '**.r2.cloudflarestorage.com', pathname: '/**' },
+    { protocol: 'https', hostname: '**.supabase.co', pathname: '/**' },
+  );
+
   // Add R2 Bucket URL if authenticated
   if (process.env.NEXT_PUBLIC_R2_PUBLIC_URL) {
     try {
