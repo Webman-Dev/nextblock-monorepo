@@ -33,6 +33,36 @@ export interface ConnectionInput {
 }
 
 /**
+ * Sanity-check a Supabase API key offline. Legacy keys are JWTs carrying { role, ref };
+ * newer keys are opaque sb_secret_* / sb_publishable_* strings. We use this to reject an
+ * anon key pasted into the service-role field (and vice-versa) BEFORE it gets written —
+ * otherwise it only surfaces much later as "permission denied" on the first write, since
+ * a SELECT probe can't tell the keys apart (anon can also read site_settings).
+ */
+function inspectSupabaseKey(key: string): {
+  role?: string;
+  ref?: string;
+  format: 'jwt' | 'secret' | 'publishable' | 'unknown';
+} {
+  if (key.startsWith('sb_secret_')) return { role: 'service_role', format: 'secret' };
+  if (key.startsWith('sb_publishable_')) return { role: 'anon', format: 'publishable' };
+  const parts = key.split('.');
+  if (parts.length === 3) {
+    try {
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+      return {
+        role: typeof payload?.role === 'string' ? payload.role : undefined,
+        ref: typeof payload?.ref === 'string' ? payload.ref : undefined,
+        format: 'jwt',
+      };
+    } catch {
+      // not a decodable JWT — fall through to 'unknown'
+    }
+  }
+  return { format: 'unknown' };
+}
+
+/**
  * Step (Profile B / local only): validate the Supabase credentials, then persist them
  * to `.env.local` and the live process. Probes with the service-role key so we can
  * also report whether the schema has been applied yet.
@@ -56,6 +86,38 @@ export async function saveSupabaseConnection(input: ConnectionInput): Promise<Ac
     return { ok: false, error: 'The Supabase URL is not a valid URL.' };
   }
 
+  // The anon and service-role keys are easy to swap (both start with "eyJ"). Catch a
+  // swapped or wrong-project key here, offline, with a clear message.
+  const svcKey = inspectSupabaseKey(serviceRoleKey);
+  if (svcKey.role && svcKey.role !== 'service_role') {
+    return {
+      ok: false,
+      error: `That service-role key is actually the "${svcKey.role}" key. Paste the secret service_role key from Supabase → Project Settings → API.`,
+    };
+  }
+  const anonKeyInfo = inspectSupabaseKey(anonKey);
+  if (anonKeyInfo.role && anonKeyInfo.role !== 'anon') {
+    return {
+      ok: false,
+      error: `That anon key is actually the "${anonKeyInfo.role}" key. Paste the public anon key from Supabase → Project Settings → API.`,
+    };
+  }
+  let urlRef: string | undefined;
+  try {
+    const host = new URL(supabaseUrl).hostname;
+    if (host.endsWith('.supabase.co') || host.endsWith('.supabase.in')) {
+      urlRef = host.split('.')[0];
+    }
+  } catch {
+    // already validated above
+  }
+  if (urlRef && svcKey.ref && svcKey.ref !== urlRef) {
+    return {
+      ok: false,
+      error: `That service-role key belongs to project "${svcKey.ref}", but the URL is project "${urlRef}". Use keys from the same project.`,
+    };
+  }
+
   if (!isLocalWritableEnv()) {
     return {
       ok: false,
@@ -68,6 +130,27 @@ export async function saveSupabaseConnection(input: ConnectionInput): Promise<Ac
   const probe = createSupabaseJsClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+
+  // Definitive service-role check: only the service_role can call the GoTrue admin API.
+  // A SELECT on site_settings can't tell service_role from anon (both can read it), so
+  // this catches a rotated/invalid key that the offline inspection above can't. Works on
+  // a fresh project too (the auth schema always exists, independent of the public schema).
+  try {
+    const { error: adminErr } = await probe.auth.admin.listUsers({ page: 1, perPage: 1 });
+    if (adminErr) {
+      return {
+        ok: false,
+        error: `That key can't perform admin actions (${adminErr.message}). Confirm you pasted the secret service_role key from Supabase → Project Settings → API.`,
+      };
+    }
+  } catch (caught) {
+    return {
+      ok: false,
+      error: `Could not verify the service-role key: ${
+        caught instanceof Error ? caught.message : 'unknown error'
+      }`,
+    };
+  }
 
   let schemaReady = false;
   try {
