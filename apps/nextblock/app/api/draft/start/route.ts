@@ -4,6 +4,7 @@ import { getCurrentUserCanEdit } from "../../../../lib/visual-editing/draft-cont
 import {
   normalizeDraftRedirectPath,
   resolveDraftPathTarget,
+  resolveRequestOrigin,
   type DraftPathTarget,
 } from "../../../../lib/visual-editing/draft-route";
 
@@ -15,10 +16,11 @@ function getRequestedPath(request: NextRequest) {
 }
 
 function redirectToSignIn(request: NextRequest, normalizedPath: string) {
-  const retryUrl = new URL(request.nextUrl.pathname, request.url);
+  const origin = resolveRequestOrigin(request);
+  const retryUrl = new URL(request.nextUrl.pathname, origin);
   retryUrl.searchParams.set("path", normalizedPath);
 
-  const signInUrl = new URL("/sign-in", request.url);
+  const signInUrl = new URL("/sign-in", origin);
   signInUrl.searchParams.set("redirect", `${retryUrl.pathname}${retryUrl.search}`);
   return redirectNoStore(signInUrl);
 }
@@ -73,5 +75,5 @@ export async function GET(request: NextRequest) {
   const draft = await draftMode();
   draft.enable();
 
-  return redirectNoStore(new URL(target.path, request.url));
+  return redirectNoStore(new URL(target.path, resolveRequestOrigin(request)));
 }

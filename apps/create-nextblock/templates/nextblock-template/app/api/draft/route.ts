@@ -4,6 +4,7 @@ import { createVerificationClient } from "../../../lib/visual-editing/draft-cont
 import {
   normalizeDraftRedirectPath,
   resolveDraftPathTarget,
+  resolveRequestOrigin,
   type DraftPathTarget,
 } from "../../../lib/visual-editing/draft-route";
 
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest) {
   const draft = await draftMode();
   draft.enable();
 
-  const response = NextResponse.redirect(new URL(target.path, request.url));
+  const response = NextResponse.redirect(new URL(target.path, resolveRequestOrigin(request)));
   response.headers.set("Cache-Control", "no-store");
   return response;
 }

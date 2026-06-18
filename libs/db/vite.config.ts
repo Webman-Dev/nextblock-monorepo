@@ -11,7 +11,11 @@ export default defineConfig({
   plugins: [
     dts({
       entryRoot: 'src',
-      tsconfigPath: './tsconfig.json',
+      // Use tsconfig.lib.json (include: src/**, no project references), not tsconfig.json
+      // (empty include + a reference to lib.json) — otherwise vite-plugin-dts builds the
+      // referenced composite project and emits to ../../dist/out-tsc instead of outDir below,
+      // shipping a package with no index.d.ts. (Matches libs/ui, libs/utils, etc.)
+      tsconfigPath: './tsconfig.lib.json',
       outDir: '../../dist/libs/db',
       exclude: ['vite.config.ts'],
       afterBuild: () => {

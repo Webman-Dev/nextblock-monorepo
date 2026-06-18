@@ -12,8 +12,6 @@ import { readFile, writeFile, access } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
-import { createInterface } from 'node:readline/promises';
-import { stdin as input, stdout as output } from 'node:process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
@@ -111,33 +109,13 @@ async function main() {
     process.exit(1);
   }
 
-  const rl = createInterface({ input, output });
-  const ask = async (q, def = '') => (await rl.question(q)).trim() || def;
-
-  console.log('Optional integrations (press Enter to skip):');
-  let turnstileSiteKey = await ask('  Cloudflare Turnstile Site Key (Enter = sandbox test keys): ');
-  let turnstileSecretKey = '';
-  if (turnstileSiteKey) {
-    turnstileSecretKey = await ask('  Cloudflare Turnstile Secret Key: ');
-  } else {
-    turnstileSiteKey = TURNSTILE_TEST_SITE_KEY;
-    turnstileSecretKey = TURNSTILE_TEST_SECRET_KEY;
-    console.log('  → Using Cloudflare Turnstile test keys (always pass).');
-  }
-
-  const smtp = { host: await ask('  SMTP Host (Enter = no email, auto-confirm sign-ups): '), port: '', user: '', pass: '', fromEmail: '', fromName: '' };
-  let mailerAutoconfirm = 'true';
-  if (smtp.host) {
-    smtp.port = await ask('  SMTP Port (465 = SSL, 587 = STARTTLS): ', '587');
-    smtp.user = await ask('  SMTP User: ');
-    smtp.pass = await ask('  SMTP Password: ');
-    smtp.fromEmail = await ask('  From Email: ');
-    smtp.fromName = await ask('  From Name: ', 'NextBlock');
-    mailerAutoconfirm = 'false';
-  } else {
-    console.log('  → No SMTP: new accounts auto-confirm so your first admin can sign in immediately.');
-  }
-  rl.close();
+  // No CLI prompts. Bot protection (Turnstile) and SMTP are configured later in the browser
+  // /setup wizard and CMS settings. Default to Turnstile TEST keys (always pass) and no SMTP,
+  // so GoTrue auto-confirms new accounts and the first admin can sign in immediately.
+  const turnstileSiteKey = TURNSTILE_TEST_SITE_KEY;
+  const turnstileSecretKey = TURNSTILE_TEST_SECRET_KEY;
+  const smtp = { host: '', port: '', user: '', pass: '', fromEmail: '', fromName: '' };
+  const mailerAutoconfirm = 'true';
 
   let existing = '';
   if (await pathExists(ENV_PATH)) {
@@ -225,12 +203,8 @@ async function main() {
 
   console.log('\n🎉 Stack is up!');
   console.log('  1. Open the app:    http://localhost:3000');
-  console.log('  2. Create account:  http://localhost:3000/sign-up  (first sign-up becomes ADMIN)');
-  console.log(
-    mailerAutoconfirm === 'true'
-      ? '     No SMTP → your account is auto-confirmed; just sign in.'
-      : '     Click the confirmation link emailed by your SMTP provider.',
-  );
+  console.log('  2. Finish setup:    complete the browser wizard at http://localhost:3000/setup');
+  console.log('                      (creates your first admin — auto-confirmed, no email needed).');
   console.log('  3. Supabase API:    http://localhost:8000    MinIO console: http://localhost:9001');
   const composeStr = `${compose.cmd} ${compose.args.join(' ')}`.trim();
   console.log(`\n  Logs: ${composeStr} logs -f nextblock-cms   |   Stop: ${composeStr} down   (add -v to wipe data)`);

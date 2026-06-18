@@ -14,7 +14,13 @@ export default defineConfig({
   plugins: [
     dts({
       entryRoot: 'src',
-      tsconfigPath: './tsconfig.json',
+      // Point at tsconfig.lib.json (include: src/**, references: []) — NOT tsconfig.json,
+      // whose include is [] with only a project *reference* to lib.json. With bare tsconfig.json,
+      // vite-plugin-dts built the referenced composite project and emitted declarations to ITS
+      // outDir (../../dist/out-tsc/libs/utils/src), bypassing this plugin's outDir — so no
+      // index.d.ts ever shipped (only the hand-written server.d.ts). tsconfig.lib.json hands the
+      // plugin the source globs directly so it emits every .d.ts to outDir below (matches libs/ui).
+      tsconfigPath: './tsconfig.lib.json',
       outDir: '../../dist/libs/utils',
       afterBuild: () => {
         const packageJson = {
@@ -135,6 +141,7 @@ function buildS3Client(factory) {
   cachedClient = factory({
     region: process.env.R2_REGION || 'auto',
     endpoint,
+    forcePathStyle: process.env.R2_FORCE_PATH_STYLE === 'true',
     credentials: {
       accessKeyId,
       secretAccessKey,
@@ -239,7 +246,25 @@ async function deleteMediaFiles(keys) {
   }
 }
 
-export { getS3Client, deleteMediaFiles, encodedRedirect, getEmailServerConfig, hasEnvVars };
+async function getS3PresignClient() {
+  if (!process.env.R2_S3_PUBLIC_ENDPOINT) {
+    return getS3Client();
+  }
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    return getS3Client();
+  }
+  return new S3Client({
+    region: process.env.R2_REGION || 'auto',
+    endpoint: process.env.R2_S3_PUBLIC_ENDPOINT,
+    forcePathStyle: process.env.R2_FORCE_PATH_STYLE === 'true',
+    credentials: { accessKeyId, secretAccessKey },
+  });
+}
+
+export { getS3Client, getS3PresignClient, deleteMediaFiles, encodedRedirect, getEmailServerConfig, hasEnvVars };
 `;
 
         const serverCjs = `'use server';
@@ -280,7 +305,25 @@ async function deleteMediaFiles(keys) {
   }
 }
 
-module.exports = { getS3Client, deleteMediaFiles, encodedRedirect, getEmailServerConfig, hasEnvVars };
+async function getS3PresignClient() {
+  if (!process.env.R2_S3_PUBLIC_ENDPOINT) {
+    return getS3Client();
+  }
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    return getS3Client();
+  }
+  return new S3Client({
+    region: process.env.R2_REGION || 'auto',
+    endpoint: process.env.R2_S3_PUBLIC_ENDPOINT,
+    forcePathStyle: process.env.R2_FORCE_PATH_STYLE === 'true',
+    credentials: { accessKeyId, secretAccessKey },
+  });
+}
+
+module.exports = { getS3Client, getS3PresignClient, deleteMediaFiles, encodedRedirect, getEmailServerConfig, hasEnvVars };
 `;
 
         const serverDts = `import { S3Client } from '@aws-sdk/client-s3';
@@ -288,6 +331,7 @@ module.exports = { getS3Client, deleteMediaFiles, encodedRedirect, getEmailServe
 export declare function deleteMediaFiles(keys: string[]): Promise<void>;
 
 export declare function getS3Client(): Promise<S3Client | null>;
+export declare function getS3PresignClient(): Promise<S3Client | null>;
 export declare function encodedRedirect(type: 'error' | 'success', path: string, message: string): Promise<never>;
 export declare function getEmailServerConfig(): Promise<{
   host: string;

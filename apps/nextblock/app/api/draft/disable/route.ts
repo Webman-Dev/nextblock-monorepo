@@ -1,6 +1,9 @@
 import { draftMode } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
-import { normalizeDraftRedirectPath } from "../../../../lib/visual-editing/draft-route";
+import {
+  normalizeDraftRedirectPath,
+  resolveRequestOrigin,
+} from "../../../../lib/visual-editing/draft-route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +22,7 @@ export async function GET(request: NextRequest) {
   const draft = await draftMode();
   draft.disable();
 
-  const response = NextResponse.redirect(new URL(normalizedPath, request.url));
+  const response = NextResponse.redirect(new URL(normalizedPath, resolveRequestOrigin(request)));
   response.headers.set("Cache-Control", "no-store");
   return response;
 }

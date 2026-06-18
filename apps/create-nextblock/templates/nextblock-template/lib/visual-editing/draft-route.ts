@@ -1,3 +1,4 @@
+import type { NextRequest } from "next/server";
 import type { NextblockDocumentType } from "./types";
 
 export type DraftPathDocumentType = NextblockDocumentType | "product";
@@ -79,4 +80,21 @@ export function resolveDraftPathTarget(path: string): DraftPathTarget | null {
     slug,
     path: `/${encodeURIComponent(slug)}`,
   };
+}
+
+/**
+ * Browser-facing origin for a redirect. In the self-hosted Docker standalone server (binds to
+ * HOSTNAME=0.0.0.0), `request.url` / `request.nextUrl.origin` carry `http://0.0.0.0:3000` — an
+ * unroutable address that the browser rejects (ERR_ADDRESS_INVALID). The incoming `Host` header
+ * reflects what the user actually requested (e.g. localhost:3000), so prefer it (honoring
+ * `x-forwarded-proto` behind a proxy). Falls back to the request origin when no Host is present.
+ */
+export function resolveRequestOrigin(request: NextRequest): string {
+  const host = request.headers.get("host");
+  if (host) {
+    const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+    const protocol = forwardedProto || request.nextUrl.protocol.replace(/:$/, "") || "http";
+    return `${protocol}://${host}`;
+  }
+  return request.nextUrl.origin;
 }
