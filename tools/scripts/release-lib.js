@@ -139,7 +139,10 @@ try {
 
   console.log('\n→ Building with Nx');
   const buildCommand = `npx nx run ${nxProject}:build --skip-nx-cache --with-deps`;
-  run(buildCommand, { cwd: workspaceRoot });
+  // Run with the nx daemon OFF: the persistent daemon accumulates memory across the
+  // sequential per-lib builds in `release:all` and was OOM-killing the bundler ("cannot
+  // allocate memory"). Daemon-off recomputes the graph per invocation and frees it on exit.
+  run(buildCommand, { cwd: workspaceRoot, env: { ...process.env, NX_DAEMON: 'false' } });
 
   if (!fs.existsSync(distDir)) {
     throw new Error(`Build output not found at ${distDir}`);

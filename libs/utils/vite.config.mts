@@ -14,12 +14,14 @@ export default defineConfig({
   plugins: [
     dts({
       entryRoot: 'src',
-      // Point at tsconfig.lib.json (include: src/**, references: []) — NOT tsconfig.json,
-      // whose include is [] with only a project *reference* to lib.json. With bare tsconfig.json,
-      // vite-plugin-dts built the referenced composite project and emitted declarations to ITS
-      // outDir (../../dist/out-tsc/libs/utils/src), bypassing this plugin's outDir — so no
-      // index.d.ts ever shipped (only the hand-written server.d.ts). tsconfig.lib.json hands the
-      // plugin the source globs directly so it emits every .d.ts to outDir below (matches libs/ui).
+      // Use tsconfig.lib.json (include: src/**) so vite-plugin-dts reliably emits every
+      // declaration to outDir below and the published package ships index.d.ts. (tsconfig.json
+      // has an empty include + only a composite project reference, which made the plugin emit
+      // to ../../dist/out-tsc instead, shipping a package with no index.d.ts — the original bug.)
+      // Trade-off: this stops producing the dist/out-tsc reference output, so downstream libs'
+      // dts builds (ui/editor/ecom) log non-fatal TS6305 — they still emit correct types and
+      // publish fine. Restoring out-tsc reliably needs a non-incremental composite build, which
+      // isn't worth the complexity for cosmetic build-log noise.
       tsconfigPath: './tsconfig.lib.json',
       outDir: '../../dist/libs/utils',
       afterBuild: () => {
