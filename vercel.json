@@ -1,4 +1,7 @@
 {
+  "buildCommand": "npx nx build nextblock --prod",
+  "outputDirectory": "apps/nextblock/.next",
+  "framework": "nextjs",
   "crons": [
     {
       "path": "/api/cron/reset-sandbox",

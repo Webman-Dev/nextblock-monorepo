@@ -24,6 +24,35 @@ The Supabase integration injects the keys the app needs to boot:
 boot, the instance is **Profile A (pre-configured)**: the wizard skips the connection
 step and goes straight to creating the first administrator.
 
+## Build configuration (Nx monorepo)
+
+NextBlock is an Nx monorepo — the Next.js app lives at `apps/nextblock`, not the repo
+root — so a bare `next build` at the root fails with *"Couldn't find any `pages` or
+`app` directory."* The root [`vercel.json`](../vercel.json) pins the correct build, so
+the one-click deploy needs **no manual dashboard configuration**:
+
+```json
+{
+  "buildCommand": "npx nx build nextblock --prod",
+  "outputDirectory": "apps/nextblock/.next",
+  "framework": "nextjs"
+}
+```
+
+- **`buildCommand`** runs the Nx target from the repo root, which resolves the
+  workspace libraries (`@nextblock-cms/*` via the TS path aliases) and builds the app.
+- **`outputDirectory`** points at the app's `.next`. This `@nx/next` version emits it
+  to `apps/nextblock/.next` — **not** `dist/apps/nextblock/.next` (which only receives
+  the deploy wrapper: `package.json`, `next.config.js`, `public/`). Verify with
+  `npx nx build nextblock --prod` then check `apps/nextblock/.next/BUILD_ID`.
+- **`framework: nextjs`** keeps Vercel's first-class Next.js runtime (SSR/ISR
+  functions, image optimization, the `proxy.ts` middleware).
+
+Leave the Vercel project's **Root Directory unset** (the repo root) — the build command
+already targets the app. Do **not** set Root Directory to `apps/nextblock`: the app
+imports the workspace libraries one level up, which a custom Root Directory would hide
+(Vercel forbids `..` above a custom root).
+
 ## No environment variables required
 
 A Deploy-Button URL can only carry variable **names**, never values — so secrets can
@@ -72,19 +101,17 @@ resolves everything in-app, and the button prompts for nothing:
 > Filesystem is read-only on Vercel, so the wizard never writes `.env.local` there —
 > all configuration is environment variables (platform-managed) plus the database.
 
-## Cron jobs and the free tier
+## Cron jobs and the Hobby plan
 
-`vercel.json` declares two daily crons (`/api/cron/reset-sandbox` and
-`/api/cron/sync-currencies`). Vercel's **Hobby (free) tier allows one cron per day**.
-For a free-tier production deploy, either:
+`vercel.json` declares two crons (`/api/cron/reset-sandbox` at 03:00 and
+`/api/cron/sync-currencies` at 18:00). Vercel's **Hobby (free) tier allows up to 100
+cron jobs, each running at most once per day** — both jobs are daily, so they deploy
+fine on the free tier. (Hobby timing is approximate, ±59 min, which is irrelevant for
+daily jobs; only sub-daily schedules like `0 * * * *` are rejected on Hobby.)
 
-- Upgrade to a paid plan (both crons run as declared), **or**
-- Keep only the cron you need (most production sites don't need `reset-sandbox`, which
-  exists for the public demo sandbox), **or**
-- Consolidate both jobs into a single cron handler.
-
-This is intentionally left as a deploy-time decision rather than changed in the repo,
-since the sandbox/demo deploy relies on both crons.
+`reset-sandbox` only does work in sandbox mode — it returns 404 otherwise — so on a
+normal deploy it is a harmless no-op. Delete it from `vercel.json` if you'd rather not
+see it scheduled.
 
 ## After deploy
 
