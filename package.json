@@ -1,6 +1,6 @@
 {
   "name": "@nextblock/source",
-  "version": "0.9.92",
+  "version": "0.9.95",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -81,7 +81,7 @@
     "@eslint/js": "^9.39.4",
     "@microsoft/api-extractor": "^7.58.7",
     "@microsoft/api-extractor-model": "^7.33.8",
-    "@next/eslint-plugin-next": "16.2.7",
+    "@next/eslint-plugin-next": "16.2.9",
     "@nx/esbuild": "22.7.5",
     "@nx/eslint": "22.7.5",
     "@nx/eslint-plugin": "22.7.5",
@@ -112,7 +112,7 @@
     "@svgr/webpack": "^8.1.0",
     "@swc-node/register": "1.11.1",
     "@swc/core": "^1.15.32",
-    "@swc/helpers": "0.5.21",
+    "@swc/helpers": "0.5.23",
     "@swc/wasm": "^1.15.32",
     "@tailwindcss/postcss": "^4.2.4",
     "@types/fs-extra": "^11.0.4",
@@ -126,7 +126,7 @@
     "@typescript-eslint/eslint-plugin": "^8.59.1",
     "@typescript-eslint/parser": "^8.59.1",
     "@vitejs/plugin-react": "^5.2.0",
-    "@vitest/ui": "4.1.5",
+    "@vitest/ui": "4.1.9",
     "ajv": "^8.20.0",
     "autoprefixer": "^10.5.0",
     "baseline-browser-mapping": "^2.10.24",
@@ -135,9 +135,9 @@
     "crc-32": "^1.2.2",
     "dotenv": "^17.4.2",
     "dotenv-cli": "^10.0.0",
-    "esbuild": "^0.28.0",
+    "esbuild": "^0.28.1",
     "eslint": "^9.39.4",
-    "eslint-config-next": "16.2.7",
+    "eslint-config-next": "16.2.9",
     "eslint-config-prettier": "^10.1.8",
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-import": "^2.32.0",
@@ -151,7 +151,7 @@
     "jsonc-eslint-parser": "^2.4.2",
     "lodash.debounce": "^4.0.8",
     "lucide-react": "^0.577.0",
-    "next": "16.2.7",
+    "next": "16.2.9",
     "next-themes": "^0.4.6",
     "nx": "22.7.5",
     "plaiceholder": "^3.0.0",
@@ -174,7 +174,7 @@
     "vite": "^7.3.2",
     "vite-plugin-dts": "~4.5.4",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "4.1.5"
+    "vitest": "4.1.9"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.42",
@@ -284,9 +284,16 @@
     "postcss": "^8.5.12",
     "qs": "^6.15.2",
     "uuid": "^11.1.1",
-    "glob": "^10.4.5",
+    "glob": "^13.0.6",
     "whatwg-encoding": "npm:@exodus/bytes@latest",
     "node-domexception": "npm:domexception@latest",
-    "keygrip": "npm:keygrip@latest"
+    "keygrip": "npm:keygrip@latest",
+    "@noble/hashes": "^1.8.0",
+    "form-data": "^4.0.6",
+    "tmp": "^0.2.7",
+    "undici": "^7.28.0",
+    "js-yaml": "^4.2.0",
+    "esbuild": "^0.28.1",
+    "http-proxy-middleware": "^3.0.7"
   }
 }

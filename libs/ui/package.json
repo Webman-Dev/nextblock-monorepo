@@ -1,6 +1,6 @@
 {
   "name": "@nextblock-cms/ui",
-  "version": "0.9.91",
+  "version": "0.9.95",
   "main": "./index.js",
   "typings": "./index.d.ts",
   "exports": {
