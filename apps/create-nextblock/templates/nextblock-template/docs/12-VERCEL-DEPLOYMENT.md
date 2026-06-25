@@ -13,16 +13,31 @@ The badge links to `https://vercel.com/new/clone` with these query parameters:
 | :--- | :--- |
 | `repository-url` | The NextBlock repo to clone into the user's Git provider. |
 | `project-name` / `repository-name` | Pre-fill the new Vercel project and Git repo names. |
-| `integration-ids=oac_VqOgBHqhEoFTPzGkPd7L0iH6` | Vercel's **Supabase integration**. During import, Vercel provisions (or links) a Supabase project and injects its environment variables automatically. |
 
-Notably there is **no `env=` parameter** — the deploy prompts for **zero** values
-(see "No environment variables required" below).
+The button deliberately carries **no `env=` and no integration parameter** — it just
+clones and builds. (An earlier version used `integration-ids=oac_…`; that is Vercel's
+**legacy** OAuth-integration trigger and does **not** provision the Marketplace Supabase
+database, so it silently left the app unconfigured. Supabase is now a Vercel **Marketplace
+(native) integration**, connected as described below.)
 
-The Supabase integration injects the keys the app needs to boot:
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-`SUPABASE_SERVICE_ROLE_KEY`, and `POSTGRES_URL`. Because those are present on first
-boot, the instance is **Profile A (pre-configured)**: the wizard skips the connection
-step and goes straight to creating the first administrator.
+## Connect the database (Supabase Marketplace)
+
+Provisioning a Postgres database requires choosing a region and plan, so it can't be
+fully baked into a URL — but you never copy a key by hand. In the Vercel dashboard for
+your new project:
+
+1. Open the **Storage** tab → **Create Database** (or **Browse Marketplace**) → choose
+   **Supabase**.
+2. Pick a **region** and **database name**, then **Create**. Vercel provisions the
+   Supabase project and **automatically injects** the env vars into your project:
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+   `SUPABASE_SERVICE_ROLE_KEY`, `POSTGRES_URL`, etc. — no manual entry.
+3. **Redeploy** (env vars added after a build only take effect on the next deploy).
+
+On that deploy the instance boots as **Profile A (pre-configured)**: the wizard skips the
+database-connection step, **auto-applies the schema** from the injected `POSTGRES_URL`
+(the migrations are embedded in the build — see `lib/setup/migrations-bundle.ts`), and
+goes straight to creating the first administrator.
 
 ## Build configuration (Nx monorepo)
 

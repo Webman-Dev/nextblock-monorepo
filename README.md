@@ -73,9 +73,9 @@ The **First-Boot Setup Wizard** at `/setup` walks you through connecting Supabas
 
 ### ☁️ Deploy to the cloud in one click
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&integration-ids=oac_VqOgBHqhEoFTPzGkPd7L0iH6)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock)
 
-The button uses Vercel's **Supabase integration** to provision a Supabase project and inject its keys before the first boot — so the app comes up already connected and the wizard jumps straight to creating your admin. **No environment variables to fill in:** the site URL defaults to your `*.vercel.app` deployment URL, and the app secrets are derived automatically. See [docs/12-VERCEL-DEPLOYMENT.md](./docs/12-VERCEL-DEPLOYMENT.md).
+The button clones the repo and builds it — **no environment variables to fill in** (the site URL defaults to your `*.vercel.app` URL and the app secrets are derived automatically). To connect a database, add **Supabase** from Vercel's **Storage** tab (Marketplace): pick a region + name and Vercel **auto-injects** `NEXT_PUBLIC_SUPABASE_URL` and the rest — you never copy a key. On the next deploy the wizard then auto-skips the database step and applies the schema for you, leaving just "create your admin." Full walkthrough: [docs/12-VERCEL-DEPLOYMENT.md](./docs/12-VERCEL-DEPLOYMENT.md).
 
 > **Want a fully local, zero-config sandbox?** Use **Local Self-Hosted Docker Mode** — one command spins up the entire stack (Supabase engines + S3 storage + the app) on your own machine, with **no cloud accounts**. The app boots straight into the `/setup` wizard with MinIO storage pre-filled. See [docs/11-SELF-HOSTED-DOCKER.md](./docs/11-SELF-HOSTED-DOCKER.md).
 

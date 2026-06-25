@@ -16,6 +16,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import postgres from 'postgres';
 import { isLocalWritableEnv } from './env-status';
+import { MIGRATIONS_BUNDLE } from './migrations-bundle';
 
 export interface SchemaApplyResult {
   ok: boolean;
@@ -238,14 +239,29 @@ export async function resetDatabase(): Promise<{ ok: boolean; error?: string }> 
 
 export async function applyMigrations(): Promise<SchemaApplyResult> {
   const migrationsDir = resolveMigrationsDir();
-  if (!migrationsDir) {
-    return { ok: false, applied: 0, error: 'Could not locate the migrations directory.' };
-  }
 
-  const files = (await readdir(migrationsDir))
-    .filter((name) => /^\d+_.*\.sql$/.test(name))
-    .sort();
-  const readSql = (file: string) => readFile(path.join(migrationsDir, file), 'utf8');
+  let files: string[];
+  let readSql: (file: string) => Promise<string>;
+
+  if (migrationsDir) {
+    // Local dev / Docker: read the canonical .sql files from disk (always current).
+    files = (await readdir(migrationsDir))
+      .filter((name) => /^\d+_.*\.sql$/.test(name))
+      .sort();
+    readSql = (file: string) => readFile(path.join(migrationsDir, file), 'utf8');
+  } else if (MIGRATIONS_BUNDLE.length > 0) {
+    // Serverless (Vercel): libs/db isn't on the function filesystem, so fall back to the
+    // build-time embedded bundle (npm run generate:migrations-bundle).
+    files = MIGRATIONS_BUNDLE.map((m) => m.name).sort();
+    const sqlByName = new Map(MIGRATIONS_BUNDLE.map((m) => [m.name, m.sql]));
+    readSql = async (file: string) => sqlByName.get(file) ?? '';
+  } else {
+    return {
+      ok: false,
+      applied: 0,
+      error: 'Could not locate the migrations (no directory and no embedded bundle).',
+    };
+  }
 
   const ref = resolveProjectRef();
   const token = process.env.SUPABASE_ACCESS_TOKEN?.trim();
