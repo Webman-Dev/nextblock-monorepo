@@ -1,8 +1,7 @@
 // app/api/revalidate/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-
-const REVALIDATE_SECRET = process.env.REVALIDATE_SECRET_TOKEN;
+import { resolveRevalidateSecret } from '../../../lib/app-secrets';
 
 // Define the expected structure of the Supabase webhook payload
 interface SupabaseWebhookPayload {
@@ -15,8 +14,12 @@ interface SupabaseWebhookPayload {
 
 export async function POST(request: NextRequest) {
   const secret = request.headers.get('x-revalidate-secret');
+  // Explicit REVALIDATE_SECRET_TOKEN wins; otherwise derived from the service-role
+  // key. Empty only when Supabase is unconfigured — reject in that case rather than
+  // allowing an empty-header match.
+  const expectedSecret = resolveRevalidateSecret();
 
-  if (secret !== REVALIDATE_SECRET) {
+  if (!expectedSecret || secret !== expectedSecret) {
     console.warn("Revalidation attempt with invalid secret token.");
     return NextResponse.json({ message: 'Invalid secret token' }, { status: 401 });
   }

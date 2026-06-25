@@ -6,6 +6,7 @@ import {
   fetchAllPublishedPosts,
   type SitemapEntry,
 } from './lib/sitemap-utils';
+import { resolveSiteUrl, hasResolvedSiteUrl } from '../lib/site-url';
 
 /**
  * Cache the generated sitemap and rebuild it at most once an hour. Crawlers get
@@ -23,7 +24,8 @@ export const revalidate = 3600;
 type SitemapItem = MetadataRoute.Sitemap[number];
 type ChangeFrequency = NonNullable<SitemapItem['changeFrequency']>;
 
-const BASE_URL = (process.env.NEXT_PUBLIC_URL || 'http://localhost:3000').replace(/\/+$/, '');
+// Explicit NEXT_PUBLIC_URL → Vercel production URL → local-dev fallback.
+const BASE_URL = resolveSiteUrl();
 
 function toAbsolute(path: string): string {
   return `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
@@ -73,9 +75,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     return [];
   }
 
-  if (!process.env.NEXT_PUBLIC_URL) {
+  if (!hasResolvedSiteUrl()) {
     console.warn(
-      'Warning: NEXT_PUBLIC_URL is not set for the sitemap. Defaulting to http://localhost:3000 — set this in production.',
+      'Warning: no site URL is set for the sitemap (NEXT_PUBLIC_URL / Vercel production URL). Defaulting to http://localhost:3000 — set NEXT_PUBLIC_URL in production.',
     );
   }
 

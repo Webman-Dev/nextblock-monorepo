@@ -6,9 +6,13 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 export async function GET(request: NextRequest) {
+  // CRON_SECRET is optional: when set we enforce Vercel's `Authorization: Bearer`
+  // header, but a zero-config deploy can leave it unset (the job only does low-harm
+  // FX-rate sync). Set CRON_SECRET in the project env to lock the endpoint down.
+  const cronSecret = process.env.CRON_SECRET?.trim();
   const authHeader = request.headers.get('authorization');
 
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     return new NextResponse('Unauthorized', {
       status: 401,
     });

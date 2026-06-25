@@ -73,9 +73,9 @@ The **First-Boot Setup Wizard** at `/setup` walks you through connecting Supabas
 
 ### ☁️ Deploy to the cloud in one click
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&integration-ids=oac_VqOgBHqhEoFTPzGkPd7L0iH6&env=NEXT_PUBLIC_URL,CRON_SECRET,DRAFT_MODE_SECRET,REVALIDATE_SECRET_TOKEN&envDescription=Public%20site%20URL%20%2B%20app%20secrets.%20Supabase%20keys%20are%20injected%20automatically%20by%20the%20Supabase%20integration.&envLink=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock%2Fblob%2Fmaster%2Fdocs%2F12-VERCEL-DEPLOYMENT.md)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&integration-ids=oac_VqOgBHqhEoFTPzGkPd7L0iH6)
 
-The button uses Vercel's **Supabase integration** to provision a Supabase project and inject its keys before the first boot — so the app comes up already connected and the wizard jumps straight to creating your admin. See [docs/12-VERCEL-DEPLOYMENT.md](./docs/12-VERCEL-DEPLOYMENT.md).
+The button uses Vercel's **Supabase integration** to provision a Supabase project and inject its keys before the first boot — so the app comes up already connected and the wizard jumps straight to creating your admin. **No environment variables to fill in:** the site URL defaults to your `*.vercel.app` deployment URL, and the app secrets are derived automatically. See [docs/12-VERCEL-DEPLOYMENT.md](./docs/12-VERCEL-DEPLOYMENT.md).
 
 > **Want a fully local, zero-config sandbox?** Use **Local Self-Hosted Docker Mode** — one command spins up the entire stack (Supabase engines + S3 storage + the app) on your own machine, with **no cloud accounts**. The app boots straight into the `/setup` wizard with MinIO storage pre-filled. See [docs/11-SELF-HOSTED-DOCKER.md](./docs/11-SELF-HOSTED-DOCKER.md).
 

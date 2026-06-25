@@ -12,15 +12,40 @@ The badge links to `https://vercel.com/new/clone` with these query parameters:
 | Parameter | Purpose |
 | :--- | :--- |
 | `repository-url` | The NextBlock repo to clone into the user's Git provider. |
+| `project-name` / `repository-name` | Pre-fill the new Vercel project and Git repo names. |
 | `integration-ids=oac_VqOgBHqhEoFTPzGkPd7L0iH6` | Vercel's **Supabase integration**. During import, Vercel provisions (or links) a Supabase project and injects its environment variables automatically. |
-| `env=NEXT_PUBLIC_URL,CRON_SECRET,DRAFT_MODE_SECRET,REVALIDATE_SECRET_TOKEN` | The remaining variables Vercel prompts for. Only variable **names** are listed — never secret values. |
-| `envDescription` / `envLink` | Help text + a link back to this doc. |
+
+Notably there is **no `env=` parameter** — the deploy prompts for **zero** values
+(see "No environment variables required" below).
 
 The Supabase integration injects the keys the app needs to boot:
 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `SUPABASE_SERVICE_ROLE_KEY`, and `POSTGRES_URL`. Because those are present on first
 boot, the instance is **Profile A (pre-configured)**: the wizard skips the connection
 step and goes straight to creating the first administrator.
+
+## No environment variables required
+
+A Deploy-Button URL can only carry variable **names**, never values — so secrets can
+never be pre-filled through it. Rather than make you paste random strings, NextBlock
+resolves everything in-app, and the button prompts for nothing:
+
+- **`NEXT_PUBLIC_URL`** — optional. When unset the app falls back to Vercel's
+  production URL (`VERCEL_PROJECT_PRODUCTION_URL` server-side /
+  `NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL` in the browser), i.e. your
+  `*.vercel.app` domain. Sitemap, robots, and canonical links use it automatically.
+  Add a custom domain later, set `NEXT_PUBLIC_URL=https://yourdomain.com` in the
+  Vercel project, and redeploy (it is inlined at build time).
+- **`DRAFT_MODE_SECRET`** and **`REVALIDATE_SECRET_TOKEN`** — optional. When unset they
+  are derived deterministically from the Supabase service-role key (HMAC-SHA256), so
+  Draft Mode and on-demand revalidation work out of the box. Setting either env var
+  overrides the derived value — do this if you want a fixed `REVALIDATE_SECRET_TOKEN`
+  to paste into a Supabase revalidation webhook. (See `apps/nextblock/lib/app-secrets.ts`.)
+- **`CRON_SECRET`** — optional. The cron endpoints enforce the `Authorization: Bearer`
+  header **only when it is set**. Leave it unset for a frictionless deploy, or set it
+  in the Vercel project to lock the cron endpoints down. The destructive
+  `/api/cron/reset-sandbox` job is independently gated to sandbox-mode only (404
+  otherwise), so it never runs on a normal deploy.
 
 ## What the wizard does on Vercel
 

@@ -1,9 +1,12 @@
-export async function GET() {
-  const siteUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
+import { resolveSiteUrl, hasResolvedSiteUrl } from '../../lib/site-url';
 
-  if (!process.env.NEXT_PUBLIC_URL) {
+export async function GET() {
+  // Explicit NEXT_PUBLIC_URL → Vercel production URL → local-dev fallback.
+  const siteUrl = resolveSiteUrl();
+
+  if (!hasResolvedSiteUrl()) {
     console.warn(
-      'Warning: NEXT_PUBLIC_URL environment variable is not set for robots.txt. Defaulting to http://localhost:3000. Ensure this is set for production.'
+      'Warning: no site URL is set for robots.txt (NEXT_PUBLIC_URL / Vercel production URL). Defaulting to http://localhost:3000. Set NEXT_PUBLIC_URL for production.'
     );
   }
 

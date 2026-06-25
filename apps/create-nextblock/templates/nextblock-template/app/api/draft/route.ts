@@ -7,6 +7,7 @@ import {
   resolveRequestOrigin,
   type DraftPathTarget,
 } from "../../../lib/visual-editing/draft-route";
+import { resolveDraftModeSecret } from "../../../lib/app-secrets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,7 +55,10 @@ async function targetExists(target: DraftPathTarget) {
 }
 
 export async function GET(request: NextRequest) {
-  const configuredSecret = process.env.DRAFT_MODE_SECRET;
+  // Explicit DRAFT_MODE_SECRET wins; otherwise it is derived from the service-role
+  // key so this preview entry works on a zero-config deploy. Empty only when Supabase
+  // itself is unconfigured.
+  const configuredSecret = resolveDraftModeSecret();
 
   if (!configuredSecret) {
     return NextResponse.json(
