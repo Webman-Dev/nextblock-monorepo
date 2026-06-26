@@ -99,6 +99,14 @@ export default async function SetupPage() {
         fromName: process.env.SMTP_FROM_NAME ?? '',
       }}
       turnstilePrefill={{ siteKey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? '' }}
+      supabaseEnvDetected={{
+        NEXT_PUBLIC_SUPABASE_URL: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+        SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+        SUPABASE_ANON_KEY: Boolean(process.env.SUPABASE_ANON_KEY),
+        SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+        POSTGRES_URL: Boolean(process.env.POSTGRES_URL),
+      }}
     />
   );
 }

@@ -43,6 +43,15 @@ interface SmtpPrefill {
   fromName: string;
 }
 
+export interface SupabaseEnvDetected {
+  NEXT_PUBLIC_SUPABASE_URL: boolean;
+  SUPABASE_URL: boolean;
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: boolean;
+  SUPABASE_ANON_KEY: boolean;
+  SUPABASE_SERVICE_ROLE_KEY: boolean;
+  POSTGRES_URL: boolean;
+}
+
 interface Props {
   channel: DeployChannel;
   configured: boolean;
@@ -51,6 +60,8 @@ interface Props {
   storagePrefill: StoragePrefill;
   smtpPrefill: SmtpPrefill;
   turnstilePrefill: { siteKey: string };
+  /** Which Supabase env vars the running deployment can actually see (read-only channels). */
+  supabaseEnvDetected: SupabaseEnvDetected;
 }
 
 type StepId = 'connection' | 'storage' | 'email' | 'bot' | 'signups' | 'admin';
@@ -80,6 +91,7 @@ export default function SetupWizard({
   storagePrefill,
   smtpPrefill,
   turnstilePrefill,
+  supabaseEnvDetected,
 }: Props) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<Msg>(null);
@@ -339,12 +351,42 @@ export default function SetupWizard({
                 />
               </Field>
               {!writable && (
-                <Alert variant="destructive" className="py-2 px-4">
-                  <AlertDescription>
-                    This environment is read-only. Set the Supabase variables on your hosting
-                    platform; this step only works in local development.
-                  </AlertDescription>
-                </Alert>
+                <div className="space-y-3 rounded-md border p-4">
+                  <p className="text-sm font-medium">
+                    On {CHANNEL_LABEL[channel]} you don&apos;t fill this in — the database is
+                    connected through your platform&apos;s environment variables (e.g. Vercel&apos;s
+                    Supabase integration).
+                  </p>
+                  <div className="text-xs">
+                    <p className="mb-1 text-muted-foreground">
+                      Supabase variables this deployment can currently see:
+                    </p>
+                    <ul className="space-y-0.5 font-mono">
+                      {(
+                        [
+                          'NEXT_PUBLIC_SUPABASE_URL',
+                          'SUPABASE_URL',
+                          'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+                          'SUPABASE_ANON_KEY',
+                          'SUPABASE_SERVICE_ROLE_KEY',
+                          'POSTGRES_URL',
+                        ] as const
+                      ).map((k) => (
+                        <li key={k}>
+                          {supabaseEnvDetected[k] ? '✅' : '❌'} {k}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <Alert className="py-2 px-4">
+                    <AlertDescription className="text-xs">
+                      {supabaseEnvDetected.NEXT_PUBLIC_SUPABASE_URL ||
+                      supabaseEnvDetected.SUPABASE_URL
+                        ? 'Keys detected — reload this page and the database step will be skipped.'
+                        : 'No Supabase keys are visible to this deployment yet. If you just created the database via the Vercel integration, the keys were added AFTER this build — open Vercel → Deployments → ⋯ → Redeploy once, then reload. Env vars only bind on a new deployment.'}
+                    </AlertDescription>
+                  </Alert>
+                </div>
               )}
             </div>
           )}
