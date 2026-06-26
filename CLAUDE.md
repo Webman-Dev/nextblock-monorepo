@@ -123,6 +123,31 @@ Subsystems that span many files (each has a doc):
   `createClient()` for request-scoped/cookie auth, `getSsgSupabaseClient()` for
   public static-ish reads, `getServiceRoleSupabaseClient()` for admin/system work.
 
+- **Read Supabase env vars through the resolvers, never raw.** The hosted/Vercel
+  Supabase Marketplace integration injects *new* names — `SUPABASE_URL`
+  (non-prefixed), `SUPABASE_PUBLISHABLE_KEY` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+  (anon-equivalent), `SUPABASE_SECRET_KEY` (service-role-equivalent) — alongside the
+  legacy `NEXT_PUBLIC_SUPABASE_*` / `SUPABASE_SERVICE_ROLE_KEY`. App code resolves
+  URL/anon/service through `apps/nextblock/lib/setup/env-status.ts`
+  (`resolveSupabaseUrl` / `resolveSupabaseAnonKey` / `resolveSupabaseServiceKey`);
+  published `libs/*` can't import that, so inline the same ordered alias chain. When
+  you add or touch ANY inline Supabase client factory, accept every alias. In the
+  strict libs (`libs/db`, `libs/sdk` set `noPropertyAccessFromIndexSignature`) read the
+  new, *undeclared* names with bracket notation (`process.env['SUPABASE_SECRET_KEY']`).
+  See `docs/12`.
+
 - **Custom block slug is a public contract.** Renaming a definition's `slug`
   orphans every page/post block that references the old slug (they render
   "Unsupported block type" until re-pointed).
+
+- **Publishing libs is order- and 2FA-sensitive.** `npm run release:all -- <version>`
+  builds + publishes every lib in dependency order (utils→ui→sdk→db→editor→ecom) then
+  the CLI/template; `npm run build:<lib>` publishes one. npm 2FA requires an OTP per
+  publish, and **piping the output (`| tee` / `Tee-Object`) breaks the interactive
+  prompt** (`EOTP`) — capture logs with an npm Automation token or PowerShell
+  `Start-Transcript` instead. A lib's dts build (`vite-plugin-dts` → tsc on
+  `tsconfig.lib.json`) is touchy: a **composite** lib that imports a sibling must list
+  that sibling's sources in `include` (mirror `libs/editor`) — a project `reference`
+  yields `TS6305`, and empty `references` yields `TS6307`. Keep `libs/utils`
+  strict-clean (bracket-access undeclared keys) so the strict `libs/db` can compile it.
+  See `docs/06`.

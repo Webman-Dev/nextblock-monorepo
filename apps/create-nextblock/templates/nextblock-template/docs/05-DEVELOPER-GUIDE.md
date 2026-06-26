@@ -109,6 +109,17 @@ repo expects at least:
 - `CRON_SECRET`, `DRAFT_MODE_SECRET`, `REVALIDATE_SECRET_TOKEN` — auto-generated
   by `npm run setup`
 
+> **Supabase key aliases.** The names above are the local-dev canon, but the app also
+> accepts the *new-style* names the hosted/Vercel Supabase Marketplace integration
+> injects: `SUPABASE_URL` (non-prefixed), `SUPABASE_PUBLISHABLE_KEY` /
+> `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (anon-equivalent), and `SUPABASE_SECRET_KEY`
+> (service-role-equivalent). Resolution lives in `apps/nextblock/lib/setup/env-status.ts`
+> (`resolveSupabaseUrl` / `resolveSupabaseAnonKey` / `resolveSupabaseServiceKey`); read
+> Supabase env through those (or the same inline alias chain in published libs) rather
+> than a single raw name. `DRAFT_MODE_SECRET` / `REVALIDATE_SECRET_TOKEN` are optional in
+> production — when unset they are derived from the service-role key (see
+> `apps/nextblock/lib/app-secrets.ts`). See [12-VERCEL-DEPLOYMENT.md](./12-VERCEL-DEPLOYMENT.md).
+
 Captured by `npm run setup` and needed for a complete CMS:
 
 - R2 credentials for media storage. The app builds and serves without them, but
