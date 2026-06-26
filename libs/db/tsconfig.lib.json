@@ -5,10 +5,13 @@
     "declaration": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "../../libs/environment.d.ts"],
-  "references": [
-    {
-      "path": "../utils/tsconfig.lib.json"
-    }
-  ]
+  "include": [
+    "src/**/*.ts",
+    "../../libs/environment.d.ts",
+    "../utils/src/**/*.ts",
+    "../utils/src/**/*.tsx"
+  ],
+  // Compile imported sibling sources inline (see `include`) instead of a project reference,
+  // which would need a tsc -b output the vite build never emits (→ TS6305). Mirrors libs/editor.
+  "references": []
 }

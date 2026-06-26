@@ -63,7 +63,7 @@ export async function getS3PresignClient(): Promise<S3Client | null> {
 
 export async function deleteMediaFiles(keys: string[]) {
   const s3 = await getS3Client();
-  if (!s3 || !process.env.R2_BUCKET_NAME) {
+  if (!s3 || !process.env['R2_BUCKET_NAME']) {
       console.warn("deleteMediaFiles: S3 client or Bucket not configured.");
       return;
   }
@@ -73,7 +73,7 @@ export async function deleteMediaFiles(keys: string[]) {
   try {
     const output = await s3.send(
       new DeleteObjectsCommand({
-        Bucket: process.env.R2_BUCKET_NAME,
+        Bucket: process.env['R2_BUCKET_NAME'],
         Delete: {
           Objects: keys.map((key) => ({ Key: key })),
         },

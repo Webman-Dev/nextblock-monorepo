@@ -8,15 +8,8 @@
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["jest.config.ts", "src/**/*.spec.ts", "test-setup.ts"],
-  "references": [
-    {
-      "path": "../db/tsconfig.lib.json"
-    },
-    {
-      "path": "../ui/tsconfig.lib.json"
-    },
-    {
-      "path": "../utils/tsconfig.lib.json"
-    }
-  ]
+  // This project is NOT composite (extends tsconfig.base.json), so sibling types resolve via
+  // the path aliases and no "list all files" rule applies. Dropping the project references
+  // avoids the TS6305 "output not built" noise the vite build can't satisfy.
+  "references": []
 }

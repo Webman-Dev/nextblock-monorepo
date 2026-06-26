@@ -12,7 +12,9 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
-    "../../libs/environment.d.ts"
+    "../../libs/environment.d.ts",
+    "../utils/src/**/*.ts",
+    "../utils/src/**/*.tsx"
   ],
   "exclude": [
     "src/**/*.spec.ts",
@@ -21,9 +23,9 @@
     "src/**/*.stories.tsx",
     "vite.config.mts"
   ],
-  "references": [
-    {
-      "path": "../utils/tsconfig.lib.json"
-    }
-  ]
+  // Compile the imported sibling sources inline (see `include` above) instead of using a
+  // project reference. A composite reference would demand a tsc -b output under dist/out-tsc
+  // that the vite build never produces (→ TS6305); listing the sources satisfies composite's
+  // "all files must be listed" rule (→ avoids TS6307). Mirrors libs/editor's working setup.
+  "references": []
 }

@@ -536,7 +536,7 @@ export function prepareTranslationCsvImport({
     }
 
     if (!existingItem) {
-      const englishValue = nextTranslations.en ?? '';
+      const englishValue = nextTranslations['en'] ?? '';
 
       if (!englishValue.trim()) {
         return {
