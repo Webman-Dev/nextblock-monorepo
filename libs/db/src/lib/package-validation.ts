@@ -31,9 +31,14 @@ async function queryPackageActivation(packageId: string, supabase: any): Promise
 
 const verifyPackageOnlineCached = unstable_cache(
   async (packageId: string): Promise<boolean> => {
-    const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+    const url = process.env['NEXT_PUBLIC_SUPABASE_URL'] || process.env['SUPABASE_URL'];
     const serviceKey =
-      process.env['SUPABASE_SERVICE_ROLE_KEY'] || process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
+      process.env['SUPABASE_SERVICE_ROLE_KEY'] ||
+      process.env['SUPABASE_SECRET_KEY'] ||
+      process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] ||
+      process.env['SUPABASE_ANON_KEY'] ||
+      process.env['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'] ||
+      process.env['SUPABASE_PUBLISHABLE_KEY'];
 
     if (!url || !serviceKey) {
       return false;
@@ -58,9 +63,14 @@ export async function verifyPackageOnline(packageId: string, customClient?: any)
     return queryPackageActivation(packageId, customClient);
   }
 
-  const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+  const url = process.env['NEXT_PUBLIC_SUPABASE_URL'] || process.env['SUPABASE_URL'];
   const serviceKey =
-    process.env['SUPABASE_SERVICE_ROLE_KEY'] || process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
+    process.env['SUPABASE_SERVICE_ROLE_KEY'] ||
+    process.env['SUPABASE_SECRET_KEY'] ||
+    process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] ||
+    process.env['SUPABASE_ANON_KEY'] ||
+    process.env['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'] ||
+    process.env['SUPABASE_PUBLISHABLE_KEY'];
 
   if (url && serviceKey) {
     return verifyPackageOnlineCached(packageId);

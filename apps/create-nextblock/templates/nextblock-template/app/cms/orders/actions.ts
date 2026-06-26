@@ -162,8 +162,8 @@ export async function markOrderAsPaid(orderId: string): Promise<{ success: boole
 
     // 2. Perform Update using Service Role (Bypass RLS)
     
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 
     if (!serviceRoleKey || !supabaseUrl) {
          return { success: false, error: 'Server configuration error' };

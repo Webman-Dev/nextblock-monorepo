@@ -19,7 +19,11 @@ import { createHmac } from 'node:crypto';
 // as optional (enforced only when set) — see app/api/cron/*/route.ts.
 
 function deriveFromServiceRole(label: string): string {
-  const master = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  // Accept the Marketplace integration's SUPABASE_SECRET_KEY alias too, so derivation
+  // still works on a one-click deploy that only injected the new key name.
+  const master = (
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY
+  )?.trim();
   if (!master) return '';
   return createHmac('sha256', master).update(`nextblock:${label}`).digest('hex');
 }

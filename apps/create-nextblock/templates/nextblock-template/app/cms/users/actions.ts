@@ -8,6 +8,7 @@ import type { Database } from "@nextblock-cms/db";
 import { normalizeCustomerAddress } from "@nextblock-cms/ecommerce";
 import { upsertDefaultUserAddresses } from "@nextblock-cms/ecommerce/server";
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { resolveSupabaseServiceKey, resolveSupabaseUrl } from '../../../lib/setup/env-status';
 
 type UserRole = Database['public']['Enums']['user_role'];
 
@@ -42,8 +43,8 @@ type UpdateUserProfilePayload = {
 };
 
 function createServiceRoleClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = resolveSupabaseUrl();
+  const serviceRoleKey = resolveSupabaseServiceKey();
 
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error('Missing required environment variables');
@@ -197,13 +198,13 @@ export async function deleteUserAndProfile(userIdToDelete: string) {
   // The `createClient()` from `@supabase/ssr` for server context doesn't directly expose `auth.admin`.
   // We need to create a standard Supabase client with the service role key.
   const { createClient: createServiceRoleClient } = await import('@supabase/supabase-js');
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error('Missing required environment variables');
   }
-  
+
   const serviceSupabase = createServiceRoleClient(supabaseUrl, serviceRoleKey);
 
 

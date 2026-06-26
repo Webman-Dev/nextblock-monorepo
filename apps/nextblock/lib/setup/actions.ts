@@ -13,6 +13,8 @@ import {
 } from './provisioning';
 import { applyMigrations, resetDatabase } from './schema-apply';
 import { setSystemConfigurationServiceRole } from './system-config';
+import { getStorageBackend } from '../storage/provider';
+import { ensureStorageBucket } from '../storage/supabase-storage';
 
 export interface ActionResult {
   ok: boolean;
@@ -359,6 +361,20 @@ export async function completeSetup(input: CompleteSetupInput): Promise<ActionRe
   // Ensure PostgREST has the schema cached before ANY REST read/write below — covers a
   // fresh apply AND a cold cache over a pre-existing schema (Docker boot race / re-run).
   await waitForSchemaCache(admin);
+
+  // On the native Supabase Storage backend (zero-key Vercel deploy), provision the public
+  // media bucket now so the first upload doesn't have to. Best-effort — the upload path
+  // also ensures it lazily, so a transient failure here never blocks finishing setup.
+  if (getStorageBackend() === 'supabase') {
+    try {
+      await ensureStorageBucket();
+    } catch (caught) {
+      console.warn(
+        'Could not pre-create the Supabase Storage media bucket (will retry on first upload):',
+        caught instanceof Error ? caught.message : caught,
+      );
+    }
+  }
 
   // 4) Persist DB-backed settings (service role bypasses RLS — no admin exists yet).
   try {

@@ -7,6 +7,8 @@ import type { Database } from "@nextblock-cms/db";
 import { encodedRedirect } from "@nextblock-cms/utils/server";
 import { DeleteObjectCommand, DeleteObjectsCommand, CopyObjectCommand, ListObjectsV2Command, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getS3Client } from "@nextblock-cms/utils/server";
+import { getStorageBackend, getStorageBucket } from "../../../lib/storage/provider";
+import { supabaseRemoveObjects } from "../../../lib/storage/supabase-storage";
 
 type Media = Database['public']['Tables']['media']['Row'];
 
@@ -85,13 +87,14 @@ export async function deleteMediaItem(mediaId: string, objectKey: string) {
         return encodedRedirect("error", "/cms/media", "Forbidden: Insufficient permissions.");
     }
 
-    const s3Client = await getS3Client();
-    const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
+    const backend = getStorageBackend();
+    const bucket = getStorageBucket();
+    const s3Client = backend === 's3' ? await getS3Client() : null;
 
-    if (!R2_BUCKET_NAME) {
-      return encodedRedirect("error", "/cms/media", "R2 Bucket not configured for deletion.");
+    if (!bucket) {
+      return encodedRedirect("error", "/cms/media", "Storage bucket not configured for deletion.");
     }
-    if (!s3Client) {
+    if (backend === 's3' && !s3Client) {
       return encodedRedirect("error", "/cms/media", "R2 client is not configured for deletion.");
     }
 
@@ -110,15 +113,18 @@ export async function deleteMediaItem(mediaId: string, objectKey: string) {
     }
 
     try {
-        const deleteCommand = new DeleteObjectsCommand({
-            Bucket: R2_BUCKET_NAME,
-            Delete: {
-                Objects: keysToDelete.map(key => ({ Key: key })),
-            },
-        });
-        await s3Client.send(deleteCommand);
+        if (backend === 'supabase') {
+            await supabaseRemoveObjects(keysToDelete);
+        } else {
+            await s3Client!.send(new DeleteObjectsCommand({
+                Bucket: bucket,
+                Delete: {
+                    Objects: keysToDelete.map(key => ({ Key: key })),
+                },
+            }));
+        }
     } catch (r2Error: unknown) {
-        console.error("Error deleting from R2:", r2Error);
+        console.error("Error deleting from storage:", r2Error);
         // Decide if you want to proceed with DB deletion if R2 deletion fails
         // It's often better to proceed and log, or handle more gracefully.
         // For now, we'll let it proceed to DB deletion but the error is logged.
@@ -153,13 +159,14 @@ export async function deleteMultipleMediaItems(items: Array<{ id: string; object
     return { error: "No items selected for deletion." };
   }
 
-  const s3Client = await getS3Client();
-  const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
+  const backend = getStorageBackend();
+  const bucket = getStorageBucket();
+  const s3Client = backend === 's3' ? await getS3Client() : null;
 
-  if (!R2_BUCKET_NAME) {
-    return { error: "R2 Bucket not configured for deletion." };
+  if (!bucket) {
+    return { error: "Storage bucket not configured for deletion." };
   }
-  if (!s3Client) {
+  if (backend === 's3' && !s3Client) {
     return { error: "R2 client is not configured for deletion." };
   }
 
@@ -191,23 +198,26 @@ export async function deleteMultipleMediaItems(items: Array<{ id: string; object
   let r2DeletionError = null;
   let dbDeletionError = null;
 
-  // Batch delete from R2
+  // Batch delete from object storage
   try {
     if (r2ObjectsToDelete.length > 0) {
-      const deleteCommand = new DeleteObjectsCommand({
-        Bucket: R2_BUCKET_NAME,
-        Delete: { Objects: r2ObjectsToDelete },
-      });
-      const output = await s3Client.send(deleteCommand);
-      if (output.Errors && output.Errors.length > 0) {
-        console.error("Errors deleting some objects from R2:", output.Errors);
-        // Collect specific errors if needed, for now a general message
-        r2DeletionError = `Some objects failed to delete from R2: ${output.Errors.map(e => e.Key).join(', ')}`;
+      if (backend === 'supabase') {
+        await supabaseRemoveObjects(allKeysToDelete);
+      } else {
+        const output = await s3Client!.send(new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: r2ObjectsToDelete },
+        }));
+        if (output.Errors && output.Errors.length > 0) {
+          console.error("Errors deleting some objects from storage:", output.Errors);
+          // Collect specific errors if needed, for now a general message
+          r2DeletionError = `Some objects failed to delete from storage: ${output.Errors.map(e => e.Key).join(', ')}`;
+        }
       }
     }
   } catch (error: unknown) {
-    console.error("Error batch deleting from R2:", error);
-    r2DeletionError = `Failed to delete objects from R2: ${error instanceof Error ? error.message : String(error)}`;
+    console.error("Error batch deleting from storage:", error);
+    r2DeletionError = `Failed to delete objects from storage: ${error instanceof Error ? error.message : String(error)}`;
   }
 
   // Batch delete from Supabase
@@ -264,8 +274,14 @@ export async function moveMultipleMediaItems(
   };
   const folder = sanitizeFolder(destinationFolder);
 
+  // Folder reorganisation uses S3 copy/list semantics that the native Supabase backend
+  // doesn't replicate yet — surface a clear message instead of a generic config error.
+  if (getStorageBackend() === 'supabase') {
+    return { error: "Moving media between folders isn't supported on Supabase Storage yet. Delete and re-upload to relocate a file." };
+  }
+
   const s3Client = await getS3Client();
-  const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
+  const R2_BUCKET_NAME = getStorageBucket();
   const R2_PUBLIC_URL_BASE = process.env.NEXT_PUBLIC_R2_BASE_URL || '';
 
   if (!R2_BUCKET_NAME) {

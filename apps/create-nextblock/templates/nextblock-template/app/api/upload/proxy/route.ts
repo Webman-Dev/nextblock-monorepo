@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@nextblock-cms/db/server';
 import { getS3Client } from '@nextblock-cms/utils/server';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
-
-const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
+import { getStorageBackend, getStorageBucket } from '../../../../lib/storage/provider';
+import { supabaseUploadObject } from '../../../../lib/storage/supabase-storage';
 
 export async function POST(request: NextRequest) {
   const supabase = createClient();
@@ -14,14 +14,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!R2_BUCKET_NAME) {
-    console.error('R2_BUCKET_NAME is not set.');
+  const backend = getStorageBackend();
+  const bucket = getStorageBucket();
+  if (!bucket) {
+    console.error('No storage bucket is configured.');
     return NextResponse.json({ error: 'Server configuration error for file uploads.' }, { status: 500 });
   }
 
   try {
-    const s3Client = await getS3Client();
-    if (!s3Client) {
+    // On the S3 path we need a configured client; the native Supabase path needs none.
+    const s3Client = backend === 's3' ? await getS3Client() : null;
+    if (backend === 's3' && !s3Client) {
       console.error('R2 client is not configured. Check your R2 environment variables.');
       return NextResponse.json({ error: 'File uploads are not configured on this server.' }, { status: 500 });
     }
@@ -58,18 +61,21 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const command = new PutObjectCommand({
-      Bucket: R2_BUCKET_NAME,
-      Key: uniqueKey,
-      Body: buffer,
-      ContentType: file.type,
-      ContentLength: file.size,
-      Metadata: {
-        'uploader-user-id': user.id,
-      },
-    });
-
-    await s3Client.send(command);
+    if (backend === 'supabase') {
+      await supabaseUploadObject(uniqueKey, buffer, file.type);
+    } else {
+      const command = new PutObjectCommand({
+        Bucket: bucket,
+        Key: uniqueKey,
+        Body: buffer,
+        ContentType: file.type,
+        ContentLength: file.size,
+        Metadata: {
+          'uploader-user-id': user.id,
+        },
+      });
+      await s3Client!.send(command);
+    }
 
     return NextResponse.json({
       objectKey: uniqueKey,

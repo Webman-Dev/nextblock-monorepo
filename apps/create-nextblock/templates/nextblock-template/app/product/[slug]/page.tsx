@@ -74,8 +74,15 @@ function resolveCategoryName(category: any, languageCode?: string | null) {
 }
 
 export async function generateStaticParams() {
-  // Unconfigured instance (pre-/setup): no DB to read product slugs from.
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  // Unconfigured instance (pre-/setup): no DB to read product slugs from. Accept every
+  // Supabase key alias the Vercel integration may inject (incl. the new publishable key).
+  const hasSupabaseEnv =
+    (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL) &&
+    (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+      process.env.SUPABASE_PUBLISHABLE_KEY);
+  if (!hasSupabaseEnv) {
     return [];
   }
 

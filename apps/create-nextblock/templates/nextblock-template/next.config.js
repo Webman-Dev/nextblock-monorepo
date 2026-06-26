@@ -96,12 +96,24 @@ const nextConfig = {
     optimizePackageImports: ['@nextblock-cms/ui', '@nextblock-cms/utils'],
   },
   env: {
-    // Bridge the Vercel Supabase integration's non-prefixed names into the public vars
-    // the app + client read, so the build inlines a value whichever copy is present.
+    // Bridge every alias the Vercel Supabase integration may inject into the public
+    // vars the app + browser client read, so the build inlines a value whichever copy
+    // is present. The Marketplace integration injects the new publishable key
+    // (NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) rather than the legacy anon key — without
+    // this bridge the client bundle would ship an empty anon key. Keep the alias order
+    // in sync with apps/nextblock/lib/setup/env-status.ts.
     NEXT_PUBLIC_SUPABASE_URL:
       process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY:
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+      process.env.SUPABASE_PUBLISHABLE_KEY,
+    // On a zero-key Supabase deploy, media is served from Supabase Storage's public
+    // object endpoint — inline that as the base URL so every resolveMediaUrl() display
+    // call site works with no manual storage config (see lib/storage/provider.ts).
+    NEXT_PUBLIC_R2_BASE_URL:
+      process.env.NEXT_PUBLIC_R2_BASE_URL || computeSupabaseMediaBaseUrl(),
   },
   images: {
     formats: ['image/avif', 'image/webp'],
@@ -150,6 +162,25 @@ const withVercelToolbar = require('@vercel/toolbar/plugins/next').withVercelTool
 module.exports = shouldEnableVercelToolbarPlugin
   ? withVercelToolbar()(nextConfig)
   : nextConfig;
+
+/**
+ * Mirror of lib/storage/provider.ts resolveMediaBaseUrl() for the native Supabase backend,
+ * in CJS so it can run at build time. Returns undefined unless this is a zero-S3-key
+ * Supabase deploy (no R2 keys, a connected Supabase project), in which case it returns
+ * Supabase Storage's public object endpoint for the media bucket.
+ * @returns {string | undefined}
+ */
+function computeSupabaseMediaBaseUrl() {
+  if (process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY) return undefined;
+  const explicit = (process.env.STORAGE_PROVIDER || '').toLowerCase();
+  if (explicit && explicit !== 'supabase') return undefined;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const hasSecret =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+  if (!url || !hasSecret) return undefined;
+  const bucket = process.env.STORAGE_BUCKET || process.env.R2_BUCKET_NAME || 'media';
+  return `${url.replace(/\/+$/, '')}/storage/v1/object/public/${bucket}`;
+}
 
 function getRemotePatterns() {
   /** @type {RemotePattern[]} */

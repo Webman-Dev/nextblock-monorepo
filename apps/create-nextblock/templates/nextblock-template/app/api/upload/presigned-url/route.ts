@@ -4,8 +4,8 @@ import { createClient } from "@nextblock-cms/db/server"; // Server client for au
 import { getS3PresignClient } from "@nextblock-cms/utils/server";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-
-const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
+import { getStorageBackend, getStorageBucket } from "../../../../lib/storage/provider";
+import { supabaseCreateSignedUpload } from "../../../../lib/storage/supabase-storage";
 
 export async function POST(request: NextRequest) {
   const supabase = createClient();
@@ -26,14 +26,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden: Insufficient permissions" }, { status: 403 });
   }
 
-  if (!R2_BUCKET_NAME) {
-    console.error("R2_BUCKET_NAME is not set.");
+  const backend = getStorageBackend();
+  const bucket = getStorageBucket();
+  if (!bucket) {
+    console.error("No storage bucket is configured.");
     return NextResponse.json({ error: "Server configuration error for file uploads." }, { status: 500 });
   }
 
   try {
-    const s3Client = await getS3PresignClient();
-    if (!s3Client) {
+    const s3Client = backend === 's3' ? await getS3PresignClient() : null;
+    if (backend === 's3' && !s3Client) {
       console.error('R2 client is not configured. Check your R2 environment variables.');
       return NextResponse.json({ error: 'File uploads are not configured on this server.' }, { status: 500 });
     }
@@ -79,8 +81,18 @@ export async function POST(request: NextRequest) {
 
     const uniqueKey = `${folder}${sanitizedBaseFilename}_${timestamp}${fileExtension ? '.' + fileExtension : ''}`;
 
+    if (backend === 'supabase') {
+      // Native Supabase Storage: hand the browser a signed upload URL to PUT to directly.
+      const { signedUrl } = await supabaseCreateSignedUpload(uniqueKey);
+      return NextResponse.json({
+        presignedUrl: signedUrl,
+        objectKey: uniqueKey,
+        method: "PUT",
+      });
+    }
+
     const command = new PutObjectCommand({
-      Bucket: R2_BUCKET_NAME,
+      Bucket: bucket,
       Key: uniqueKey,
       ContentType: contentType,
       // ACL: 'public-read', // R2 objects are private by default unless bucket is public or presigned URL for GET is used
@@ -91,7 +103,7 @@ export async function POST(request: NextRequest) {
     });
 
     const expiresIn = 300; // 5 minutes
-    const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn });
+    const presignedUrl = await getSignedUrl(s3Client!, command, { expiresIn });
 
     return NextResponse.json({
       presignedUrl,

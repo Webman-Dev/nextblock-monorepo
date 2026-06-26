@@ -38,8 +38,9 @@ async function requireOrderManager() {
 }
 
 function createAdminSupabaseClient() {
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    // Accept the Vercel Marketplace integration's new key names too.
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 
     if (!serviceRoleKey || !supabaseUrl) {
         throw new Error('Server configuration error');

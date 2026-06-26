@@ -12,20 +12,54 @@
 
 export type DeployChannel = 'docker' | 'vercel' | 'local';
 
+// --- Supabase env-var resolution (naming-tolerant) ---------------------------
+//
+// NextBlock's own vars are NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY and
+// SUPABASE_SERVICE_ROLE_KEY. But the Supabase Vercel Marketplace integration
+// (the one-click `stores` deploy flow) injects a DIFFERENT set of names:
+//   - URL:     SUPABASE_URL / NEXT_PUBLIC_SUPABASE_URL
+//   - anon:    SUPABASE_PUBLISHABLE_KEY / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+//   - service: SUPABASE_SECRET_KEY
+// (the new `sb_publishable_…` / `sb_secret_…` API keys, which supabase-js accepts
+// in place of the legacy anon / service_role JWTs). Resolving every alias here is
+// what makes auto-injected credentials work with zero manual entry. Keep the alias
+// order identical anywhere this chain is duplicated (the published `libs/db`
+// clients can't import this module, so they inline the same order).
+
+/** The Supabase project URL, under either the prefixed or non-prefixed name. */
+export function resolveSupabaseUrl(): string | undefined {
+  return (
+    process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || undefined
+  );
+}
+
+/** The anon / publishable key — the RLS-respecting public key, under any alias. */
+export function resolveSupabaseAnonKey(): string | undefined {
+  return (
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    undefined
+  );
+}
+
+/** The service-role / secret key — the RLS-bypassing admin key, under either alias. */
+export function resolveSupabaseServiceKey(): string | undefined {
+  return (
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SECRET_KEY ||
+    undefined
+  );
+}
+
 /**
  * True when the public Supabase connection vars are present — enough to create an
  * anon client and reach the database. This is the single predicate the boot path,
  * the middleware gate, and the wizard all use to decide "is this instance wired up?".
  */
 export function isSupabaseConfigured(): boolean {
-  // Accept both namings: the app's own NEXT_PUBLIC_* vars AND the non-prefixed
-  // SUPABASE_URL / SUPABASE_ANON_KEY that the Vercel Supabase integration also injects.
-  // This lets the wizard auto-skip the connection step when the integration provisioned
-  // the project, regardless of which copy of the vars is present.
-  return Boolean(
-    (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL) &&
-      (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY),
-  );
+  return Boolean(resolveSupabaseUrl() && resolveSupabaseAnonKey());
 }
 
 /**
@@ -33,7 +67,7 @@ export function isSupabaseConfigured(): boolean {
  * schema). The wizard's first-admin step and schema-apply step require this.
  */
 export function isFullyConfigured(): boolean {
-  return isSupabaseConfigured() && Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  return isSupabaseConfigured() && Boolean(resolveSupabaseServiceKey());
 }
 
 /**
@@ -47,7 +81,7 @@ export function detectChannel(): DeployChannel {
   // Docker is identified by the internal Supabase gateway URL (Kong :8000) or the MinIO
   // storage marker the docker setup writes — NOT by NEXT_PUBLIC_IS_SANDBOX, which the
   // managed cloud sandbox also sets.
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const url = resolveSupabaseUrl() ?? '';
   if (
     url.includes('localhost:8000') ||
     url.includes('127.0.0.1:8000') ||

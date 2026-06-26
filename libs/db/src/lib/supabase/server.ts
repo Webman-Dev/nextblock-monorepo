@@ -29,8 +29,10 @@ type SupabaseCookiePayload = {
 // middleware redirects unconfigured traffic to /setup, so these clients are rarely
 // exercised in that state). This mirrors getSsgSupabaseClient's existing approach.
 export const createClient = () => {
-  // Accept the Vercel Supabase integration's non-prefixed names as a fallback so a
-  // one-click deploy works whichever copy of the vars the integration injected.
+  // Accept every alias the Vercel Supabase integration may inject (the non-prefixed
+  // names AND the new `sb_publishable_…` publishable key) as fallbacks, so a one-click
+  // deploy works whichever copy of the vars the integration set. Keep this alias order
+  // in sync with apps/nextblock/lib/setup/env-status.ts (a published lib can't import it).
   const supabaseUrl =
     process.env['NEXT_PUBLIC_SUPABASE_URL'] ||
     process.env['SUPABASE_URL'] ||
@@ -38,6 +40,8 @@ export const createClient = () => {
   const supabaseAnonKey =
     process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] ||
     process.env['SUPABASE_ANON_KEY'] ||
+    process.env['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'] ||
+    process.env['SUPABASE_PUBLISHABLE_KEY'] ||
     'dummy-anon-key';
 
   return createServerClient(
@@ -114,7 +118,10 @@ export async function getActiveLanguagesServerSide(): Promise<Language[]> {
 export const getServiceRoleSupabaseClient = () => {
   const supabaseUrl =
     process.env['NEXT_PUBLIC_SUPABASE_URL'] || process.env['SUPABASE_URL'];
-  const supabaseServiceKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+  // SUPABASE_SECRET_KEY is the Marketplace integration's name for the RLS-bypassing
+  // key (the new `sb_secret_…` format); accept it as a fallback to SUPABASE_SERVICE_ROLE_KEY.
+  const supabaseServiceKey =
+    process.env['SUPABASE_SERVICE_ROLE_KEY'] || process.env['SUPABASE_SECRET_KEY'];
 
   if (!supabaseUrl || !supabaseServiceKey) {
     throw new Error('Missing Supabase Service Role environment variables');

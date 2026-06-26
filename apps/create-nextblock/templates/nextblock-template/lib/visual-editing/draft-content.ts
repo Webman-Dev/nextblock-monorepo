@@ -372,7 +372,7 @@ export function updateDraftBlockContent(
 }
 
 export function createVerificationClient() {
-  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY) {
     return getServiceRoleSupabaseClient();
   }
 

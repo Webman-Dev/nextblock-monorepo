@@ -3,6 +3,11 @@ import { unstable_cache } from 'next/cache';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 import type { Database } from '@nextblock-cms/db';
 import {
+  resolveSupabaseAnonKey,
+  resolveSupabaseServiceKey,
+  resolveSupabaseUrl,
+} from '../../lib/setup/env-status';
+import {
   DEFAULT_SITE_TITLE,
   DEFAULT_SITE_DESCRIPTION,
   DEFAULT_SITE_KEYWORDS,
@@ -28,11 +33,9 @@ export function createStaticSupabaseClient() {
   // (getSiteSettings + the getCached* helpers) already swallow failures and use
   // fallbacks, and loadLayoutData short-circuits before reaching here when there is
   // no Supabase env at all.
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supabase.co';
+  const supabaseUrl = resolveSupabaseUrl() || 'https://dummy.supabase.co';
   const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    'dummy-anon-key';
+    resolveSupabaseServiceKey() || resolveSupabaseAnonKey() || 'dummy-anon-key';
 
   return createSupabaseJsClient<Database>(supabaseUrl, supabaseKey, {
     auth: {

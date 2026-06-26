@@ -102,9 +102,16 @@ export default async function SetupPage() {
       supabaseEnvDetected={{
         NEXT_PUBLIC_SUPABASE_URL: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
         SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-        SUPABASE_ANON_KEY: Boolean(process.env.SUPABASE_ANON_KEY),
-        SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: Boolean(
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+            process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+        ),
+        SUPABASE_ANON_KEY: Boolean(
+          process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY,
+        ),
+        SUPABASE_SERVICE_ROLE_KEY: Boolean(
+          process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
+        ),
         POSTGRES_URL: Boolean(process.env.POSTGRES_URL),
       }}
     />

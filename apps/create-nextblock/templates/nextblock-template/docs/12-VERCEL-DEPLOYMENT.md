@@ -13,31 +13,49 @@ The badge links to `https://vercel.com/new/clone` with these query parameters:
 | :--- | :--- |
 | `repository-url` | The NextBlock repo to clone into the user's Git provider. |
 | `project-name` / `repository-name` | Pre-fill the new Vercel project and Git repo names. |
-| `integration-ids=oac_VqOgBHqhEoFTPzGkPd7L0iH6` | Vercel's **Supabase integration**. During import you're prompted to **create a Supabase database** (name + region); Vercel then provisions it and injects the env vars automatically. |
+| `stores=[{"type":"integration","integrationSlug":"supabase","productSlug":"supabase"}]` | Vercel's **native Supabase Marketplace integration**. During import you're prompted to **create a Supabase database** (name + region); Vercel **provisions it, connects it to the project, and injects the env vars before the first build**. |
 
 There is deliberately **no `env=` parameter** — the deploy prompts for **zero** values you
 have to type (see "No environment variables required" below). The only interaction is the
 Supabase integration's "create database" step, which can't be skipped because provisioning
 a Postgres DB requires choosing a region/plan.
 
+> **Why `stores`, not `integration-ids`?** The legacy `integration-ids=oac_…` parameter
+> triggers an OAuth integration that *creates* a Supabase project but leaves it
+> **disconnected** — it injects **no** environment variables into the Vercel project, so
+> the app boots unconfigured and you have to wire the keys up by hand. The modern `stores`
+> parameter is the native Marketplace path that actually **connects the store and injects
+> credentials before the build**. ([Vercel Deploy Button docs](https://vercel.com/docs/deploy-button/source))
+
 ## Connect the database (Supabase integration)
 
-The `integration-ids` parameter makes Vercel prompt you to create a Supabase database
-during import. Pick a **name** and **region**, and Vercel **automatically injects** the
-keys into the project — you never copy a value:
+The `stores` parameter makes Vercel prompt you to create a Supabase database during import.
+Pick a **name** and **region**, and Vercel **automatically injects** the integration's
+environment variables into the project — you never copy a value. The native integration
+injects the **new-style** Supabase key names, e.g.:
 
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
-`POSTGRES_URL`, and their non-prefixed twins (`SUPABASE_URL`, `SUPABASE_ANON_KEY`). The app
-**accepts either naming** (`NEXT_PUBLIC_SUPABASE_URL` *or* `SUPABASE_URL`), so the wizard's
-connection step auto-skips regardless of which copy the integration set.
+`NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` /
+`SUPABASE_PUBLISHABLE_KEY` (the anon-equivalent), `SUPABASE_SECRET_KEY` (the
+service-role-equivalent), and `POSTGRES_URL` (+ the other `POSTGRES_*` parts).
 
-> If the database step still appears: the integration's env vars were added **after** the
-> first build, so **Redeploy** once (Vercel binds env vars at deploy time). After that the
-> instance boots **Profile A (pre-configured)**.
+NextBlock reads **all** of these aliases (see `apps/nextblock/lib/setup/env-status.ts`):
+it accepts `NEXT_PUBLIC_SUPABASE_URL` *or* `SUPABASE_URL`; anon *or* `PUBLISHABLE_KEY`;
+`SUPABASE_SERVICE_ROLE_KEY` *or* `SUPABASE_SECRET_KEY`. So the wizard's connection step
+auto-skips no matter which copy the integration set, and the browser client gets the
+publishable key bridged in as the anon key at build time.
+
+> If the database step still appears after a deploy that connected the store, the env vars
+> landed **after** that build — **Redeploy** once (Vercel binds env vars at deploy time).
+> With the `stores` flow they're injected *before* the first build, so this is rarely needed.
 
 On that deploy the wizard skips the database-connection step, **auto-applies the schema**
-from the injected `POSTGRES_URL` (the migrations are embedded in the build — see
-`lib/setup/migrations-bundle.ts`), and goes straight to creating the first administrator.
+(the migrations are embedded in the build — see `lib/setup/migrations-bundle.ts` — and run
+via the injected `POSTGRES_URL`), uses the connected Supabase project for media storage,
+and goes straight to creating the first administrator.
+
+> Until the schema is applied and the first admin exists, **every route redirects to
+> `/setup`** (the homepage does *not* 404). The middleware treats a "schema not applied yet"
+> database error as *unprovisioned* and funnels traffic to the wizard.
 
 ## Build configuration (Nx monorepo)
 
@@ -94,19 +112,27 @@ resolves everything in-app, and the button prompts for nothing:
 ## What the wizard does on Vercel
 
 1. **Database** — already connected (integration-injected). The wizard verifies a
-   first admin doesn't exist yet, otherwise it redirects to `/cms/dashboard`.
-2. **Schema** — apply the migrations to the managed Supabase project. The Supabase
-   integration creates the project but does **not** run NextBlock's migrations, so run
-   them once after the first deploy (locally against the project, or via the Supabase
-   dashboard SQL editor) — see [docs/04](./04-DATABASE-AND-AUTH.md) and
-   [docs/05](./05-DEVELOPER-GUIDE.md).
-3. **Storage** — pre-filled for **Supabase Storage** (S3-compatible). The wizard's
-   storage step shows the endpoint derived from your Supabase URL
-   (`<project>/storage/v1/s3`). Create an S3 access key in the Supabase dashboard
-   (Storage → S3 connection) and set `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` in
-   your Vercel project environment. (Cloudflare R2 remains the default for non-Vercel
-   installs — it has a more generous free storage tier; only the one-click Vercel
-   path defaults to Supabase Storage.)
+   first admin doesn't exist yet, otherwise it redirects to `/cms/dashboard`. The
+   connection step is **auto-skipped**.
+2. **Schema** — applied **automatically**. The Supabase integration creates the project
+   but does **not** run NextBlock's migrations, so the wizard applies them itself on the
+   final step: it runs the build-embedded migration bundle over the injected
+   `POSTGRES_URL` (no CLI, no manual SQL). Idempotent — a re-run is a no-op. See
+   [docs/04](./04-DATABASE-AND-AUTH.md) and [docs/05](./05-DEVELOPER-GUIDE.md).
+3. **Storage** — **skipped on Vercel; nothing to configure.** Media uses **native
+   Supabase Storage** through the already-connected project: the injected
+   `SUPABASE_SECRET_KEY` authenticates uploads/downloads/deletes via the Supabase client
+   (no S3 access keys required), a public `media` bucket is auto-created, and images are
+   served from `<project>/storage/v1/object/public/media/…`. The storage backend is
+   selected automatically (`apps/nextblock/lib/storage/provider.ts`): if S3/R2 keys are
+   present it uses them; otherwise it falls back to native Supabase Storage. (Cloudflare
+   R2 remains the default for non-Vercel installs — it has a more generous free storage
+   tier; set the `R2_*` env vars to use it on Vercel instead.)
+
+   > **Upload size:** the CMS media uploader proxies the file through a serverless
+   > function (`/api/upload/proxy`), which is subject to Vercel's ~4.5 MB request-body
+   > limit — larger single images fail on the Hobby/Pro serverless runtime regardless of
+   > storage backend. This is a platform constraint, not a NextBlock one.
 4. **Email / Bot protection / Sign-ups** — optional steps; bot-protection and the
    sign-up policy persist to the database and work immediately. SMTP, if used, is set
    as Vercel environment variables.

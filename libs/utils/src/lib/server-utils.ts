@@ -51,8 +51,13 @@ export async function getEmailServerConfig() {
   };
 }
 export async function hasEnvVars() {
+  // Accept every alias the Vercel Supabase integration may inject (non-prefixed names
+  // and the new publishable key) so the env-var warning isn't shown on a configured deploy.
   return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL) &&
+      (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+        process.env.SUPABASE_ANON_KEY ||
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+        process.env.SUPABASE_PUBLISHABLE_KEY),
   );
 }

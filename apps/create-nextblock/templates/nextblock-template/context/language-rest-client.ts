@@ -1,10 +1,11 @@
 import type { Database } from '@nextblock-cms/db';
+import { resolveSupabaseAnonKey, resolveSupabaseUrl } from '../lib/setup/env-status';
 
 type Language = Database['public']['Tables']['languages']['Row'];
 
 export async function fetchActiveLanguagesFromRest(): Promise<Language[]> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = resolveSupabaseUrl();
+  const supabaseAnonKey = resolveSupabaseAnonKey();
 
   if (!supabaseUrl || !supabaseAnonKey) {
     return [];

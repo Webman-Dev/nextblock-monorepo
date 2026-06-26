@@ -8,10 +8,11 @@ import {
   stripe,
   syncStripeOrderFromSession,
 } from '@nextblock-cms/ecommerce/server';
+import { resolveSupabaseServiceKey, resolveSupabaseUrl } from '../../../lib/setup/env-status';
 
 function getServiceRoleSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = resolveSupabaseUrl();
+  const serviceRoleKey = resolveSupabaseServiceKey();
 
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error('Missing Supabase Service Role environment variables');

@@ -1,8 +1,5 @@
 // app/article/[slug]/page.tsx
 import React from 'react';
-// Remove or alias the problematic import if only used by other functions:
-// import { createClient } from "@nextblock-cms/db/server";
-import { createClient as createSupabaseJsClient } from '@supabase/supabase-js'; // Import base client
 import { notFound } from "next/navigation";
 import type { Metadata } from 'next';
 import PostClientContent from "./PostClientContent";
@@ -58,16 +55,10 @@ const resolveLanguageCode = (languagesField: PostTranslation["languages"]): stri
 };
 
 export async function generateStaticParams(): Promise<ResolvedPostParams[]> {
-  // Use a new Supabase client instance that doesn't rely on cookies
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('Missing Supabase environment variables in generateStaticParams (Posts)');
-    return [];
-  }
-  
-  const supabase = createSupabaseJsClient(supabaseUrl, supabaseAnonKey);
+  // Cookie-free SSG client. getSsgSupabaseClient() resolves the Supabase URL/anon key
+  // under every alias the Vercel integration may inject (incl. the new publishable key)
+  // and degrades to a dummy client when unconfigured (the query below then returns []).
+  const supabase = getSsgSupabaseClient();
 
   const { data: posts, error } = await supabase
     .from("posts")

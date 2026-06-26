@@ -126,9 +126,14 @@ export default function SetupWizard({
     if (!configured) {
       list.push('connection');
     }
-    list.push('storage', 'email', 'bot', 'signups', 'admin');
+    // One-click Vercel deploys use the connected Supabase project for media storage with
+    // zero keys (native Supabase Storage), so there's nothing to configure — skip the step.
+    if (channel !== 'vercel') {
+      list.push('storage');
+    }
+    list.push('email', 'bot', 'signups', 'admin');
     return list;
-  }, [configured]);
+  }, [configured, channel]);
 
   const [stepIndex, setStepIndex] = useState(0);
   const current = steps[stepIndex];

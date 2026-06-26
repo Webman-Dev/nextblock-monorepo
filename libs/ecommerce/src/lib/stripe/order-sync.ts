@@ -20,8 +20,9 @@ const STRIPE_CHECKOUT_SESSION_TAX_EXPANDS = ['total_details.breakdown'] as const
 const STRIPE_CHECKOUT_LINE_ITEM_TAX_EXPANDS = ['data.taxes.rate'] as const;
 
 function getServiceRoleSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Accept the Vercel Marketplace integration's new key names too.
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
 
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error('Missing Supabase Service Role environment variables');

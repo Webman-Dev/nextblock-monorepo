@@ -15,6 +15,7 @@ import {
 } from './lib/seo';
 import { getSiteSettings } from './lib/site-settings';
 import { getRequestOrigin } from '../lib/visual-editing/edit-info';
+import { isSupabaseConfigured } from '../lib/setup/env-status';
 
 const DEFAULT_LOCALE = 'en';
 const LANGUAGE_COOKIE_KEY = 'NEXT_USER_LOCALE';
@@ -65,7 +66,7 @@ async function getPreferredLocale() {
 export async function generateMetadata(): Promise<Metadata> {
   // Unconfigured instance (pre-/setup): skip all DB work so metadata generation
   // can't crash the boot. The proxy redirects unconfigured traffic to /setup anyway.
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  if (!isSupabaseConfigured()) {
     return { title: 'NextBlock' };
   }
 

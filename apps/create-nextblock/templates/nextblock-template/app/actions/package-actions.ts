@@ -4,6 +4,11 @@ import { createClient } from '@supabase/supabase-js';
 import { NEXTBLOCK_PACKAGES } from '@nextblock-cms/utils';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
+import {
+  resolveSupabaseAnonKey,
+  resolveSupabaseServiceKey,
+  resolveSupabaseUrl,
+} from '../../lib/setup/env-status';
 
 // Freemius handles both Sandbox and Production keys on the same API domain.
 // The key itself determines the environment.
@@ -11,15 +16,15 @@ const FM_API_URL = 'https://api.freemius.com/v1';
 
 // Helper to get service role client
 const getServiceRoleClient = () => {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = resolveSupabaseUrl();
+    const supabaseServiceKey = resolveSupabaseServiceKey();
 
     if (!supabaseUrl || !supabaseServiceKey) {
         console.error('Missing Supabase credentials');
         throw new Error('Missing Supabase credentials (Service Key required for activation).');
     }
 
-    if (supabaseServiceKey === process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    if (supabaseServiceKey === resolveSupabaseAnonKey()) {
         console.warn('CRITICAL WARNING: SUPABASE_SERVICE_ROLE_KEY matches NEXT_PUBLIC_SUPABASE_ANON_KEY. This will likely cause Permission Denied errors as RLS cannot be bypassed.');
     }
 

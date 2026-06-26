@@ -12,8 +12,8 @@ export const createCheckoutSession = async (
   currencyCode?: string
 ): Promise<{ url: string | null; error?: string }> => {
   // Use Service Role Key to bypass RLS
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
 
   if (!supabaseUrl || !supabaseServiceKey) {
       console.error('Missing Supabase credentials for checkout (Service Key required).');

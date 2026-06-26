@@ -5,6 +5,15 @@ import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import { Readable } from 'stream';
 import { getPlaiceholder } from 'plaiceholder';
+import {
+  getStorageBackend,
+  getStorageBucket,
+  resolveMediaBaseUrl,
+} from '../../../lib/storage/provider';
+import {
+  supabaseDownloadObject,
+  supabaseUploadObject,
+} from '../../../lib/storage/supabase-storage';
 
 // Helper to convert stream to buffer
 async function streamToBuffer(stream: Readable): Promise<Buffer> {
@@ -15,12 +24,6 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
     stream.on('end', () => resolve(Buffer.concat(chunks)));
   });
 }
-
-const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
-// Construct the public URL base. Assumes your R2 bucket is set up for public access.
-// Example: https://<your-bucket>.<account-id>.r2.cloudflarestorage.com
-// Or if you use a custom domain: https://your.custom.domain
-const R2_PUBLIC_URL_BASE = process.env.NEXT_PUBLIC_R2_BASE_URL;
 
 interface ProcessedImageVariant {
   objectKey: string;
@@ -44,21 +47,44 @@ const TARGET_FORMAT = 'avif';
 const TARGET_MIME_TYPE = 'image/avif';
 
 export async function POST(request: NextRequest) {
-  if (!R2_BUCKET_NAME) {
-    return NextResponse.json({ error: 'R2 bucket name is not configured.' }, { status: 500 });
+  const backend = getStorageBackend();
+  const bucket = getStorageBucket();
+  const publicUrlBase = resolveMediaBaseUrl();
+
+  if (!bucket) {
+    return NextResponse.json({ error: 'Storage bucket is not configured.' }, { status: 500 });
   }
-  if (!process.env.R2_S3_ENDPOINT && !process.env.R2_ACCOUNT_ID) {
-    console.error("R2_S3_ENDPOINT or R2_ACCOUNT_ID must be set to construct R2_PUBLIC_URL_BASE");
-    return NextResponse.json({ error: 'Server configuration error for R2 public URL.' }, { status: 500 });
+  // The native Supabase path derives the public base from the project URL — if that's
+  // somehow empty (e.g. STORAGE_PROVIDER=supabase forced without a URL), fail loudly
+  // rather than minting malformed `/key` URLs that won't resolve to the bucket.
+  if (backend === 'supabase' && !publicUrlBase) {
+    return NextResponse.json({ error: 'Supabase URL is required for image processing on the Supabase backend.' }, { status: 500 });
+  }
+  // The S3 path needs an endpoint to construct the public URL base; the native Supabase
+  // path derives it from the project URL, so this check only applies to S3/R2.
+  if (backend === 's3' && !process.env.R2_S3_ENDPOINT && !process.env.R2_ACCOUNT_ID) {
+    console.error('R2_S3_ENDPOINT or R2_ACCOUNT_ID must be set to construct the public URL base');
+    return NextResponse.json({ error: 'Server configuration error for storage public URL.' }, { status: 500 });
   }
 
 
   try {
-    const s3Client = await getS3Client();
-    if (!s3Client) {
+    const s3Client = backend === 's3' ? await getS3Client() : null;
+    if (backend === 's3' && !s3Client) {
       console.error('R2 client is not configured. Check your R2 environment variables.');
       return NextResponse.json({ error: 'Image processing is not configured on this server.' }, { status: 500 });
     }
+
+    // Backend-agnostic object writer used for every processed variant below.
+    const putObject = async (key: string, body: Buffer, contentType: string) => {
+      if (backend === 'supabase') {
+        await supabaseUploadObject(key, body, contentType);
+      } else {
+        await s3Client!.send(
+          new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }),
+        );
+      }
+    };
 
     const { objectKey: originalObjectKey, contentType: originalContentType } = await request.json();
 
@@ -70,25 +96,25 @@ export async function POST(request: NextRequest) {
       // For now, we only process images. Could be extended for other file types if needed.
       return NextResponse.json({
         message: 'File is not an image. Skipping processing.',
-        originalImage: { objectKey: originalObjectKey, fileType: originalContentType, url: `${R2_PUBLIC_URL_BASE}/${originalObjectKey}` },
+        originalImage: { objectKey: originalObjectKey, fileType: originalContentType, url: `${publicUrlBase}/${originalObjectKey}` },
         processedVariants: [],
         blurDataURL: null // Or an empty string, depending on how you want to handle non-images
       }, { status: 200 });
     }
 
-    // 1. Fetch the original image from R2
-    const getObjectParams = {
-      Bucket: R2_BUCKET_NAME,
-      Key: originalObjectKey,
-    };
-    const getObjectCommand = new GetObjectCommand(getObjectParams);
-    const getObjectResponse = await s3Client.send(getObjectCommand);
-
-    if (!getObjectResponse.Body) {
-      throw new Error('Failed to retrieve image from R2: Empty body.');
+    // 1. Fetch the original image from storage
+    let imageBuffer: Buffer;
+    if (backend === 'supabase') {
+      imageBuffer = await supabaseDownloadObject(originalObjectKey);
+    } else {
+      const getObjectResponse = await s3Client!.send(
+        new GetObjectCommand({ Bucket: bucket, Key: originalObjectKey }),
+      );
+      if (!getObjectResponse.Body) {
+        throw new Error('Failed to retrieve image from storage: Empty body.');
+      }
+      imageBuffer = await streamToBuffer(getObjectResponse.Body as Readable);
     }
-
-    let imageBuffer = await streamToBuffer(getObjectResponse.Body as Readable);
     let sharpInstance = sharp(imageBuffer);
     let originalMetadata = await sharpInstance.metadata();
 
@@ -132,15 +158,9 @@ export async function POST(request: NextRequest) {
       // already .avif — strip it so keys read `..._large.avif`, not `..._large_avif.avif`.
       const fileSuffix = size.label.replace(/_avif$/, '');
       const newObjectKey = `${baseName}_${fileSuffix}.${TARGET_FORMAT}`;
-      const newPublicUrl = `${R2_PUBLIC_URL_BASE}/${newObjectKey}`;
+      const newPublicUrl = `${publicUrlBase}/${newObjectKey}`;
 
-      const putObjectParams = {
-        Bucket: R2_BUCKET_NAME,
-        Key: newObjectKey,
-        Body: processedImageBuffer,
-        ContentType: TARGET_MIME_TYPE,
-      };
-      await s3Client.send(new PutObjectCommand(putObjectParams));
+      await putObject(newObjectKey, processedImageBuffer, TARGET_MIME_TYPE);
 
       const newMetadata = await sharp(processedImageBuffer).metadata();
       processedVariants.push({
@@ -163,14 +183,9 @@ export async function POST(request: NextRequest) {
             .toBuffer();
         
         const originalAvifObjectKey = `${baseName}_original.${TARGET_FORMAT}`;
-        const originalAvifPublicUrl = `${R2_PUBLIC_URL_BASE}/${originalAvifObjectKey}`;
+        const originalAvifPublicUrl = `${publicUrlBase}/${originalAvifObjectKey}`;
 
-        await s3Client.send(new PutObjectCommand({
-            Bucket: R2_BUCKET_NAME,
-            Key: originalAvifObjectKey,
-            Body: originalAvifBuffer,
-            ContentType: TARGET_MIME_TYPE,
-        }));
+        await putObject(originalAvifObjectKey, originalAvifBuffer, TARGET_MIME_TYPE);
         const originalAvifMetadata = await sharp(originalAvifBuffer).metadata();
         processedVariants.push({
             objectKey: originalAvifObjectKey,
@@ -188,7 +203,7 @@ export async function POST(request: NextRequest) {
     // The client already has some of this, but good to have a consistent structure.
     const originalImageDetails: ProcessedImageVariant = {
         objectKey: originalObjectKey,
-        url: `${R2_PUBLIC_URL_BASE}/${originalObjectKey}`,
+        url: `${publicUrlBase}/${originalObjectKey}`,
         width: originalMetadata.width || 0,
         height: originalMetadata.height || 0,
         fileType: originalContentType,

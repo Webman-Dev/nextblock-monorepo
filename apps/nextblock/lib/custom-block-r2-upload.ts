@@ -5,6 +5,8 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getS3PresignClient } from '@nextblock-cms/utils/server';
 
 import { resolveMediaUrl } from './media/resolveMediaUrl';
+import { getStorageBackend, getStorageBucket } from './storage/provider';
+import { supabaseCreateSignedUpload } from './storage/supabase-storage';
 import {
   buildR2UploadObjectKey,
   R2_PRESIGNED_UPLOAD_EXPIRES_IN_SECONDS,
@@ -30,9 +32,29 @@ export async function createR2PresignedUpload(
   payload: ValidR2PresignedUploadPayload,
   options: { now?: Date; nonce?: string; userId: string }
 ): Promise<R2PresignedUploadResult> {
-  const bucketName = process.env.R2_BUCKET_NAME;
+  const backend = getStorageBackend();
+  const bucketName = getStorageBucket();
   if (!bucketName) {
     throw new R2PresignedUploadError('File uploads are not configured on this server.', 500);
+  }
+
+  const objectKey = buildR2UploadObjectKey(payload, options);
+  const publicUrl = resolveMediaUrl(objectKey) ?? `/${objectKey}`;
+
+  if (backend === 'supabase') {
+    // Native Supabase Storage: a signed upload URL the browser PUTs to directly.
+    const { signedUrl } = await supabaseCreateSignedUpload(objectKey);
+    return {
+      expiresIn: R2_PRESIGNED_UPLOAD_EXPIRES_IN_SECONDS,
+      headers: {
+        'Content-Type': payload.contentType,
+      },
+      method: 'PUT',
+      objectKey,
+      presignedUrl: signedUrl,
+      publicUrl,
+      uploadUrl: signedUrl,
+    };
   }
 
   const s3Client = await getS3PresignClient();
@@ -40,7 +62,6 @@ export async function createR2PresignedUpload(
     throw new R2PresignedUploadError('File uploads are not configured on this server.', 500);
   }
 
-  const objectKey = buildR2UploadObjectKey(payload, options);
   const command = new PutObjectCommand({
     Bucket: bucketName,
     ContentType: payload.contentType,
@@ -52,7 +73,6 @@ export async function createR2PresignedUpload(
   const presignedUrl = await getSignedUrl(s3Client, command, {
     expiresIn: R2_PRESIGNED_UPLOAD_EXPIRES_IN_SECONDS,
   });
-  const publicUrl = resolveMediaUrl(objectKey) ?? `/${objectKey}`;
 
   return {
     expiresIn: R2_PRESIGNED_UPLOAD_EXPIRES_IN_SECONDS,

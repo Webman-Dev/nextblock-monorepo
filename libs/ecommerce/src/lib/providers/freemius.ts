@@ -257,8 +257,9 @@ export class FreemiusProvider implements PaymentProvider {
       errorStatus?: number;
       customProps?: any;
     }> {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      // Accept the Vercel Marketplace integration's new key names too.
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
   
       if (!supabaseUrl || !supabaseServiceKey) {
         return { error: 'Missing Supabase credentials for checkout (Service Key required).', url: null };
@@ -654,8 +655,9 @@ export async function syncFreemiusProductsToSupabase() {
     const devId = readFreemiusEnvValue('FREEMIUS_DEVELOPER_ID');
     const publicKey = readFreemiusEnvValue('FREEMIUS_PUBLIC_KEY');
     const secretKey = readFreemiusEnvValue('FREEMIUS_SECRET_KEY');
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // Accept the Vercel Marketplace integration's new key names too.
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
 
     if (!devId || !publicKey || !secretKey || !supabaseUrl || !supabaseServiceKey) {
         throw new Error('Missing necessary environment variables for Freemius Sync.');
@@ -713,8 +715,9 @@ export async function syncSingleFreemiusProduct(productId: string) {
     const devId = readFreemiusEnvValue('FREEMIUS_DEVELOPER_ID');
     const publicKey = readFreemiusEnvValue('FREEMIUS_PUBLIC_KEY');
     const secretKey = readFreemiusEnvValue('FREEMIUS_SECRET_KEY');
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // Accept the Vercel Marketplace integration's new key names too.
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
 
     if (!devId || !publicKey || !secretKey || !supabaseUrl || !supabaseServiceKey) {
         throw new Error('Missing environment variables for Freemius Sync.');

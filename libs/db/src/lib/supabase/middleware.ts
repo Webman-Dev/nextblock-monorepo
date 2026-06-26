@@ -12,9 +12,16 @@ export const updateSession = async (request: NextRequest) => {
       },
     });
 
-    const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
-    const supabaseAnonKey = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
-    
+    // Accept every alias the Vercel Supabase integration may inject (non-prefixed names
+    // and the new publishable key). Keep this order in sync with env-status.ts.
+    const supabaseUrl =
+      process.env['NEXT_PUBLIC_SUPABASE_URL'] || process.env['SUPABASE_URL'];
+    const supabaseAnonKey =
+      process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] ||
+      process.env['SUPABASE_ANON_KEY'] ||
+      process.env['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'] ||
+      process.env['SUPABASE_PUBLISHABLE_KEY'];
+
     if (!supabaseUrl || !supabaseAnonKey) {
       throw new Error('Missing Supabase environment variables');
     }

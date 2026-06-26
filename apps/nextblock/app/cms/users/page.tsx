@@ -37,9 +37,9 @@ import { DeleteUserButtonClient } from "./components/DeleteUserButton";
 async function getUsersData(currentAdminId: string): Promise<UserWithProfile[]> {
   // This needs to use a service role client to list all users from auth.users
   const { createClient: createServiceRoleClient } = await import('@supabase/supabase-js');
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error('Missing required environment variables');
   }

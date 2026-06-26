@@ -21,7 +21,10 @@ export function generateNumericCode(digits = 6): string {
 function getSecret(): string {
   // Dedicated secret if provided, otherwise fall back to the service-role key
   // (server-only, never shipped to the client).
-  const secret = process.env.NB_2FA_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const secret =
+    process.env.NB_2FA_SECRET ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SECRET_KEY;
   if (!secret) {
     throw new Error('Missing NB_2FA_SECRET / SUPABASE_SERVICE_ROLE_KEY for 2FA signing.');
   }

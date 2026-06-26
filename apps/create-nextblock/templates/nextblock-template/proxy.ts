@@ -2,6 +2,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@nextblock-cms/db';
+import { resolveSupabaseAnonKey, resolveSupabaseUrl } from './lib/setup/env-status';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type UserRole = Database['public']['Enums']['user_role'];
@@ -55,7 +56,12 @@ function isSetupAllowlisted(pathname: string): boolean {
     pathname.startsWith('/api/setup') ||
     pathname.startsWith('/auth/') ||
     pathname.startsWith('/_next/') ||
-    pathname.startsWith('/favicon')
+    pathname.startsWith('/favicon') ||
+    // Crawler-facing static routes: keep them reachable while unprovisioned so a fresh
+    // deploy never redirects robots.txt / the sitemap to /setup (which would let crawlers
+    // treat the wizard as the canonical entry point).
+    pathname === '/robots.txt' ||
+    pathname.startsWith('/sitemap')
   );
 }
 
@@ -64,11 +70,31 @@ function isSetupAllowlisted(pathname: string): boolean {
 let provisionedAdminCache: { value: boolean; expires: number } | null = null;
 
 /**
+ * A Supabase/PostgREST error that means the table itself is absent — i.e. the schema
+ * was never applied. This is NOT a transient hiccup: it's the signature of a fresh,
+ * unprovisioned deploy (env injected, migrations not yet run), so the caller treats it
+ * as "no admin" and funnels traffic to /setup instead of failing open.
+ * 42P01 = undefined_table (Postgres); PGRST205 = PostgREST "table not in schema cache".
+ */
+function isSchemaMissingError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const code = error.code ?? '';
+  if (code === '42P01' || code === 'PGRST205') return true;
+  const message = (error.message ?? '').toLowerCase();
+  return (
+    message.includes('does not exist') ||
+    message.includes('schema cache') ||
+    message.includes('could not find the table')
+  );
+}
+
+/**
  * Returns true once the system has a first admin (site_settings.is_admin_created).
  * `is_admin_created` is a non-sensitive, anon-readable key, so the request-scoped
  * anon client can read it. Cached aggressively once true (it never reverts) and
  * briefly while false (so the gate releases promptly after the wizard runs).
- * Fail-open: any read error returns true so a hiccup never traps the whole site.
+ * A missing-schema error returns false (unprovisioned → /setup); any OTHER read error
+ * fails open (returns true) so a transient hiccup never traps the whole site.
  */
 async function hasProvisionedAdmin(supabase: SupabaseClient): Promise<boolean> {
   const now = Date.now();
@@ -84,6 +110,12 @@ async function hasProvisionedAdmin(supabase: SupabaseClient): Promise<boolean> {
       .maybeSingle();
 
     if (error) {
+      // Schema not applied yet → definitively unprovisioned: send traffic to /setup
+      // (otherwise the homepage 404s on a fresh deploy because no content exists).
+      if (isSchemaMissingError(error)) {
+        provisionedAdminCache = { value: false, expires: now + 3_000 };
+        return false;
+      }
       return true;
     }
 
@@ -307,11 +339,11 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string | u
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  // Accept the Vercel Supabase integration's non-prefixed names too, so the gate doesn't
-  // bounce a configured deploy to /setup when only SUPABASE_URL/SUPABASE_ANON_KEY are set.
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-  const supabaseAnonKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+  // Resolve Supabase creds under every alias the Vercel integration may inject (prefixed,
+  // non-prefixed, and the new publishable key) so the gate doesn't bounce a configured
+  // deploy to /setup just because the credentials arrived under a different name.
+  const supabaseUrl = resolveSupabaseUrl();
+  const supabaseAnonKey = resolveSupabaseAnonKey();
   const configured = Boolean(supabaseUrl && supabaseAnonKey);
   process.env.NEXTBLOCK_UNCONFIGURED = configured ? 'false' : 'true';
 

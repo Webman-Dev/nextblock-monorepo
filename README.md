@@ -73,14 +73,16 @@ The **First-Boot Setup Wizard** at `/setup` walks you through connecting Supabas
 
 ### ☁️ Deploy to the cloud in one click
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&integration-ids=oac_VqOgBHqhEoFTPzGkPd7L0iH6)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D)
 
-During import, Vercel's **Supabase integration** prompts you to create a Supabase
-database (name + region) and **auto-injects** its keys — you never copy a value, and
-there are **no environment variables to fill in** (the site URL defaults to your
-`*.vercel.app` URL and the app secrets are derived automatically). The app then boots
-with the database connected: the wizard auto-skips the connection step, applies the
-schema for you, and leaves just "create your admin." Full walkthrough:
+During import, Vercel's native **Supabase Marketplace integration** (the `stores`
+button parameter) prompts you to create a Supabase database (name + region), then
+**provisions it, connects it to the project, and injects its keys before the first
+build** — you never copy a value, and there are **no environment variables to fill in**
+(the site URL defaults to your `*.vercel.app` URL and the app secrets are derived
+automatically). The app boots with the database already connected: the wizard
+auto-skips the connection step, applies the schema for you, uses the connected Supabase
+project for media storage, and leaves just "create your admin." Full walkthrough:
 [docs/12-VERCEL-DEPLOYMENT.md](./docs/12-VERCEL-DEPLOYMENT.md).
 
 > **Want a fully local, zero-config sandbox?** Use **Local Self-Hosted Docker Mode** — one command spins up the entire stack (Supabase engines + S3 storage + the app) on your own machine, with **no cloud accounts**. The app boots straight into the `/setup` wizard with MinIO storage pre-filled. See [docs/11-SELF-HOSTED-DOCKER.md](./docs/11-SELF-HOSTED-DOCKER.md).
