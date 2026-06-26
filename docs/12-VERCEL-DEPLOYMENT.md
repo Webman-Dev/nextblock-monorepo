@@ -13,31 +13,31 @@ The badge links to `https://vercel.com/new/clone` with these query parameters:
 | :--- | :--- |
 | `repository-url` | The NextBlock repo to clone into the user's Git provider. |
 | `project-name` / `repository-name` | Pre-fill the new Vercel project and Git repo names. |
+| `integration-ids=oac_VqOgBHqhEoFTPzGkPd7L0iH6` | Vercel's **Supabase integration**. During import you're prompted to **create a Supabase database** (name + region); Vercel then provisions it and injects the env vars automatically. |
 
-The button deliberately carries **no `env=` and no integration parameter** — it just
-clones and builds. (An earlier version used `integration-ids=oac_…`; that is Vercel's
-**legacy** OAuth-integration trigger and does **not** provision the Marketplace Supabase
-database, so it silently left the app unconfigured. Supabase is now a Vercel **Marketplace
-(native) integration**, connected as described below.)
+There is deliberately **no `env=` parameter** — the deploy prompts for **zero** values you
+have to type (see "No environment variables required" below). The only interaction is the
+Supabase integration's "create database" step, which can't be skipped because provisioning
+a Postgres DB requires choosing a region/plan.
 
-## Connect the database (Supabase Marketplace)
+## Connect the database (Supabase integration)
 
-Provisioning a Postgres database requires choosing a region and plan, so it can't be
-fully baked into a URL — but you never copy a key by hand. In the Vercel dashboard for
-your new project:
+The `integration-ids` parameter makes Vercel prompt you to create a Supabase database
+during import. Pick a **name** and **region**, and Vercel **automatically injects** the
+keys into the project — you never copy a value:
 
-1. Open the **Storage** tab → **Create Database** (or **Browse Marketplace**) → choose
-   **Supabase**.
-2. Pick a **region** and **database name**, then **Create**. Vercel provisions the
-   Supabase project and **automatically injects** the env vars into your project:
-   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-   `SUPABASE_SERVICE_ROLE_KEY`, `POSTGRES_URL`, etc. — no manual entry.
-3. **Redeploy** (env vars added after a build only take effect on the next deploy).
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+`POSTGRES_URL`, and their non-prefixed twins (`SUPABASE_URL`, `SUPABASE_ANON_KEY`). The app
+**accepts either naming** (`NEXT_PUBLIC_SUPABASE_URL` *or* `SUPABASE_URL`), so the wizard's
+connection step auto-skips regardless of which copy the integration set.
 
-On that deploy the instance boots as **Profile A (pre-configured)**: the wizard skips the
-database-connection step, **auto-applies the schema** from the injected `POSTGRES_URL`
-(the migrations are embedded in the build — see `lib/setup/migrations-bundle.ts`), and
-goes straight to creating the first administrator.
+> If the database step still appears: the integration's env vars were added **after** the
+> first build, so **Redeploy** once (Vercel binds env vars at deploy time). After that the
+> instance boots **Profile A (pre-configured)**.
+
+On that deploy the wizard skips the database-connection step, **auto-applies the schema**
+from the injected `POSTGRES_URL` (the migrations are embedded in the build — see
+`lib/setup/migrations-bundle.ts`), and goes straight to creating the first administrator.
 
 ## Build configuration (Nx monorepo)
 

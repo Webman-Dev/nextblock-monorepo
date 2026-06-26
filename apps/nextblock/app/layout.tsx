@@ -321,7 +321,8 @@ async function loadLayoutData() {
   const translations = Array.isArray(translationsResult) ? translationsResult : [];
 
   const hasSupabaseEnv = Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL) &&
+      (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY)
   );
 
   const [profile, headerNavItems, footerNavItems, logo] = await Promise.all([
@@ -453,8 +454,10 @@ export default async function RootLayout({
   // build-time-inlined NEXT_PUBLIC_* and these just match; it only matters in local dev,
   // where the wizard writes those vars at runtime and the loaded bundle would otherwise
   // hold stale empties until a dev-server restart. Read from server process.env (fresh).
-  const publicSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const publicSupabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  const publicSupabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+  const publicSupabaseAnonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 
   return (
     <html lang={serverDeterminedLocale} suppressHydrationWarning>

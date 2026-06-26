@@ -73,9 +73,15 @@ The **First-Boot Setup Wizard** at `/setup` walks you through connecting Supabas
 
 ### ☁️ Deploy to the cloud in one click
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&integration-ids=oac_VqOgBHqhEoFTPzGkPd7L0iH6)
 
-The button clones the repo and builds it — **no environment variables to fill in** (the site URL defaults to your `*.vercel.app` URL and the app secrets are derived automatically). To connect a database, add **Supabase** from Vercel's **Storage** tab (Marketplace): pick a region + name and Vercel **auto-injects** `NEXT_PUBLIC_SUPABASE_URL` and the rest — you never copy a key. On the next deploy the wizard then auto-skips the database step and applies the schema for you, leaving just "create your admin." Full walkthrough: [docs/12-VERCEL-DEPLOYMENT.md](./docs/12-VERCEL-DEPLOYMENT.md).
+During import, Vercel's **Supabase integration** prompts you to create a Supabase
+database (name + region) and **auto-injects** its keys — you never copy a value, and
+there are **no environment variables to fill in** (the site URL defaults to your
+`*.vercel.app` URL and the app secrets are derived automatically). The app then boots
+with the database connected: the wizard auto-skips the connection step, applies the
+schema for you, and leaves just "create your admin." Full walkthrough:
+[docs/12-VERCEL-DEPLOYMENT.md](./docs/12-VERCEL-DEPLOYMENT.md).
 
 > **Want a fully local, zero-config sandbox?** Use **Local Self-Hosted Docker Mode** — one command spins up the entire stack (Supabase engines + S3 storage + the app) on your own machine, with **no cloud accounts**. The app boots straight into the `/setup` wizard with MinIO storage pre-filled. See [docs/11-SELF-HOSTED-DOCKER.md](./docs/11-SELF-HOSTED-DOCKER.md).
 

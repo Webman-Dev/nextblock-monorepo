@@ -81,7 +81,8 @@ export default async function SetupPage() {
   }
 
   const channel = detectChannel();
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
 
   return (
     <SetupWizard

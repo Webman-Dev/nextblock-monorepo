@@ -18,8 +18,13 @@ export type DeployChannel = 'docker' | 'vercel' | 'local';
  * the middleware gate, and the wizard all use to decide "is this instance wired up?".
  */
 export function isSupabaseConfigured(): boolean {
+  // Accept both namings: the app's own NEXT_PUBLIC_* vars AND the non-prefixed
+  // SUPABASE_URL / SUPABASE_ANON_KEY that the Vercel Supabase integration also injects.
+  // This lets the wizard auto-skip the connection step when the integration provisioned
+  // the project, regardless of which copy of the vars is present.
   return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL) &&
+      (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY),
   );
 }
 

@@ -96,8 +96,12 @@ const nextConfig = {
     optimizePackageImports: ['@nextblock-cms/ui', '@nextblock-cms/utils'],
   },
   env: {
-    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    // Bridge the Vercel Supabase integration's non-prefixed names into the public vars
+    // the app + client read, so the build inlines a value whichever copy is present.
+    NEXT_PUBLIC_SUPABASE_URL:
+      process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY:
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY,
   },
   images: {
     formats: ['image/avif', 'image/webp'],

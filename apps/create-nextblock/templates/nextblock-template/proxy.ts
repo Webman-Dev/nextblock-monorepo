@@ -307,8 +307,11 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string | u
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // Accept the Vercel Supabase integration's non-prefixed names too, so the gate doesn't
+  // bounce a configured deploy to /setup when only SUPABASE_URL/SUPABASE_ANON_KEY are set.
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const supabaseAnonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
   const configured = Boolean(supabaseUrl && supabaseAnonKey);
   process.env.NEXTBLOCK_UNCONFIGURED = configured ? 'false' : 'true';
 
