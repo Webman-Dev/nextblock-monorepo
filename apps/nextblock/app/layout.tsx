@@ -440,7 +440,10 @@ export default async function RootLayout({
     privacySettings,
   } = await loadLayoutData();
   const draft = await draftMode();
-  const resolvedGtmId = privacySettings.gtm_id || process.env.NEXT_PUBLIC_GTM_ID || '';
+  // GTM container id comes solely from the privacy settings row (site_settings).
+  // There is intentionally no NEXT_PUBLIC_GTM_ID env fallback — analytics is
+  // configured in the CMS (Settings -> Privacy), not via build-time env.
+  const resolvedGtmId = privacySettings.gtm_id || '';
   const visualEditingEnabled =
     draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
   const isVercelDeployment = process.env.VERCEL === '1';
@@ -519,6 +522,7 @@ export default async function RootLayout({
         <DeferredSpeedInsights />
         <ConsentGatedAnalytics
           gtmId={resolvedGtmId}
+          gaMeasurementId={privacySettings.ga_measurement_id || ''}
           customScripts={privacySettings.custom_scripts}
           nonce={nonce}
         />

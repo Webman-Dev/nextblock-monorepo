@@ -90,6 +90,18 @@ export async function savePrivacySettings(input: PrivacySettings): Promise<void>
   }
 }
 
+// Privacy/consent and Google Analytics share the single `privacy_settings` row but
+// are edited from two different CMS pages (Settings -> Privacy vs Settings -> Google
+// Analytics). Each page must persist only its own fields without clobbering the other
+// page's, so writes read-merge against the current row. (We may split this into a
+// dedicated `analytics_settings` key later.)
+export async function mergePrivacySettings(
+  patch: Partial<PrivacySettings>
+): Promise<void> {
+  const current = await getPrivacySettings();
+  await savePrivacySettings({ ...current, ...patch });
+}
+
 export async function saveSecuritySettings(input: SecuritySettings): Promise<void> {
   const supabase = createClient();
   const value = normalizeSecurity(input);

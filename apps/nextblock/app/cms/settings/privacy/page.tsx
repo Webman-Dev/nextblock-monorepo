@@ -12,9 +12,10 @@ export default async function PrivacySettingsPage() {
         <CardHeader>
           <CardTitle>Privacy &amp; Consent (Law 25 / CASL)</CardTitle>
           <CardDescription>
-            Control the Quebec Law 25 consent banner, the analytics that load only
-            after consent, and the corporate identity appended to the CASL-compliant
-            footer. Analytics scripts download zero bytes until a visitor opts in.
+            Control the Quebec Law 25 consent banner and the corporate identity appended
+            to the CASL-compliant footer. Analytics tags (Google Tag Manager / GA4) are
+            configured under Settings &rarr; Google Analytics and download zero bytes until
+            a visitor opts in here.
           </CardDescription>
         </CardHeader>
         <CardContent>

@@ -4,7 +4,7 @@ import { createClient } from '@nextblock-cms/db/server';
 import { revalidatePath } from 'next/cache';
 import {
   getPrivacySettings as readPrivacySettings,
-  savePrivacySettings,
+  mergePrivacySettings,
 } from '../../../../lib/privacy/settings';
 import type { PrivacySettings } from '../../../../lib/privacy/types';
 
@@ -33,11 +33,10 @@ async function assertAdmin(): Promise<void> {
 export async function updatePrivacySettings(formData: FormData) {
   await assertAdmin();
 
-  const settings: PrivacySettings = {
+  // Analytics fields (GTM/GA4/custom scripts) are owned by the Google Analytics
+  // settings page; merge only the consent + corporate fields so they aren't clobbered.
+  const patch: Partial<PrivacySettings> = {
     banner_enabled: formData.get('banner_enabled') === 'true',
-    gtm_id: (formData.get('gtm_id')?.toString() ?? '').trim(),
-    ga_measurement_id: (formData.get('ga_measurement_id')?.toString() ?? '').trim(),
-    custom_scripts: formData.get('custom_scripts')?.toString() ?? '',
     corporate: {
       legal_name: (formData.get('legal_name')?.toString() ?? '').trim(),
       address: (formData.get('address')?.toString() ?? '').trim(),
@@ -45,7 +44,7 @@ export async function updatePrivacySettings(formData: FormData) {
     },
   };
 
-  await savePrivacySettings(settings);
+  await mergePrivacySettings(patch);
   // Footer (corporate identity) and the analytics guard live in the root layout.
   revalidatePath('/', 'layout');
 

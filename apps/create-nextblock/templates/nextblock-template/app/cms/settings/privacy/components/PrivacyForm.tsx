@@ -26,9 +26,6 @@ export default function PrivacyForm({ initialSettings }: PrivacyFormProps) {
   const [message, setMessage] = useState<Message | null>(null);
 
   const [bannerEnabled, setBannerEnabled] = useState(initialSettings.banner_enabled);
-  const [gtmId, setGtmId] = useState(initialSettings.gtm_id);
-  const [gaId, setGaId] = useState(initialSettings.ga_measurement_id);
-  const [customScripts, setCustomScripts] = useState(initialSettings.custom_scripts);
   const [legalName, setLegalName] = useState(initialSettings.corporate.legal_name);
   const [address, setAddress] = useState(initialSettings.corporate.address);
   const [supportEmail, setSupportEmail] = useState(initialSettings.corporate.support_email);
@@ -42,9 +39,6 @@ export default function PrivacyForm({ initialSettings }: PrivacyFormProps) {
 
     const formData = new FormData();
     formData.append('banner_enabled', String(bannerEnabled));
-    formData.append('gtm_id', gtmId);
-    formData.append('ga_measurement_id', gaId);
-    formData.append('custom_scripts', customScripts);
     formData.append('legal_name', legalName);
     formData.append('address', address);
     formData.append('support_email', supportEmail);
@@ -79,48 +73,6 @@ export default function PrivacyForm({ initialSettings }: PrivacyFormProps) {
               stay disabled until they accept.
             </p>
           </div>
-        </div>
-      </section>
-
-      <Separator />
-
-      {/* Analytics */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold">Analytics &amp; tracking</h3>
-          <p className="text-xs text-slate-500">
-            These load <strong>only</strong> after a visitor consents to analytics, so
-            the default page weight stays at zero tracking bytes.
-          </p>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="gtm_id">Google Tag Manager ID</Label>
-          <Input
-            id="gtm_id"
-            value={gtmId}
-            onChange={(e) => setGtmId(e.target.value)}
-            placeholder="GTM-XXXXXXX"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="ga_measurement_id">GA4 Measurement ID (optional)</Label>
-          <Input
-            id="ga_measurement_id"
-            value={gaId}
-            onChange={(e) => setGaId(e.target.value)}
-            placeholder="G-XXXXXXXXXX"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="custom_scripts">Custom consented scripts (optional)</Label>
-          <Textarea
-            id="custom_scripts"
-            value={customScripts}
-            onChange={(e) => setCustomScripts(e.target.value)}
-            placeholder="<!-- Additional marketing/analytics <script> tags, injected only after consent -->"
-            rows={4}
-            className="font-mono text-xs"
-          />
         </div>
       </section>
 

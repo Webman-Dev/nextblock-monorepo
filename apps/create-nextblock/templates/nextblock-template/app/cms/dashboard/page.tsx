@@ -2,12 +2,13 @@ import { Alert, AlertDescription, AlertTitle, Card, CardContent, CardDescription
 import { Calendar, FileText, PenTool, Users, Eye, TrendingUp, DollarSign, Receipt, ShoppingCart } from "lucide-react"
 import { getDashboardStats } from "./actions"
 import { MetricCard, SalesLedger, PremiumCTA } from "./components/DashboardComponents"
+import { getPrivacySettings } from "../../../lib/privacy/settings"
 import { formatPrice } from "@nextblock-cms/utils"
 
 export default async function CmsDashboardPage() {
   const stats = await getDashboardStats();
-  const gtmId = process.env.NEXT_PUBLIC_GTM_ID;
-  const showWarning = !gtmId && gtmId !== "false";
+  const privacySettings = await getPrivacySettings();
+  const showWarning = !privacySettings.gtm_id;
 
   const isEcommerce = stats.isEcommerceActive;
 
@@ -17,7 +18,11 @@ export default async function CmsDashboardPage() {
         <Alert variant="destructive">
           <AlertTitle>Google Tag Manager Not Configured</AlertTitle>
           <AlertDescription>
-            Missing <code>NEXT_PUBLIC_GTM_ID</code>. Analytics tracking is disabled.
+            No Google Tag Manager ID set. Add one under{" "}
+            <a href="/cms/settings/google-analytics" className="font-medium underline">
+              Settings → Google Analytics
+            </a>{" "}
+            to enable consent-gated analytics tracking.
           </AlertDescription>
         </Alert>
       )}

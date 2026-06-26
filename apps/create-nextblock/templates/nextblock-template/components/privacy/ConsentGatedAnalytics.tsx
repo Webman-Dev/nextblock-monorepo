@@ -5,10 +5,12 @@
 // shows zero analytics bytes, preserving the Lighthouse budget.
 import { useEffect, useRef, useState } from 'react';
 import { DeferredGoogleTagManager } from '../DeferredGoogleTagManager';
+import { DeferredGoogleAnalytics } from '../DeferredGoogleAnalytics';
 import { CONSENT_CHANGE_EVENT, readConsent } from '../../lib/privacy/consent-client';
 
 interface ConsentGatedAnalyticsProps {
   gtmId?: string;
+  gaMeasurementId?: string;
   customScripts?: string;
   nonce?: string;
 }
@@ -29,6 +31,7 @@ function injectCustomScripts(markup: string, nonce?: string) {
 
 export function ConsentGatedAnalytics({
   gtmId,
+  gaMeasurementId,
   customScripts,
   nonce,
 }: ConsentGatedAnalyticsProps) {
@@ -54,6 +57,14 @@ export function ConsentGatedAnalytics({
     }
   }, [analyticsAllowed, customScripts, nonce]);
 
-  if (!analyticsAllowed || !gtmId) return null;
-  return <DeferredGoogleTagManager gtmId={gtmId} nonce={nonce} />;
+  if (!analyticsAllowed) return null;
+  if (!gtmId && !gaMeasurementId) return null;
+  return (
+    <>
+      {gtmId && <DeferredGoogleTagManager gtmId={gtmId} nonce={nonce} />}
+      {gaMeasurementId && (
+        <DeferredGoogleAnalytics gaId={gaMeasurementId} nonce={nonce} />
+      )}
+    </>
+  );
 }

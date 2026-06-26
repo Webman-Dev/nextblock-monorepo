@@ -2207,7 +2207,7 @@ Both endpoints enforce `Authorization: Bearer ${CRON_SECRET}` per the security m
 
 ### 3.4.8 Google Tag Manager — Analytics Delivery
 
-Google Tag Manager is loaded via `@next/third-parties` (`^16.1.1`) using the `NEXT_PUBLIC_GTM_ID` environment variable. The production CSP allowlist emitted by `apps/nextblock/proxy.ts` explicitly includes `googletagmanager.com`, `google-analytics.com`, and `analytics.google.com` per F-011's origin allowlist.
+Google Tag Manager is loaded via `@next/third-parties` (`^16.1.1`) using the GTM container id configured in the CMS at **Settings → Privacy** and stored in the `site_settings` table (`privacy_settings.gtm_id`); there is no `NEXT_PUBLIC_GTM_ID` environment variable. The id is read in the root layout via `getPrivacySettings()` and passed through the consent gate, so the tag loads only after the visitor accepts analytics. The production CSP allowlist emitted by `apps/nextblock/proxy.ts` explicitly includes `googletagmanager.com`, `google-analytics.com`, and `analytics.google.com` per F-011's origin allowlist.
 
 ## 3.5 DATABASES AND STORAGE
 
@@ -4192,7 +4192,7 @@ The integration landscape comprises eight external domains declared in `libs/env
 | Frankfurter FX | HTTPS (JSON) | Cron runs 18:00 UTC daily; `maxDuration: 30s` |
 | SMTP | SMTP + TLS | Best-effort from server actions |
 | Vercel Cron | HTTPS + Bearer `CRON_SECRET` | 03:00 UTC (reset-sandbox, 60s); 18:00 UTC (sync-currencies, 30s) |
-| Google Tag Manager | HTTPS (JS) | `NEXT_PUBLIC_GTM_ID`; allowlisted in CSP |
+| Google Tag Manager | HTTPS (JS) | GTM id from `privacy_settings` (site_settings); allowlisted in CSP |
 
 ## 5.2 COMPONENT DETAILS
 
@@ -7135,7 +7135,6 @@ Freemius has the broadest environment surface, reflecting the mixture of store-s
 |:--|:--|
 | `CRON_SECRET` | Bearer token for all `/api/cron/*` endpoints |
 | `REVALIDATE_SECRET_TOKEN` | Header token for `/api/revalidate` |
-| `NEXT_PUBLIC_GTM_ID` | Google Tag Manager container ID |
 
 ##### 6.3.4.4.7 Optional Overrides
 
@@ -7369,7 +7368,7 @@ Per Section 5.1.4.2, each external integration carries explicit SLA-like propert
 | Frankfurter | HTTPS (JSON) | Cron daily 18:00 UTC; `maxDuration: 30s` |
 | SMTP | SMTP + TLS | Best-effort from server actions |
 | Vercel Cron | HTTPS + Bearer CRON_SECRET | 03:00 UTC (reset-sandbox 60s); 18:00 UTC (sync-currencies 30s) |
-| Google Tag Manager | HTTPS (JS) | `NEXT_PUBLIC_GTM_ID`; allowlisted in CSP |
+| Google Tag Manager | HTTPS (JS) | GTM id from `privacy_settings` (site_settings); allowlisted in CSP |
 
 #### 6.3.6.2 Known Integration Limitations
 
@@ -8324,7 +8323,7 @@ The `@vercel/speed-insights ^1.3.1` package is declared in the root `package.jso
 
 ##### 6.5.2.1.2 Google Tag Manager and Client-Side Analytics
 
-Google Tag Manager is integrated via `@next/third-parties` and the `<GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID || ''} nonce={nonce} />` component, also mounted in the root layout. Configuration is environment-driven via `NEXT_PUBLIC_GTM_ID`; when the variable is not set, the tag is rendered with an empty `gtmId` and effectively disabled. The CSP allowlists `googletagmanager.com`, `google-analytics.com`, `analytics.google.com`, and `*.googletagmanager.com` origins for `script-src`, `img-src`, and `connect-src`, so analytics delivery operates without breaking the nonce policy.
+Google Tag Manager is integrated via `@next/third-parties`, wrapped by `ConsentGatedAnalytics` → `DeferredGoogleTagManager` and mounted in the root layout. The container id is database-driven: the layout resolves `const resolvedGtmId = privacySettings.gtm_id || ''` from `getPrivacySettings()` (the `privacy_settings` row of `site_settings`, edited at **Settings → Privacy**) — there is no `NEXT_PUBLIC_GTM_ID` env fallback. When the id is empty, no GTM chunk is imported; when set, the tag still loads only after the visitor consents to analytics and after the first interaction event. The CSP allowlists `googletagmanager.com`, `google-analytics.com`, `analytics.google.com`, and `*.googletagmanager.com` origins for `script-src`, `img-src`, and `connect-src`, so analytics delivery operates without breaking the nonce policy.
 
 ##### 6.5.2.1.3 Declared-but-Unused @vercel/analytics
 
@@ -8393,7 +8392,7 @@ The primary alert pathway is the **Feedback System** implemented by `FeedbackMod
 
 ##### 6.5.2.4.2 Configuration-Discovery Alerts
 
-The CMS dashboard at `/cms/dashboard/page.tsx` reads `process.env.NEXT_PUBLIC_GTM_ID` during render and conditionally displays a destructive `<Alert>` banner when GTM is unconfigured (suppressed when explicitly set to the string `'false'`). This is a CMS-admin-facing configuration alert — not a runtime monitoring alert — designed to catch missing telemetry configuration during deployment.
+The CMS dashboard at `/cms/dashboard/page.tsx` calls `getPrivacySettings()` during render and conditionally displays a destructive `<Alert>` banner (linking to **Settings → Privacy**) when no GTM container id is configured in the `privacy_settings` row. This is a CMS-admin-facing configuration alert — not a runtime monitoring alert — designed to catch missing telemetry configuration after deployment.
 
 ##### 6.5.2.4.3 Platform-Managed Alerts
 
@@ -8441,7 +8440,7 @@ flowchart TB
         end
 
         subgraph ConfigAlert["Configuration Banner"]
-            GtmBanner{{NEXT_PUBLIC_GTM_ID not set?<br/>Show destructive Alert}}
+            GtmBanner{{privacy_settings.gtm_id not set?<br/>Show destructive Alert}}
         end
 
         GtmBanner --> MetricRow
@@ -8896,7 +8895,7 @@ The following observability gaps are acknowledged and documented for honest stak
 - `apps/nextblock/app/providers.tsx` — Client provider composition order
 - `libs/ecommerce/src/lib/stripe/webhooks.ts` — Stripe webhook handler with `[Stripe Webhook Error]` prefix; `console.error` on missing `STRIPE_WEBHOOK_SECRET` and on `constructEvent` failure
 - `libs/db/src/lib/package-validation.ts` — License gate with `console.error` and 60-second `unstable_cache` tagged `'package-activation'`
-- `libs/environment.d.ts` — `NodeJS.ProcessEnv` augmentation declaring all telemetry and external-service env vars (`NEXT_PUBLIC_GTM_ID`, `NEXT_PUBLIC_IS_SANDBOX`, `REVALIDATE_SECRET_TOKEN`, `CRON_SECRET`, SMTP vars)
+- `libs/environment.d.ts` — `NodeJS.ProcessEnv` augmentation declaring external-service env vars (Supabase, R2/S3, SMTP, Freemius, OpenRouter/Cortex AI). GTM is no longer env-configured — it lives in `privacy_settings`.
 - `vercel.json` — Two cron schedule declarations: `0 3 * * *` reset-sandbox (60s) and `0 18 * * *` sync-currencies (30s)
 - `package.json` (root) — Dependency declarations including `@vercel/speed-insights ^1.3.1` and `@next/third-parties ^16.1.1`
 - `apps/nextblock/package.json` — Template-level dependency declarations including `@vercel/analytics ^1.6.1` (declared but not imported)
@@ -10423,7 +10422,7 @@ graph TB
 
     subgraph Telemetry["Observability Sinks"]
         SpeedIns[(Vercel Speed Insights<br/>LCP · INP · CLS · TTFB)]
-        GTM[(Google Tag Manager<br/>NEXT_PUBLIC_GTM_ID)]
+        GTM[(Google Tag Manager<br/>privacy_settings.gtm_id)]
         VercelLogs[(Vercel Log Stream<br/>warn + error preserved)]
         FeedbackInbox[(feedback@nextblock.ca<br/>SMTP inbox)]
     end
@@ -10541,7 +10540,7 @@ Runtime configuration is **exclusively environment-variable driven**, consumed t
 
 | Category | Variable Count | Examples |
 |:--|:--|:--|
-| Platform | 4 | `NEXT_PUBLIC_URL`, `TARGET_URL`, `NEXT_PUBLIC_IS_SANDBOX`, `NEXT_PUBLIC_GTM_ID` |
+| Platform | 3 | `NEXT_PUBLIC_URL`, `TARGET_URL`, `NEXT_PUBLIC_IS_SANDBOX` |
 | Secrets / Auth | 3 | `CRON_SECRET`, `REVALIDATE_SECRET_TOKEN`, `LHCI_GITHUB_APP_TOKEN` |
 | FX | 1 | `FX_API_BASE_URL` (defaults to `https://api.frankfurter.dev`) |
 | Supabase | 6 | `SUPABASE_PROJECT_ID`, `POSTGRES_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ACCESS_TOKEN` |
@@ -10723,7 +10722,7 @@ Eight external service integrations are declared across the workspace:
 | Frankfurter FX | native `fetch` | N/A (`api.frankfurter.dev`) | Best-effort (skipped currency telemetry) |
 | SMTP | `nodemailer` | `^7.0.10` | Best-effort degrade |
 | Vercel Speed Insights | `@vercel/speed-insights` | `^1.3.1` | Observational |
-| Google Tag Manager | `@next/third-parties` | `^16.1.1` / `1.1.1` | Observational (disabled if `NEXT_PUBLIC_GTM_ID` unset) |
+| Google Tag Manager | `@next/third-parties` | `^16.1.1` / `1.1.1` | Observational (disabled if `privacy_settings.gtm_id` unset) |
 
 ### 8.3.3 High Availability Design
 
@@ -11380,7 +11379,7 @@ graph TB
 
     subgraph InternalDash["In-App Dashboards"]
         CmsDash[/cms/dashboard<br/>Live counts via Supabase]
-        GtmBanner[GTM Config Banner<br/>when NEXT_PUBLIC_GTM_ID unset]
+        GtmBanner[GTM Config Banner<br/>when privacy_settings.gtm_id unset]
     end
 
     SpeedInsClient --> SpeedDash
@@ -11690,7 +11689,6 @@ The following table enumerates environment variables declared in the `NodeJS.Pro
 | `SMTP_FROM_NAME` | SMTP | From-name for transactional mail |
 | `NEXT_PUBLIC_URL` | Platform | Canonical application base URL |
 | `NEXT_PUBLIC_IS_SANDBOX` | Platform | Enables sandbox banner and demo behaviors |
-| `NEXT_PUBLIC_GTM_ID` | Platform | Google Tag Manager container ID |
 | `CRON_SECRET` | Platform | Bearer token authenticating cron endpoints |
 | `REVALIDATE_SECRET_TOKEN` | Platform | Validates on-demand revalidation requests |
 | `FX_API_BASE_URL` | Platform | Frankfurter FX API base URL override |
