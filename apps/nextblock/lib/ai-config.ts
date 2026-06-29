@@ -1,10 +1,14 @@
 import {
-  decryptOpenRouterApiKey,
   encryptOpenRouterApiKey,
   getMaskedOpenRouterKey,
   getOpenRouterKeyEnvelopeStatus,
   type EncryptedOpenRouterKeyEnvelope,
 } from './ai-key-crypto';
+import {
+  hasSecretEncryptionKey,
+  resolveSecretEncryptionKey,
+  tryDecryptWithEnvKey,
+} from '@nextblock-cms/db/server';
 
 const SERVER_ONLY_ERROR_MESSAGE =
   'Cortex AI configuration can only be imported from server-side code.';
@@ -33,17 +37,24 @@ export function getCortexAiEnvConfig() {
   return {
     encryptionKey: readEnvValue('CORTEX_AI_ENCRYPTION_KEY'),
     freemiusSandboxKey: readEnvValue('FREEMIUS_AI_SANDBOX_KEY'),
-    hasEncryptionKey: Boolean(readEnvValue('CORTEX_AI_ENCRYPTION_KEY')),
+    // True when ANY usable key exists: an explicit env key OR the service-role-derived
+    // fallback — so BYOK works on a one-click Vercel deploy with no extra env var.
+    hasEncryptionKey: hasSecretEncryptionKey(),
     hasOpenRouterEnvKey: Boolean(openRouterApiKey),
     openRouterEnvKeyLast4: openRouterApiKey ? openRouterApiKey.slice(-4) : null,
   };
 }
 
 function requireEncryptionKey() {
-  const encryptionKey = readEnvValue('CORTEX_AI_ENCRYPTION_KEY');
+  // Resolve via the shared chain: NEXTBLOCK_ENCRYPTION_KEY -> CORTEX_AI_ENCRYPTION_KEY ->
+  // a stable key derived from the Supabase service-role key. The derived fallback lets
+  // BYOK work out-of-the-box on hosted installs (e.g. one-click Vercel).
+  const encryptionKey = resolveSecretEncryptionKey();
 
   if (!encryptionKey) {
-    throw new Error('CORTEX_AI_ENCRYPTION_KEY is required to manage stored OpenRouter keys.');
+    throw new Error(
+      'An encryption key (NEXTBLOCK_ENCRYPTION_KEY, CORTEX_AI_ENCRYPTION_KEY, or a Supabase service-role key) is required to manage stored OpenRouter keys.'
+    );
   }
 
   return encryptionKey;
@@ -57,10 +68,16 @@ export function encryptStoredOpenRouterApiKey(apiKey: string) {
 }
 
 export function decryptStoredOpenRouterApiKey(encryptedKey: unknown) {
-  return decryptOpenRouterApiKey({
-    encryptedKey,
-    encryptionSecret: requireEncryptionKey(),
-  });
+  // Try every candidate key (explicit env keys + the derived fallback). This keeps a key
+  // stored under one key readable if another is added later, and matches the SMTP/payment
+  // secret behaviour. The envelope is byte-compatible with the shared secret-crypto format.
+  const result = tryDecryptWithEnvKey(encryptedKey);
+
+  if (result === null) {
+    throw new Error('Failed to decrypt stored OpenRouter key.');
+  }
+
+  return result;
 }
 
 export function getStoredOpenRouterKeyStatus(value: unknown) {

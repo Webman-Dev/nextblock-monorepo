@@ -7,7 +7,7 @@
 // The root encryption key stays in an env var — it is the root of trust for all
 // DB-stored secrets and cannot itself live in the DB (chicken-and-egg). Reads use
 // bracket notation because libs/db sets noPropertyAccessFromIndexSignature.
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
 
 export const SECRET_ENVELOPE_ALGORITHM = 'aes-256-gcm';
 export const SECRET_ENVELOPE_VERSION = 1;
@@ -141,16 +141,46 @@ export function getSecretEnvelopeStatus(value: unknown): {
 // The root key stays in env. New deployments may set NEXTBLOCK_ENCRYPTION_KEY;
 // existing ones reuse the already-provisioned CORTEX_AI_ENCRYPTION_KEY.
 
+const DERIVED_KEY_INFO = 'nextblock-secret-encryption-key-v1';
+
+/**
+ * Derive a stable encryption key from the Supabase service-role key (HMAC-SHA256). Lets
+ * secret storage work out-of-the-box on hosted installs (e.g. one-click Vercel) without a
+ * dedicated env var — mirrors how apps/nextblock/lib/app-secrets.ts derives the Draft/
+ * Revalidate secrets. Anyone with the service-role key already has full DB access, so this
+ * adds no new exposure. Accepts both the legacy and the Marketplace-injected key names.
+ */
+function deriveKeyFromServiceRole(): string | null {
+  const serviceKey =
+    process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? process.env['SUPABASE_SECRET_KEY'];
+  if (typeof serviceKey !== 'string' || !serviceKey.trim()) {
+    return null;
+  }
+  return createHmac('sha256', serviceKey.trim()).update(DERIVED_KEY_INFO).digest('hex');
+}
+
+/**
+ * Ordered candidate keys: explicit env keys first, then the service-role-derived fallback.
+ * Encryption uses the first candidate; decryption tries them all, so a secret stays
+ * readable if an explicit key is added after it was stored with the derived key (or vice
+ * versa). A service-role-key rotation invalidates the derived key — re-enter such secrets.
+ */
+function candidateEncryptionKeys(): string[] {
+  const keys: string[] = [];
+  const add = (value: string | null | undefined) => {
+    const trimmed = typeof value === 'string' ? value.trim() : '';
+    if (trimmed && !keys.includes(trimmed)) {
+      keys.push(trimmed);
+    }
+  };
+  add(process.env['NEXTBLOCK_ENCRYPTION_KEY']);
+  add(process.env['CORTEX_AI_ENCRYPTION_KEY']);
+  add(deriveKeyFromServiceRole());
+  return keys;
+}
+
 export function resolveSecretEncryptionKey(): string | null {
-  const fromNextblock = process.env['NEXTBLOCK_ENCRYPTION_KEY'];
-  if (typeof fromNextblock === 'string' && fromNextblock.trim()) {
-    return fromNextblock.trim();
-  }
-  const fromCortex = process.env['CORTEX_AI_ENCRYPTION_KEY'];
-  if (typeof fromCortex === 'string' && fromCortex.trim()) {
-    return fromCortex.trim();
-  }
-  return null;
+  return candidateEncryptionKeys()[0] ?? null;
 }
 
 export function hasSecretEncryptionKey(): boolean {
@@ -184,13 +214,12 @@ export function tryDecryptWithEnvKey(envelope: unknown): string | null {
   if (!isEncryptedSecretEnvelope(envelope)) {
     return null;
   }
-  const key = resolveSecretEncryptionKey();
-  if (!key) {
-    return null;
+  for (const key of candidateEncryptionKeys()) {
+    try {
+      return decryptSecret({ envelope, encryptionSecret: key });
+    } catch {
+      // Wrong key — try the next candidate.
+    }
   }
-  try {
-    return decryptSecret({ envelope, encryptionSecret: key });
-  } catch {
-    return null;
-  }
+  return null;
 }

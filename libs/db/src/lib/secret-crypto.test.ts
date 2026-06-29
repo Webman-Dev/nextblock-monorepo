@@ -42,21 +42,26 @@ describe('secret-crypto', () => {
   });
 
   describe('env-key layer', () => {
-    const original = {
-      nextblock: process.env['NEXTBLOCK_ENCRYPTION_KEY'],
-      cortex: process.env['CORTEX_AI_ENCRYPTION_KEY'],
-    };
+    const KEYS = [
+      'NEXTBLOCK_ENCRYPTION_KEY',
+      'CORTEX_AI_ENCRYPTION_KEY',
+      'SUPABASE_SERVICE_ROLE_KEY',
+      'SUPABASE_SECRET_KEY',
+    ] as const;
+    const original: Record<string, string | undefined> = {};
 
     beforeEach(() => {
-      delete process.env['NEXTBLOCK_ENCRYPTION_KEY'];
-      delete process.env['CORTEX_AI_ENCRYPTION_KEY'];
+      for (const k of KEYS) {
+        original[k] = process.env[k];
+        delete process.env[k];
+      }
     });
 
     afterEach(() => {
-      if (original.nextblock === undefined) delete process.env['NEXTBLOCK_ENCRYPTION_KEY'];
-      else process.env['NEXTBLOCK_ENCRYPTION_KEY'] = original.nextblock;
-      if (original.cortex === undefined) delete process.env['CORTEX_AI_ENCRYPTION_KEY'];
-      else process.env['CORTEX_AI_ENCRYPTION_KEY'] = original.cortex;
+      for (const k of KEYS) {
+        if (original[k] === undefined) delete process.env[k];
+        else process.env[k] = original[k];
+      }
     });
 
     it('prefers NEXTBLOCK_ENCRYPTION_KEY, falls back to CORTEX_AI_ENCRYPTION_KEY', () => {
@@ -70,6 +75,26 @@ describe('secret-crypto', () => {
       process.env['CORTEX_AI_ENCRYPTION_KEY'] = 'cortex-key';
       const envelope = encryptWithEnvKey('pi_secret_value');
       expect(decryptWithEnvKey(envelope)).toBe('pi_secret_value');
+    });
+
+    it('derives a stable key from the service-role key when no explicit key is set', () => {
+      process.env['SUPABASE_SERVICE_ROLE_KEY'] = 'service-role-secret';
+      const derived = resolveSecretEncryptionKey();
+      expect(derived).toBeTruthy();
+      // Stable: same service key -> same derived key.
+      expect(resolveSecretEncryptionKey()).toBe(derived);
+      const envelope = encryptWithEnvKey('smtp-password');
+      expect(decryptWithEnvKey(envelope)).toBe('smtp-password');
+    });
+
+    it('still decrypts a derived-key secret after an explicit key is added later', () => {
+      process.env['SUPABASE_SERVICE_ROLE_KEY'] = 'service-role-secret';
+      const envelope = encryptWithEnvKey('smtp-password'); // encrypted with derived key
+      // Operator later adds an explicit key — it becomes preferred for encryption...
+      process.env['NEXTBLOCK_ENCRYPTION_KEY'] = 'explicit-key';
+      expect(resolveSecretEncryptionKey()).toBe('explicit-key');
+      // ...but the old secret is still readable because decryption tries all candidates.
+      expect(tryDecryptWithEnvKey(envelope)).toBe('smtp-password');
     });
 
     it('tryDecryptWithEnvKey returns null instead of throwing when no key is set', () => {
