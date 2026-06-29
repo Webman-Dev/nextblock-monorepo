@@ -1,3 +1,4 @@
+export * from './lib/payment-config';
 export * from './lib/stripe/client';
 export * from './lib/stripe/checkout';
 export * from './lib/stripe/order-sync';

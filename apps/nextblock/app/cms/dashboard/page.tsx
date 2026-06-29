@@ -1,31 +1,21 @@
-import { Alert, AlertDescription, AlertTitle, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@nextblock-cms/ui"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@nextblock-cms/ui"
 import { Calendar, FileText, PenTool, Users, Eye, TrendingUp, DollarSign, Receipt, ShoppingCart } from "lucide-react"
 import { getDashboardStats } from "./actions"
 import { MetricCard, SalesLedger, PremiumCTA } from "./components/DashboardComponents"
-import { getPrivacySettings } from "../../../lib/privacy/settings"
+import DashboardOnboarding from "./components/DashboardOnboarding"
+import { getOnboardingStatus } from "../../../lib/onboarding/status"
+import { setOnboardingDismissed } from "../../../lib/onboarding/actions"
 import { formatPrice } from "@nextblock-cms/utils"
 
 export default async function CmsDashboardPage() {
   const stats = await getDashboardStats();
-  const privacySettings = await getPrivacySettings();
-  const showWarning = !privacySettings.gtm_id;
+  const onboarding = await getOnboardingStatus({ isEcommerceActive: stats.isEcommerceActive });
 
   const isEcommerce = stats.isEcommerceActive;
 
   return (
     <div className="w-full space-y-8">
-      {showWarning && (
-        <Alert variant="destructive">
-          <AlertTitle>Google Tag Manager Not Configured</AlertTitle>
-          <AlertDescription>
-            No Google Tag Manager ID set. Add one under{" "}
-            <a href="/cms/settings/google-analytics" className="font-medium underline">
-              Settings → Google Analytics
-            </a>{" "}
-            to enable consent-gated analytics tracking.
-          </AlertDescription>
-        </Alert>
-      )}
+      <DashboardOnboarding status={onboarding} dismissAction={setOnboardingDismissed} />
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>

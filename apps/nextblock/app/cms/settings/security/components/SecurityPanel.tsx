@@ -503,8 +503,8 @@ function AdminPolicyCard({
             <div className="space-y-1">
               <Label htmlFor="enforce_staff_2fa">Encourage staff to enable 2FA</Label>
               <p className="text-xs text-slate-500">
-                Surfaces a reminder for ADMIN/WRITER accounts that haven&rsquo;t set up a
-                second factor.
+                Shows a reminder banner across the CMS to ADMIN/WRITER accounts that
+                haven&rsquo;t set up a second factor. On by default.
               </p>
             </div>
           </div>

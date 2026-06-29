@@ -1,18 +1,21 @@
 import Stripe from 'stripe';
-import { stripe } from './client';
+import { getStripeClient } from './client';
+import { resolveStripeWebhookSecret } from '../payment-config';
 import { syncStripeOrderFromSession } from './order-sync';
 
 export const handleStripeWebhook = async (
   signature: string,
   body: string | Buffer
 ): Promise<{ received: boolean; error?: string }> => {
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  // Resolve the webhook secret DB-first (CMS), falling back to STRIPE_WEBHOOK_SECRET.
+  const webhookSecret = await resolveStripeWebhookSecret();
 
   if (!webhookSecret) {
-    console.error('Missing STRIPE_WEBHOOK_SECRET');
+    console.error('Missing Stripe webhook secret (configure it in CMS or STRIPE_WEBHOOK_SECRET)');
     return { received: false, error: 'Server configuration error' };
   }
 
+  const stripe = await getStripeClient();
   let event: Stripe.Event;
 
   try {

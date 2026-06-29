@@ -9,10 +9,12 @@ import {
   CardHeader,
   CardTitle,
   Checkbox,
+  Input,
   Label,
 } from '@nextblock-cms/ui';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useFormStatus } from 'react-dom';
+import type { PaymentCredentialsView } from '../../../payment-config';
 
 interface ConfigStatus {
   stripe: {
@@ -28,14 +30,18 @@ interface ConfigStatus {
 export function PaymentsClient({
   initialEnabledProviders,
   configStatus,
+  credentials,
   saveAction,
+  saveCredentialsAction,
 }: {
   initialEnabledProviders: {
     stripe: boolean;
     freemius: boolean;
   };
   configStatus: ConfigStatus;
+  credentials: PaymentCredentialsView;
   saveAction: (formData: FormData) => Promise<void>;
+  saveCredentialsAction: (formData: FormData) => Promise<void>;
 }) {
   const [enabledProviders, setEnabledProviders] = useState(initialEnabledProviders);
 
@@ -43,7 +49,18 @@ export function PaymentsClient({
   const isFreemiusReady = configStatus?.freemius?.hasKeys;
 
   return (
-    <form action={saveAction} className="space-y-6 max-w-3xl p-8">
+    <div className="space-y-6 max-w-3xl p-8">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Payment Settings</h1>
+        <p className="text-sm text-muted-foreground">
+          Enter your provider API keys, then enable the providers your store needs. Physical
+          products use Stripe and digital products use Freemius.
+        </p>
+      </div>
+
+      <ProviderCredentialsCard credentials={credentials} saveAction={saveCredentialsAction} />
+
+      <form action={saveAction} className="space-y-6">
       <input
         type="hidden"
         name="stripe_enabled"
@@ -54,14 +71,6 @@ export function PaymentsClient({
         name="freemius_enabled"
         value={enabledProviders.freemius ? 'true' : 'false'}
       />
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Payment Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Enable the payment providers your store needs. Physical products use Stripe and digital
-          products use Freemius.
-        </p>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle>Payment Providers</CardTitle>
@@ -134,7 +143,8 @@ export function PaymentsClient({
           </div>
         </CardContent>
       </Card>
-    </form>
+      </form>
+    </div>
   );
 }
 
@@ -142,6 +152,131 @@ function SaveButton() {
   const { pending } = useFormStatus();
 
   return <Button type="submit" disabled={pending}>{pending ? 'Saving...' : 'Save Changes'}</Button>;
+}
+
+function CredentialField({
+  id,
+  label,
+  type = 'text',
+  defaultValue,
+  placeholder,
+  hint,
+}: {
+  id: string;
+  label: ReactNode;
+  type?: 'text' | 'password';
+  defaultValue?: string;
+  placeholder?: string;
+  hint?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        name={id}
+        type={type}
+        defaultValue={defaultValue}
+        placeholder={placeholder}
+        autoComplete={type === 'password' ? 'new-password' : 'off'}
+      />
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+function ProviderCredentialsCard({
+  credentials,
+  saveAction,
+}: {
+  credentials: PaymentCredentialsView;
+  saveAction: (formData: FormData) => Promise<void>;
+}) {
+  const storedPlaceholder = '•••••••• (stored — leave blank to keep)';
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Provider API Keys</CardTitle>
+        <CardDescription>
+          Keys are encrypted at rest and used DB-first (these override any <code>.env</code>{' '}
+          values). Leave a secret blank to keep the stored value.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form action={saveAction} className="space-y-6">
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold">Stripe (physical products)</h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <CredentialField
+                id="stripe_publishableKey"
+                label="Publishable key"
+                defaultValue={credentials.stripe.publishableKey}
+                placeholder="pk_live_…"
+              />
+              <CredentialField
+                id="stripe_secretKey"
+                label="Secret key"
+                type="password"
+                placeholder={credentials.stripe.hasSecretKey ? storedPlaceholder : 'sk_live_…'}
+              />
+              <CredentialField
+                id="stripe_webhookSecret"
+                label="Webhook signing secret"
+                type="password"
+                placeholder={credentials.stripe.hasWebhookSecret ? storedPlaceholder : 'whsec_…'}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold">Freemius (digital products)</h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <CredentialField
+                id="freemius_developerId"
+                label="Developer ID"
+                defaultValue={credentials.freemius.developerId}
+              />
+              <CredentialField
+                id="freemius_productId"
+                label="Product ID"
+                defaultValue={credentials.freemius.productId}
+              />
+              <CredentialField
+                id="freemius_publicKey"
+                label="Public key"
+                defaultValue={credentials.freemius.publicKey}
+                placeholder="pk_…"
+              />
+              <CredentialField
+                id="freemius_secretKey"
+                label="Secret key"
+                type="password"
+                placeholder={credentials.freemius.hasSecretKey ? storedPlaceholder : 'sk_…'}
+              />
+              <CredentialField
+                id="freemius_apiKey"
+                label="API key"
+                type="password"
+                placeholder={credentials.freemius.hasApiKey ? storedPlaceholder : 'API key'}
+              />
+            </div>
+          </div>
+
+          {credentials.envFallbackActive && (
+            <p className="text-xs text-amber-700">
+              Stripe keys are currently read from environment variables. Saving here moves them into
+              the database and takes precedence.
+            </p>
+          )}
+
+          <div className="flex justify-end">
+            <SaveButton />
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
 }
 
 function ProviderToggleCard({
@@ -216,8 +351,8 @@ function MissingKeysGuide({
         <AlertCircle className="w-4 h-4" />
         <span>Configuration Required</span>
       </div>
-      <p className="mb-2">The {provider} integration is missing the following environment variables:</p>
-      <ul className="list-disc list-inside bg-white/50 dark:bg-black/20 p-2 rounded mb-3 font-mono text-xs">
+      <p className="mb-2">The {provider} integration still needs the following:</p>
+      <ul className="list-disc list-inside bg-white/50 dark:bg-black/20 p-2 rounded mb-3 text-xs">
         {missingKeys.map((key) => (
           <li key={key}>{key}</li>
         ))}
@@ -227,7 +362,7 @@ function MissingKeysGuide({
       </p>
       <ol className="list-decimal list-inside space-y-1 ml-1 mb-3">
         <li>
-          Go to{' '}
+          Get your API keys from{' '}
           <a
             href={docsUrl}
             target="_blank"
@@ -238,10 +373,8 @@ function MissingKeysGuide({
           </a>
           .
         </li>
-        <li>Copy your API keys.</li>
-        <li>Open your <code>.env</code> (or variables settings in Vercel/Railway).</li>
-        <li>Add the keys listed above.</li>
-        <li>Restart your development server.</li>
+        <li>Enter them in the <strong>Provider API Keys</strong> section above and save.</li>
+        <li>This provider can then be enabled.</li>
       </ol>
     </div>
   );

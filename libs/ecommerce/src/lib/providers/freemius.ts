@@ -2,6 +2,7 @@ import { PaymentProvider } from '../types';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { Freemius } from '@freemius/sdk';
+import { hydrateFreemiusEnvFromDb } from '../payment-config';
 import { CheckoutSessionInput, normalizeOrderCustomerDetails } from '../customer';
 import { getCouponQuote, recordCouponRedemption } from '../coupon-server';
 import type { CouponQuote } from '../coupons';
@@ -477,6 +478,8 @@ export class FreemiusProvider implements PaymentProvider {
           });
       }
             
+      // Overlay any CMS-configured Freemius credentials (DB-first) onto the env reads below.
+      await hydrateFreemiusEnvFromDb();
       // Freemius checkout sandbox is independent from the app-wide demo sandbox.
       const isFreemiusSandboxEnabled = process.env.FREEMIUS_SANDBOX_ENABLED === 'true';
       const checkoutCredentials = resolveFreemiusCheckoutCredentials(freemiusProductId);

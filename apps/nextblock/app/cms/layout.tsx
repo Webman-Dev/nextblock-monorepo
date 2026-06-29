@@ -2,7 +2,7 @@ import 'katex/dist/katex.min.css';
 import { redirect } from 'next/navigation';
 import CmsClientLayout from "./CmsClientLayout";
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
-import { evaluateTwoFactor } from '../../lib/auth/twoFactor';
+import { evaluateTwoFactor, getStaffTwoFactorReminder } from '../../lib/auth/twoFactor';
 
 export default async function CmsLayout({
   children,
@@ -16,13 +16,18 @@ export default async function CmsLayout({
     redirect('/two-factor?redirect_to=/cms/dashboard');
   }
 
-  const [isEcommerceActive, isCortexAiActive] = await Promise.all([
+  const [isEcommerceActive, isCortexAiActive, showTwoFactorReminder] = await Promise.all([
     verifyPackageOnline('ecommerce'),
     verifyPackageOnline('cortex-ai'),
+    getStaffTwoFactorReminder(),
   ]);
 
   return (
-    <CmsClientLayout isCortexAiActive={isCortexAiActive} isEcommerceActive={isEcommerceActive}>
+    <CmsClientLayout
+      isCortexAiActive={isCortexAiActive}
+      isEcommerceActive={isEcommerceActive}
+      showTwoFactorReminder={showTwoFactorReminder}
+    >
       {children}
     </CmsClientLayout>
   );

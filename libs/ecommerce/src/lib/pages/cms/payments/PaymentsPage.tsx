@@ -1,14 +1,16 @@
-import { updatePaymentSettings } from './actions';
+import { savePaymentProviderCredentials, updatePaymentSettings } from './actions';
 import {
   getEnabledPaymentProviders,
   getStoreConfigStatus,
 } from './queries';
+import { getPaymentCredentialsView } from '../../../payment-config';
 import { PaymentsClient } from './PaymentsClient';
 
 export async function PaymentsPage() {
-  const [initialEnabledProviders, configStatus] = await Promise.all([
+  const [initialEnabledProviders, configStatus, credentials] = await Promise.all([
     getEnabledPaymentProviders(),
     getStoreConfigStatus(),
+    getPaymentCredentialsView(),
   ]);
 
   async function savePaymentSettings(formData: FormData) {
@@ -29,7 +31,9 @@ export async function PaymentsPage() {
     <PaymentsClient
       initialEnabledProviders={initialEnabledProviders}
       configStatus={configStatus}
+      credentials={credentials}
       saveAction={savePaymentSettings}
+      saveCredentialsAction={savePaymentProviderCredentials}
     />
   );
 }

@@ -106,6 +106,9 @@ export async function updateAutoAcceptSignups(formData: FormData) {
 // --- Global policy (admin only) -------------------------------------------------
 
 export async function updateGlobalSecuritySettings(formData: FormData) {
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+    throw new Error('Security settings are disabled in the sandbox environment.');
+  }
   const { supabase, user } = await requireUser();
   const { data: profile } = await supabase
     .from('profiles')

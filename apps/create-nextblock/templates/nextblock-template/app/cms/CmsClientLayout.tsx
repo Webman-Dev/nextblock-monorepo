@@ -9,8 +9,9 @@ import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
   ExternalLink, Paintbrush, Brain, TicketPercent, ShieldAlert, Folder, DatabaseBackup, Boxes, Tag,
-  ShieldCheck, Cookie, LineChart,
+  ShieldCheck, Cookie, LineChart, Mail, UserPlus, SlidersHorizontal,
 } from "lucide-react"
+import TwoFactorReminderBanner from "./components/TwoFactorReminderBanner"
 import { Button } from "@nextblock-cms/ui"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
 import { cn } from "@nextblock-cms/utils"
@@ -115,11 +116,14 @@ export default function CmsClientLayout({
   children,
   isCortexAiActive = false,
   isEcommerceActive = false,
+  showTwoFactorReminder = false,
 }: {
   children: ReactNode,
   isCortexAiActive?: boolean,
   isEcommerceActive?: boolean,
+  showTwoFactorReminder?: boolean,
 }) {
+  const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
   const { user, profile, role, isLoading, isAdmin, isWriter } = useAuth();
   const { logo, siteTitle } = useAppBranding();
   const router = useRouter();
@@ -228,6 +232,8 @@ export default function CmsClientLayout({
   else if (pathname.startsWith("/cms/settings/taxes")) pageTitle = "Tax Settings";
   else if (pathname.startsWith("/cms/settings/cortex-ai")) pageTitle = "Cortex AI";
   else if (pathname.startsWith("/cms/settings/bot-protection")) pageTitle = "Bot Protection";
+  else if (pathname.startsWith("/cms/settings/email")) pageTitle = "Email";
+  else if (pathname.startsWith("/cms/settings/registration")) pageTitle = "Sign-ups & Registration";
   else if (pathname.startsWith("/cms/settings/google-analytics")) pageTitle = "Google Analytics";
   else if (pathname.startsWith("/cms/settings/privacy")) pageTitle = "Privacy & Consent";
   else if (pathname.startsWith("/cms/settings/security")) pageTitle = "Security & 2FA";
@@ -310,9 +316,11 @@ export default function CmsClientLayout({
               <NavItem href="/cms/navigation" icon={ListTree} isActive={pathname.startsWith("/cms/navigation")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Navigation
               </NavItem>
-              <NavItem href="/cms/settings/security" icon={ShieldCheck} isActive={pathname.startsWith("/cms/settings/security")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
-                Security
-              </NavItem>
+              {!isSandbox && (
+                <NavItem href="/cms/settings/security" icon={ShieldCheck} isActive={pathname.startsWith("/cms/settings/security")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                  Security
+                </NavItem>
+              )}
 
               {isEcommerceActive && (
                 <>
@@ -348,18 +356,31 @@ export default function CmsClientLayout({
                   <NavItem href="/cms/promotions" icon={Tag} isActive={pathname.startsWith("/cms/promotions")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Bulk Price & Sales
                   </NavItem>
-                  <NavItem href="/cms/shipping" icon={Package} isActive={pathname.startsWith("/cms/shipping")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                    Shipping
-                  </NavItem>
-                  <NavItem href="/cms/payments" icon={CreditCard} isActive={pathname.startsWith("/cms/payments")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                    Payments
-                  </NavItem>
-                  <NavItem href="/cms/settings/taxes" icon={Settings} isActive={pathname.startsWith("/cms/settings/taxes")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                    Taxes
-                  </NavItem>
-                  <NavItem href="/cms/settings/currencies" icon={Coins} isActive={pathname.startsWith("/cms/settings/currencies")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                    Currencies
-                  </NavItem>
+                  <CollapsibleNavItem
+                    icon={SlidersHorizontal}
+                    title="Configuration"
+                    isActive={
+                      pathname.startsWith("/cms/payments") ||
+                      pathname.startsWith("/cms/shipping") ||
+                      pathname.startsWith("/cms/settings/taxes") ||
+                      pathname.startsWith("/cms/settings/currencies")
+                    }
+                    adminOnly
+                    isAdmin={isAdmin}
+                  >
+                    <NavItem href="/cms/payments" icon={CreditCard} isActive={pathname.startsWith("/cms/payments")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Payments
+                    </NavItem>
+                    <NavItem href="/cms/shipping" icon={Package} isActive={pathname.startsWith("/cms/shipping")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Shipping
+                    </NavItem>
+                    <NavItem href="/cms/settings/taxes" icon={Settings} isActive={pathname.startsWith("/cms/settings/taxes")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Taxes
+                    </NavItem>
+                    <NavItem href="/cms/settings/currencies" icon={Coins} isActive={pathname.startsWith("/cms/settings/currencies")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Currencies
+                    </NavItem>
+                  </CollapsibleNavItem>
                 </>
               )}
 
@@ -379,7 +400,7 @@ export default function CmsClientLayout({
                   <CollapsibleNavItem
                     icon={Settings}
                     title="Settings"
-                    isActive={pathname.startsWith("/cms/settings") && !pathname.startsWith("/cms/settings/taxes") && !pathname.startsWith("/cms/settings/currencies")}
+                    isActive={pathname.startsWith("/cms/settings") && !pathname.startsWith("/cms/settings/taxes") && !pathname.startsWith("/cms/settings/currencies") && !pathname.startsWith("/cms/settings/email") && !pathname.startsWith("/cms/settings/registration") && !pathname.startsWith("/cms/settings/bot-protection")}
                     adminOnly
                     isAdmin={isAdmin}
                   >
@@ -395,9 +416,6 @@ export default function CmsClientLayout({
                     <NavItem href="/cms/settings/global-css" icon={Paintbrush} isActive={pathname.startsWith("/cms/settings/global-css")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Global CSS
                     </NavItem>
-                    <NavItem href="/cms/settings/bot-protection" icon={ShieldAlert} isActive={pathname.startsWith("/cms/settings/bot-protection")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                      Bot Protection
-                    </NavItem>
                     <NavItem href="/cms/settings/privacy" icon={Cookie} isActive={pathname.startsWith("/cms/settings/privacy")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Privacy &amp; Consent
                     </NavItem>
@@ -409,6 +427,27 @@ export default function CmsClientLayout({
                     </NavItem>
                     <NavItem href="/cms/settings/backup-restore" icon={DatabaseBackup} isActive={pathname.startsWith("/cms/settings/backup-restore")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Backup / Restore
+                    </NavItem>
+                 </CollapsibleNavItem>
+                  <CollapsibleNavItem
+                    icon={SlidersHorizontal}
+                    title="Configuration"
+                    isActive={
+                      pathname.startsWith("/cms/settings/email") ||
+                      pathname.startsWith("/cms/settings/registration") ||
+                      pathname.startsWith("/cms/settings/bot-protection")
+                    }
+                    adminOnly
+                    isAdmin={isAdmin}
+                  >
+                    <NavItem href="/cms/settings/email" icon={Mail} isActive={pathname.startsWith("/cms/settings/email")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Email
+                    </NavItem>
+                    <NavItem href="/cms/settings/bot-protection" icon={ShieldAlert} isActive={pathname.startsWith("/cms/settings/bot-protection")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Bot Protection
+                    </NavItem>
+                    <NavItem href="/cms/settings/registration" icon={UserPlus} isActive={pathname.startsWith("/cms/settings/registration")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Sign-ups
                     </NavItem>
                  </CollapsibleNavItem>
                 </>
@@ -458,6 +497,7 @@ export default function CmsClientLayout({
             </Button>
         </header>
         <main className="flex-1 min-h-0 w-full overflow-y-auto overscroll-contain px-6 pt-6 pb-20 scroll-pb-24 md:pb-24">
+            {showTwoFactorReminder && <TwoFactorReminderBanner />}
             {children}
         </main>
       </div>

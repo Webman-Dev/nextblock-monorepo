@@ -1,4 +1,4 @@
-import { stripe } from './client';
+import { getStripeClient } from './client';
 import { createClient } from '@supabase/supabase-js';
 import { type CartItem } from '../types';
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
@@ -211,6 +211,7 @@ export const createCheckoutSession = async (
 
   // 4. Create Stripe Session
   try {
+    const stripe = await getStripeClient();
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       success_url: `${siteUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,

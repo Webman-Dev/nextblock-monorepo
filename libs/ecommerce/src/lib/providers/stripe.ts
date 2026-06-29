@@ -1,5 +1,5 @@
 import Stripe from 'stripe';
-import { stripe } from '../stripe/client';
+import { getStripeClient } from '../stripe/client';
 import { createClient } from '@supabase/supabase-js';
 import { countries } from '../countries';
 import {
@@ -138,6 +138,7 @@ async function upsertStripeCheckoutCustomer(input: {
     return null;
   }
 
+  const stripe = await getStripeClient();
   const stripeShippingAddress = toStripeAddress(input.shippingAddress);
   const shippingName =
     input.shippingAddress?.recipient_name ||
@@ -209,6 +210,7 @@ export class StripeProvider implements PaymentProvider {
     errorStatus?: number;
     customProps?: any;
   }> {
+    const stripe = await getStripeClient();
     // Accept the Vercel Marketplace integration's new key names too.
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;

@@ -14,7 +14,7 @@ import {
   normalizeOrderTaxDetails,
 } from '../order-tax-details';
 import { assignInvoiceMetadata } from '../invoice-server';
-import { stripe } from './client';
+import { getStripeClient } from './client';
 
 const STRIPE_CHECKOUT_SESSION_TAX_EXPANDS = ['total_details.breakdown'] as const;
 const STRIPE_CHECKOUT_LINE_ITEM_TAX_EXPANDS = ['data.taxes.rate'] as const;
@@ -69,6 +69,7 @@ function parseStoredCustomerDetails(value: unknown): OrderCustomerDetails {
 
 export async function syncStripeOrderFromSession(session: Stripe.Checkout.Session) {
   const supabase = getServiceRoleSupabaseClient();
+  const stripe = await getStripeClient();
   let detailedSession = session;
 
   try {

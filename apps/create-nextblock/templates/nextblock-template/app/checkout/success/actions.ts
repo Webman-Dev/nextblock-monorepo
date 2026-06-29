@@ -5,7 +5,7 @@ import {
   applyOrderInventoryDeduction,
   assignInvoiceMetadata,
   getInvoicePresentationData,
-  stripe,
+  getStripeClient,
   syncStripeOrderFromSession,
 } from '@nextblock-cms/ecommerce/server';
 import { resolveSupabaseServiceKey, resolveSupabaseUrl } from '../../../lib/setup/env-status';
@@ -37,6 +37,7 @@ export async function fulfillOrderAction(sessionId: string) {
 
   try {
     if (sessionId.startsWith('cs_')) {
+      const stripe = await getStripeClient();
       const session = await stripe.checkout.sessions.retrieve(sessionId);
 
       if (session.payment_status !== 'paid') {

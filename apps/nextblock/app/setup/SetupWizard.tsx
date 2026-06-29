@@ -35,14 +35,6 @@ export interface StoragePrefill {
   secretAccessKey: string;
 }
 
-interface SmtpPrefill {
-  host: string;
-  port: string;
-  user: string;
-  fromEmail: string;
-  fromName: string;
-}
-
 export interface SupabaseEnvDetected {
   NEXT_PUBLIC_SUPABASE_URL: boolean;
   SUPABASE_URL: boolean;
@@ -58,20 +50,19 @@ interface Props {
   writable: boolean;
   siteUrl: string;
   storagePrefill: StoragePrefill;
-  smtpPrefill: SmtpPrefill;
-  turnstilePrefill: { siteKey: string };
   /** Which Supabase env vars the running deployment can actually see (read-only channels). */
   supabaseEnvDetected: SupabaseEnvDetected;
 }
 
-type StepId = 'connection' | 'storage' | 'email' | 'bot' | 'signups' | 'admin';
+// Email (SMTP), bot protection, and sign-up policy are no longer collected here — they
+// moved to the CMS (Settings → Configuration) and are nudged from the dashboard onboarding
+// checklist. A fresh install only needs the database connection, media storage, and the
+// first administrator account.
+type StepId = 'connection' | 'storage' | 'admin';
 
 const STEP_TITLES: Record<StepId, string> = {
   connection: 'Database connection',
   storage: 'Media storage',
-  email: 'Email (SMTP)',
-  bot: 'Bot protection',
-  signups: 'Sign-ups',
   admin: 'Administrator account',
 };
 
@@ -89,8 +80,6 @@ export default function SetupWizard({
   writable,
   siteUrl,
   storagePrefill,
-  smtpPrefill,
-  turnstilePrefill,
   supabaseEnvDetected,
 }: Props) {
   const [isPending, startTransition] = useTransition();
@@ -110,15 +99,8 @@ export default function SetupWizard({
   // "Start from a clean database" — only offered/honored on a local fresh install.
   const [resetFirst, setResetFirst] = useState(true);
 
-  // Storage / SMTP / bot / signups / admin.
+  // Storage / admin.
   const [storage, setStorage] = useState(storagePrefill);
-  const [smtp, setSmtp] = useState({ ...smtpPrefill, pass: '' });
-  const [turnstileEnabled, setTurnstileEnabled] = useState(false);
-  const [turnstile, setTurnstile] = useState({
-    siteKey: turnstilePrefill.siteKey,
-    secretKey: '',
-  });
-  const [autoAccept, setAutoAccept] = useState(false); // off by default (defense-in-depth)
   const [admin, setAdmin] = useState({ email: '', password: '', fullName: '' });
 
   const steps = useMemo<StepId[]>(() => {
@@ -131,7 +113,7 @@ export default function SetupWizard({
     if (channel !== 'vercel') {
       list.push('storage');
     }
-    list.push('email', 'bot', 'signups', 'admin');
+    list.push('admin');
     return list;
   }, [configured, channel]);
 
@@ -205,12 +187,6 @@ export default function SetupWizard({
       // (baseUrl only differs if a channel prefilled a separate custom domain).
       put('NEXT_PUBLIC_R2_PUBLIC_URL', storage.publicUrl);
       put('NEXT_PUBLIC_R2_BASE_URL', storage.baseUrl || storage.publicUrl);
-      put('SMTP_HOST', smtp.host);
-      put('SMTP_PORT', smtp.port);
-      put('SMTP_USER', smtp.user);
-      put('SMTP_PASS', smtp.pass);
-      put('SMTP_FROM_EMAIL', smtp.fromEmail);
-      put('SMTP_FROM_NAME', smtp.fromName);
     }
 
     setMessage(null);
@@ -218,12 +194,8 @@ export default function SetupWizard({
     startTransition(async () => {
       const result = await completeSetup({
         admin,
-        autoAcceptSignups: autoAccept,
         envValues,
         resetFirst: resetFirst && writable,
-        turnstile: turnstileEnabled
-          ? { provider: 'turnstile', siteKey: turnstile.siteKey, secretKey: turnstile.secretKey }
-          : { provider: 'none', siteKey: '', secretKey: '' },
       });
 
       if (!result.ok) {
@@ -400,122 +372,6 @@ export default function SetupWizard({
             <StorageStep storage={storage} setStorage={setStorage} channel={channel} />
           )}
 
-          {current === 'email' && (
-            <div className="space-y-4">
-              {channel === 'docker' && (
-                <p className="text-xs text-muted-foreground">
-                  Docker auto-confirms sign-ups when SMTP is not configured, so this is optional.
-                </p>
-              )}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="SMTP host" htmlFor="smtpHost">
-                  <Input
-                    id="smtpHost"
-                    value={smtp.host}
-                    onChange={(e) => setSmtp({ ...smtp, host: e.target.value })}
-                  />
-                </Field>
-                <Field label="Port" htmlFor="smtpPort">
-                  <Input
-                    id="smtpPort"
-                    value={smtp.port}
-                    onChange={(e) => setSmtp({ ...smtp, port: e.target.value })}
-                  />
-                </Field>
-                <Field label="Username" htmlFor="smtpUser">
-                  <Input
-                    id="smtpUser"
-                    value={smtp.user}
-                    onChange={(e) => setSmtp({ ...smtp, user: e.target.value })}
-                  />
-                </Field>
-                <Field label="Password" htmlFor="smtpPass">
-                  <Input
-                    id="smtpPass"
-                    type="password"
-                    value={smtp.pass}
-                    onChange={(e) => setSmtp({ ...smtp, pass: e.target.value })}
-                  />
-                </Field>
-                <Field label="From email" htmlFor="smtpFromEmail">
-                  <Input
-                    id="smtpFromEmail"
-                    value={smtp.fromEmail}
-                    onChange={(e) => setSmtp({ ...smtp, fromEmail: e.target.value })}
-                  />
-                </Field>
-                <Field label="From name" htmlFor="smtpFromName">
-                  <Input
-                    id="smtpFromName"
-                    value={smtp.fromName}
-                    onChange={(e) => setSmtp({ ...smtp, fromName: e.target.value })}
-                  />
-                </Field>
-              </div>
-              {!writable && channel !== 'docker' && (
-                <p className="text-xs text-muted-foreground">
-                  On this platform, set SMTP_* as environment variables in your hosting dashboard.
-                </p>
-              )}
-            </div>
-          )}
-
-          {current === 'bot' && (
-            <div className="space-y-4">
-              <label className="flex items-start gap-3">
-                <Checkbox
-                  checked={turnstileEnabled}
-                  onCheckedChange={(c) => setTurnstileEnabled(c === true)}
-                  className="mt-1"
-                />
-                <span className="text-sm">
-                  <span className="font-medium">Enable Cloudflare Turnstile</span>
-                  <span className="block text-xs text-muted-foreground">
-                    Protects sign-up / sign-in forms. Stored securely in the database.
-                  </span>
-                </span>
-              </label>
-              {turnstileEnabled && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Site key" htmlFor="tsSite">
-                    <Input
-                      id="tsSite"
-                      value={turnstile.siteKey}
-                      onChange={(e) => setTurnstile({ ...turnstile, siteKey: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="Secret key" htmlFor="tsSecret">
-                    <Input
-                      id="tsSecret"
-                      type="password"
-                      value={turnstile.secretKey}
-                      onChange={(e) => setTurnstile({ ...turnstile, secretKey: e.target.value })}
-                    />
-                  </Field>
-                </div>
-              )}
-            </div>
-          )}
-
-          {current === 'signups' && (
-            <label className="flex items-start gap-3">
-              <Checkbox
-                checked={autoAccept}
-                onCheckedChange={(c) => setAutoAccept(c === true)}
-                className="mt-1"
-              />
-              <span className="text-sm">
-                <span className="font-medium">
-                  Auto-approve local registrations (skip outbound email verification)
-                </span>
-                <span className="block text-xs text-muted-foreground">
-                  New sign-ups become active immediately, even without SMTP configured. Convenient
-                  for local / self-hosted use; leave off for public production sites.
-                </span>
-              </span>
-            </label>
-          )}
-
           {current === 'admin' && (
             <div className="space-y-4">
               <Field label="Full name" htmlFor="adminName">
@@ -546,6 +402,13 @@ export default function SetupWizard({
                 verification email needed). Finishing also applies the database schema and saved
                 settings, so it can take up to a minute.
               </p>
+              <Alert className="py-2 px-4">
+                <AlertDescription className="text-xs">
+                  Next, your dashboard will guide you through finishing setup — branding, copyright,
+                  email (SMTP), payment providers, and bot protection are all configured there, no
+                  environment variables required.
+                </AlertDescription>
+              </Alert>
 
               {writable && (
                 <label className="flex items-start gap-3 rounded-lg border p-3">
@@ -606,14 +469,8 @@ function stepDescription(step: StepId, channel: DeployChannel): string {
         : channel === 'vercel'
           ? 'Using Supabase Storage (S3-compatible) for media.'
           : 'Bring your own Cloudflare R2 bucket for media storage.';
-    case 'email':
-      return 'Optional. Used for verification emails, password resets, and 2FA codes.';
-    case 'bot':
-      return 'Optional. Add Cloudflare Turnstile to your auth forms.';
-    case 'signups':
-      return 'Choose how new public registrations are handled.';
     case 'admin':
-      return 'Create the first administrator account.';
+      return 'Create the first administrator account — the last step. Email, payments, branding, and the rest are configured from your dashboard.';
     default:
       return '';
   }

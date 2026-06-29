@@ -6,6 +6,7 @@ import {
   readFreemiusEnvValue,
   resolveFreemiusCheckoutCredentials,
 } from './providers/freemius';
+import { hydrateFreemiusEnvFromDb } from './payment-config';
 
 type SupabaseLikeClient = SupabaseClient<any>;
 
@@ -66,6 +67,8 @@ async function freemiusCouponRequest(input: {
   couponId?: string | null;
   body?: Record<string, unknown>;
 }) {
+  // Overlay any CMS-configured Freemius credentials (DB-first) before the sync env reads.
+  await hydrateFreemiusEnvFromDb();
   const apiKey = getFreemiusApiKey(input.productId);
 
   if (!apiKey) {

@@ -1,6 +1,6 @@
 {
   "name": "create-nextblock",
-  "version": "0.10.2",
+  "version": "0.10.5",
   "description": "",
   "main": "index.js",
   "bin": {

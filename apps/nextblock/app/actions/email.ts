@@ -1,6 +1,6 @@
 "use server";
 
-import { getEmailServerConfig } from '@nextblock-cms/utils/server';
+import { resolveEmailServerConfig } from '../../lib/config/email-settings';
 import nodemailer from 'nodemailer';
 
 interface EmailParams {
@@ -11,10 +11,11 @@ interface EmailParams {
 }
 
 export async function sendEmail({ to, subject, text, html }: EmailParams) {
-  const emailConfig = await getEmailServerConfig();
+  // DB-first (CMS Settings → Configuration → Email), falling back to SMTP_* env vars.
+  const emailConfig = await resolveEmailServerConfig();
 
   if (!emailConfig) {
-    throw new Error("Email server is not configured. Please check environment variables.");
+    throw new Error("Email server is not configured. Configure SMTP in CMS Settings → Configuration → Email.");
   }
 
   const transporter = nodemailer.createTransport(emailConfig);

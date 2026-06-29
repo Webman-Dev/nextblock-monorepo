@@ -10,6 +10,7 @@ import {
   setSecureCookie,
 } from './cookies';
 import { hasValidTrustedDevice } from './trustedDevices';
+import { getSecuritySettings } from '../privacy/settings';
 
 const EMAIL_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const TWO_FACTOR_SESSION_TTL_SECONDS = 12 * 60 * 60; // 12 hours
@@ -115,6 +116,46 @@ export interface TwoFactorEvaluation {
   status: TwoFactorStatus;
   userId: string | null;
   mfaType: 'totp' | 'email' | null;
+}
+
+/**
+ * Whether to surface the "set up two-factor authentication" reminder banner to the
+ * currently signed-in staff user. True only when: not in sandbox, the user is an
+ * ADMIN/WRITER, the global "encourage staff to enable 2FA" policy is on, and the user
+ * has not enrolled a second factor. Best-effort — any failure resolves to no banner.
+ */
+export async function getStaffTwoFactorReminder(): Promise<boolean> {
+  // Sandbox runs on a shared demo account; never nag it (the page is disabled there too).
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') return false;
+
+  try {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+    const role = profile?.role;
+    if (role !== 'ADMIN' && role !== 'WRITER') return false;
+
+    const { enforce_staff_2fa } = await getSecuritySettings();
+    if (!enforce_staff_2fa) return false;
+
+    const { data: settings } = await supabase
+      .from('user_security_settings')
+      .select('mfa_enabled, mfa_type')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    return !(settings?.mfa_enabled && settings?.mfa_type);
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -8024,6 +8024,162 @@ SET content = replace(content::text, 'foo@bar.com', 'contact@example.com')::json
 WHERE content::text LIKE '%foo@bar.com%';
 
 
+-- >>> FROM: 00000000000033_setup_config_settings.sql <<<
+-- 00000000000033_setup_config_settings.sql
+-- DB-backed CMS configuration: move SMTP and payment-provider credentials out of
+-- environment variables and into \`site_settings\`. Secret rows (email_secret,
+-- payment_secret) hold AES-256-GCM envelopes and are restricted to ADMIN / service_role,
+-- extending the sensitive-key masking established in migration 018. Public rows hold
+-- non-secret config (SMTP host/from, publishable keys, provider flags) and the dashboard
+-- onboarding state.
+--
+-- This re-issues ALL FOUR site_settings policies because the masked-key list is embedded
+-- in each policy body and Postgres has no incremental "add a key" operation.
+
+COMMENT ON TABLE public.site_settings IS 'Key-value store for global site settings. Sensitive keys (Cortex AI BYOK, Bot Protection Secret, Email secret, Payment secret) hold encrypted envelopes and are restricted to ADMIN via row-level policies.';
+
+DROP POLICY IF EXISTS site_settings_read_policy ON public.site_settings;
+DROP POLICY IF EXISTS site_settings_insert_policy ON public.site_settings;
+DROP POLICY IF EXISTS site_settings_update_policy ON public.site_settings;
+DROP POLICY IF EXISTS site_settings_delete_policy ON public.site_settings;
+
+CREATE POLICY site_settings_read_policy
+  ON public.site_settings
+  FOR SELECT
+  TO public
+  USING (
+    key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
+    OR (
+      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
+      AND (SELECT auth.role()) = 'authenticated'
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
+  );
+
+CREATE POLICY site_settings_insert_policy
+  ON public.site_settings
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    (
+      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
+  );
+
+CREATE POLICY site_settings_update_policy
+  ON public.site_settings
+  FOR UPDATE
+  TO authenticated
+  USING (
+    (
+      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
+  )
+  WITH CHECK (
+    (
+      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
+  );
+
+CREATE POLICY site_settings_delete_policy
+  ON public.site_settings
+  FOR DELETE
+  TO authenticated
+  USING (
+    (
+      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
+      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
+    )
+    OR (
+      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
+      AND (SELECT public.get_current_user_role()) = 'ADMIN'
+    )
+  );
+
+-- Seed the new configuration rows (idempotent). Secret rows are created on first save
+-- from the CMS, so they are intentionally not seeded here.
+INSERT INTO public.site_settings (key, value)
+VALUES ('email_public', '{"host": "", "port": "", "fromEmail": "", "fromName": "", "secure": true}'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+INSERT INTO public.site_settings (key, value)
+VALUES ('payment_public', '{"stripe": {"publishableKey": ""}, "freemius": {"developerId": "", "publicKey": "", "productId": "", "sandboxEnabled": false}}'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+INSERT INTO public.site_settings (key, value)
+VALUES ('onboarding_state', '{"dismissed": false, "skipped": []}'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+
+-- >>> FROM: 00000000000034_enable_staff_2fa_reminder_default.sql <<<
+-- 00000000000034_enable_staff_2fa_reminder_default.sql
+-- Turn the "Encourage staff to enable 2FA" policy ON by default. The reminder banner is
+-- now implemented (shown to ADMIN/WRITER accounts without a second factor); migration 027
+-- seeded this flag to false, so flip the existing security_settings row to true. Admins can
+-- still turn it off afterward. The sandbox never enforces it (handled at runtime), so the
+-- stored value here is harmless after a sandbox reset.
+
+UPDATE public.site_settings
+SET value = jsonb_set(coalesce(value, '{}'::jsonb), '{enforce_staff_2fa}', 'true'::jsonb)
+WHERE key = 'security_settings';
+
+-- Cover the unlikely case where the row is missing (it is seeded in migration 027).
+INSERT INTO public.site_settings (key, value)
+VALUES ('security_settings', '{"trusted_device_days": 30, "enforce_staff_2fa": true}'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+
+-- >>> FROM: 00000000000035_reassert_advisor_fixes.sql <<<
+-- 00000000000035_reassert_advisor_fixes.sql
+-- Re-assert two Supabase Advisor (database linter) fixes that were first applied in
+-- migration 00000000000028 but can be lost when a database is restored/reset to a
+-- pre-028 state while its migration history still records 028 as applied (so the forward
+-- tooling never re-runs it). These two advisors reappeared, so we re-apply the fixes in a
+-- forward-only, idempotent way. No application behaviour changes.
+--
+--   1. 0011 function_search_path_mutable
+--      public.handle_ucp_cart_sessions_update() needs a pinned search_path.
+--   2. 0029 authenticated_security_definer_function_executable
+--      public.duplicate_block_definition(uuid) must run as SECURITY INVOKER (it already
+--      keeps its own ADMIN/WRITER role check and is gated by custom_block_definitions RLS).
+
+-- 1. Pin the search_path. Re-create the function with SET search_path baked into its
+--    definition (not just an ALTER) so a future CREATE OR REPLACE can't silently drop it.
+--    The body only calls now() (pg_catalog, always implicitly searched), so an empty
+--    search_path is safe. CREATE OR REPLACE keeps the function OID, so the existing
+--    trg_handle_ucp_cart_sessions_update trigger and the service_role grant are preserved.
+CREATE OR REPLACE FUNCTION public.handle_ucp_cart_sessions_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+-- 2. Ensure the duplicate helper runs with the caller's privileges. The function body
+--    (unchanged) still raises 42501 for non-ADMIN/WRITER callers, and its SELECT/INSERT
+--    are gated by custom_block_definitions RLS, so it does not need definer privileges.
+ALTER FUNCTION public.duplicate_block_definition(uuid) SECURITY INVOKER;
+
+
   -- Step D: Anchor preserved profiles
   INSERT INTO public.profiles (id, updated_at, full_name, avatar_url, website, role)
   SELECT preserved_user.id, NULL, NULL, NULL, NULL, 'ADMIN'

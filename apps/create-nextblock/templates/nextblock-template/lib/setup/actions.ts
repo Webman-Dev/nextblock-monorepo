@@ -227,11 +227,8 @@ export async function recheckStatus(): Promise<ProvisioningStatus & { writable: 
 
 export interface CompleteSetupInput {
   admin: { email: string; password: string; fullName: string };
-  autoAcceptSignups: boolean;
-  /** Local-only extra env (storage / SMTP) collected by the wizard. */
+  /** Local-only extra env (media storage) collected by the wizard. */
   envValues?: Record<string, string>;
-  /** Bot protection — stored in the DB so it works on read-only channels too. */
-  turnstile?: { provider: 'none' | 'turnstile'; siteKey: string; secretKey: string };
   /** "Start from a clean database" — wipe before installing (local dev only, server-gated). */
   resetFirst?: boolean;
 }
@@ -286,11 +283,8 @@ export async function completeSetup(input: CompleteSetupInput): Promise<ActionRe
   if (password.length < 8) {
     return { ok: false, error: 'Use an administrator password of at least 8 characters.' };
   }
-  if (input.turnstile?.provider === 'turnstile' && !input.turnstile.secretKey?.trim()) {
-    return { ok: false, error: 'Enter a Turnstile secret key, or disable bot protection.' };
-  }
 
-  // 1) Persist any local env extras (storage / SMTP) for Profile B.
+  // 1) Persist any local env extras (media storage) for Profile B.
   if (
     input.envValues &&
     Object.keys(input.envValues).length > 0 &&
@@ -377,20 +371,11 @@ export async function completeSetup(input: CompleteSetupInput): Promise<ActionRe
   }
 
   // 4) Persist DB-backed settings (service role bypasses RLS — no admin exists yet).
+  //    Sign-up policy, bot protection, email, and payments are no longer collected by the
+  //    wizard; they are configured later from the CMS. New sign-ups default to requiring
+  //    email verification (auto_accept_signups = false) as a safe default.
   try {
-    if (input.turnstile && input.turnstile.provider !== 'none') {
-      await admin.from('site_settings').upsert({
-        key: 'bot_protection_public',
-        value: { provider: input.turnstile.provider, siteKey: input.turnstile.siteKey },
-      });
-      await admin.from('site_settings').upsert({
-        key: 'bot_protection_secret',
-        value: { secretKey: input.turnstile.secretKey },
-      });
-    }
-    await setSystemConfigurationServiceRole({
-      auto_accept_signups: Boolean(input.autoAcceptSignups),
-    });
+    await setSystemConfigurationServiceRole({ auto_accept_signups: false });
   } catch (caught) {
     return {
       ok: false,

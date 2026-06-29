@@ -61,7 +61,9 @@ export const DEFAULT_TRUSTED_DEVICE_DAYS = 30;
 
 export const DEFAULT_SECURITY_SETTINGS: SecuritySettings = {
   trusted_device_days: DEFAULT_TRUSTED_DEVICE_DAYS,
-  enforce_staff_2fa: false,
+  // On by default: staff are encouraged to enable 2FA (a CMS reminder banner is shown to
+  // ADMIN/WRITER accounts without a second factor). Never enforced in the sandbox.
+  enforce_staff_2fa: true,
 };
 
 export type MfaType = 'totp' | 'email';

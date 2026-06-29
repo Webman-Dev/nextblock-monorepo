@@ -91,14 +91,6 @@ export default async function SetupPage() {
       writable={isLocalWritableEnv()}
       siteUrl={process.env.NEXT_PUBLIC_URL ?? ''}
       storagePrefill={buildStoragePrefill(channel, supabaseUrl)}
-      smtpPrefill={{
-        host: process.env.SMTP_HOST ?? '',
-        port: process.env.SMTP_PORT ?? '465',
-        user: process.env.SMTP_USER ?? '',
-        fromEmail: process.env.SMTP_FROM_EMAIL ?? '',
-        fromName: process.env.SMTP_FROM_NAME ?? '',
-      }}
-      turnstilePrefill={{ siteKey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? '' }}
       supabaseEnvDetected={{
         NEXT_PUBLIC_SUPABASE_URL: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
         SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
