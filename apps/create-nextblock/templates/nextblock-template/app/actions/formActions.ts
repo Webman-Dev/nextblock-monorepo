@@ -32,7 +32,16 @@ export async function handleFormSubmission(
   prevState: unknown,
   formData: FormData
 ): Promise<FormSubmissionResult> {
-  const { recipient, botProtectionProvider } = normalizeSubmissionConfig(config);
+  const { recipient: configuredRecipient, botProtectionProvider } = normalizeSubmissionConfig(config);
+
+  // In sandbox mode the DB is periodically wiped and re-seeded with a dummy
+  // recipient, so route every submission to the operator's sandbox inbox instead.
+  // Real installs ignore this and use the recipient configured on the form block.
+  const sandboxRecipient =
+    process.env.NEXT_PUBLIC_IS_SANDBOX === 'true'
+      ? process.env.SANDBOX_CONTACT_EMAIL?.trim() || ''
+      : '';
+  const recipient = sandboxRecipient || configuredRecipient;
 
   // Phase 1: Honeypot Validation
   const honeypot = formData.get('verification_secondary_email');

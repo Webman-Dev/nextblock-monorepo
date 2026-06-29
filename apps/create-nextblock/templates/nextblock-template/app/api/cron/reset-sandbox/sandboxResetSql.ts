@@ -7899,6 +7899,131 @@ CREATE POLICY system_configuration_service_role_all
   WITH CHECK (true);
 
 
+-- >>> FROM: 00000000000031_seed_footer_navigation.sql <<<
+-- 00000000000031_seed_footer_navigation.sql
+-- Seed editable FOOTER navigation items (EN + FR).
+--
+-- The public footer used to hard-code its "Privacy Policy" and "Terms of Service"
+-- links in apps/nextblock/components/AppShell.tsx. This migration turns them into
+-- real navigation_items rows under the FOOTER menu so they are editable from the
+-- CMS (/cms/navigation) like any other menu, and so the French footer points at
+-- the localized page slugs.
+--
+-- Targets the legal pages seeded by 00000000000027_setup_privacy_and_mfa.sql:
+--   EN  /privacy-policy            FR  /politique-de-confidentialite
+--   EN  /terms-of-service          FR  /conditions-utilisation
+--
+-- Idempotent: re-running replaces the FOOTER rows it owns (matched by URL) and
+-- reuses their translation_group_id so EN/FR stay linked across re-runs.
+DO $seed_footer$
+DECLARE
+  v_en bigint;
+  v_fr bigint;
+  v_privacy_group uuid;
+  v_terms_group uuid;
+  v_en_privacy_page bigint;
+  v_fr_privacy_page bigint;
+  v_en_terms_page bigint;
+  v_fr_terms_page bigint;
+BEGIN
+  SELECT id INTO v_en FROM public.languages WHERE code = 'en' LIMIT 1;
+  SELECT id INTO v_fr FROM public.languages WHERE code = 'fr' LIMIT 1;
+
+  IF v_en IS NULL THEN
+    RAISE NOTICE 'Default language "en" not found; skipping footer navigation seed.';
+    RETURN;
+  END IF;
+
+  -- Reuse existing translation groups if these footer items were seeded before,
+  -- so EN <-> FR stay paired and re-runs do not orphan translations.
+  SELECT translation_group_id INTO v_privacy_group
+    FROM public.navigation_items
+    WHERE menu_key = 'FOOTER' AND url = '/privacy-policy' LIMIT 1;
+  IF v_privacy_group IS NULL THEN v_privacy_group := gen_random_uuid(); END IF;
+
+  SELECT translation_group_id INTO v_terms_group
+    FROM public.navigation_items
+    WHERE menu_key = 'FOOTER' AND url = '/terms-of-service' LIMIT 1;
+  IF v_terms_group IS NULL THEN v_terms_group := gen_random_uuid(); END IF;
+
+  -- Best-effort link each item to its underlying page (ON DELETE SET NULL keeps
+  -- the link working even if a page is later removed; url remains the source of truth).
+  SELECT id INTO v_en_privacy_page
+    FROM public.pages WHERE slug = 'privacy-policy' AND language_id = v_en LIMIT 1;
+  SELECT id INTO v_en_terms_page
+    FROM public.pages WHERE slug = 'terms-of-service' AND language_id = v_en LIMIT 1;
+
+  -- Remove any prior copies of the footer links we own, then re-insert cleanly.
+  DELETE FROM public.navigation_items
+    WHERE menu_key = 'FOOTER'
+      AND url IN (
+        '/privacy-policy', '/terms-of-service',
+        '/politique-de-confidentialite', '/conditions-utilisation'
+      );
+
+  -- ----- English footer -----
+  INSERT INTO public.navigation_items
+    (language_id, menu_key, label, url, "order", page_id, translation_group_id)
+  VALUES
+    (v_en, 'FOOTER', 'Privacy Policy',    '/privacy-policy',    0, v_en_privacy_page, v_privacy_group),
+    (v_en, 'FOOTER', 'Terms of Service',  '/terms-of-service',  1, v_en_terms_page,   v_terms_group);
+
+  -- ----- French footer (only if the French language exists) -----
+  IF v_fr IS NOT NULL THEN
+    SELECT id INTO v_fr_privacy_page
+      FROM public.pages WHERE slug = 'politique-de-confidentialite' AND language_id = v_fr LIMIT 1;
+    SELECT id INTO v_fr_terms_page
+      FROM public.pages WHERE slug = 'conditions-utilisation' AND language_id = v_fr LIMIT 1;
+
+    INSERT INTO public.navigation_items
+      (language_id, menu_key, label, url, "order", page_id, translation_group_id)
+    VALUES
+      (v_fr, 'FOOTER', 'Politique de confidentialité', '/politique-de-confidentialite', 0, v_fr_privacy_page, v_privacy_group),
+      (v_fr, 'FOOTER', 'Conditions d''utilisation',    '/conditions-utilisation',       1, v_fr_terms_page,   v_terms_group);
+  END IF;
+
+  RAISE NOTICE 'Seeded FOOTER navigation items (Privacy Policy, Terms of Service).';
+END;
+$seed_footer$;
+
+
+-- >>> FROM: 00000000000032_neutralize_seeded_contact_emails.sql <<<
+-- 00000000000032_neutralize_seeded_contact_emails.sql
+-- Remove the original authors' contact addresses from seeded content so a
+-- downloaded / self-hosted copy of NextBlock never routes mail to us.
+--
+-- Earlier migrations baked real addresses into block content:
+--   * 00000000000027 seeded \`privacy@nextblock.dev\` across the Privacy Policy and
+--     Terms pages (EN + FR), as visible text and \`mailto:\` links.
+--   * 00000000000010 seeded a \`mailto:info@nextblock.dev\` CTA on the French home
+--     page (the English page correctly links to /contact), and \`foo@bar.com\` as
+--     the contact form recipient.
+--
+-- Migrations are append-only, so this is a forward-only data fix rather than an
+-- edit of those files. Each statement is idempotent (a no-op once applied).
+--
+-- The \`{{privacy_email}}\` token is resolved at render time by the app
+-- (apps/nextblock/lib/privacy/contact-emails.ts): admin "Support email" setting
+-- -> SANDBOX_PRIVACY_EMAIL env (sandbox only) -> privacy@example.com fallback.
+
+-- 1. Privacy / Terms legal pages: swap the hard-coded address for a merge tag.
+UPDATE public.blocks
+SET content = replace(content::text, 'privacy@nextblock.dev', '{{privacy_email}}')::jsonb
+WHERE content::text LIKE '%privacy@nextblock.dev%';
+
+-- 2. French home "Nous contacter" CTA: point at the contact form like the English
+--    page instead of a mailto to our inbox.
+UPDATE public.blocks
+SET content = replace(content::text, 'mailto:info@nextblock.dev', '/contact')::jsonb
+WHERE content::text LIKE '%mailto:info@nextblock.dev%';
+
+-- 3. Contact form default recipient: use a neutral placeholder. In sandbox the
+--    app overrides this with SANDBOX_CONTACT_EMAIL at submit time.
+UPDATE public.blocks
+SET content = replace(content::text, 'foo@bar.com', 'contact@example.com')::jsonb
+WHERE content::text LIKE '%foo@bar.com%';
+
+
   -- Step D: Anchor preserved profiles
   INSERT INTO public.profiles (id, updated_at, full_name, avatar_url, website, role)
   SELECT preserved_user.id, NULL, NULL, NULL, NULL, 'ADMIN'

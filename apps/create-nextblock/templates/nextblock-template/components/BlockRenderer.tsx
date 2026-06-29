@@ -17,6 +17,7 @@ import ClientTextBlockRenderer from "./blocks/renderers/ClientTextBlockRenderer"
 import { getCachedCustomBlockDefinitionBySlug } from "../lib/custom-block-definitions";
 import { CachedDynamicLayoutEngine } from "./renderers/CachedDynamicLayoutEngine";
 import { resolveBlockRelations } from "../lib/resolve-block-relations";
+import { substitutePrivacyMergeTags } from "../lib/privacy/contact-emails";
 
 const ECOMMERCE_BLOCK_TYPES = new Set([
   "product_grid",
@@ -143,9 +144,16 @@ async function renderLoadedBlock({
 
   // Keep common LCP-adjacent text blocks out of the dynamic renderer manifest.
   if (block.block_type === 'text') {
+    // Top-level text blocks bypass the server TextBlockRenderer, so resolve any
+    // merge tags (e.g. {{privacy_email}} on the Privacy/Terms pages) here.
+    const textContent = block.content as { html_content?: string } | null;
+    const rawHtml = typeof textContent?.html_content === 'string' ? textContent.html_content : '';
+    const html = rawHtml.includes('{{')
+      ? await substitutePrivacyMergeTags(rawHtml)
+      : rawHtml;
     return (
       <ClientTextBlockRenderer
-        content={block.content as any}
+        content={{ ...(textContent as any), html_content: html }}
         languageId={languageId}
         visualEditAttributes={visualEditAttributes}
       />

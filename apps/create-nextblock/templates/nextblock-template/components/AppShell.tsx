@@ -3,7 +3,6 @@
 import type { Database } from '@nextblock-cms/db';
 import { cn } from '@nextblock-cms/utils';
 import { usePathname } from 'next/navigation';
-import Link from 'next/link';
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import Header from './Header';
 import FooterNavigation from './FooterNavigation';
@@ -148,12 +147,6 @@ export function AppShell({
                   )}
                 <div className="flex flex-row items-center gap-4">
                   <p className="text-muted-foreground">{copyrightText}</p>
-                  <Link href="/privacy-policy" className="hover:underline">
-                    Privacy Policy
-                  </Link>
-                  <Link href="/terms-of-service" className="hover:underline">
-                    Terms of Service
-                  </Link>
                   <ThemeSwitcher />
                 </div>
               </div>

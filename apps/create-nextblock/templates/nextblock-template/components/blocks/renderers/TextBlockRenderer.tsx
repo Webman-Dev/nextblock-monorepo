@@ -2,6 +2,7 @@ import React from "react";
 import { headers } from 'next/headers';
 import ClientTextBlockRenderer from "./ClientTextBlockRenderer";
 import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
+import { substitutePrivacyMergeTags } from "../../../lib/privacy/contact-emails";
 
 export type TextBlockContent = {
     html_content?: string;
@@ -31,7 +32,11 @@ const TextBlockRenderer: React.FC<TextBlockRendererProps> = async ({
 }) => {
   const hdrs = await headers();
   const nonce = hdrs.get('x-nonce') || '';
-  const htmlWithNonce = content.html_content ? addNonceToInlineScripts(content.html_content, nonce) : '';
+  let html = content.html_content || '';
+  if (html.includes('{{')) {
+    html = await substitutePrivacyMergeTags(html);
+  }
+  const htmlWithNonce = html ? addNonceToInlineScripts(html, nonce) : '';
   const patchedContent = { ...content, html_content: htmlWithNonce };
   return (
     <ClientTextBlockRenderer
