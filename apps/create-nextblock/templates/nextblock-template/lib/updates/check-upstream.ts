@@ -23,7 +23,9 @@ import pkg from '../../package.json';
 
 const UPSTREAM_REPO = 'nextblock-cms/nextblock';
 const RELEASES_API = `https://api.github.com/repos/${UPSTREAM_REPO}/releases/latest`;
-const CONFLICT_LABEL = 'nextblock-sync-conflict';
+// The sync workflow tags its conflict issues with this hidden body marker. We match on it
+// (not on a label) so a label that failed to create on GitHub can't hide a real conflict.
+const CONFLICT_MARKER = '<!-- nextblock-sync-conflict -->';
 const REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000; // throttle the background poll to every 6h
 
 export type UpdateTrack = 'git' | 'standalone';
@@ -240,11 +242,12 @@ export async function checkForSyncConflicts(): Promise<SyncConflictResult> {
   // Only an AUTHORITATIVE res.ok read may drive the resolve loop below: a 404 (private
   // fork without NEXTBLOCK_GITHUB_TOKEN, or a transient error) must NOT be read as "zero
   // open conflicts", or live conflict alerts would be wrongly auto-resolved and hidden.
-  let issues: Array<{ number: number; html_url: string; pull_request?: unknown }> = [];
+  let issues: Array<{ number: number; html_url: string; body?: string | null; pull_request?: unknown }> =
+    [];
   let issuesFetched = false;
   let fetchError: string | undefined;
   try {
-    const url = `https://api.github.com/repos/${self.owner}/${self.repo}/issues?labels=${CONFLICT_LABEL}&state=open&per_page=20`;
+    const url = `https://api.github.com/repos/${self.owner}/${self.repo}/issues?state=open&per_page=50`;
     const res = await fetch(url, {
       headers: githubHeaders(),
       signal: AbortSignal.timeout(15_000),
@@ -253,7 +256,10 @@ export async function checkForSyncConflicts(): Promise<SyncConflictResult> {
     if (res.ok) {
       issuesFetched = true;
       const data = await res.json();
-      issues = (Array.isArray(data) ? data : []).filter((i) => !i.pull_request);
+      // Exclude PRs (the /issues endpoint returns them too) and keep only our marked issues.
+      issues = (Array.isArray(data) ? data : [])
+        .filter((i) => !i.pull_request)
+        .filter((i) => typeof i.body === 'string' && i.body.includes(CONFLICT_MARKER));
     } else if (res.status === 404) {
       fetchError =
         'Could not read repository issues (HTTP 404). For a private fork, set NEXTBLOCK_GITHUB_TOKEN.';
@@ -391,6 +397,34 @@ export async function refreshUpstreamStatus(): Promise<{
   }
 
   return { update, conflicts, snapshot };
+}
+
+/**
+ * Mark the sync workflow as installed/active immediately after a successful Connect
+ * install — so the onboarding step flips to done right away rather than waiting for the
+ * next throttled poll (and GitHub's brief workflow-registration lag). Never throws.
+ */
+export async function markSyncWorkflowInstalled(): Promise<void> {
+  try {
+    const config = await getSystemConfiguration();
+    const prev = config.settings?.['upstream_status'] as Partial<UpstreamStatusSnapshot> | undefined;
+    const self = resolveSelfRepo();
+    const snapshot: UpstreamStatusSnapshot = {
+      checked_at: new Date().toISOString(),
+      current_version: prev?.current_version ?? pkg.version,
+      latest_version: prev?.latest_version ?? null,
+      update_available: prev?.update_available ?? false,
+      track: prev?.track ?? 'git',
+      repo: self ? `${self.owner}/${self.repo}` : prev?.repo ?? null,
+      open_conflicts: prev?.open_conflicts ?? 0,
+      actions_active: true,
+    };
+    await setSystemConfigurationServiceRole({
+      settings: { ...config.settings, upstream_status: snapshot },
+    });
+  } catch {
+    /* best-effort */
+  }
 }
 
 /** Throttled background refresh for the CMS layout's after() hook. Never throws. */

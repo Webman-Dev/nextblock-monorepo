@@ -8,6 +8,7 @@ import {
   pollDeviceFlowOnce,
   installSyncWorkflow,
 } from '../../../lib/updates/github-device';
+import { markSyncWorkflowInstalled } from '../../../lib/updates/check-upstream';
 
 const DEVICE_COOKIE = 'nb_gh_device';
 
@@ -84,6 +85,9 @@ export async function pollGithubConnect(): Promise<PollConnectResult> {
     const install = await installSyncWorkflow(poll.token);
     store.delete({ name: DEVICE_COOKIE, path: '/cms' });
     if (install.ok) {
+      // We just installed the workflow — flip the onboarding state now instead of waiting
+      // for the throttled background poll / GitHub's registration lag.
+      await markSyncWorkflowInstalled();
       revalidatePath('/cms', 'layout');
       return { status: 'installed', htmlUrl: install.htmlUrl };
     }
