@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Check, ExternalLink, Github, Loader2 } from 'lucide-react';
 import { Button } from '@nextblock-cms/ui';
 import { startGithubConnect, pollGithubConnect } from './github-connect-actions';
@@ -13,6 +14,7 @@ type Phase = 'idle' | 'starting' | 'awaiting' | 'installed' | 'error';
  * No PAT, no env config — the public client id is baked into the app.
  */
 export default function ConnectGitHubButton() {
+  const router = useRouter();
   const [phase, setPhase] = useState<Phase>('idle');
   const [userCode, setUserCode] = useState('');
   const [verificationUri, setVerificationUri] = useState('https://github.com/login/device');
@@ -34,6 +36,9 @@ export default function ConnectGitHubButton() {
 
     if (result.status === 'installed') {
       setPhase('installed');
+      // Re-render the dashboard so the onboarding step picks up the now-active workflow
+      // (the step then flips to done and this control is replaced).
+      router.refresh();
       return;
     }
     if (result.status === 'error') {
@@ -44,7 +49,7 @@ export default function ConnectGitHubButton() {
     // pending — back off a little on slow_down, then poll again.
     const next = result.slowDown ? intervalMs + 5000 : intervalMs;
     setTimeout(() => void poll(next), next);
-  }, []);
+  }, [router]);
 
   const connect = useCallback(async () => {
     setError('');
@@ -67,7 +72,7 @@ export default function ConnectGitHubButton() {
     return (
       <div className="flex items-center gap-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400">
         <Check className="h-4 w-4" />
-        Connected — installing…
+        Connected — workflow installed
       </div>
     );
   }

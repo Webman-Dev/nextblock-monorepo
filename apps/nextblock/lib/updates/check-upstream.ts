@@ -393,6 +393,34 @@ export async function refreshUpstreamStatus(): Promise<{
   return { update, conflicts, snapshot };
 }
 
+/**
+ * Mark the sync workflow as installed/active immediately after a successful Connect
+ * install — so the onboarding step flips to done right away rather than waiting for the
+ * next throttled poll (and GitHub's brief workflow-registration lag). Never throws.
+ */
+export async function markSyncWorkflowInstalled(): Promise<void> {
+  try {
+    const config = await getSystemConfiguration();
+    const prev = config.settings?.['upstream_status'] as Partial<UpstreamStatusSnapshot> | undefined;
+    const self = resolveSelfRepo();
+    const snapshot: UpstreamStatusSnapshot = {
+      checked_at: new Date().toISOString(),
+      current_version: prev?.current_version ?? pkg.version,
+      latest_version: prev?.latest_version ?? null,
+      update_available: prev?.update_available ?? false,
+      track: prev?.track ?? 'git',
+      repo: self ? `${self.owner}/${self.repo}` : prev?.repo ?? null,
+      open_conflicts: prev?.open_conflicts ?? 0,
+      actions_active: true,
+    };
+    await setSystemConfigurationServiceRole({
+      settings: { ...config.settings, upstream_status: snapshot },
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
 /** Throttled background refresh for the CMS layout's after() hook. Never throws. */
 export async function maybeRefreshUpstreamStatus(): Promise<void> {
   try {
