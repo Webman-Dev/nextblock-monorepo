@@ -28,15 +28,44 @@ workflow**). Each run:
    dashboard with a link to resolve it. Once you resolve and **close the issue**, the
    banner clears automatically.
 
-### One-time step: enable GitHub Actions
+### One-click install (Connect GitHub)
 
-GitHub **disables Actions on a freshly-forked repo** until you turn them on once:
+Vercel's 1-click deploy creates your repo through an integration whose token lacks the
+GitHub **`workflow`** scope, so GitHub **strips `.github/workflows/`** from the copy — your
+new repo won't have the sync workflow even though the template ships it. To fix that with no
+token to create, the dashboard onboarding step shows a **Connect GitHub** button:
 
-> Your repo → **Actions** tab → **"I understand my workflows, go ahead and enable them."**
+1. Click **Connect GitHub** — a short code appears.
+2. Click **Authorize on GitHub**, enter the code, approve.
+3. NextBlock installs `.github/workflows/nextblock-sync.yml` into your repo for you, and the
+   step turns green.
 
-The dashboard onboarding checklist reminds you of this ("Enable automatic updates
-(GitHub Actions)") and links straight to your repo's Actions tab. The step marks itself
-done once the workflow has run at least once.
+This uses GitHub's **device flow** — no token to create, no per-site callback, nothing to
+configure (the public client id ships with NextBlock). The authorization requests the
+`repo` + `workflow` scopes because GitHub requires them to write a workflow file; NextBlock
+uses the grant once to install the file and does **not** store it. Revoke it anytime at
+GitHub → **Settings → Applications**.
+
+### Do you need to enable GitHub Actions?
+
+It depends on how the repository was created:
+
+- **Vercel 1-click deploy** creates a **new repository you own** (a copy, *not* a GitHub
+  fork). GitHub **enables Actions by default** on repos you own — **there's nothing to turn
+  on**. The sync workflow runs automatically once it lands on your repo's **default branch**.
+- **A manual GitHub _fork_** (the "Fork" button) has Actions **disabled** by default. Enable
+  them once: your repo → **Actions** tab → **"I understand my workflows, go ahead and enable
+  them."**
+
+> **Seeing GitHub's "Get started with Actions / choose a workflow" page?** That only means
+> your Actions tab is **empty** — `.github/workflows/nextblock-sync.yml` isn't on your
+> **default branch** yet (scheduled workflows only run from the default branch). Once it is,
+> the tab shows **NextBlock Upstream Sync** with a **Run workflow** button. There is no
+> separate "enable" button on an owned repo because Actions are already on.
+
+The dashboard onboarding step ("Automatic updates (GitHub Actions)") links to **Settings →
+Actions** — where you can confirm Actions are allowed — and completes itself once GitHub
+reports the sync workflow as active.
 
 ### No GitHub secrets required (public forks)
 

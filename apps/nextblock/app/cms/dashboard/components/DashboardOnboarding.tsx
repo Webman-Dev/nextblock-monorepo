@@ -12,6 +12,7 @@ import {
 } from '@nextblock-cms/ui';
 import { ArrowRight, CheckCircle2, Circle, X } from 'lucide-react';
 import type { OnboardingStatus } from '../../../../lib/onboarding/status';
+import ConnectGitHubButton from '../../components/ConnectGitHubButton';
 
 export default function DashboardOnboarding({
   status,
@@ -102,19 +103,23 @@ export default function DashboardOnboarding({
                 <p className="text-xs text-muted-foreground">{step.description}</p>
               </div>
               {!step.done && step.key !== 'admin' && (
-                <Button asChild variant="outline" size="sm" className="shrink-0">
-                  {step.isExternal ? (
-                    <a href={step.href} target="_blank" rel="noopener noreferrer">
-                      Set up
-                      <ArrowRight className="ml-1 h-3.5 w-3.5" />
-                    </a>
-                  ) : (
-                    <Link href={step.href}>
-                      Set up
-                      <ArrowRight className="ml-1 h-3.5 w-3.5" />
-                    </Link>
-                  )}
-                </Button>
+                step.connectGithub ? (
+                  <ConnectGitHubButton />
+                ) : (
+                  <Button asChild variant="outline" size="sm" className="shrink-0">
+                    {step.isExternal ? (
+                      <a href={step.href} target="_blank" rel="noopener noreferrer">
+                        Set up
+                        <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                      </a>
+                    ) : (
+                      <Link href={step.href}>
+                        Set up
+                        <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                      </Link>
+                    )}
+                  </Button>
+                )
               )}
             </li>
           ))}

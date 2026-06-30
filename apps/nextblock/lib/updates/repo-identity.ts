@@ -39,8 +39,18 @@ export function resolveSelfRepo(): SelfRepo | null {
   return null;
 }
 
-/** The fork's GitHub Actions tab, for the onboarding "enable Actions" reminder. */
+/** The repo's GitHub Actions tab (shows the sync workflow + a "Run workflow" button). */
 export function selfActionsUrl(): string | null {
   const self = resolveSelfRepo();
   return self ? `https://github.com/${self.owner}/${self.repo}/actions` : null;
+}
+
+/**
+ * Settings -> Actions -> General. The authoritative enable/permissions page — always
+ * renders a clear UI (unlike /actions, which redirects to the confusing "choose a
+ * workflow" chooser when no workflow has run yet). Used by the onboarding reminder.
+ */
+export function selfActionsSettingsUrl(): string | null {
+  const self = resolveSelfRepo();
+  return self ? `https://github.com/${self.owner}/${self.repo}/settings/actions` : null;
 }

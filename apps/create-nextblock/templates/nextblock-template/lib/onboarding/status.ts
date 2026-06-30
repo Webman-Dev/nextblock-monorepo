@@ -7,7 +7,8 @@ import { getEmailPublicSettings } from '../config/email-settings';
 import { getPrivacySettings } from '../privacy/settings';
 import { detectChannel } from '../setup/env-status';
 import { getSystemConfiguration } from '../setup/system-config';
-import { selfActionsUrl } from '../updates/repo-identity';
+import { selfActionsSettingsUrl } from '../updates/repo-identity';
+import { isGithubConnectAvailable } from '../updates/github-device';
 
 export type OnboardingStep = {
   key: string;
@@ -18,6 +19,8 @@ export type OnboardingStep = {
   optional: boolean;
   /** When true, render the CTA as an external link (new tab) instead of an in-app route. */
   isExternal?: boolean;
+  /** When true, render the device-flow "Connect GitHub" control instead of a link. */
+  connectGithub?: boolean;
 };
 
 export type OnboardingStatus = {
@@ -180,18 +183,22 @@ export async function getOnboardingStatus(opts: {
     } catch {
       actionsActive = false;
     }
+    const canConnect = !actionsActive && isGithubConnectAvailable();
     steps.push({
       key: 'github-actions',
-      title: 'Enable automatic updates (GitHub Actions)',
+      title: 'Automatic updates (GitHub Actions)',
       description: actionsActive
-        ? 'Automated upstream sync is active for your repository.'
-        : 'Turn on GitHub Actions in your forked repo so NextBlock can merge upstream updates for you.',
+        ? 'The daily upstream-sync workflow is active for your repository.'
+        : canConnect
+          ? 'Connect GitHub to install the upstream-sync workflow into your repo — Vercel’s 1-click deploy can’t copy it automatically.'
+          : 'Vercel deploys have GitHub Actions on by default — this completes once GitHub registers the sync workflow on your default branch. A manually forked repo needs Actions enabled under Settings → Actions.',
       href:
-        selfActionsUrl() ??
-        'https://docs.github.com/actions/managing-workflow-runs-and-deployments/managing-workflow-runs/disabling-and-enabling-a-workflow',
+        selfActionsSettingsUrl() ??
+        'https://github.com/nextblock-cms/nextblock/blob/HEAD/docs/13-STAYING-UP-TO-DATE.md',
       done: actionsActive,
       optional: true,
       isExternal: true,
+      connectGithub: canConnect,
     });
   }
 

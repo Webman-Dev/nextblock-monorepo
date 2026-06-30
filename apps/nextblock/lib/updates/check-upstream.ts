@@ -264,10 +264,13 @@ export async function checkForSyncConflicts(): Promise<SyncConflictResult> {
     fetchError = caught instanceof Error ? caught.message : 'Could not reach the GitHub issues API.';
   }
 
-  // 2) Has the sync workflow ever run? (drives the onboarding "Actions enabled" state)
+  // 2) Is the sync workflow present AND enabled? (drives the onboarding "Actions" step)
+  // We check the workflow's `state` rather than whether it has *run*: a healthy Vercel
+  // deploy has Actions enabled by default, so the workflow is 'active' immediately — no
+  // need to wait up to 24h for the first daily cron before the step completes.
   let actionsActive = false;
   try {
-    const wfUrl = `https://api.github.com/repos/${self.owner}/${self.repo}/actions/workflows/nextblock-sync.yml/runs?per_page=1`;
+    const wfUrl = `https://api.github.com/repos/${self.owner}/${self.repo}/actions/workflows/nextblock-sync.yml`;
     const res = await fetch(wfUrl, {
       headers: githubHeaders(),
       signal: AbortSignal.timeout(15_000),
@@ -275,7 +278,7 @@ export async function checkForSyncConflicts(): Promise<SyncConflictResult> {
     });
     if (res.ok) {
       const data = await res.json();
-      actionsActive = (data?.total_count ?? 0) > 0;
+      actionsActive = data?.state === 'active';
     }
   } catch {
     /* best-effort */
