@@ -22,11 +22,34 @@ export type OnboardingStatus = {
   dismissed: boolean;
 };
 
-function hasCopyright(value: unknown): boolean {
+// Seeded defaults (libs/db migrations 008 + 010). The branding/copyright steps count as
+// "done" only when the value has been customized away from these — a fresh install ships
+// with the seeds, so a plain presence check would mark every step complete immediately.
+const SEEDED_SITE_TITLE = 'NextBlock™ CMS';
+const SEEDED_LOGO_OBJECT_KEY = 'images/nextblock-logo-small.webp';
+const SEEDED_COPYRIGHT: Record<string, string> = {
+  en: '© {year} Nextblock CMS. All rights reserved.',
+  fr: '© {year} Nextblock CMS. Tous droits réservés.',
+};
+
+/** True when at least one language's copyright text is set AND differs from the seed. */
+function hasCustomCopyright(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
-  return Object.values(value as Record<string, unknown>).some(
-    (v) => typeof v === 'string' && v.trim().length > 0
-  );
+  return Object.entries(value as Record<string, unknown>).some(([lang, v]) => {
+    if (typeof v !== 'string') return false;
+    const trimmed = v.trim();
+    return trimmed.length > 0 && trimmed !== (SEEDED_COPYRIGHT[lang] ?? '');
+  });
+}
+
+/** Pull the active logo's media object_key from the (to-one) embedded relation. */
+function extractLogoObjectKey(logoRow: unknown): string | null {
+  if (!logoRow || typeof logoRow !== 'object') return null;
+  const media = (logoRow as { media?: unknown }).media;
+  const record = Array.isArray(media) ? media[0] : media;
+  if (!record || typeof record !== 'object') return null;
+  const key = (record as { object_key?: unknown }).object_key;
+  return typeof key === 'string' ? key : null;
 }
 
 export async function getOnboardingStatus(opts: {
@@ -38,8 +61,13 @@ export async function getOnboardingStatus(opts: {
     supabase
       .from('site_settings')
       .select('key, value')
-      .in('key', ['footer_copyright', 'bot_protection_public', 'onboarding_state']),
-    supabase.from('logos').select('id').limit(1).maybeSingle(),
+      .in('key', ['footer_copyright', 'bot_protection_public', 'onboarding_state', 'site_title']),
+    supabase
+      .from('logos')
+      .select('media:media_id(object_key)')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
     getEmailPublicSettings(),
     getPrivacySettings(),
   ]);
@@ -48,8 +76,16 @@ export async function getOnboardingStatus(opts: {
   const botPublic = (rows.get('bot_protection_public') ?? {}) as Record<string, unknown>;
   const onboardingState = (rows.get('onboarding_state') ?? {}) as Record<string, unknown>;
 
-  const brandingDone = Boolean(logoRow);
-  const copyrightDone = hasCopyright(rows.get('footer_copyright'));
+  const siteTitleRaw = rows.get('site_title');
+  const siteTitle = typeof siteTitleRaw === 'string' ? siteTitleRaw.trim() : '';
+  const siteTitleCustomized = siteTitle.length > 0 && siteTitle !== SEEDED_SITE_TITLE;
+  const logoObjectKey = extractLogoObjectKey(logoRow);
+  const logoCustomized = Boolean(logoObjectKey) && logoObjectKey !== SEEDED_LOGO_OBJECT_KEY;
+
+  // Branding is "done" once the user renames the site or uploads their own logo — not merely
+  // because the seeded NextBlock title/logo exist.
+  const brandingDone = siteTitleCustomized || logoCustomized;
+  const copyrightDone = hasCustomCopyright(rows.get('footer_copyright'));
   const emailDone = Boolean(emailPublic.host) || Boolean(process.env['SMTP_HOST']);
   const analyticsDone = Boolean(privacy.gtm_id);
   const botProvider = typeof botPublic['provider'] === 'string' ? (botPublic['provider'] as string) : 'none';
