@@ -182,6 +182,10 @@ export async function saveSupabaseConnection(input: ConnectionInput): Promise<Ac
     NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: anonKey,
     SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey,
+    // Enable the build-time migration hook for this install (Milestone 4). On Vercel
+    // VERCEL_ENV gates it instead; off-Vercel (local / Docker / standalone) production
+    // builds read this flag. Only written to a local-writable .env (no-op on Vercel).
+    NEXTBLOCK_BUILD_MIGRATE: '1',
   };
   if (input.siteUrl?.trim()) values.NEXT_PUBLIC_URL = input.siteUrl.trim();
   if (input.postgresUrl?.trim()) values.POSTGRES_URL = input.postgresUrl.trim();

@@ -158,3 +158,12 @@ see it scheduled.
 
 Visit the deployment URL — it redirects to `/setup` until the first admin exists.
 Complete the wizard, then sign in at `/cms/dashboard`.
+
+**Turn on automatic updates.** The 1-click deploy forks NextBlock into your Git provider
+and ships a daily upstream-sync GitHub Action — but GitHub **disables Actions on a fresh
+fork** until you enable them once (your repo → **Actions** tab → *"I understand my
+workflows, go ahead and enable them."*). The dashboard onboarding checklist reminds you and
+links straight there. We recommend a **public** fork (fully zero-config); a **private**
+fork additionally needs a `NEXTBLOCK_GITHUB_TOKEN` env var for the in-CMS conflict banner.
+Full details — both tracks, conflict handling, and build-time migrations — are in
+[docs/13](./13-STAYING-UP-TO-DATE.md).

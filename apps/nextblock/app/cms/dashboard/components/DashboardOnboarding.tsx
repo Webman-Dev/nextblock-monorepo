@@ -103,10 +103,17 @@ export default function DashboardOnboarding({
               </div>
               {!step.done && step.key !== 'admin' && (
                 <Button asChild variant="outline" size="sm" className="shrink-0">
-                  <Link href={step.href}>
-                    Set up
-                    <ArrowRight className="ml-1 h-3.5 w-3.5" />
-                  </Link>
+                  {step.isExternal ? (
+                    <a href={step.href} target="_blank" rel="noopener noreferrer">
+                      Set up
+                      <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                    </a>
+                  ) : (
+                    <Link href={step.href}>
+                      Set up
+                      <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                    </Link>
+                  )}
                 </Button>
               )}
             </li>

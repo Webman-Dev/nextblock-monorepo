@@ -747,6 +747,10 @@ async function runSetupWizard(projectDir, projectName) {
     'CRON_SECRET=': `CRON_SECRET=${cronSecret}`,
     'DRAFT_MODE_SECRET=': `DRAFT_MODE_SECRET=${draftSecret}`,
     'REVALIDATE_SECRET_TOKEN=': `REVALIDATE_SECRET_TOKEN=${revalidateSecret}`,
+    // Build-time migration hook gate for standalone installs (Milestone 4): on a
+    // production build with POSTGRES_URL set, pending migrations are applied before
+    // `next build`. Skips gracefully when the DB is unreachable.
+    'NEXTBLOCK_BUILD_MIGRATE=': 'NEXTBLOCK_BUILD_MIGRATE=1',
     // The R2 public URL is consumed under two names (next/image remotePatterns + CSP, and
     // media URL resolution) — write the same value to both, matching setup.mjs.
     'NEXT_PUBLIC_R2_PUBLIC_URL=': `NEXT_PUBLIC_R2_PUBLIC_URL=${r2.publicBaseUrl}`,

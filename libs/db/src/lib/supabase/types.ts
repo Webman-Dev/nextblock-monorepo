@@ -1874,6 +1874,42 @@ export type Database = {
         }
         Relationships: []
       }
+      system_alerts: {
+        Row: {
+          alert_type: string
+          created_at: string
+          id: string
+          is_resolved: boolean
+          message: string
+          metadata: Json
+          resolved_at: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          alert_type: string
+          created_at?: string
+          id?: string
+          is_resolved?: boolean
+          message: string
+          metadata?: Json
+          resolved_at?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          alert_type?: string
+          created_at?: string
+          id?: string
+          is_resolved?: boolean
+          message?: string
+          metadata?: Json
+          resolved_at?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       system_configuration: {
         Row: {
           auto_accept_signups: boolean

@@ -1,9 +1,10 @@
 {
   "name": "@nextblock-cms/template",
-  "version": "0.10.7",
+  "version": "0.10.9",
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node tools/build-migrate.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

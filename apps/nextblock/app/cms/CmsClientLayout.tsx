@@ -12,6 +12,7 @@ import {
   ShieldCheck, Cookie, LineChart, Mail, UserPlus, SlidersHorizontal,
 } from "lucide-react"
 import TwoFactorReminderBanner from "./components/TwoFactorReminderBanner"
+import SystemAlertsBanner, { type SystemAlertItem } from "./components/SystemAlertsBanner"
 import { Button } from "@nextblock-cms/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar"
 import { cn } from "@nextblock-cms/utils"
@@ -117,11 +118,13 @@ export default function CmsClientLayout({
   isCortexAiActive = false,
   isEcommerceActive = false,
   showTwoFactorReminder = false,
+  systemAlerts = [],
 }: {
   children: ReactNode,
   isCortexAiActive?: boolean,
   isEcommerceActive?: boolean,
   showTwoFactorReminder?: boolean,
+  systemAlerts?: SystemAlertItem[],
 }) {
   const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
   const { user, profile, role, isLoading, isAdmin, isWriter } = useAuth();
@@ -498,6 +501,7 @@ export default function CmsClientLayout({
         </header>
         <main className="flex-1 min-h-0 w-full overflow-y-auto overscroll-contain px-6 pt-6 pb-20 scroll-pb-24 md:pb-24">
             {showTwoFactorReminder && <TwoFactorReminderBanner />}
+            <SystemAlertsBanner alerts={systemAlerts} />
             {children}
         </main>
       </div>

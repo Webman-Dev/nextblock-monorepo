@@ -1,0 +1,138 @@
+# NextBlock upstream sync — Track A (Git-backed forks: Vercel 1-click, GitHub forks).
+#
+# Once a day (and on demand) this merges the latest upstream NextBlock release branch
+# into this repository's deploy branch:
+#   * Clean merge  -> commit + push to the deploy branch, which triggers Vercel CD, and
+#                     auto-close any open conflict issue.
+#   * Conflict     -> abort the merge and open (or update) a GitHub Issue labeled
+#                     `nextblock-sync-conflict`. The CMS dashboard polls the GitHub API
+#                     and mirrors that issue into a banner — see lib/updates/check-upstream.ts.
+#
+# Zero secrets required: the conflict signal uses the automatically-provided GITHUB_TOKEN.
+# The app writes the dashboard alert itself using the Supabase key it already has, so no
+# Supabase credentials need to be added to GitHub. (Private repos: the app needs a
+# GITHUB_TOKEN env var to read its own issues — see docs. Public repos need nothing.)
+#
+# NOTE: GitHub disables Actions on a freshly-forked repo until the owner enables them once
+# (repo -> Actions tab -> "I understand my workflows, go ahead and enable them").
+
+name: NextBlock Upstream Sync
+
+on:
+  schedule:
+    # Daily at 00:00 UTC.
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      upstream_branch:
+        description: 'Upstream branch to merge from'
+        required: false
+        default: 'master'
+
+# contents: write -> push the merge commit. issues: write -> open/close the conflict issue.
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: nextblock-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      UPSTREAM_REMOTE: https://github.com/nextblock-cms/nextblock.git
+      UPSTREAM_LABEL: nextblock-cms/nextblock
+      UPSTREAM_BRANCH: ${{ github.event.inputs.upstream_branch || 'master' }}
+      TARGET_BRANCH: ${{ github.ref_name }}
+      CONFLICT_LABEL: nextblock-sync-conflict
+    steps:
+      - name: Checkout deploy branch (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure the NextBlock automation identity
+        run: |
+          git config user.name "nextblock-sync[bot]"
+          git config user.email "nextblock-sync[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "${UPSTREAM_REMOTE}" 2>/dev/null || git remote set-url upstream "${UPSTREAM_REMOTE}"
+          git fetch --no-tags upstream "${UPSTREAM_BRANCH}"
+
+      - name: Merge upstream into the deploy branch
+        id: merge
+        shell: bash
+        run: |
+          set +e
+          MERGE_OUTPUT=$(git merge --no-commit --no-ff "upstream/${UPSTREAM_BRANCH}" 2>&1)
+          MERGE_CODE=$?
+          set -e
+          echo "$MERGE_OUTPUT"
+
+          if git ls-files --unmerged | grep -q .; then
+            echo "Merge produced conflicts; aborting so they can be resolved on GitHub."
+            git merge --abort || true
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+          elif echo "$MERGE_OUTPUT" | grep -qiE "already up to date|already up-to-date"; then
+            echo "status=current" >> "$GITHUB_OUTPUT"
+          elif [ "$MERGE_CODE" -ne 0 ]; then
+            echo "Merge failed for a non-conflict reason; treating as needs-attention."
+            git merge --abort 2>/dev/null || true
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=merged" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push the merge (triggers Vercel CD)
+        if: steps.merge.outputs.status == 'merged'
+        run: |
+          git commit --no-edit -m "chore(sync): merge upstream ${UPSTREAM_LABEL}@${UPSTREAM_BRANCH}" \
+            -m "Automated upstream sync via the NextBlock Upstream Sync workflow."
+          git push origin "HEAD:${TARGET_BRANCH}"
+          echo "Pushed merged upstream changes to ${TARGET_BRANCH}."
+
+      - name: Clear any open conflict issue (sync is healthy again)
+        if: steps.merge.outputs.status == 'merged' || steps.merge.outputs.status == 'current'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          for n in $(gh issue list --label "$CONFLICT_LABEL" --state open --json number --jq '.[].number' 2>/dev/null); do
+            gh issue close "$n" --comment "Resolved automatically — upstream now merges cleanly into ${TARGET_BRANCH}." || true
+            echo "Closed conflict issue #$n."
+          done
+
+      - name: Open a conflict issue (the dashboard mirrors it into a banner)
+        # Fires on a detected conflict, or as a catch-all if any earlier step failed
+        # unexpectedly (e.g. the push was rejected) — so an operator is always notified.
+        if: ${{ steps.merge.outputs.status == 'conflict' || failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          BODY=$(printf '%s\n' \
+            "The automated sync from ${UPSTREAM_LABEL} (${UPSTREAM_BRANCH}) could not be merged into ${TARGET_BRANCH} automatically." \
+            "" \
+            "To resolve:" \
+            "1. Merge upstream locally: git fetch ${UPSTREAM_REMOTE} ${UPSTREAM_BRANCH} && git merge FETCH_HEAD" \
+            "2. Fix the conflicts, commit, and push to ${TARGET_BRANCH} (this triggers a new deploy)." \
+            "3. Close this issue — the CMS dashboard banner clears automatically." \
+            "" \
+            "Workflow run: ${RUN_URL}")
+
+          # Ensure the label exists (idempotent), then reuse an open issue instead of stacking duplicates.
+          gh label create "$CONFLICT_LABEL" --color B60205 --description "Automated upstream sync conflict" 2>/dev/null || true
+          EXISTING=$(gh issue list --label "$CONFLICT_LABEL" --state open --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "Still conflicting as of ${NOW}. Run: ${RUN_URL}" || true
+            echo "Updated existing conflict issue #${EXISTING}."
+          else
+            gh issue create --title "Upstream sync needs manual resolution" --label "$CONFLICT_LABEL" --body "$BODY"
+            echo "Opened a new conflict issue."
+          fi

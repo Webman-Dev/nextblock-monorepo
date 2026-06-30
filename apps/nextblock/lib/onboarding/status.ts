@@ -5,6 +5,9 @@ import { createClient } from '@nextblock-cms/db/server';
 import { getStoreConfigStatus } from '@nextblock-cms/ecommerce/server';
 import { getEmailPublicSettings } from '../config/email-settings';
 import { getPrivacySettings } from '../privacy/settings';
+import { detectChannel } from '../setup/env-status';
+import { getSystemConfiguration } from '../setup/system-config';
+import { selfActionsUrl } from '../updates/repo-identity';
 
 export type OnboardingStep = {
   key: string;
@@ -13,6 +16,8 @@ export type OnboardingStep = {
   href: string;
   done: boolean;
   optional: boolean;
+  /** When true, render the CTA as an external link (new tab) instead of an in-app route. */
+  isExternal?: boolean;
 };
 
 export type OnboardingStatus = {
@@ -158,6 +163,35 @@ export async function getOnboardingStatus(opts: {
       href: '/cms/payments',
       done: paymentsDone,
       optional: false,
+    });
+  }
+
+  // Git-backed (Vercel 1-click / fork) installs: remind the operator to enable GitHub
+  // Actions so the upstream sync workflow can run. "done" flips once the background poll
+  // (maybeRefreshUpstreamStatus) has seen the workflow run at least once.
+  if (detectChannel() === 'vercel') {
+    let actionsActive = false;
+    try {
+      const config = await getSystemConfiguration();
+      const upstream = config.settings?.['upstream_status'] as
+        | { actions_active?: boolean }
+        | undefined;
+      actionsActive = upstream?.actions_active === true;
+    } catch {
+      actionsActive = false;
+    }
+    steps.push({
+      key: 'github-actions',
+      title: 'Enable automatic updates (GitHub Actions)',
+      description: actionsActive
+        ? 'Automated upstream sync is active for your repository.'
+        : 'Turn on GitHub Actions in your forked repo so NextBlock can merge upstream updates for you.',
+      href:
+        selfActionsUrl() ??
+        'https://docs.github.com/actions/managing-workflow-runs-and-deployments/managing-workflow-runs/disabling-and-enabling-a-workflow',
+      done: actionsActive,
+      optional: true,
+      isExternal: true,
     });
   }
 

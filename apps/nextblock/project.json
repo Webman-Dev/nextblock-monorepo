@@ -17,6 +17,7 @@
       ],
       "options": {
         "commands": [
+          "node apps/nextblock/tools/build-migrate.mjs",
           "nx run nextblock:build-base"
         ],
         "parallel": false,
