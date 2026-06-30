@@ -47,6 +47,8 @@ jobs:
       UPSTREAM_BRANCH: ${{ github.event.inputs.upstream_branch || 'master' }}
       TARGET_BRANCH: ${{ github.ref_name }}
       CONFLICT_LABEL: nextblock-sync-conflict
+      CONFLICT_TITLE: 'Upstream sync needs manual resolution'
+      CONFLICT_MARKER: '<!-- nextblock-sync-conflict -->'
     steps:
       - name: Checkout deploy branch (full history)
         uses: actions/checkout@v4
@@ -67,8 +69,11 @@ jobs:
         id: merge
         shell: bash
         run: |
+          # --allow-unrelated-histories: a Vercel 1-click deploy creates a fresh repo (not a
+          # fork), so it shares no history with upstream and a plain merge is refused. The
+          # first merge bridges them (creating a common ancestor); later merges are normal.
           set +e
-          MERGE_OUTPUT=$(git merge --no-commit --no-ff "upstream/${UPSTREAM_BRANCH}" 2>&1)
+          MERGE_OUTPUT=$(git merge --no-commit --no-ff --allow-unrelated-histories "upstream/${UPSTREAM_BRANCH}" 2>&1)
           MERGE_CODE=$?
           set -e
           echo "$MERGE_OUTPUT"
@@ -101,7 +106,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          for n in $(gh issue list --label "$CONFLICT_LABEL" --state open --json number --jq '.[].number' 2>/dev/null); do
+          for n in $(gh issue list --limit 50 --search "is:open in:title $CONFLICT_TITLE" --json number --jq '.[].number' 2>/dev/null); do
             gh issue close "$n" --comment "Resolved automatically — upstream now merges cleanly into ${TARGET_BRANCH}." || true
             echo "Closed conflict issue #$n."
           done
@@ -116,23 +121,32 @@ jobs:
         run: |
           RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # The dashboard finds this issue by the hidden marker in the body — NOT by label —
+          # so a label that fails to create can never block issue creation.
           BODY=$(printf '%s\n' \
             "The automated sync from ${UPSTREAM_LABEL} (${UPSTREAM_BRANCH}) could not be merged into ${TARGET_BRANCH} automatically." \
             "" \
             "To resolve:" \
-            "1. Merge upstream locally: git fetch ${UPSTREAM_REMOTE} ${UPSTREAM_BRANCH} && git merge FETCH_HEAD" \
+            "1. Merge upstream locally: git fetch ${UPSTREAM_REMOTE} ${UPSTREAM_BRANCH} && git merge --allow-unrelated-histories FETCH_HEAD" \
             "2. Fix the conflicts, commit, and push to ${TARGET_BRANCH} (this triggers a new deploy)." \
             "3. Close this issue — the CMS dashboard banner clears automatically." \
             "" \
-            "Workflow run: ${RUN_URL}")
+            "Workflow run: ${RUN_URL}" \
+            "" \
+            "$CONFLICT_MARKER")
 
-          # Ensure the label exists (idempotent), then reuse an open issue instead of stacking duplicates.
-          gh label create "$CONFLICT_LABEL" --color B60205 --description "Automated upstream sync conflict" 2>/dev/null || true
-          EXISTING=$(gh issue list --label "$CONFLICT_LABEL" --state open --json number --jq '.[0].number' 2>/dev/null || true)
+          EXISTING=$(gh issue list --limit 50 --search "is:open in:title $CONFLICT_TITLE" --json number --jq '.[0].number // empty' 2>/dev/null || true)
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --body "Still conflicting as of ${NOW}. Run: ${RUN_URL}" || true
             echo "Updated existing conflict issue #${EXISTING}."
           else
-            gh issue create --title "Upstream sync needs manual resolution" --label "$CONFLICT_LABEL" --body "$BODY"
-            echo "Opened a new conflict issue."
+            # Create WITHOUT --label so a missing label can't fail this; add the label after,
+            # best-effort, purely as a human-friendly nicety.
+            CREATED=$(gh issue create --title "$CONFLICT_TITLE" --body "$BODY" 2>/dev/null || true)
+            echo "Opened conflict issue: ${CREATED}"
+            NUM=$(printf '%s\n' "$CREATED" | grep -oE '[0-9]+$' || true)
+            if [ -n "$NUM" ]; then
+              gh label create "$CONFLICT_LABEL" --color B60205 --description "Automated upstream sync conflict" >/dev/null 2>&1 || true
+              gh issue edit "$NUM" --add-label "$CONFLICT_LABEL" >/dev/null 2>&1 || true
+            fi
           fi
