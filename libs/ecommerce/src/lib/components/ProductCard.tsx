@@ -191,7 +191,7 @@ export const ProductCard = ({ product, className }: ProductCardProps) => {
               <span className="ml-0.5">({product.total_reviews})</span>
             </>
           ) : (
-            <span className="text-slate-400 dark:text-slate-600">No reviews yet</span>
+            <span className="text-slate-400 dark:text-slate-600">{t('reviews.no_reviews')}</span>
           )}
         </div>
         

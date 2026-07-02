@@ -374,12 +374,14 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
                           {product.average_rating?.toFixed(1)}
                         </span>
                         <span className="text-sm text-muted-foreground underline decoration-dotted group-hover:text-primary">
-                          ({product.total_reviews} {product.total_reviews === 1 ? 'review' : 'reviews'})
+                          ({product.total_reviews === 1
+                            ? t('reviews.review_count_one', { count: product.total_reviews })
+                            : t('reviews.review_count_other', { count: product.total_reviews })})
                         </span>
                       </>
                     ) : (
                       <span className="text-xs text-muted-foreground group-hover:text-primary underline decoration-dotted">
-                        No reviews yet. Be the first to write one!
+                        {t('reviews.be_the_first')}
                       </span>
                     )}
                   </a>

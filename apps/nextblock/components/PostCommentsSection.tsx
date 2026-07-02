@@ -6,7 +6,7 @@ import { Button } from "@nextblock-cms/ui/button";
 import { Textarea } from "@nextblock-cms/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar";
 import { submitInteraction, toggleReaction } from "../app/actions/interactions";
-import { cn } from "@nextblock-cms/utils";
+import { cn, useTranslations } from "@nextblock-cms/utils";
 import { MessageSquare, ThumbsUp, Loader2, PenTool } from "lucide-react";
 
 interface PostCommentsSectionProps {
@@ -14,6 +14,7 @@ interface PostCommentsSectionProps {
 }
 
 export default function PostCommentsSection({ postId }: PostCommentsSectionProps) {
+  const { t, lang } = useTranslations();
   const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -29,7 +30,7 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
 
   // Liked interactions tracking
   const [likedIds, setLikedIds] = useState<string[]>([]);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   // Optimistic comments list
   const [optimisticComments, setOptimisticComments] = useOptimistic(
@@ -57,7 +58,9 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
     if (match) {
       try {
         setLikedIds(JSON.parse(decodeURIComponent(match[1])));
-      } catch {}
+      } catch (err) {
+        console.warn("Failed to parse liked interactions cookie:", err);
+      }
     }
 
     // 3. Load initial comments
@@ -142,12 +145,12 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
-      setError("You must be logged in to submit a comment.");
+      setError(t("comments.login_to_write"));
       return;
     }
 
     if (content.trim().length < 5) {
-      setError("Your comment must be at least 5 characters long.");
+      setError(lang === "fr" ? "Votre commentaire doit faire au moins 5 caractères." : "Your comment must be at least 5 characters long.");
       return;
     }
 
@@ -166,7 +169,7 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
     if (res.error) {
       setError(res.error);
     } else {
-      setSuccess("Your comment has been submitted successfully and is pending moderation.");
+      setSuccess(t("comments.success_pending"));
       setContent("");
       // Close form after a brief delay
       setTimeout(() => {
@@ -195,10 +198,10 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <MessageSquare className="h-6 w-6 text-primary" />
-            Discussion &amp; Comments
+            {t("comments.discussion")}
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Join the conversation and express your thoughts.
+            {t("comments.join_conversation")}
           </p>
         </div>
 
@@ -209,11 +212,11 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
             variant={isFormOpen ? "outline" : "default"}
           >
             <PenTool className="h-4 w-4" />
-            {isFormOpen ? "Cancel Comment" : "Write a Comment"}
+            {isFormOpen ? t("comments.cancel_comment") : t("comments.write_comment")}
           </Button>
         ) : (
           <p className="text-sm text-muted-foreground italic">
-            Please log in to write a comment.
+            {t("comments.login_to_write")}
           </p>
         )}
       </div>
@@ -224,7 +227,7 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
           onSubmit={handleSubmitComment}
           className="bg-card/50 border border-border/80 rounded-2xl p-6 shadow-sm space-y-4 animate-in fade-in slide-in-from-top-4 duration-300"
         >
-          <h3 className="text-lg font-semibold text-foreground">Join the Discussion</h3>
+          <h3 className="text-lg font-semibold text-foreground">{t("comments.join_discussion")}</h3>
 
           {/* Text Area */}
           <div className="space-y-1.5">
@@ -232,11 +235,11 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
               htmlFor="comment-content"
               className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block"
             >
-              Your Message
+              {t("comments.your_message")}
             </label>
             <Textarea
               id="comment-content"
-              placeholder="What are your thoughts on this article?"
+              placeholder={t("comments.message_placeholder")}
               value={content}
               onChange={(e) => setContent(e.target.value)}
               className="min-h-[120px] focus:ring-1 focus:ring-primary"
@@ -255,16 +258,16 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
               onClick={() => setIsFormOpen(false)}
               disabled={submitting}
             >
-              Cancel
+              {t("comments.cancel")}
             </Button>
             <Button type="submit" disabled={submitting} className="min-w-[120px]">
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Submitting
+                  {t("comments.submitting")}
                 </>
               ) : (
-                "Post Comment"
+                t("comments.post_comment")
               )}
             </Button>
           </div>
@@ -278,7 +281,7 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
             const hasLiked = likedIds.includes(comment.id) || comment.tempHasReacted;
             const likeCount = (comment.reactions as Record<string, number>)?.likes || 0;
             const commenterName = comment.profiles?.full_name || comment.profiles?.github_username || "Anonymous";
-            const dateStr = new Date(comment.created_at).toLocaleDateString(undefined, {
+            const dateStr = new Date(comment.created_at).toLocaleDateString(lang, {
               year: "numeric",
               month: "long",
               day: "numeric",
@@ -302,7 +305,7 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
                       <h4 className="text-sm font-semibold text-foreground leading-none">
                         {commenterName}
                       </h4>
-                      <span className="text-[10px] text-muted-foreground mt-1.5 block">
+                      <span className="text-[10px] text-muted-foreground mt-1.5 block" suppressHydrationWarning>
                         {dateStr}
                       </span>
                     </div>
@@ -326,7 +329,7 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
                     )}
                   >
                     <ThumbsUp className={cn("h-3.5 w-3.5", hasLiked && "fill-current")} />
-                    <span>Like</span>
+                    <span>{t("comments.like")}</span>
                     {likeCount > 0 && <span className="font-semibold ml-0.5">{likeCount}</span>}
                   </button>
                 </div>
@@ -337,9 +340,9 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
           !loading && (
             <div className="text-center py-12 border border-dashed rounded-2xl bg-slate-50/50 dark:bg-slate-900/10">
               <MessageSquare className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-700" />
-              <h3 className="mt-4 text-sm font-semibold text-foreground">No comments yet</h3>
+              <h3 className="mt-4 text-sm font-semibold text-foreground">{t("comments.no_comments")}</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Be the first to share your thoughts!
+                {t("comments.be_the_first")}
               </p>
             </div>
           )
@@ -356,7 +359,7 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
         {hasMore && !loading && (
           <div className="flex justify-center pt-2">
             <Button variant="outline" size="sm" onClick={handleLoadMore}>
-              Load More Comments
+              {t("comments.load_more")}
             </Button>
           </div>
         )}
