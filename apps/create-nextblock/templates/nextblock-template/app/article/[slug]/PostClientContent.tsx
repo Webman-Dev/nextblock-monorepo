@@ -9,6 +9,7 @@ import { useCurrentContent } from '../../../context/CurrentContentContext';
 import Link from 'next/link';
 import { estimateReadTimeMinutesFromBlocks } from '../../../lib/posts/readTime';
 import FeatureImageHero from '../../../components/FeatureImageHero';
+import PostCommentsSection from '../../../components/PostCommentsSection';
 
 type PostType = Database['public']['Tables']['posts']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
@@ -429,6 +430,11 @@ export default function PostClientContent({ initialPostData, currentSlug, childr
 
       <div ref={articleBodyRef} className="post-article__body mx-auto mt-10 w-full px-4 md:mt-14">
         {children}
+      </div>
+
+      {/* Post Comments Section */}
+      <div className="mx-auto max-w-4xl px-4 mt-16 border-t pt-10 border-slate-200 dark:border-slate-800">
+        <PostCommentsSection postId={currentPostData.id} />
       </div>
     </article>
   );

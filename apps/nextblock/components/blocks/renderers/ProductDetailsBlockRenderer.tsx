@@ -3,6 +3,7 @@ import { ProductDetailsLayout } from '@nextblock-cms/ecommerce/components/Produc
 import type { VisualEditAttributes, VisualEditingDocumentContext } from '../../../lib/visual-editing/types';
 import { createClient } from "@nextblock-cms/db/server";
 import BlockRenderer from "../../BlockRenderer";
+import ProductReviewsSection from "../../ProductReviewsSection";
 
 interface ProductDetailsBlockRendererProps {
   visualEditAttributes?: VisualEditAttributes;
@@ -84,6 +85,7 @@ export default async function ProductDetailsBlockRenderer({
       <ProductDetailsLayout 
         visualEditingEnabled={productVisualEditingEnabled} 
         descriptionNode={descriptionNode}
+        reviewsNode={excludeProductId ? <ProductReviewsSection productId={excludeProductId} /> : undefined}
       />
     </div>
   );

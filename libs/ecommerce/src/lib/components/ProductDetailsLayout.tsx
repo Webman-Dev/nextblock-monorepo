@@ -6,7 +6,7 @@ import { Badge } from '@nextblock-cms/ui/badge';
 import { Button } from '@nextblock-cms/ui/button';
 import { Label } from '@nextblock-cms/ui/label';
 import { Separator } from '@nextblock-cms/ui/separator';
-import { formatPrice, useTranslations } from '@nextblock-cms/utils';
+import { cn, formatPrice, useTranslations } from '@nextblock-cms/utils';
 
 import { useProduct } from '../product-context';
 import { ProductGallery } from './ProductGallery';
@@ -40,6 +40,7 @@ type ProductVisualEditAttributes = {
 interface ProductDetailsLayoutProps {
   visualEditingEnabled?: boolean;
   descriptionNode?: React.ReactNode;
+  reviewsNode?: React.ReactNode;
 }
 
 function buildProductVisualEditAttributes(
@@ -111,6 +112,7 @@ function buildProductVisualEditAttributes(
 export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
   visualEditingEnabled = false,
   descriptionNode,
+  reviewsNode,
 }) => {
   const product = useProduct();
   const { t, lang } = useTranslations();
@@ -342,6 +344,46 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
                 >
                   {product.title}
                 </h1>
+
+                {/* Rating display under title */}
+                <div className="flex items-center gap-2 mt-2">
+                  <a
+                    href="#reviews-section"
+                    className="flex items-center gap-1.5 group hover:opacity-85 transition-opacity"
+                  >
+                    <div className="flex items-center text-amber-500">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <svg
+                          key={i}
+                          className={cn(
+                            "h-4 w-4 fill-current",
+                            i < Math.round(product.average_rating || 0)
+                              ? "text-amber-500"
+                              : "text-slate-300 dark:text-slate-700"
+                          )}
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      ))}
+                    </div>
+                    {product.total_reviews && product.total_reviews > 0 ? (
+                      <>
+                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          {product.average_rating?.toFixed(1)}
+                        </span>
+                        <span className="text-sm text-muted-foreground underline decoration-dotted group-hover:text-primary">
+                          ({product.total_reviews} {product.total_reviews === 1 ? 'review' : 'reviews'})
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground group-hover:text-primary underline decoration-dotted">
+                        No reviews yet. Be the first to write one!
+                      </span>
+                    )}
+                  </a>
+                </div>
 
                 {product.categories && product.categories.length > 0 && (
                   <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
@@ -615,6 +657,13 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
           </div>
         )}
       </div>
+
+      {/* Product Reviews Section */}
+      {reviewsNode && (
+        <div id="reviews-section" className="border-t border-border mt-12 pt-12">
+          {reviewsNode}
+        </div>
+      )}
     </div>
   );
 };

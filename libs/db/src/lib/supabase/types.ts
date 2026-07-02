@@ -112,6 +112,70 @@ export type Database = {
         }
         Relationships: []
       }
+      cms_interactions: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          post_id: number | null
+          product_id: string | null
+          rating: number | null
+          reactions: Json
+          status: Database["public"]["Enums"]["approval_status"]
+          type: Database["public"]["Enums"]["interaction_type"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          post_id?: number | null
+          product_id?: string | null
+          rating?: number | null
+          reactions?: Json
+          status?: Database["public"]["Enums"]["approval_status"]
+          type: Database["public"]["Enums"]["interaction_type"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          post_id?: number | null
+          product_id?: string | null
+          rating?: number | null
+          reactions?: Json
+          status?: Database["public"]["Enums"]["approval_status"]
+          type?: Database["public"]["Enums"]["interaction_type"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cms_interactions_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_interactions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_interactions_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_drafts: {
         Row: {
           author_id: string | null
@@ -1600,6 +1664,7 @@ export type Database = {
       }
       products: {
         Row: {
+          average_rating: number
           created_at: string | null
           description_json: Json | null
           freemius_plan_id: string | null
@@ -1627,6 +1692,7 @@ export type Database = {
           status: string
           stock: number | null
           title: string
+          total_reviews: number
           translation_group_id: string
           trial_period_days: number
           trial_requires_payment_method: boolean
@@ -1634,6 +1700,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          average_rating?: number
           created_at?: string | null
           description_json?: Json | null
           freemius_plan_id?: string | null
@@ -1661,6 +1728,7 @@ export type Database = {
           status?: string
           stock?: number | null
           title: string
+          total_reviews?: number
           translation_group_id?: string
           trial_period_days?: number
           trial_requires_payment_method?: boolean
@@ -1668,6 +1736,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          average_rating?: number
           created_at?: string | null
           description_json?: Json | null
           freemius_plan_id?: string | null
@@ -1695,6 +1764,7 @@ export type Database = {
           status?: string
           stock?: number | null
           title?: string
+          total_reviews?: number
           translation_group_id?: string
           trial_period_days?: number
           trial_requires_payment_method?: boolean
@@ -2255,6 +2325,8 @@ export type Database = {
       }
     }
     Enums: {
+      approval_status: "pending" | "approved" | "denied"
+      interaction_type: "review" | "comment"
       menu_location: "HEADER" | "FOOTER" | "SIDEBAR"
       page_status: "draft" | "published" | "archived"
       revision_type: "snapshot" | "diff"
@@ -2386,6 +2458,8 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      approval_status: ["pending", "approved", "denied"],
+      interaction_type: ["review", "comment"],
       menu_location: ["HEADER", "FOOTER", "SIDEBAR"],
       page_status: ["draft", "published", "archived"],
       revision_type: ["snapshot", "diff"],

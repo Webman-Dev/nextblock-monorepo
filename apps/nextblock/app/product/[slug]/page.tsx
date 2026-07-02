@@ -326,6 +326,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
     title: productRecord.title,
     slug: productRecord.slug,
     sku: productRecord.sku,
+    average_rating: productRecord.average_rating,
+    total_reviews: productRecord.total_reviews,
     upc: productRecord.upc || undefined,
     price: productRecord.price,
     prices: normalizePriceMap(productRecord.prices),

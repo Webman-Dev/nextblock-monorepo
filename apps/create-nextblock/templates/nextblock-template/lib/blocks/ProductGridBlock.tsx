@@ -80,6 +80,8 @@ export const ProductGridBlock = async ({
         title: p.title,
         slug: p.slug,
         sku: p.sku,
+        average_rating: p.average_rating,
+        total_reviews: p.total_reviews,
         upc: p.upc || undefined,
         price: p.price,
         prices: normalizePriceMap(p.prices),

@@ -104,6 +104,8 @@ export interface Product {
   id: string;
   title: string;
   slug: string;
+  average_rating?: number;
+  total_reviews?: number;
   categories?: Category[];
   sku: string;
   upc?: string | null;

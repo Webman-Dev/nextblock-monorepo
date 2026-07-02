@@ -244,6 +244,7 @@ export default function CmsClientLayout({
 
   else if (pathname.startsWith("/cms/settings/packages")) pageTitle = "Packages";
   else if (pathname.startsWith("/cms/settings")) pageTitle = "Settings";
+  else if (pathname.startsWith("/cms/interactions")) pageTitle = "Interactions";
   else if (pathname.startsWith("/cms/products/inventory")) pageTitle = "Inventory";
   else if (pathname.startsWith("/cms/coupons/") && pathname.endsWith("/edit")) pageTitle = "Edit Coupon";
   else if (pathname.startsWith("/cms/coupons")) pageTitle = "Coupons";
@@ -315,6 +316,9 @@ export default function CmsClientLayout({
               </NavItem>
               <NavItem href="/cms/custom-blocks" icon={Boxes} isActive={pathname.startsWith("/cms/custom-blocks")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Blocks
+              </NavItem>
+              <NavItem href="/cms/interactions" icon={MessageSquare} isActive={pathname.startsWith("/cms/interactions")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
+                Interactions
               </NavItem>
               <NavItem href="/cms/navigation" icon={ListTree} isActive={pathname.startsWith("/cms/navigation")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Navigation
