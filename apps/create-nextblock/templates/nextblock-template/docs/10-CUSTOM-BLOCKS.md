@@ -179,8 +179,8 @@ surfaced at `/cms/import-export` via `ContentTransferControls.tsx`.
 Cortex AI can generate a custom block definition from a prompt:
 
 - Route: `apps/nextblock/app/api/ai/cortex/build-widget/route.ts`.
-- Helpers: `apps/nextblock/lib/cortex-widget-registry.ts` and the custom-block
-  agent tools in `apps/nextblock/lib/ai-global-agent-custom-block-tools.ts`.
+- Helpers: `libs/cortex/src/lib/cortex-widget-registry.ts` and the custom-block
+  agent tools in `libs/cortex/src/lib/ai-global-agent-custom-block-tools.ts`.
 - After a Cortex-driven change, the front end dispatches a
   `nextblock:cortex-data-changed` event; the custom-blocks list listens for it
   (and for window focus) and refetches so the library stays in sync without a
@@ -205,8 +205,8 @@ npm run verify:cortex-ai-build-widget
 Relevant Vitest files:
 
 - `apps/nextblock/components/renderers/DynamicLayoutEngine.test.tsx`
-- `apps/nextblock/lib/cortex-widget-registry.test.ts`
-- `apps/nextblock/lib/cortex-widget-schema.test.tsx`
+- `libs/cortex/src/lib/cortex-widget-registry.test.ts`
+- `libs/cortex/src/lib/cortex-widget-schema.test.tsx`
 
 ## Notes for Contributors
 

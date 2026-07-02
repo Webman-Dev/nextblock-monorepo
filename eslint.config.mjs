@@ -13,12 +13,12 @@ export default [
     rules: {},
   },
   {
-    ignores: [
-      '**/.next',
-      '**/dist',
-      '**/vite.config.*.timestamp*',
-      '**/vitest.config.*.timestamp*',
-    ],
+      "ignores": [
+        "**/.next",
+        "**/dist",
+        "**/vite.config.*.timestamp*",
+        "**/vitest.config.*.timestamp*"
+      ]
   },
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],

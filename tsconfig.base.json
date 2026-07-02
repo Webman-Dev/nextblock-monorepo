@@ -5,7 +5,10 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "target": "es2022",
-    "lib": ["esnext", "dom"],
+    "lib": [
+      "esnext",
+      "dom"
+    ],
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
@@ -18,35 +21,73 @@
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "paths": {
-      "@/*": ["./apps/nextblock/*"],
-
-      // DB Library
-      "@nextblock-cms/db": ["./libs/db/src/index.ts"],
-      "@nextblock-cms/db/server": ["./libs/db/src/server.ts"],
-
-      // Ecommerce Library (Ghost Module)
-      "@nextblock-cms/ecommerce": ["./libs/ecommerce/src/index.ts"],
-      "@nextblock-cms/ecommerce/server": ["./libs/ecommerce/src/server.ts"],
-      "@nextblock-cms/ecommerce/actions": ["./libs/ecommerce/src/actions.ts"],
-      "@nextblock-cms/ecommerce/*": ["./libs/ecommerce/src/lib/*"],
-
-      // Editor Library
-      "@nextblock-cms/editor": ["./libs/editor/src/index.ts"],
-      "@nextblock-cms/editor/*": ["./libs/editor/src/*"],
-
-      // SDK Library
-      "@nextblock-cms/sdk": ["./libs/sdk/src/index.ts"],
-
-      // UI Library (Corrected Section)
-      "@nextblock-cms/ui": ["./libs/ui/src/index.ts"],
-      "@nextblock-cms/ui/styles/*": ["./libs/ui/src/styles/*"],
-      "@nextblock-cms/ui/*": ["./libs/ui/src/lib/*"],
-      "@nextblock-cms/ui/tailwind.config.js": ["./libs/ui/tailwind.config.js"],
-
-      // Utils Library
-      "@nextblock-cms/utils": ["./libs/utils/src/index.ts"],
-      "@nextblock-cms/utils/server": ["./libs/utils/src/server.ts"]
+      "@/*": [
+        "./apps/nextblock/*"
+      ],
+      "@nextblock-cms/db": [
+        "./libs/db/src/index.ts"
+      ],
+      "@nextblock-cms/db/server": [
+        "./libs/db/src/server.ts"
+      ],
+      "@nextblock-cms/db/secrets": [
+        "./libs/db/src/secrets.ts"
+      ],
+      "@nextblock-cms/db/types": [
+        "./libs/db/src/lib/supabase/types.ts"
+      ],
+      "@nextblock-cms/ecommerce": [
+        "./libs/ecommerce/src/index.ts"
+      ],
+      "@nextblock-cms/ecommerce/server": [
+        "./libs/ecommerce/src/server.ts"
+      ],
+      "@nextblock-cms/ecommerce/actions": [
+        "./libs/ecommerce/src/actions.ts"
+      ],
+      "@nextblock-cms/ecommerce/*": [
+        "./libs/ecommerce/src/lib/*"
+      ],
+      "@nextblock-cms/editor": [
+        "./libs/editor/src/index.ts"
+      ],
+      "@nextblock-cms/editor/*": [
+        "./libs/editor/src/*"
+      ],
+      "@nextblock-cms/sdk": [
+        "./libs/sdk/src/index.ts"
+      ],
+      "@nextblock-cms/ui": [
+        "./libs/ui/src/index.ts"
+      ],
+      "@nextblock-cms/ui/styles/*": [
+        "./libs/ui/src/styles/*"
+      ],
+      "@nextblock-cms/ui/*": [
+        "./libs/ui/src/lib/*"
+      ],
+      "@nextblock-cms/ui/tailwind.config.js": [
+        "./libs/ui/tailwind.config.js"
+      ],
+      "@nextblock-cms/utils": [
+        "./libs/utils/src/index.ts"
+      ],
+      "@nextblock-cms/utils/server": [
+        "./libs/utils/src/server.ts"
+      ],
+      "@nextblock-cms/utils/*": [
+        "./libs/utils/src/lib/*"
+      ],
+      "@nextblock/cortex": [
+        "./libs/cortex/src/index.ts"
+      ],
+      "@nextblock/cortex/client": [
+        "./libs/cortex/src/client.ts"
+      ]
     }
   },
-  "exclude": ["node_modules", "tmp"]
+  "exclude": [
+    "node_modules",
+    "tmp"
+  ]
 }

@@ -8,7 +8,7 @@ import {
   executeUpdateFooter,
   executeUpdateNavigationBar,
   executeUpdateSectionColumnBlock,
-} from '../lib/ai-global-agent-tools';
+} from '@nextblock/cortex';
 
 type MockRow = Record<string, any>;
 

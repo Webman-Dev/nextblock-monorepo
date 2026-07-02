@@ -57,7 +57,7 @@ Implemented:
   - `fetch_ecommerce_stats`
 - Multilingual navigation/footer tool arguments using either language codes or language names.
 - Guardrails against OpenRouter free-model rate limits, raw tool-call leakage, and stuck loading streams.
-- Custom-block "build widget" generation: `/api/ai/cortex/build-widget` and the custom-block agent tools (`apps/nextblock/lib/ai-global-agent-custom-block-tools.ts`) produce data-driven `custom_block_definitions` from a prompt. See [10-CUSTOM-BLOCKS.md](./10-CUSTOM-BLOCKS.md) for the block model.
+- Custom-block "build widget" generation: `/api/ai/cortex/build-widget` and the custom-block agent tools (`libs/cortex/src/lib/ai-global-agent-custom-block-tools.ts`) produce data-driven `custom_block_definitions` from a prompt. See [10-CUSTOM-BLOCKS.md](./10-CUSTOM-BLOCKS.md) for the block model.
 
 Known incomplete or future work:
 
@@ -73,8 +73,8 @@ Known incomplete or future work:
 | File | Purpose |
 | --- | --- |
 | `libs/utils/src/lib/nextblock-packages.ts` | Package registry. Contains `cortex-ai` metadata and Freemius product/plan ids. |
-| `apps/nextblock/lib/ai-config.ts` | Server-only Cortex AI constants and environment accessors. |
-| `apps/nextblock/lib/ai-key-crypto.ts` | AES-256-GCM encryption/decryption helpers for stored OpenRouter BYOK keys. |
+| `libs/cortex/src/lib/ai-config.ts` | Server-only Cortex AI constants and environment accessors. |
+| `libs/cortex/src/lib/ai-key-crypto.ts` | AES-256-GCM encryption/decryption helpers for stored OpenRouter BYOK keys. |
 | `.env.exemple` | Documents `FREEMIUS_AI_SANDBOX_KEY`, `OPENROUTER_API_KEY`, and `CORTEX_AI_ENCRYPTION_KEY`. |
 | `libs/environment.d.ts` | Type declarations for Cortex AI environment variables. |
 
@@ -90,9 +90,9 @@ Known incomplete or future work:
 
 | File | Purpose |
 | --- | --- |
-| `apps/nextblock/lib/ai-client.ts` | Creates OpenRouter provider/client with credential resolution and text-generation helper. |
-| `apps/nextblock/lib/ai-model-catalog.ts` | Server-only OpenRouter model catalog fetcher. |
-| `apps/nextblock/lib/ai-model-registry.ts` | Free model registry, routing policy builder, model filtering/parsing helpers, rate-limit detection, fallback runner. |
+| `libs/cortex/src/lib/ai-client.ts` | Creates OpenRouter provider/client with credential resolution and text-generation helper. |
+| `libs/cortex/src/lib/ai-model-catalog.ts` | Server-only OpenRouter model catalog fetcher. |
+| `libs/cortex/src/lib/ai-model-registry.ts` | Free model registry, routing policy builder, model filtering/parsing helpers, rate-limit detection, fallback runner. |
 | `apps/nextblock/scripts/verify-cortex-ai-routing.ts` | Manual verification script for OpenRouter routing. |
 
 ### Inline Editor Assistance
@@ -101,7 +101,7 @@ Known incomplete or future work:
 | --- | --- |
 | `libs/utils/src/lib/editor-blocks.ts` | Main Tiptap JSON Zod schemas, allowed node/mark types, JSON Schema extraction. Still used for product descriptions and agent validation. |
 | `schemas/editor-blocks.ts` | Re-export shim for schema imports from app scripts/lib code. |
-| `apps/nextblock/lib/ai-block-generation.ts` | Inline editor HTML-fragment generation using `generateText`, routing fallback, and lightweight output validation. |
+| `libs/cortex/src/lib/ai-block-generation.ts` | Inline editor HTML-fragment generation using `generateText`, routing fallback, and lightweight output validation. |
 | `apps/nextblock/app/api/ai/generate-blocks/route.ts` | Compatibility route for inline editor generation. Returns `{ html, credentialSource, modelId }`. |
 | `libs/editor/src/lib/NotionEditor.tsx` | Editor prompt UI and HTML insertion behavior via normal Tiptap parsing. |
 | `apps/nextblock/scripts/validate-editor-block-schema.ts` | Validates editor schema against sample content and emits diagnostics. |
@@ -111,11 +111,11 @@ Known incomplete or future work:
 
 | File | Purpose |
 | --- | --- |
-| `apps/nextblock/lib/ai-global-agent-tools.ts` | Tool schemas and execution functions. |
+| `libs/cortex/src/lib/ai-global-agent-tools.ts` | Tool schemas and execution functions. |
 | `apps/nextblock/app/api/ai/global-agent/route.ts` | Global agent route and SSE streaming orchestration. |
 | `apps/nextblock/app/cms/components/CortexGlobalAgentChat.tsx` | Persistent dashboard chat UI with thread history. |
 | `apps/nextblock/app/cms/components/CortexAiPageContext.tsx` | Client page-context provider/registrar used by CMS edit screens and the global chat. |
-| `apps/nextblock/lib/ai-global-agent-tools.test.ts` | Unit tests for tool executors. |
+| `libs/cortex/src/lib/ai-global-agent-tools.test.ts` | Unit tests for tool executors. |
 | `apps/nextblock/scripts/verify-cortex-ai-global-tools.ts` | Focused verifier for global tools. |
 
 ### CMS Integration
@@ -211,7 +211,7 @@ Required only for saving/decrypting DB-stored BYOK keys.
 
 Implementation detail:
 
-- `apps/nextblock/lib/ai-key-crypto.ts` hashes this secret with SHA-256 to derive a 32-byte AES key.
+- `libs/cortex/src/lib/ai-key-crypto.ts` hashes this secret with SHA-256 to derive a 32-byte AES key.
 - Stored keys use AES-256-GCM with a 12-byte random IV and auth tag.
 - Changing this value invalidates previously encrypted stored keys.
 
@@ -284,7 +284,7 @@ Settings UI behavior:
 
 ## OpenRouter Client Architecture
 
-The OpenRouter client is implemented in `apps/nextblock/lib/ai-client.ts`.
+The OpenRouter client is implemented in `libs/cortex/src/lib/ai-client.ts`.
 
 It uses:
 
@@ -328,7 +328,7 @@ This prevents accidental client-side exposure of secrets.
 
 ## Model Registry and Fallback
 
-The model registry lives in `apps/nextblock/lib/ai-model-registry.ts`.
+The model registry lives in `libs/cortex/src/lib/ai-model-registry.ts`.
 
 Default free router constant:
 
@@ -356,7 +356,7 @@ Both registries intentionally use the same model list. The inline editor no long
 Paid model selection:
 
 - `CORTEX_AI_REQUIRED_MODEL_PARAMETERS = ['tools', 'structured_outputs']`.
-- `apps/nextblock/lib/ai-model-catalog.ts` fetches `https://openrouter.ai/api/v1/models?supported_parameters=tools,structured_outputs&output_modalities=text`.
+- `libs/cortex/src/lib/ai-model-catalog.ts` fetches `https://openrouter.ai/api/v1/models?supported_parameters=tools,structured_outputs&output_modalities=text`.
 - Catalog filtering keeps only non-expired text-output models that advertise all required parameters.
 - `buildCortexAiRoutingPolicy` is the single policy entrypoint for inline editor generation, global agent routing, and shared text generation.
 - Env-key routing always returns exactly the free fallback registry.
@@ -524,7 +524,7 @@ Response:
 Generator:
 
 ```txt
-apps/nextblock/lib/ai-block-generation.ts
+libs/cortex/src/lib/ai-block-generation.ts
 ```
 
 Prompt persona:
@@ -583,7 +583,7 @@ The global dashboard agent has two main pieces:
 File:
 
 ```txt
-apps/nextblock/lib/ai-global-agent-tools.ts
+libs/cortex/src/lib/ai-global-agent-tools.ts
 ```
 
 Exported tool schemas:
@@ -1103,10 +1103,10 @@ npx nx build nextblock --skip-nx-cache
 Vitest files:
 
 ```txt
-apps/nextblock/lib/ai-key-crypto.test.ts
-apps/nextblock/lib/ai-model-catalog.test.ts
-apps/nextblock/lib/ai-model-registry.test.ts
-apps/nextblock/lib/ai-global-agent-tools.test.ts
+libs/cortex/src/lib/ai-key-crypto.test.ts
+libs/cortex/src/lib/ai-model-catalog.test.ts
+libs/cortex/src/lib/ai-model-registry.test.ts
+libs/cortex/src/lib/ai-global-agent-tools.test.ts
 ```
 
 Notes:

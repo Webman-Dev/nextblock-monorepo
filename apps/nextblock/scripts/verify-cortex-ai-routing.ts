@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import {
   CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
   generateCortexAiText,
-} from '../lib/ai-client';
+} from '@nextblock/cortex';
 
 dotenv.config({ path: '.env.local' });
 

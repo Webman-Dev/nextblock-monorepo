@@ -12,7 +12,7 @@ vi.mock('@nextblock-cms/utils', async () => {
   };
 });
 
-vi.mock('@nextblock-cms/ecommerce', async () => {
+vi.mock('@nextblock-cms/ecommerce/product-schema', async () => {
   const { z } = await import('zod');
   const currencyPriceMapSchema = z.record(z.string(), z.coerce.number().min(0)).default({});
   const currencySalePriceMapSchema = z
@@ -56,7 +56,7 @@ vi.mock('@nextblock-cms/ecommerce', async () => {
   };
 });
 
-vi.mock('@nextblock-cms/ecommerce/server', async () => {
+vi.mock('@nextblock-cms/ecommerce/product-actions', async () => {
   const { z } = await import('zod');
   const currencyPriceMapSchema = z.record(z.string(), z.coerce.number().min(0)).default({});
   const currencySalePriceMapSchema = z

@@ -58,6 +58,7 @@
     "postgres": "^3.4.9",
     "server-only": "^0.0.1",
     "@nextblock-cms/ecommerce": "npm:@nextblock-cms/ecom@latest",
+    "@nextblock/cortex": "workspace:*",
     "@nextblock-cms/ui": "workspace:*",
     "@nextblock-cms/utils": "workspace:*",
     "@nextblock-cms/db": "workspace:*",

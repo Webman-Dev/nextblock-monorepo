@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@nextblock-cms/db';
+import type { Database } from '@nextblock-cms/db/types';
 import { getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
 
 import type { ProductFormValues } from './product-schema';

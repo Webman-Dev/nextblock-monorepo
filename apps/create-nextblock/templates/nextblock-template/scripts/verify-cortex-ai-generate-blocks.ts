@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 
-import { generateEditorHtmlFragment } from '../lib/ai-block-generation';
+import { generateEditorHtmlFragment } from '@nextblock/cortex';
 
 dotenv.config({ path: '.env.local' });
 

@@ -5,11 +5,11 @@ import { createClient } from '@nextblock-cms/db/server';
 import {
   generateEditorHtmlFragment,
   generateEditorBlocksRequestSchema,
-} from '../../../../lib/ai-block-generation';
+} from '@nextblock/cortex';
 import {
   safeParseCortexAiModelSelection,
   summarizeCortexAiRoutingError,
-} from '../../../../lib/ai-model-registry';
+} from '@nextblock/cortex';
 
 export const dynamic = 'force-dynamic';
 

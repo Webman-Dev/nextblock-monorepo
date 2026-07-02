@@ -1,9 +1,9 @@
-import type { Database, Json } from '@nextblock-cms/db';
+import type { Database, Json } from '@nextblock-cms/db/types';
 import {
   customBlockDefinitionCreateSchema,
   customBlockDefinitionRowSchema,
   type CustomBlockDefinition,
-} from '@nextblock-cms/utils';
+} from '@nextblock-cms/utils/custom-blocks';
 
 import type { CortexWidgetDefinition } from './cortex-widget-schema';
 

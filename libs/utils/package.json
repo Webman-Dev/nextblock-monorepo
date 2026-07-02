@@ -12,6 +12,14 @@
       "types": "./src/server.ts",
       "default": "./src/server.ts"
     },
+    "./custom-blocks": {
+      "types": "./src/lib/custom-blocks.ts",
+      "default": "./src/lib/custom-blocks.ts"
+    },
+    "./utils": {
+      "types": "./src/lib/utils.ts",
+      "default": "./src/lib/utils.ts"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {

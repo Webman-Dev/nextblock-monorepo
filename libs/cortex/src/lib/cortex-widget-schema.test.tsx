@@ -1,8 +1,6 @@
-import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@nextblock-cms/utils', async () => {
+vi.mock('@nextblock-cms/utils/custom-blocks', async () => {
   const { z } = await import('zod');
   const fieldKeyPattern = /^[a-z][a-z0-9_]*$/;
   const slugPattern = /^[a-z][a-z0-9-]*$/;
@@ -116,7 +114,6 @@ vi.mock('@nextblock-cms/utils', async () => {
   };
 });
 
-import { DynamicLayoutEngine } from '../components/renderers/DynamicLayoutEngine';
 import {
   buildCortexProfileCardVerificationDefinition,
   buildCortexWidgetBuilderPrompt,
@@ -143,52 +140,6 @@ describe('cortex widget schema', () => {
       throw new Error('Expected verification layout to be a container.');
     }
     expect(definition.layout_schema.children[0]?.type).toBe('container');
-  });
-
-  it('renders the generated recursive layout without runtime compilation', () => {
-    const definition = buildCortexProfileCardVerificationDefinition();
-    const html = renderToStaticMarkup(
-      <DynamicLayoutEngine
-        definition={{
-          fields: definition.fields,
-          id: '55555555-5555-4555-8555-555555555555',
-          layout_schema: definition.layout_schema,
-          name: definition.name,
-          slug: definition.slug,
-        }}
-        data={{
-          customer_list: ['profile-1', 'profile-2'],
-          profile_name: 'Ada Lovelace',
-          profile_photo: {
-            alt: 'Ada Lovelace',
-            object_key: 'cortex/profile-card/ada.webp',
-            url: 'https://cdn.nextblock.dev/cortex/profile-card/ada.webp',
-          },
-          profile_role: 'Principal Architect',
-          profile_summary: '<p>Builds analytical systems with human taste.</p>',
-          resolved_relations: {
-            customer_list: [
-              {
-                record: { full_name: 'Analytical Engine Society', id: 'profile-1' },
-                table: 'profiles',
-                value: 'profile-1',
-              },
-              {
-                record: { full_name: 'Difference Labs', id: 'profile-2' },
-                table: 'profiles',
-                value: 'profile-2',
-              },
-            ],
-          },
-        }}
-      />
-    );
-
-    expect(html).toContain('mx-auto max-w-3xl p-4');
-    expect(html).toContain('src="https://cdn.nextblock.dev/cortex/profile-card/ada.webp"');
-    expect(html).toContain('Ada Lovelace');
-    expect(html).toContain('Principal Architect');
-    expect(html).toContain('Analytical Engine Society, Difference Labs');
   });
 
   it('rejects layout fields that are not declared', () => {

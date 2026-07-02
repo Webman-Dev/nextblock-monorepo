@@ -8,7 +8,11 @@ import {
 const SERVER_ONLY_ERROR_MESSAGE =
   'Cortex AI OpenRouter model catalog can only be imported from server-side code.';
 
-if (typeof window !== 'undefined') {
+function assertServerOnly() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
   throw new Error(SERVER_ONLY_ERROR_MESSAGE);
 }
 
@@ -25,6 +29,7 @@ export async function listCortexAiCompatibleOpenRouterModels(params?: {
   fetch?: FetchFunction;
   now?: Date;
 }): Promise<CortexAiCompatibleOpenRouterModel[]> {
+  assertServerOnly();
   const fetchImpl = params?.fetch || globalThis.fetch;
   const response = await fetchImpl(buildOpenRouterModelsUrl(), {
     cache: 'no-store',

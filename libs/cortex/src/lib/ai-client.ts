@@ -1,5 +1,4 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
 import { generateText, type LanguageModel } from 'ai';
 
 import {
@@ -27,7 +26,11 @@ type FetchFunction = typeof globalThis.fetch;
 const SERVER_ONLY_ERROR_MESSAGE =
   'Cortex AI OpenRouter client can only be imported from server-side code.';
 
-if (typeof window !== 'undefined') {
+function assertServerOnly() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
   throw new Error(SERVER_ONLY_ERROR_MESSAGE);
 }
 
@@ -58,6 +61,7 @@ export type CortexAiGenerateTextResult = {
 };
 
 function buildOpenRouterHeaders() {
+  assertServerOnly();
   const referer = process.env.NEXT_PUBLIC_URL?.trim() || 'https://nextblock.dev';
 
   return {
@@ -70,6 +74,7 @@ export function createCortexAiOpenRouterProvider(params: {
   apiKey: string;
   fetch?: FetchFunction;
 }) {
+  assertServerOnly();
   return createOpenAICompatible<string, string, string, string>({
     apiKey: params.apiKey,
     baseURL: CORTEX_AI_OPENROUTER_BASE_URL,
@@ -82,6 +87,8 @@ export function createCortexAiOpenRouterProvider(params: {
 }
 
 async function readStoredOpenRouterApiKey() {
+  assertServerOnly();
+  const { getServiceRoleSupabaseClient } = await import('@nextblock-cms/db/server');
   const supabase = getServiceRoleSupabaseClient();
   const { data, error } = await supabase
     .from('site_settings')
@@ -101,6 +108,8 @@ async function readStoredOpenRouterApiKey() {
 }
 
 export async function getStoredCortexAiModelSelection(): Promise<CortexAiStoredModelSelection | null> {
+  assertServerOnly();
+  const { getServiceRoleSupabaseClient } = await import('@nextblock-cms/db/server');
   const supabase = getServiceRoleSupabaseClient();
   const { data, error } = await supabase
     .from('site_settings')
@@ -118,6 +127,7 @@ export async function getStoredCortexAiModelSelection(): Promise<CortexAiStoredM
 export async function resolveCortexAiOpenRouterCredential(params?: {
   apiKey?: string;
 }): Promise<CortexAiOpenRouterCredential> {
+  assertServerOnly();
   const manualApiKey = params?.apiKey?.trim();
 
   if (manualApiKey) {
@@ -156,6 +166,7 @@ export async function createCortexAiOpenRouterClient(params?: {
   fetch?: FetchFunction;
   modelSelection?: CortexAiStoredModelSelection | null;
 }) {
+  assertServerOnly();
   const credential = await resolveCortexAiOpenRouterCredential({
     apiKey: params?.apiKey,
   });
@@ -190,6 +201,7 @@ export async function generateCortexAiText({
   modelId,
   ...options
 }: CortexAiGenerateTextOptions & { modelSelection?: CortexAiStoredModelSelection | null }): Promise<CortexAiGenerateTextResult> {
+  assertServerOnly();
   const client = await createCortexAiOpenRouterClient({ apiKey, modelSelection: options.modelSelection });
   const routingPolicy = buildCortexAiRoutingPolicy({
     credentialSource: client.credentialSource,

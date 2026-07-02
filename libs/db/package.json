@@ -12,6 +12,14 @@
       "types": "./src/server.ts",
       "default": "./src/server.ts"
     },
+    "./secrets": {
+      "types": "./src/secrets.ts",
+      "default": "./src/secrets.ts"
+    },
+    "./types": {
+      "types": "./src/lib/supabase/types.ts",
+      "default": "./src/lib/supabase/types.ts"
+    },
     "./package.json": "./package.json"
   },
   "files": [

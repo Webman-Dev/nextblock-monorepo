@@ -2,7 +2,7 @@ import {
   customBlockDefinitionCreateSchema,
   customBlockFieldKeySchema,
   customBlockSlugSchema,
-} from '@nextblock-cms/utils';
+} from '@nextblock-cms/utils/custom-blocks';
 
 import { z } from './zod-config';
 

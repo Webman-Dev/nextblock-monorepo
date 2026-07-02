@@ -4,8 +4,8 @@ import { z } from './zod-config';
 
 // The widget-builder pipeline (and its heavier zod/AI deps) is imported lazily
 // inside the execute functions so that merely importing this tools module stays
-// light — important because some test suites mock @nextblock-cms/utils with a
-// partial export set.
+// light — important because the custom-block schema helpers are only needed when
+// a custom block mutation actually runs.
 
 // Custom block definitions are GLOBAL (a reusable block library), not scoped to a
 // page/post/product. These tools let Cortex AI create/edit/delete them directly,
@@ -192,7 +192,7 @@ export async function executeUpdateCustomBlock(
 
     const [{ generateCortexWidgetDefinition }, { customBlockDefinitionCreateSchema }] = await Promise.all([
       import('./ai-cortex-widget-builder'),
-      import('@nextblock-cms/utils'),
+      import('@nextblock-cms/utils/custom-blocks'),
     ]);
 
     const generation = await generateCortexWidgetDefinition(

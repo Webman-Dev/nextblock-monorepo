@@ -1,0 +1,44 @@
+{
+  "name": "@nextblock/cortex",
+  "version": "0.11.1",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nextblock-cms/packages.git"
+  },
+  "type": "module",
+  "main": "./index.cjs.js",
+  "module": "./index.es.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.es.js",
+      "require": "./index.cjs.js"
+    },
+    "./client": {
+      "types": "./client.d.ts",
+      "import": "./client.es.js",
+      "require": "./client.cjs.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "nx": {
+    "tags": [
+      "scope:premium"
+    ]
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^2.0.42",
+    "@nextblock-cms/db": "workspace:*",
+    "@nextblock-cms/ecommerce": "workspace:*",
+    "@nextblock-cms/utils": "workspace:*",
+    "ai": "^6.0.170",
+    "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "next": "^16.2.7"
+  }
+}

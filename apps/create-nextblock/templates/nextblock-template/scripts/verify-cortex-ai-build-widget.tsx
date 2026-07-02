@@ -4,12 +4,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { DynamicLayoutEngine } from '../components/renderers/DynamicLayoutEngine';
 import {
+  buildCortexWidgetDefinitionInsertPayload,
   buildCortexProfileCardVerificationDefinition,
   validateCortexWidgetDefinitionOutput,
-} from '../lib/cortex-widget-schema';
-import {
-  buildCortexWidgetDefinitionInsertPayload,
-} from '../lib/cortex-widget-registry';
+} from '@nextblock/cortex';
 
 dotenv.config({ path: '.env.local' });
 

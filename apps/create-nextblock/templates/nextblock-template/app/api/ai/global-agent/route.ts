@@ -1,30 +1,25 @@
 import { stepCountIs, streamText } from 'ai';
 import { NextResponse } from 'next/server';
-import { z } from '../../../../lib/zod-config';
 
 import {
   createClient,
   getServiceRoleSupabaseClient,
   verifyPackageOnline,
 } from '@nextblock-cms/db/server';
-
 import {
   buildCortexAiRoutingPolicy,
-  createCortexAiOpenRouterClient,
-  isOpenRouterRateLimitError,
-  omitUnsupportedCortexAiModelOptions,
-  summarizeCortexAiRoutingError,
-} from '../../../../lib/ai-client';
-import { safeParseCortexAiModelSelection } from '../../../../lib/ai-model-registry';
-import {
   buildVisibleContactIntroActionPlan,
   cortexAiPageContextSchema,
   createCortexGlobalAgentTools,
+  createCortexAiOpenRouterClient,
   executeCmsActionPlan,
   executeCreateCmsPage,
   executeCreateCmsPost,
   executeCreateCmsProduct,
+  executeDatabaseActionPlan,
+  executeDatabaseMutation,
   executeDeleteCmsItem,
+  executeDeleteCustomBlock,
   executeInsertContentBlock,
   executeUpdateContentBlock,
   executeUpdateCmsItemField,
@@ -32,13 +27,14 @@ import {
   executeUpdateFooter,
   executeUpdateNavigationBar,
   executeUpdateSectionColumnBlock,
+  isOpenRouterRateLimitError,
+  omitUnsupportedCortexAiModelOptions,
+  safeParseCortexAiModelSelection,
+  summarizeCortexAiRoutingError,
   type CortexAiPageContext,
-} from '../../../../lib/ai-global-agent-tools';
-import {
-  executeDatabaseActionPlan,
-  executeDatabaseMutation,
-} from '../../../../lib/ai-global-agent-db-tools';
-import { executeDeleteCustomBlock } from '../../../../lib/ai-global-agent-custom-block-tools';
+  z,
+} from '@nextblock/cortex';
+import { validateBlockContent } from '../../../../lib/blocks/blockRegistry';
 
 export const dynamic = 'force-dynamic';
 
@@ -666,6 +662,7 @@ export async function POST(request: Request) {
           latestUserMessage: confirmedToolCall.confirmationPhrase,
           pageContext,
           supabase: getServiceRoleSupabaseClient(),
+          validateBlockContent,
         },
         input: confirmedToolCall.input,
         toolName: confirmedToolCall.toolName,
@@ -690,6 +687,7 @@ export async function POST(request: Request) {
           latestUserMessage,
           pageContext,
           supabase: getServiceRoleSupabaseClient(),
+          validateBlockContent,
         },
         input: directActionPlan,
         toolName: 'execute_cms_action_plan',
@@ -733,6 +731,7 @@ export async function POST(request: Request) {
       latestUserMessage,
       pageContext,
       supabase: getServiceRoleSupabaseClient(),
+      validateBlockContent,
     });
     const systemPrompt = buildGlobalAgentSystemPrompt(pageContext);
 

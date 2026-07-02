@@ -1,0 +1,25 @@
+{
+  "name": "cortex",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/cortex/src",
+  "projectType": "library",
+  "tags": [
+    "scope:premium"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/libs/cortex",
+        "configFile": "libs/cortex/vite.config.mts",
+        "assets": [
+          "libs/cortex/*.md",
+          "libs/cortex/package.json"
+        ]
+      }
+    }
+  }
+}

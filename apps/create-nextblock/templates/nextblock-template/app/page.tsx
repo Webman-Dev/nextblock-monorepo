@@ -113,14 +113,14 @@ export async function generateMetadata(): Promise<Metadata> {
     ...buildSocialMetadata({
       title,
       description,
-      url: `${siteUrl}/`,
+      url: `${siteUrl}`,
       siteTitle,
       imageUrl: pageData.feature_image_url,
       type: 'website',
       locale: toOpenGraphLocale(pageData.language_code),
     }),
     alternates: {
-      canonical: `${siteUrl}/`,
+      canonical: `${siteUrl}`,
       languages: Object.keys(alternates).length > 0 ? alternates : undefined,
     },
   };

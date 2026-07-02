@@ -9,17 +9,15 @@ import {
   CORTEX_AI_OPENROUTER_MODEL_SELECTION_SETTING_KEY,
   CORTEX_AI_OPENROUTER_SETTING_KEY,
   CORTEX_AI_PACKAGE_ID,
+  createCortexAiStoredModelSelection,
   encryptStoredOpenRouterApiKey,
   getCortexAiEnvConfig,
   getEnvOpenRouterKeyStatus,
   getStoredOpenRouterKeyStatus,
-} from '../../../../lib/ai-config';
-import { listCortexAiCompatibleOpenRouterModels } from '../../../../lib/ai-model-catalog';
-import {
-  createCortexAiStoredModelSelection,
+  listCortexAiCompatibleOpenRouterModels,
   safeParseCortexAiModelSelection,
   type CortexAiStoredModelSelection,
-} from '../../../../lib/ai-model-registry';
+} from '@nextblock/cortex';
 
 const CORTEX_AI_SETTINGS_PATH = '/cms/settings/cortex-ai';
 

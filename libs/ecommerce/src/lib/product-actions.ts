@@ -1,9 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { deleteMediaFiles } from '@nextblock-cms/utils/server';
-import type { Database } from '@nextblock-cms/db';
+import type { Database } from '@nextblock-cms/db/types';
 import type { ProductFormValues } from './product-schema';
 import { syncSharedInventoryForSavedProduct } from './shared-inventory';
-import { normalizeCurrencyCode } from '@nextblock-cms/utils';
+import { normalizeCurrencyCode } from '@nextblock-cms/utils/utils';
 
 // Helper to convert dollars to cents
 const toCents = (dollars: number) => Math.round(dollars * 100);

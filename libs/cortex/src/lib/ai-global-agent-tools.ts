@@ -30,6 +30,10 @@ type SupabaseLike = {
 };
 
 type RevalidateFn = (path: string, type?: 'layout' | 'page') => void;
+type BlockContentValidator = (
+  blockType: BlockType,
+  content: Record<string, any>
+) => BlockValidationResult;
 type MenuKey = 'HEADER' | 'FOOTER';
 type CmsContentType = 'page' | 'post' | 'product';
 
@@ -42,6 +46,7 @@ type ToolExecutionContext = {
   revalidatePath?: RevalidateFn;
   skipConfirmation?: boolean;
   supabase?: SupabaseLike;
+  validateBlockContent?: BlockContentValidator;
 };
 
 const SEARCH_DOCUMENTATION_TIMEOUT_MS = 10000;
@@ -810,41 +815,22 @@ const fallbackBlockSchemas: Record<BlockType, z.ZodTypeAny> = {
     url: z.string(),
   }),
 };
-let runtimeBlockContentValidator:
-  | false
-  | ((blockType: BlockType, content: Record<string, any>) => BlockValidationResult)
-  | null = null;
-
 function isValidBlockType(blockType: string): blockType is BlockType {
   return (availableCortexAiBlockTypes as readonly string[]).includes(blockType);
 }
 
-function getRuntimeBlockContentValidator() {
-  if (runtimeBlockContentValidator !== null) {
-    return runtimeBlockContentValidator || null;
-  }
-
-  try {
-    const registry = require('./blocks/blockRegistry') as {
-      validateBlockContent?: (
-        blockType: BlockType,
-        content: Record<string, any>
-      ) => BlockValidationResult;
-    };
-
-    runtimeBlockContentValidator =
-      typeof registry.validateBlockContent === 'function'
-        ? registry.validateBlockContent
-        : false;
-  } catch {
-    runtimeBlockContentValidator = false;
-  }
-
-  return runtimeBlockContentValidator || null;
+function getRuntimeBlockContentValidator(context?: ToolExecutionContext) {
+  return typeof context?.validateBlockContent === 'function'
+    ? context.validateBlockContent
+    : null;
 }
 
-function validateCortexBlockContent(blockType: BlockType, content: Record<string, unknown>) {
-  const runtimeValidator = getRuntimeBlockContentValidator();
+function validateCortexBlockContent(
+  blockType: BlockType,
+  content: Record<string, unknown>,
+  context?: ToolExecutionContext
+) {
+  const runtimeValidator = getRuntimeBlockContentValidator(context);
 
   if (runtimeValidator) {
     return runtimeValidator(blockType, content);
@@ -1325,8 +1311,13 @@ function assertRequestedBlockTypeMatches(
   }
 }
 
-function assertValidBlockContent(blockType: BlockType, content: Record<string, unknown>, label: string) {
-  const validation = validateCortexBlockContent(blockType, content);
+function assertValidBlockContent(
+  blockType: BlockType,
+  content: Record<string, unknown>,
+  label: string,
+  context?: ToolExecutionContext
+) {
+  const validation = validateCortexBlockContent(blockType, content, context);
 
   if (!validation.isValid) {
     throw new Error(
@@ -1387,7 +1378,11 @@ function createNestedTempId(blockType: BlockType) {
   return `ai-${blockType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function normalizeNestedColumnBlock(value: unknown, label: string): ColumnBlock {
+function normalizeNestedColumnBlock(
+  value: unknown,
+  label: string,
+  context?: ToolExecutionContext
+): ColumnBlock {
   if (!isPlainJsonRecord(value)) {
     throw new Error(`${label} must be a JSON object.`);
   }
@@ -1399,7 +1394,12 @@ function normalizeNestedColumnBlock(value: unknown, label: string): ColumnBlock 
     throw new Error(`${label} cannot be a nested ${blockType} block.`);
   }
 
-  const content = normalizeBlockContentForType(blockType, cloneJsonRecord(value.content, label), label);
+  const content = normalizeBlockContentForType(
+    blockType,
+    cloneJsonRecord(value.content, label),
+    label,
+    context
+  );
 
   const rawTempId = value.temp_id ?? value.tempId;
   const tempId = typeof rawTempId === 'string' && rawTempId.trim() ? rawTempId : createNestedTempId(blockType);
@@ -1411,11 +1411,14 @@ function normalizeNestedColumnBlock(value: unknown, label: string): ColumnBlock 
   };
 }
 
-function normalizeNestedBlocksToAppend(contentPatch: Record<string, unknown>): ColumnBlock[] {
+function normalizeNestedBlocksToAppend(
+  contentPatch: Record<string, unknown>,
+  context?: ToolExecutionContext
+): ColumnBlock[] {
   const blocks: ColumnBlock[] = [];
 
   if ('append_block' in contentPatch) {
-    blocks.push(normalizeNestedColumnBlock(contentPatch.append_block, 'Nested block to append'));
+    blocks.push(normalizeNestedColumnBlock(contentPatch.append_block, 'Nested block to append', context));
   }
 
   if ('append_blocks' in contentPatch) {
@@ -1426,14 +1429,17 @@ function normalizeNestedBlocksToAppend(contentPatch: Record<string, unknown>): C
     }
 
     appendBlocks.forEach((block, index) => {
-      blocks.push(normalizeNestedColumnBlock(block, `Nested block to append ${index}`));
+      blocks.push(normalizeNestedColumnBlock(block, `Nested block to append ${index}`, context));
     });
   }
 
   return blocks;
 }
 
-function maybeInferSingleNestedBlockToAppend(contentPatch: Record<string, unknown>): ColumnBlock | null {
+function maybeInferSingleNestedBlockToAppend(
+  contentPatch: Record<string, unknown>,
+  context?: ToolExecutionContext
+): ColumnBlock | null {
   if (
     'append_block' in contentPatch ||
     'append_blocks' in contentPatch ||
@@ -1455,7 +1461,7 @@ function maybeInferSingleNestedBlockToAppend(contentPatch: Record<string, unknow
   }
 
   const content = cloneJsonRecord(contentPatch, `Nested ${blockType} block`);
-  assertValidBlockContent(blockType, content, `Nested ${blockType} block`);
+  assertValidBlockContent(blockType, content, `Nested ${blockType} block`, context);
 
   return {
     block_type: blockType,
@@ -1487,15 +1493,16 @@ function getAppendColumnIndex(contentPatch: Record<string, unknown>, existingCol
 function buildNextTopLevelBlockContent(
   blockType: BlockType,
   existingContent: Record<string, unknown>,
-  contentPatch: Record<string, unknown>
+  contentPatch: Record<string, unknown>,
+  context?: ToolExecutionContext
 ) {
   if (!isSectionLikeBlock(blockType)) {
     return mergeJsonRecords(existingContent, contentPatch);
   }
 
   const nextContentPatch = { ...contentPatch };
-  const blocksToAppend = normalizeNestedBlocksToAppend(nextContentPatch);
-  const inferredBlock = maybeInferSingleNestedBlockToAppend(nextContentPatch);
+  const blocksToAppend = normalizeNestedBlocksToAppend(nextContentPatch, context);
+  const inferredBlock = maybeInferSingleNestedBlockToAppend(nextContentPatch, context);
 
   if (inferredBlock) {
     blocksToAppend.push(inferredBlock);
@@ -2207,7 +2214,8 @@ function normalizeFormFields(fields: unknown) {
 function normalizeBlockContentForType(
   blockType: BlockType,
   rawContent: Record<string, unknown>,
-  label: string
+  label: string,
+  context?: ToolExecutionContext
 ) {
   const content = cloneJsonValue(rawContent);
 
@@ -2258,16 +2266,21 @@ function normalizeBlockContentForType(
       'Thanks for reaching out. We will reply as soon as possible.';
   }
 
-  assertValidBlockContent(blockType, content, label);
+  assertValidBlockContent(blockType, content, label, context);
 
   return content;
 }
 
-function normalizeCreateBlock(input: z.infer<typeof createCmsBlockInputSchema>, index: number) {
+function normalizeCreateBlock(
+  input: z.infer<typeof createCmsBlockInputSchema>,
+  index: number,
+  context?: ToolExecutionContext
+) {
   const content = normalizeBlockContentForType(
     input.blockType,
     cloneJsonRecord(input.content, `Block ${index}`),
-    `Block ${index}`
+    `Block ${index}`,
+    context
   );
 
   return {
@@ -2277,7 +2290,11 @@ function normalizeCreateBlock(input: z.infer<typeof createCmsBlockInputSchema>, 
   };
 }
 
-function buildContactPageBlocks(contactEmail: string, title = 'Contact Us') {
+function buildContactPageBlocks(
+  contactEmail: string,
+  title = 'Contact Us',
+  context?: ToolExecutionContext
+) {
   return [
     normalizeCreateBlock(
       {
@@ -2313,7 +2330,8 @@ function buildContactPageBlocks(contactEmail: string, title = 'Contact Us') {
           vertical_alignment: 'center',
         },
       },
-      0
+      0,
+      context
     ),
     normalizeCreateBlock(
       {
@@ -2347,7 +2365,8 @@ function buildContactPageBlocks(contactEmail: string, title = 'Contact Us') {
           success_message: 'Thanks for reaching out. We will reply as soon as possible.',
         },
       },
-      1
+      1,
+      context
     ),
   ];
 }
@@ -2355,13 +2374,14 @@ function buildContactPageBlocks(contactEmail: string, title = 'Contact Us') {
 function normalizeCreateBlocks(
   blocks: Array<z.infer<typeof createCmsBlockInputSchema>> | undefined,
   fallbackContactEmail?: string,
-  title?: string
+  title?: string,
+  context?: ToolExecutionContext
 ) {
   if ((!blocks || blocks.length === 0) && fallbackContactEmail) {
-    return buildContactPageBlocks(fallbackContactEmail, title);
+    return buildContactPageBlocks(fallbackContactEmail, title, context);
   }
 
-  return (blocks || []).map((block, index) => normalizeCreateBlock(block, index));
+  return (blocks || []).map((block, index) => normalizeCreateBlock(block, index, context));
 }
 
 async function assertUniqueSlug(params: {
@@ -3305,9 +3325,10 @@ export async function executeUpdateContentBlock(
   const nextContent = buildNextTopLevelBlockContent(
     existingBlockType,
     existingContent,
-    parsed.content
+    parsed.content,
+    context
   );
-  assertValidBlockContent(existingBlockType, nextContent, `Block ${parsed.blockId}`);
+  assertValidBlockContent(existingBlockType, nextContent, `Block ${parsed.blockId}`, context);
 
   const confirmation = getConfirmationPreview({
     action: 'UPDATE CONTENT BLOCK',
@@ -3412,7 +3433,7 @@ export async function executeInsertContentBlock(
 
     return parsed.position === 'before' ? anchorOrder : anchorOrder + 1;
   };
-  const normalizedBlock = normalizeCreateBlock(parsed.block, 0);
+  const normalizedBlock = normalizeCreateBlock(parsed.block, 0, context);
   const blocks = await loadBlocks();
   const newOrder = resolveOrder(blocks);
   const targetContext: CortexAiPageContext = {
@@ -3540,7 +3561,12 @@ export async function executeUpdateSectionColumnBlock(
     parentBlock.content,
     `Parent block ${parsed.parentBlockId}`
   ) as SectionBlockContent;
-  assertValidBlockContent(parentBlockType, parentContent, `Parent block ${parsed.parentBlockId}`);
+  assertValidBlockContent(
+    parentBlockType,
+    parentContent,
+    `Parent block ${parsed.parentBlockId}`,
+    context
+  );
 
   const targetColumn = parentContent.column_blocks?.[parsed.columnIndex];
   const targetNestedBlock = targetColumn?.[parsed.blockIndex];
@@ -3563,7 +3589,8 @@ export async function executeUpdateSectionColumnBlock(
   assertValidBlockContent(
     nestedBlockType,
     parsed.content,
-    `Nested block ${parsed.columnIndex}:${parsed.blockIndex}`
+    `Nested block ${parsed.columnIndex}:${parsed.blockIndex}`,
+    context
   );
 
   const nextColumnBlocks = parentContent.column_blocks.map((column, columnIndex) =>
@@ -3585,7 +3612,8 @@ export async function executeUpdateSectionColumnBlock(
   assertValidBlockContent(
     parentBlockType,
     nextParentContent,
-    `Updated parent block ${parsed.parentBlockId}`
+    `Updated parent block ${parsed.parentBlockId}`,
+    context
   );
 
   const confirmation = getConfirmationPreview({
@@ -3648,7 +3676,7 @@ export async function executeCreateCmsPage(input: CreateCmsPageInput, context?: 
   const actorUserId = getActorUserId(context);
   const language = await getDefaultLanguageRecord(supabase, parsed.languageCode);
   const slug = slugify(parsed.slug || parsed.title);
-  const blocks = normalizeCreateBlocks(parsed.blocks, parsed.contactEmail, parsed.title);
+  const blocks = normalizeCreateBlocks(parsed.blocks, parsed.contactEmail, parsed.title, context);
   const duplicate = await assertUniqueSlug({
     contentType: 'page',
     languageId: language.id,
@@ -3759,7 +3787,7 @@ export async function executeCreateCmsPost(input: CreateCmsPostInput, context?: 
   const actorUserId = getActorUserId(context);
   const language = await getDefaultLanguageRecord(supabase, parsed.languageCode);
   const slug = slugify(parsed.slug || parsed.title);
-  const blocks = normalizeCreateBlocks(parsed.blocks);
+  const blocks = normalizeCreateBlocks(parsed.blocks, undefined, undefined, context);
   const duplicate = await assertUniqueSlug({
     contentType: 'post',
     languageId: language.id,

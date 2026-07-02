@@ -27,13 +27,14 @@ import {
   Trash2,
   Info,
 } from 'lucide-react';
+import {
+  createCortexAiStoredModelSelection,
+  type CortexAiStoredModelSelection,
+} from '@nextblock/cortex/client';
 
 const CORTEX_AI_SANDBOX_KEY_LOCAL_STORAGE = 'cortex_ai_sandbox_openrouter_api_key';
 const CORTEX_AI_SANDBOX_MODEL_LOCAL_STORAGE = 'cortex_ai_sandbox_openrouter_model_selection';
 const CORTEX_AI_SETTINGS_CHANGED_EVENT = 'nextblock:cortex-ai-settings-changed';
-
-import type { CortexAiStoredModelSelection } from '../../../../lib/ai-model-registry';
-import { createCortexAiStoredModelSelection } from '../../../../lib/ai-model-registry';
 
 type SandboxCortexAiSettingsClientProps = {
   compatibleModels: Array<{

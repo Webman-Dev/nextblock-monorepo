@@ -8,12 +8,16 @@ import {
   hasSecretEncryptionKey,
   resolveSecretEncryptionKey,
   tryDecryptWithEnvKey,
-} from '@nextblock-cms/db/server';
+} from '@nextblock-cms/db/secrets';
 
 const SERVER_ONLY_ERROR_MESSAGE =
   'Cortex AI configuration can only be imported from server-side code.';
 
-if (typeof window !== 'undefined') {
+function assertServerOnly() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
   throw new Error(SERVER_ONLY_ERROR_MESSAGE);
 }
 
@@ -28,10 +32,12 @@ function readEnvValue(name: string) {
 }
 
 export function getOpenRouterEnvApiKey() {
+  assertServerOnly();
   return readEnvValue('OPENROUTER_API_KEY');
 }
 
 export function getCortexAiEnvConfig() {
+  assertServerOnly();
   const openRouterApiKey = getOpenRouterEnvApiKey();
 
   return {
@@ -46,6 +52,7 @@ export function getCortexAiEnvConfig() {
 }
 
 function requireEncryptionKey() {
+  assertServerOnly();
   // Resolve via the shared chain: NEXTBLOCK_ENCRYPTION_KEY -> CORTEX_AI_ENCRYPTION_KEY ->
   // a stable key derived from the Supabase service-role key. The derived fallback lets
   // BYOK work out-of-the-box on hosted installs (e.g. one-click Vercel).
@@ -68,6 +75,7 @@ export function encryptStoredOpenRouterApiKey(apiKey: string) {
 }
 
 export function decryptStoredOpenRouterApiKey(encryptedKey: unknown) {
+  assertServerOnly();
   // Try every candidate key (explicit env keys + the derived fallback). This keeps a key
   // stored under one key readable if another is added later, and matches the SMTP/payment
   // secret behaviour. The envelope is byte-compatible with the shared secret-crypto format.
@@ -85,6 +93,7 @@ export function getStoredOpenRouterKeyStatus(value: unknown) {
 }
 
 export function getEnvOpenRouterKeyStatus() {
+  assertServerOnly();
   const env = getCortexAiEnvConfig();
 
   return {

@@ -30,6 +30,7 @@
     "@nextblock-cms/sdk": "workspace:*",
     "@nextblock-cms/ui": "workspace:*",
     "@nextblock-cms/utils": "workspace:*",
+    "@nextblock/cortex": "workspace:*",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.1",

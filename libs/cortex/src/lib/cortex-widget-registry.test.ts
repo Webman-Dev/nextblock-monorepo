@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@nextblock-cms/utils', async () => {
+vi.mock('@nextblock-cms/utils/custom-blocks', async () => {
   const { z } = await import('zod');
   const fieldKeyPattern = /^[a-z][a-z0-9_]*$/;
   const slugPattern = /^[a-z][a-z0-9-]*$/;

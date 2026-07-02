@@ -50,9 +50,14 @@ function run(command, options = {}) {
   execSync(command, { stdio: 'inherit', shell: true, ...options });
 }
 
-// @nextblock-cms/db -> libs/db ; @nextblock-cms/ecom -> libs/ecommerce
+// @nextblock-cms/db -> libs/db ; @nextblock-cms/ecom -> libs/ecommerce ;
+// @nextblock/cortex -> libs/cortex
 function resolveSiblingVersion(depName) {
-  const suffix = depName.replace('@nextblock-cms/', '');
+  const suffix = depName.startsWith('@nextblock-cms/')
+    ? depName.replace('@nextblock-cms/', '')
+    : depName.startsWith('@nextblock/')
+      ? depName.replace('@nextblock/', '')
+      : depName;
   const dir = suffix === 'ecom' ? 'ecommerce' : suffix;
   const siblingPkgPath = path.join(workspaceRoot, 'libs', dir, 'package.json');
   try {
@@ -62,6 +67,21 @@ function resolveSiblingVersion(depName) {
     // fall through to a floating spec
   }
   return 'latest';
+}
+
+function resolveWorkspaceDeps(pkg) {
+  if (pkg.dependencies) {
+    for (const depName of Object.keys(pkg.dependencies)) {
+      const spec = pkg.dependencies[depName];
+      if (typeof spec === 'string' && spec.startsWith('workspace:')) {
+        if (depName === '@nextblock-cms/ecommerce') {
+          pkg.dependencies[depName] = `npm:@nextblock-cms/ecom@${resolveSiblingVersion('@nextblock-cms/ecom')}`;
+          continue;
+        }
+        pkg.dependencies[depName] = resolveSiblingVersion(depName);
+      }
+    }
+  }
 }
 
 // libs/ecommerce ships source-available + license-gated (same model as Cortex AI): the
@@ -98,14 +118,7 @@ function finalizeEcomDistPackageJson(distPkgPath) {
     },
   };
 
-  if (pkg.dependencies) {
-    for (const depName of Object.keys(pkg.dependencies)) {
-      const spec = pkg.dependencies[depName];
-      if (typeof spec === 'string' && spec.startsWith('workspace:')) {
-        pkg.dependencies[depName] = resolveSiblingVersion(depName);
-      }
-    }
-  }
+  resolveWorkspaceDeps(pkg);
 
   pkg.publishConfig = { access: 'public' };
   delete pkg.nx; // workspace-internal metadata, not for the published package
@@ -113,6 +126,37 @@ function finalizeEcomDistPackageJson(distPkgPath) {
   fs.writeFileSync(distPkgPath, JSON.stringify(pkg, null, 2) + '\n');
   console.log(
     '✓ Normalized ecom dist package.json (entry points + resolved sibling deps + public access)',
+  );
+}
+
+function finalizeCortexDistPackageJson(distPkgPath) {
+  const pkg = JSON.parse(fs.readFileSync(distPkgPath, 'utf8'));
+
+  pkg.main = './index.cjs.js';
+  pkg.module = './index.es.js';
+  pkg.types = './index.d.ts';
+  pkg.exports = {
+    '.': {
+      types: './index.d.ts',
+      import: './index.es.js',
+      require: './index.cjs.js',
+    },
+    './client': {
+      types: './client.d.ts',
+      import: './client.es.js',
+      require: './client.cjs.js',
+    },
+    './package.json': './package.json',
+  };
+
+  resolveWorkspaceDeps(pkg);
+
+  pkg.publishConfig = { access: 'public' };
+  delete pkg.nx;
+
+  fs.writeFileSync(distPkgPath, JSON.stringify(pkg, null, 2) + '\n');
+  console.log(
+    '✓ Normalized cortex dist package.json (entry points + resolved sibling deps + public access)',
   );
 }
 
@@ -148,10 +192,13 @@ try {
     throw new Error(`Build output not found at ${distDir}`);
   }
 
-  // libs/ecommerce is the one lib whose vite build does not emit a complete manifest;
-  // normalize its dist package.json (entry points + resolved sibling deps) before publish.
+  // Source-available premium libs copy raw package.json files during Vite builds;
+  // normalize their manifests (entry points + resolved sibling deps) before publish.
   if (library === 'ecommerce' || library === 'ecom') {
     finalizeEcomDistPackageJson(path.join(distDir, 'package.json'));
+  }
+  if (library === 'cortex') {
+    finalizeCortexDistPackageJson(path.join(distDir, 'package.json'));
   }
 
   // -------------------------------------------------------------------------

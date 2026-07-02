@@ -3,14 +3,14 @@ import { revalidatePath, revalidateTag } from 'next/cache';
 
 import { createClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 
-import { generateCortexWidgetDefinition } from '../../../../../lib/ai-cortex-widget-builder';
+import { generateCortexWidgetDefinition } from '@nextblock/cortex';
 import {
   cortexWidgetBuildRequestSchema,
-} from '../../../../../lib/cortex-widget-schema';
+} from '@nextblock/cortex';
 import {
   CortexWidgetRegistryInsertError,
   insertCortexWidgetDefinition,
-} from '../../../../../lib/cortex-widget-registry';
+} from '@nextblock/cortex';
 import {
   CUSTOM_BLOCK_DEFINITIONS_CACHE_TAG,
   getCustomBlockDefinitionCacheTag,
@@ -18,7 +18,7 @@ import {
 import {
   safeParseCortexAiModelSelection,
   summarizeCortexAiRoutingError,
-} from '../../../../../lib/ai-model-registry';
+} from '@nextblock/cortex';
 
 export const dynamic = 'force-dynamic';
 
