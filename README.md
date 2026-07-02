@@ -79,7 +79,7 @@ The **First-Boot Setup Wizard** at `/setup` walks you through connecting Supabas
 > Repository" unchecked**. On the free (Hobby) plan, automatic upstream updates only deploy
 > from a **public** repo — Hobby blocks bot-authored deploys on private repos — and public
 > also makes update checks fully tokenless. You can change visibility later in the repo's
-> GitHub settings. Details: [docs/13](./docs/13-STAYING-UP-TO-DATE.md).
+> GitHub settings if you change your mind. Details: [docs/13](./docs/13-STAYING-UP-TO-DATE.md).
 
 During import, Vercel's native **Supabase Marketplace integration** (the `stores`
 button parameter) prompts you to create a Supabase database (name + region), then
