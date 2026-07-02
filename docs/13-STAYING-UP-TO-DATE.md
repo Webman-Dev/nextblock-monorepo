@@ -89,6 +89,13 @@ Variables, or your `.env`):
 With that set, the dashboard conflict banner works on private forks too. (The workflow
 itself still needs no extra secret — `GITHUB_TOKEN` covers it either way.)
 
+> **⚠️ Vercel Hobby (free) plan + a private repo blocks auto-deploys.** On Hobby, Vercel only
+> deploys **private**-repo commits authored by the project owner and rejects automated
+> (bot/collaborator) commits — so the auto-merge push won't deploy (*"Hobby Plan does not
+> support collaboration for private repositories"*). Either **make the repo public**
+> (recommended — it also makes the conflict banner tokenless) or upgrade to **Vercel Pro**.
+> Public repos have no such restriction on Hobby.
+
 ### How the dashboard stays current (no cron)
 
 The CMS refreshes update/conflict status **in the background after a dashboard page

@@ -75,6 +75,12 @@ The **First-Boot Setup Wizard** at `/setup` walks you through connecting Supabas
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D)
 
+> **Tip — keep the new repo public.** When Vercel asks, leave **"Create private Git
+> Repository" unchecked**. On the free (Hobby) plan, automatic upstream updates only deploy
+> from a **public** repo — Hobby blocks bot-authored deploys on private repos — and public
+> also makes update checks fully tokenless. You can change visibility later in the repo's
+> GitHub settings. Details: [docs/13](./docs/13-STAYING-UP-TO-DATE.md).
+
 During import, Vercel's native **Supabase Marketplace integration** (the `stores`
 button parameter) prompts you to create a Supabase database (name + region), then
 **provisions it, connects it to the project, and injects its keys before the first
