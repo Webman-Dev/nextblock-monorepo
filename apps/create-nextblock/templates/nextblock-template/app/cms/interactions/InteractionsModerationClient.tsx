@@ -4,7 +4,7 @@ import React, { useState, useTransition } from "react";
 import { Button } from "@nextblock-cms/ui";
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui";
 import { Badge } from "@nextblock-cms/ui";
-import { updateInteractionStatus } from "../../actions/interactions";
+import { updateInteractionStatus, saveNotificationEmails } from "../../actions/interactions";
 import { cn } from "@nextblock-cms/utils";
 import {
   MessageSquare,
@@ -15,7 +15,8 @@ import {
   Filter,
   ExternalLink,
   ThumbsUp,
-  AlertCircle
+  AlertCircle,
+  Mail
 } from "lucide-react";
 import Link from "next/link";
 
@@ -29,9 +30,50 @@ export default function InteractionsModerationClient({
   isAdmin,
 }: InteractionsModerationClientProps) {
   const [interactions, setInteractions] = useState<any[]>(initialInteractions);
+
+  // Notification settings states
+  const [emailsInput, setEmailsInput] = useState("");
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [savingEmails, setSavingEmails] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (isAdmin) {
+      import("../../actions/interactions").then(({ getNotificationEmails }) => {
+        getNotificationEmails().then((res) => {
+          if (res.success && res.emails) {
+            setEmailsInput(res.emails);
+          }
+        });
+      });
+    }
+  }, [isAdmin]);
+
+  const handleSaveEmails = async () => {
+    setSavingEmails(true);
+    setSettingsError(null);
+    setSettingsSuccess(null);
+
+    const res = await saveNotificationEmails(emailsInput);
+    setSavingEmails(false);
+
+    if (res.error) {
+      setSettingsError(res.error);
+    } else {
+      setSettingsSuccess("Notification settings saved successfully.");
+      if (res.emails) {
+        setEmailsInput(res.emails);
+      }
+      setTimeout(() => {
+        setSettingsSuccess(null);
+        setIsSettingsOpen(false);
+      }, 1500);
+    }
+  };
   const [filterType, setFilterType] = useState<"all" | "review" | "comment">("all");
   const [filterStatus, setFilterStatus] = useState<"pending" | "approved" | "denied">("pending");
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [moderatingId, setModeratingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -96,6 +138,18 @@ export default function InteractionsModerationClient({
             Review and moderate customer reviews and blog comments.
           </p>
         </div>
+        {isAdmin && (
+          <div className="flex items-center gap-2 self-start md:self-auto">
+            <Button
+              onClick={() => setIsSettingsOpen(true)}
+              className="flex items-center gap-2 text-xs"
+              variant="outline"
+            >
+              <Mail className="h-4 w-4" />
+              Notifications
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Tabs / Filters Bar */}
@@ -200,7 +254,7 @@ export default function InteractionsModerationClient({
                           {item.type}
                         </Badge>
                       </div>
-                      <span className="text-[10px] text-muted-foreground mt-1.5 block">
+                      <span className="text-[10px] text-muted-foreground mt-1.5 block" suppressHydrationWarning>
                         {dateStr}
                       </span>
                     </div>
@@ -292,6 +346,63 @@ export default function InteractionsModerationClient({
           </div>
         )}
       </div>
+
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-background border border-border rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <Mail className="h-5 w-5 text-primary" />
+                Notification Settings
+              </h3>
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground text-left">
+              Configure which email addresses receive notification alerts when new pending reviews or comments are submitted.
+            </p>
+            <div className="space-y-1.5 text-left">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
+                Email Recipients
+              </label>
+              <textarea
+                value={emailsInput}
+                onChange={(e) => setEmailsInput(e.target.value)}
+                placeholder="admin@example.com, moderator@example.com"
+                className="w-full min-h-[80px] bg-background border border-border rounded-xl px-3 py-2 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+              />
+              <span className="text-[10px] text-muted-foreground">
+                Enter a comma-separated list of email addresses.
+              </span>
+            </div>
+
+            {settingsError && <div className="text-xs font-medium text-destructive text-left">{settingsError}</div>}
+            {settingsSuccess && <div className="text-xs font-medium text-emerald-600 text-left">{settingsSuccess}</div>}
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                variant="ghost"
+                onClick={() => setIsSettingsOpen(false)}
+                disabled={savingEmails}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveEmails}
+                disabled={savingEmails}
+                className="min-w-[100px]"
+              >
+                {savingEmails ? "Saving..." : "Save Settings"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

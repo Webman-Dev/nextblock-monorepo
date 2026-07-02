@@ -445,7 +445,9 @@ export async function completeSetup(input: CompleteSetupInput): Promise<ActionRe
     .eq('id', created.user.id)
     .maybeSingle();
   if (createdProfile?.role !== 'ADMIN') {
-    await admin.auth.admin.deleteUser(created.user.id).catch(() => {});
+    await admin.auth.admin.deleteUser(created.user.id).catch((err) => {
+      console.warn('Failed to clean up stale admin user after race condition:', err);
+    });
     return {
       ok: false,
       error: 'Setup was just completed by another session. Please sign in instead.',

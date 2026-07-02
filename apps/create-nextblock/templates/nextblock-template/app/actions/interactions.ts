@@ -2,7 +2,8 @@
 
 import { createClient, getServiceRoleSupabaseClient, getProfileWithRoleServerSide } from "@nextblock-cms/db/server";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { sendEmail } from "./email";
 
 export interface SubmitInteractionInput {
   type: "review" | "comment";
@@ -68,6 +69,77 @@ export async function submitInteraction(input: SubmitInteractionInput) {
 
     // 4. Revalidate moderation panel path
     revalidatePath("/cms/interactions");
+
+    // 5. Send email notification asynchronously if emails are configured
+    try {
+      const admin = getServiceRoleSupabaseClient();
+      if (admin) {
+        const { data: config } = await admin
+          .from("site_settings")
+          .select("value")
+          .eq("key", "interactions_notification_emails")
+          .maybeSingle();
+
+        const emailsString = (config?.value as any)?.emails || "";
+
+        if (emailsString) {
+          const host = (await headers()).get("host");
+          const protocol = host?.includes("localhost") || host?.includes("127.0.0.1") ? "http" : "https";
+          const origin = `${protocol}://${host}`;
+
+          const capitalizedType = input.type.charAt(0).toUpperCase() + input.type.slice(1);
+          const subject = `[NextBlock CMS] New Pending ${capitalizedType} Submitted`;
+
+          const html = `
+            <div style="font-family: sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 8px;">
+              <h2 style="color: #6366f1; margin-top: 0;">New Pending ${capitalizedType} Submitted</h2>
+              <p>Hello,</p>
+              <p>A new content interaction has been submitted and is currently <strong>pending moderation</strong>.</p>
+              <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+              <div style="background-color: #f9fafb; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+                <p style="margin: 0 0 8px 0;"><strong>Type:</strong> ${capitalizedType}</p>
+                ${input.type === "review" && input.rating ? `<p style="margin: 0 0 8px 0;"><strong>Rating:</strong> ${input.rating} / 5</p>` : ""}
+                <p style="margin: 0 0 8px 0;"><strong>Content:</strong></p>
+                <blockquote style="margin: 0; padding-left: 10px; border-left: 3px solid #6366f1; color: #555; font-style: italic;">
+                  ${input.content.trim()}
+                </blockquote>
+              </div>
+              <p>Please log in to the moderation dashboard to approve or deny this interaction:</p>
+              <p style="margin-top: 20px;">
+                <a href="${origin}/cms/interactions" style="background-color: #6366f1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+                  Go to Moderation Dashboard
+                </a>
+              </p>
+              <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+              <p style="font-size: 11px; color: #888;">This is an automated notification from your NextBlock™ CMS instance.</p>
+            </div>
+          `;
+
+          const text = `
+New Pending ${capitalizedType} Submitted
+
+A new ${input.type} has been submitted and is currently pending moderation.
+
+Type: ${capitalizedType}
+${input.type === "review" && input.rating ? `Rating: ${input.rating} / 5\n` : ""}
+Content: "${input.content.trim()}"
+
+Moderation Dashboard: ${origin}/cms/interactions
+          `;
+
+          sendEmail({
+            to: emailsString,
+            subject,
+            text,
+            html,
+          }).catch((err) =>
+            console.error("Failed to send pending interaction email notification:", err)
+          );
+        }
+      }
+    } catch (emailErr) {
+      console.error("Failed to process email notifications:", emailErr);
+    }
 
     return { success: true, data };
   } catch (err: any) {
@@ -226,5 +298,75 @@ export async function updateInteractionStatus(interactionId: string, status: "ap
   } catch (err: any) {
     console.error("Update interaction status failed:", err);
     return { error: err.message || "An unexpected error occurred." };
+  }
+}
+
+/**
+ * Fetches the interactions notification emails from site_settings.
+ */
+export async function getNotificationEmails() {
+  const supabase = createClient();
+  
+  // Authenticate & authorize
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const profile = await getProfileWithRoleServerSide(user.id);
+  if (!profile || profile.role !== "ADMIN") {
+    return { error: "Unauthorized. Admin role required." };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "interactions_notification_emails")
+      .maybeSingle();
+
+    if (error) throw error;
+    
+    return { success: true, emails: (data?.value as any)?.emails || "" };
+  } catch (err: any) {
+    console.error("Failed to fetch notification emails:", err);
+    return { error: err.message || "Failed to fetch settings." };
+  }
+}
+
+/**
+ * Saves the interactions notification emails to site_settings.
+ */
+export async function saveNotificationEmails(emails: string) {
+  const supabase = createClient();
+
+  // Authenticate & authorize
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const profile = await getProfileWithRoleServerSide(user.id);
+  if (!profile || profile.role !== "ADMIN") {
+    return { error: "Unauthorized. Admin role required." };
+  }
+
+  // Basic validation of emails
+  const cleaned = emails
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean)
+    .join(", ");
+
+  try {
+    const { error } = await supabase
+      .from("site_settings")
+      .upsert({
+        key: "interactions_notification_emails",
+        value: { emails: cleaned },
+      });
+
+    if (error) throw error;
+
+    return { success: true, emails: cleaned };
+  } catch (err: any) {
+    console.error("Failed to save notification emails:", err);
+    return { error: err.message || "Failed to save settings." };
   }
 }

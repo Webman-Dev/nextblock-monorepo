@@ -8279,7 +8279,7 @@ SET
   title = 'How to Install NextBlock: Every Setup Option Explained',
   subtitle = 'Four ways to launch NextBlock: a one-click Vercel deploy, npm create nextblock, git clone with the browser setup wizard, or a fully local Docker stack.',
   excerpt = 'Every way to install NextBlock — one-click cloud deploy, CLI scaffold, git clone, or self-hosted Docker — with copy-paste steps for each.',
-  meta_title = 'How to Install NextBlock — Vercel, CLI, Git or Docker',
+  meta_title = 'How to Install NextBlock CMS — Vercel, CLI, Git or Docker',
   meta_description = 'Install NextBlock in minutes — one-click Vercel deploy, npm create nextblock, git clone, or self-hosted Docker. No config files, no manual SQL.'
 WHERE slug = 'how-to-setup-nextblock';
 
@@ -8287,10 +8287,10 @@ WHERE slug = 'how-to-setup-nextblock';
 UPDATE public.posts
 SET
   title = $meta$Installer NextBlock : toutes les options expliquées$meta$,
-  subtitle = $meta$Quatre façons de lancer NextBlock : déploiement Vercel en un clic, npm create nextblock, git clone avec l'assistant navigateur, ou une pile Docker 100 % locale.$meta$,
+  subtitle = $meta$Quatre façons de lancer NextBlock : déploiement Vercel en un clic, npm create nextblock, git clone avec l'assistant dans le navigateur, ou une pile Docker 100 % locale.$meta$,
   excerpt = $meta$Toutes les façons d'installer NextBlock — cloud en un clic, CLI, git clone ou Docker auto-hébergé — avec les étapes à copier-coller.$meta$,
   meta_title = $meta$Installer NextBlock — Vercel, CLI, Git ou Docker$meta$,
-  meta_description = $meta$Installez NextBlock en quelques minutes : déploiement Vercel en un clic, npm create nextblock, git clone ou Docker auto-hébergé. Sans fichiers de config ni SQL.$meta$
+  meta_description = $meta$Installez NextBlock en quelques minutes : déploiement Vercel en un clic, npm create nextblock, git clone ou Docker auto-hébergé. Sans config ni SQL.$meta$
 WHERE slug = 'comment-configurer-nextblock';
 
 WITH target_posts AS (
@@ -8306,7 +8306,7 @@ INSERT INTO public.blocks (post_id, language_id, block_type, content, "order")
 
 -- EN: How to Install NextBlock
 SELECT tp.id, tp.language_id, 'text', jsonb_build_object('html_content',
-$$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock is an open-source, AI-native CMS built on Next.js and Supabase — and installing it no longer involves config files, terminal wizards, or manual SQL. There are four ways to get running, and they all end in the same place: a browser <strong>setup wizard</strong> that connects your database, configures media storage, and creates your admin account for you. Pick the path that fits, follow the steps, and you will be publishing in minutes.</p>
+$$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock is an open-source, AI-native Next.js CMS built on Supabase — and installing it no longer involves config files, terminal wizards, or manual SQL. There are four ways to get running, and they all end in the same place: a browser <strong>setup wizard</strong> that connects your database, configures media storage, and creates your admin account for you. Pick the path that fits, follow the steps, and you will be publishing in minutes.</p>
 
 <div class='grid gap-5 md:grid-cols-2 my-10'>
   <a href='#one-click-vercel' class='block rounded-[1.75rem] border border-blue-200 bg-blue-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-blue-500/20 dark:bg-blue-500/10'>
@@ -8357,15 +8357,15 @@ $$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock is a
 
 <h2 id='npm-create'>Option 2: Scaffold a Project with npm create nextblock</h2>
 <p>The best starting point for building your own site. The CLI scaffolds a standalone Next.js application with NextBlock already wired in — no monorepo, no workspace tooling — and hands everything else to the browser wizard.</p>
-<p>Before you start, create a free project at <a href='https://supabase.com' target='_blank' rel='noopener'>supabase.com</a> (or pick the CLI's Docker mode during creation and skip cloud accounts entirely).</p>
+<p>Before you start, install <a href='https://nodejs.org' target='_blank' rel='noopener'>Node.js 20 or newer</a> (it includes npm), then create a free project at <a href='https://supabase.com' target='_blank' rel='noopener'>supabase.com</a> (or pick the CLI's Docker mode during creation and skip cloud accounts entirely).</p>
 <pre><code>npm create nextblock@latest my-site
 cd my-site
 npm run dev</code></pre>
 <p>Open <code>http://localhost:3000/setup</code> and let the wizard take over:</p>
 <ol class='space-y-2'>
   <li><strong>Connect Supabase</strong> — paste your project URL, publishable (anon) key, secret (service role) key, and a personal access token so the wizard can apply the database schema for you.</li>
-  <li><strong>Choose media storage</strong> — plug in a Cloudflare R2 bucket for images and files.</li>
-  <li><strong>Create your administrator</strong> — the wizard applies every migration, generates the app secrets, writes <code>.env.local</code>, creates your confirmed admin account, and signs you in.</li>
+  <li><strong>Choose media storage</strong> — plug in a Cloudflare R2 bucket for images and files, or leave it blank to use your connected Supabase project's storage.</li>
+  <li><strong>Create your administrator</strong> — the wizard applies every migration, generates the app secrets, writes <code>.env.local</code>, creates your confirmed admin account, and signs you in. Restart <code>npm run dev</code> once afterwards so the fresh environment is baked into the app.</li>
 </ol>
 <div class='rounded-3xl border border-violet-200 bg-violet-50/80 p-6 my-8 dark:border-violet-500/20 dark:bg-violet-500/10'>
   <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Premium modules</p>
@@ -8385,7 +8385,7 @@ npx nx serve nextblock</code></pre>
 </div>
 
 <h2 id='docker'>Option 4: Self-Hosted with Docker</h2>
-<p>Everything runs on your machine: Supabase's Postgres and auth engines, a PostgREST API behind a Kong gateway, S3-compatible MinIO storage, and the CMS itself. No Supabase account, no Vercel, no email service — ideal for evaluations, air-gapped environments, and full data ownership.</p>
+<p>Everything runs on your machine: Supabase's Postgres and auth engines, a PostgREST API behind a Kong gateway, S3-compatible MinIO storage, and the CMS itself. No Supabase account, no Vercel, no email service — ideal for evaluations, air-gapped environments, and anyone who wants a fully self-hosted CMS with complete data ownership.</p>
 <p>With <a href='https://www.docker.com/products/docker-desktop/' target='_blank' rel='noopener'>Docker Desktop</a> installed and running:</p>
 <pre><code>git clone https://github.com/nextblock-cms/nextblock.git
 cd nextblock
@@ -8415,8 +8415,10 @@ npm run docker:logs</code></pre>
 <p>From there, see how the platform fits together in <a href='/article/how-nextblock-works'>How NextBlock Works</a>, add a storefront with the <a href='/article/nextblock-commerce-guide'>Commerce guide</a>, or meet your AI copilot in the <a href='/article/nextblock-cortex-ai-guide'>Cortex AI guide</a>.</p>
 
 <h2 id='faq'>Installation FAQ</h2>
+<h3>What do I need installed?</h3>
+<p>Nothing for the Vercel path — it runs entirely in the browser. For <code>npm create nextblock</code>: <a href='https://nodejs.org' target='_blank' rel='noopener'>Node.js 20+</a> (which includes npm). For the cloned repository: Node.js 20+ and git. For Docker: those plus Docker Desktop.</p>
 <h3>Is NextBlock free?</h3>
-<p>Yes — the core CMS is 100% free and open source (AGPL). Premium packages such as e-commerce and Cortex AI are optional and activate with a license key.</p>
+<p>Yes — the core of NextBlock is a 100% free, open-source CMS (AGPL). Premium packages such as e-commerce and Cortex AI are optional and activate with a license key. Both Vercel and Supabase offer free tiers, so a starter site can run at no cost.</p>
 <h3>Do I need a Supabase account?</h3>
 <p>On Vercel, the database is created for you during the deploy. For <code>npm create nextblock</code> and the cloned repository you bring a free Supabase project. With Docker you need no cloud accounts at all.</p>
 <h3>Do I have to run migrations or SQL by hand?</h3>
@@ -8424,7 +8426,7 @@ npm run docker:logs</code></pre>
 <h3>Can I switch paths later?</h3>
 <p>Yes. Every path runs the same application and the same database schema, so you can prototype locally with Docker today and deploy to Vercel tomorrow. NextBlock deploys like any standard Next.js app.</p>
 <h3>How do I update NextBlock?</h3>
-<p>On Vercel, the Connect GitHub onboarding step enables a daily automatic sync with upstream. On a cloned repository, <code>git pull</code> and restart — pending database migrations apply automatically on production builds. With Docker, pull the latest code and run <code>npm run docker:up</code>.</p>
+<p>On Vercel, the Connect GitHub onboarding step enables a daily automatic sync with upstream. On a cloned repository, <code>git pull</code>, run <code>npm run db:migrate</code>, then restart (on production builds, pending migrations apply automatically). With Docker, pull the latest code and run <code>npm run docker:up</code>.</p>
 
 <div class='rounded-[2rem] border border-slate-200/80 bg-slate-50 p-8 my-12 text-center dark:border-white/10 dark:bg-white/5'>
   <p class='mt-0 text-2xl font-semibold text-slate-900 dark:text-white'>Ready to launch?</p>
@@ -8446,10 +8448,10 @@ $$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock est 
   <a href='#one-click-vercel' class='block rounded-[1.75rem] border border-blue-200 bg-blue-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-blue-500/20 dark:bg-blue-500/10'>
     <p class='mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200'>Le plus rapide &middot; environ 3 minutes</p>
     <h3 class='mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>Déploiement Vercel en un clic</h3>
-    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>Un site de production en ligne avec une base de données managée. Pas de terminal, pas de variables d'environnement, rien à copier.</p>
+    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>Un site de production en ligne avec une base de données gérée. Pas de terminal, pas de variables d'environnement, rien à copier.</p>
   </a>
   <a href='#npm-create' class='block rounded-[1.75rem] border border-violet-200 bg-violet-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-violet-500/20 dark:bg-violet-500/10'>
-    <p class='mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Recommandé pour vos projets</p>
+    <p class='mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Recommandé pour les nouveaux projets</p>
     <h3 class='mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>npm create nextblock</h3>
     <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>Générez une app Next.js autonome avec NextBlock intégré, puis terminez la configuration dans votre navigateur.</p>
   </a>
@@ -8473,7 +8475,7 @@ $$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock est 
 </figure>
 
 <h2 id='one-click-vercel'>Option 1 : Déploiement Vercel en un clic</h2>
-<p>Le moyen le plus rapide d'obtenir un site NextBlock en production. Un seul bouton crée votre propre copie de NextBlock sur GitHub, provisionne une base de données Supabase managée et déploie le site — sans jamais ouvrir un terminal ni copier la moindre clé.</p>
+<p>Le moyen le plus rapide d'obtenir un site NextBlock en production. Un seul bouton crée votre propre copie de NextBlock sur GitHub, provisionne une base de données Supabase gérée et déploie le site — sans jamais ouvrir un terminal ni copier la moindre clé.</p>
 <ol class='space-y-2'>
   <li><strong>Cliquez sur Deploy to Vercel</strong> et connectez-vous — Vercel clone NextBlock dans un nouveau dépôt qui vous appartient.</li>
   <li><strong>Créez la base de données Supabase</strong> quand on vous le demande : choisissez un nom et une région. Vercel la connecte au projet et injecte les clés avant le premier build.</li>
@@ -8487,23 +8489,23 @@ $$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock est 
   <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200'>Zéro configuration</p>
   <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>Aucune variable d'environnement à remplir. Le stockage des médias utilise automatiquement votre projet Supabase connecté, les secrets de sécurité sont dérivés pour vous, et les migrations de base de données s'exécutent automatiquement à chaque build de production. Un domaine personnalisé plus tard ? Définissez <code>NEXT_PUBLIC_URL</code> dans votre projet Vercel et redéployez.</p>
 </div>
-<p>Votre site reste aussi à jour tout seul : la checklist du tableau de bord inclut une étape <strong>Connect GitHub</strong> en un clic qui installe un workflow quotidien synchronisant votre copie avec la dernière version de NextBlock.</p>
+<p>Par ailleurs, votre site reste à jour tout seul : la checklist du tableau de bord inclut une étape <strong>Connect GitHub</strong> en un clic qui installe un workflow quotidien synchronisant votre copie avec la dernière version de NextBlock.</p>
 
 <h2 id='npm-create'>Option 2 : Créer un projet avec npm create nextblock</h2>
-<p>Le meilleur point de départ pour construire votre propre site. Le CLI génère une application Next.js autonome avec NextBlock déjà intégré — sans monorepo ni outillage de workspace — et confie tout le reste à l'assistant du navigateur.</p>
-<p>Avant de commencer, créez un projet gratuit sur <a href='https://supabase.com' target='_blank' rel='noopener'>supabase.com</a> (ou choisissez le mode Docker du CLI pendant la création et passez-vous entièrement de comptes cloud).</p>
+<p>Le meilleur point de départ pour construire votre propre site. Le CLI génère une application Next.js autonome avec NextBlock déjà intégré — sans monorepo ni outillage de workspace — et confie tout le reste à l'assistant dans le navigateur.</p>
+<p>Avant de commencer, installez <a href='https://nodejs.org' target='_blank' rel='noopener'>Node.js 20 ou plus récent</a> (npm inclus), puis créez un projet gratuit sur <a href='https://supabase.com' target='_blank' rel='noopener'>supabase.com</a> (ou choisissez le mode Docker du CLI pendant la création et passez-vous entièrement de comptes cloud).</p>
 <pre><code>npm create nextblock@latest mon-site
 cd mon-site
 npm run dev</code></pre>
 <p>Ouvrez <code>http://localhost:3000/setup</code> et laissez l'assistant faire le travail :</p>
 <ol class='space-y-2'>
   <li><strong>Connectez Supabase</strong> — collez l'URL du projet, la clé publiable (anon), la clé secrète (service role) et un jeton d'accès personnel pour que l'assistant applique le schéma de base de données à votre place.</li>
-  <li><strong>Choisissez le stockage des médias</strong> — branchez un bucket Cloudflare R2 pour les images et les fichiers.</li>
-  <li><strong>Créez votre administrateur</strong> — l'assistant applique toutes les migrations, génère les secrets de l'application, écrit <code>.env.local</code>, crée votre compte admin confirmé et vous connecte.</li>
+  <li><strong>Choisissez le stockage des médias</strong> — branchez un bucket Cloudflare R2 pour les images et les fichiers, ou laissez les champs vides pour utiliser le stockage de votre projet Supabase.</li>
+  <li><strong>Créez votre administrateur</strong> — l'assistant applique toutes les migrations, génère les secrets de l'application, écrit <code>.env.local</code>, crée votre compte admin confirmé et vous connecte. Redémarrez ensuite <code>npm run dev</code> une fois pour que le nouvel environnement soit intégré à l'application.</li>
 </ol>
 <div class='rounded-3xl border border-violet-200 bg-violet-50/80 p-6 my-8 dark:border-violet-500/20 dark:bg-violet-500/10'>
   <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Modules premium</p>
-  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>Besoin d'une boutique ? Une seule commande ajoute produits, paiement, commandes et coupons — sous licence, prêts quand vous l'êtes : <code>npx create-nextblock activate ecommerce</code></p>
+  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>Besoin d'une boutique ? Une seule commande ajoute produits, paiement, commandes et coupons — activés par clé de licence, prêts quand vous l'êtes : <code>npx create-nextblock activate ecommerce</code></p>
 </div>
 
 <h2 id='git-clone'>Option 3 : Cloner le dépôt</h2>
@@ -8512,9 +8514,9 @@ npm run dev</code></pre>
 cd nextblock
 npm install
 npx nx serve nextblock</code></pre>
-<p>Ouvrez <code>http://localhost:4200</code> — une installation neuve redirige chaque page vers <code>/setup</code>, où le même assistant en trois étapes connecte Supabase, configure le stockage et crée votre admin. Il valide vos clés, écrit <code>.env.local</code> avec des secrets générés, et applique toutes les migrations via l'API de management Supabase — sans CLI Supabase.</p>
+<p>Ouvrez <code>http://localhost:4200</code> — une nouvelle installation redirige chaque page vers <code>/setup</code>, où le même assistant en trois étapes connecte Supabase, configure le stockage et crée votre admin. Il valide vos clés, écrit <code>.env.local</code> avec des secrets générés, et applique toutes les migrations via l'API de management Supabase — sans CLI Supabase.</p>
 <div class='rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 my-8 dark:border-emerald-500/20 dark:bg-emerald-500/10'>
-  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Plus de configuration terminal</p>
+  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Zéro configuration dans le terminal</p>
   <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>La configuration se fait entièrement dans le navigateur — il n'y a plus d'étape interactive en ligne de commande. Quand l'assistant termine, vous êtes connecté en administrateur ; redémarrez ensuite le serveur de développement une fois pour que le nouvel environnement soit intégré au bundle de l'application.</p>
 </div>
 
@@ -8525,7 +8527,7 @@ npx nx serve nextblock</code></pre>
 cd nextblock
 npm install
 npm run docker:setup</code></pre>
-<p>La commande ne pose aucune question : elle génère des clés sécurisées, construit la pile, applique toutes les migrations et démarre les services. Quand elle se termine, ouvrez <code>http://localhost:3000</code> — l'assistant de configuration a déjà la base de données et le stockage MinIO câblés, il ne reste qu'à créer votre administrateur (confirmé instantanément, sans email).</p>
+<p>La commande ne pose aucune question : elle génère des clés sécurisées, construit la pile, applique toutes les migrations et démarre les services. Quand elle se termine, ouvrez <code>http://localhost:3000</code> — la base de données et le stockage MinIO sont déjà connectés dans l'assistant de configuration, il ne reste qu'à créer votre administrateur (confirmé instantanément, sans email).</p>
 <div class='rounded-3xl border border-amber-200 bg-amber-50/80 p-6 my-8 dark:border-amber-500/20 dark:bg-amber-500/10'>
   <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200'>Commandes du quotidien</p>
   <pre class='mt-4 mb-0'><code># reconstruire et redémarrer la pile
@@ -8539,26 +8541,28 @@ npm run docker:logs</code></pre>
 </div>
 
 <h2 id='after-install'>Après l'installation : vos 10 premières minutes</h2>
-<p>Chaque chemin vous dépose sur <code>/cms/dashboard</code>, connecté en tant que premier administrateur. Une checklist d'intégration intégrée vous guide pour la suite :</p>
+<p>Chaque chemin vous dépose sur <code>/cms/dashboard</code>, connecté en tant que premier administrateur. Une checklist de démarrage intégrée vous guide pour la suite :</p>
 <ul class='space-y-2'>
   <li><strong>Ajoutez votre identité visuelle</strong> — téléversez votre logo et définissez le titre du site.</li>
-  <li><strong>Réglez votre pied de page</strong> — ligne de copyright et navigation du footer.</li>
+  <li><strong>Réglez votre pied de page</strong> — mention de copyright et navigation du pied de page.</li>
   <li><strong>Configurez l'email (SMTP)</strong> — dans les réglages, pour que les réinitialisations de mot de passe et les invitations partent bien.</li>
-  <li><strong>Extras optionnels</strong> — connectez l'analytics, activez la protection anti-bots et (sur Vercel) les mises à jour automatiques.</li>
+  <li><strong>Extras optionnels</strong> — connectez vos outils d'analytics, activez la protection anti-bots et (sur Vercel) les mises à jour automatiques.</li>
 </ul>
 <p>Ensuite, découvrez comment la plateforme s'articule dans <a href='/article/comment-nextblock-fonctionne'>Comment NextBlock fonctionne</a>, ou ajoutez une boutique avec le <a href='/article/guide-commerce-nextblock'>guide Commerce</a>.</p>
 
 <h2 id='faq'>FAQ d'installation</h2>
+<h3>Que dois-je installer ?</h3>
+<p>Rien pour le chemin Vercel — tout se passe dans le navigateur. Pour <code>npm create nextblock</code> : <a href='https://nodejs.org' target='_blank' rel='noopener'>Node.js 20+</a> (npm inclus). Pour le dépôt cloné : Node.js 20+ et git. Pour Docker : ajoutez Docker Desktop.</p>
 <h3>NextBlock est-il gratuit ?</h3>
-<p>Oui — le cœur du CMS est 100 % gratuit et open source (AGPL). Les packages premium comme l'e-commerce et Cortex AI sont optionnels et s'activent avec une clé de licence.</p>
+<p>Oui — le cœur du CMS est 100 % gratuit et open source (AGPL). Les packages premium comme l'e-commerce et Cortex AI sont optionnels et s'activent avec une clé de licence. Vercel et Supabase proposent chacun une offre gratuite : un site de départ peut donc tourner sans frais.</p>
 <h3>Ai-je besoin d'un compte Supabase ?</h3>
-<p>Sur Vercel, la base de données est créée pour vous pendant le déploiement. Pour <code>npm create nextblock</code> et le dépôt cloné, vous apportez un projet Supabase gratuit. Avec Docker, aucun compte cloud n'est nécessaire.</p>
+<p>Sur Vercel, la base de données est créée pour vous pendant le déploiement. Pour <code>npm create nextblock</code> et le dépôt cloné, il vous faut un projet Supabase gratuit. Avec Docker, aucun compte cloud n'est nécessaire.</p>
 <h3>Dois-je exécuter des migrations ou du SQL à la main ?</h3>
-<p>Non. L'assistant de configuration, le build Vercel et la pile Docker appliquent tous le schéma de base de données automatiquement — et le relancer est toujours sans risque.</p>
+<p>Non. L'assistant de configuration, le build Vercel et la pile Docker appliquent tous le schéma de base de données automatiquement — et relancer l'opération est toujours sans risque.</p>
 <h3>Puis-je changer de chemin plus tard ?</h3>
 <p>Oui. Chaque chemin exécute la même application et le même schéma de base de données : vous pouvez prototyper en local avec Docker aujourd'hui et déployer sur Vercel demain. NextBlock se déploie comme n'importe quelle app Next.js.</p>
 <h3>Comment mettre à jour NextBlock ?</h3>
-<p>Sur Vercel, l'étape Connect GitHub de la checklist active une synchronisation quotidienne automatique. Sur un dépôt cloné, <code>git pull</code> puis redémarrez — les migrations en attente s'appliquent automatiquement lors des builds de production. Avec Docker, récupérez le dernier code et lancez <code>npm run docker:up</code>.</p>
+<p>Sur Vercel, l'étape Connect GitHub de la checklist active une synchronisation quotidienne automatique. Sur un dépôt cloné, <code>git pull</code>, lancez <code>npm run db:migrate</code>, puis redémarrez (lors des builds de production, les migrations en attente s'appliquent automatiquement). Avec Docker, récupérez le dernier code et lancez <code>npm run docker:up</code>.</p>
 
 <div class='rounded-[2rem] border border-slate-200/80 bg-slate-50 p-8 my-12 text-center dark:border-white/10 dark:bg-white/5'>
   <p class='mt-0 text-2xl font-semibold text-slate-900 dark:text-white'>Prêt à vous lancer ?</p>
@@ -8865,6 +8869,152 @@ ALTER TABLE public.cms_interactions
   ADD CONSTRAINT cms_interactions_user_id_profiles_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 COMMENT ON COLUMN public.cms_interactions.user_id IS 'References public.profiles.id';
+
+
+-- >>> FROM: 00000000000041_seed_interactions_translations.sql <<<
+-- 00000000000041_seed_interactions_translations.sql
+-- Adds translation strings for Product Reviews and Post Comments storefront modules.
+
+
+INSERT INTO public.translations (key, translations)
+VALUES
+  (
+    'reviews.customer_reviews',
+    '{"en": "Customer Reviews", "fr": "Avis clients"}'::jsonb
+  ),
+  (
+    'reviews.share_thoughts',
+    '{"en": "Share your thoughts and experience with this product.", "fr": "Partagez vos impressions et votre expérience avec ce produit."}'::jsonb
+  ),
+  (
+    'reviews.write_review',
+    '{"en": "Write a Review", "fr": "Rédiger un avis"}'::jsonb
+  ),
+  (
+    'reviews.cancel_review',
+    '{"en": "Cancel Review", "fr": "Annuler l''avis"}'::jsonb
+  ),
+  (
+    'reviews.login_to_write',
+    '{"en": "Please log in to write a review.", "fr": "Veuillez vous connecter pour rédiger un avis."}'::jsonb
+  ),
+  (
+    'reviews.write_your_review',
+    '{"en": "Write your review", "fr": "Rédigez votre avis"}'::jsonb
+  ),
+  (
+    'reviews.rating',
+    '{"en": "Rating", "fr": "Note"}'::jsonb
+  ),
+  (
+    'reviews.description',
+    '{"en": "Review Description", "fr": "Description de l''avis"}'::jsonb
+  ),
+  (
+    'reviews.description_placeholder',
+    '{"en": "What did you like or dislike? How does it perform?", "fr": "Qu''avez-vous aimé ou déploré ? Comment se comporte-t-il ?"}'::jsonb
+  ),
+  (
+    'reviews.submit_review',
+    '{"en": "Submit Review", "fr": "Soumettre l''avis"}'::jsonb
+  ),
+  (
+    'reviews.submitting',
+    '{"en": "Submitting...", "fr": "Envoi en cours..."}'::jsonb
+  ),
+  (
+    'reviews.success_pending',
+    '{"en": "Your review has been submitted successfully and is pending moderation.", "fr": "Votre avis a été soumis avec succès et est en attente de modération."}'::jsonb
+  ),
+  (
+    'reviews.cancel',
+    '{"en": "Cancel", "fr": "Annuler"}'::jsonb
+  ),
+  (
+    'reviews.helpful',
+    '{"en": "Helpful", "fr": "Utile"}'::jsonb
+  ),
+  (
+    'reviews.no_reviews',
+    '{"en": "No reviews yet", "fr": "Aucun avis pour le moment"}'::jsonb
+  ),
+  (
+    'reviews.be_the_first',
+    '{"en": "There are no reviews for this product yet. Be the first to write one!", "fr": "Il n''y a pas encore d''avis sur ce produit. Soyez le premier à en rédiger un !"}'::jsonb
+  ),
+  (
+    'reviews.load_more',
+    '{"en": "Load More Reviews", "fr": "Charger plus d''avis"}'::jsonb
+  ),
+  (
+    'reviews.review_count_one',
+    '{"en": "{count} review", "fr": "{count} avis"}'::jsonb
+  ),
+  (
+    'reviews.review_count_other',
+    '{"en": "{count} reviews", "fr": "{count} avis"}'::jsonb
+  ),
+  (
+    'comments.discussion',
+    '{"en": "Discussion & Comments", "fr": "Discussion & Commentaires"}'::jsonb
+  ),
+  (
+    'comments.join_conversation',
+    '{"en": "Join the conversation and express your thoughts.", "fr": "Rejoignez la conversation et exprimez vos pensées."}'::jsonb
+  ),
+  (
+    'comments.write_comment',
+    '{"en": "Write a Comment", "fr": "Écrire un commentaire"}'::jsonb
+  ),
+  (
+    'comments.cancel_comment',
+    '{"en": "Cancel Comment", "fr": "Annuler le commentaire"}'::jsonb
+  ),
+  (
+    'comments.login_to_write',
+    '{"en": "Please log in to write a comment.", "fr": "Veuillez vous connecter pour écrire un commentaire."}'::jsonb
+  ),
+  (
+    'comments.join_discussion',
+    '{"en": "Join the Discussion", "fr": "Rejoindre la discussion"}'::jsonb
+  ),
+  (
+    'comments.your_message',
+    '{"en": "Your Message", "fr": "Votre message"}'::jsonb
+  ),
+  (
+    'comments.message_placeholder',
+    '{"en": "What are your thoughts on this article?", "fr": "Quelles sont vos pensées sur cet article ?"}'::jsonb
+  ),
+  (
+    'comments.post_comment',
+    '{"en": "Post Comment", "fr": "Publier le commentaire"}'::jsonb
+  ),
+  (
+    'comments.success_pending',
+    '{"en": "Your comment has been submitted successfully and is pending moderation.", "fr": "Votre commentaire a été soumis avec succès et est en attente de modération."}'::jsonb
+  ),
+  (
+    'comments.like',
+    '{"en": "Like", "fr": "J''aime"}'::jsonb
+  ),
+  (
+    'comments.no_comments',
+    '{"en": "No comments yet", "fr": "Aucun commentaire pour le moment"}'::jsonb
+  ),
+  (
+    'comments.be_the_first',
+    '{"en": "Be the first to share your thoughts!", "fr": "Soyez le premier à partager vos pensées !"}'::jsonb
+  ),
+  (
+    'comments.load_more',
+    '{"en": "Load More Comments", "fr": "Charger plus de commentaires"}'::jsonb
+  )
+ON CONFLICT (key) DO UPDATE
+SET 
+  translations = EXCLUDED.translations,
+  updated_at = now();
+
 
 
   -- Step D: Anchor preserved profiles

@@ -27,6 +27,8 @@ import {
   submitInteraction,
   toggleReaction,
   updateInteractionStatus,
+  getNotificationEmails,
+  saveNotificationEmails,
 } from "./interactions";
 
 describe("Interactions Server Actions", () => {
@@ -201,6 +203,99 @@ describe("Interactions Server Actions", () => {
       expect(eqUpdateMock).toHaveBeenCalledWith("id", "int-1");
       expect(cacheMocks.revalidatePath).toHaveBeenCalledWith("/product/my-product");
       expect(cacheMocks.revalidatePath).toHaveBeenCalledWith("/cms/interactions");
+    });
+  });
+
+  describe("Notification Emails Settings Actions", () => {
+    it("returns error if non-admin attempts to get or save configuration", async () => {
+      dbServerMocks.createClient.mockReturnValue({
+        auth: {
+          getUser: vi.fn().mockResolvedValue({
+            data: { user: { id: "user-1" } },
+            error: null,
+          }),
+        },
+      });
+      dbServerMocks.getProfileWithRoleServerSide.mockResolvedValue({
+        role: "WRITER",
+      } as any);
+
+      const getRes = await getNotificationEmails();
+      expect(getRes.error).toContain("Unauthorized");
+
+      const saveRes = await saveNotificationEmails("test@example.com");
+      expect(saveRes.error).toContain("Unauthorized");
+    });
+
+    it("allows admins to get configuration", async () => {
+      dbServerMocks.createClient.mockReturnValue({
+        auth: {
+          getUser: vi.fn().mockResolvedValue({
+            data: { user: { id: "admin-1" } },
+            error: null,
+          }),
+        },
+      });
+      dbServerMocks.getProfileWithRoleServerSide.mockResolvedValue({
+        role: "ADMIN",
+      } as any);
+
+      const maybeSingleMock = vi.fn().mockResolvedValue({
+        data: { value: { emails: "a@b.com, c@d.com" } },
+        error: null,
+      });
+      const eqMock = vi.fn().mockReturnValue({ maybeSingle: maybeSingleMock });
+      const selectMock = vi.fn().mockReturnValue({ eq: eqMock });
+      const fromMock = vi.fn().mockReturnValue({ select: selectMock });
+
+      dbServerMocks.createClient.mockReturnValue({
+        auth: {
+          getUser: vi.fn().mockResolvedValue({
+            data: { user: { id: "admin-1" } },
+            error: null,
+          }),
+        },
+        from: fromMock,
+      });
+
+      const res = await getNotificationEmails();
+      expect(res.success).toBe(true);
+      expect(res.emails).toBe("a@b.com, c@d.com");
+    });
+
+    it("allows admins to save configuration", async () => {
+      dbServerMocks.createClient.mockReturnValue({
+        auth: {
+          getUser: vi.fn().mockResolvedValue({
+            data: { user: { id: "admin-1" } },
+            error: null,
+          }),
+        },
+      });
+      dbServerMocks.getProfileWithRoleServerSide.mockResolvedValue({
+        role: "ADMIN",
+      } as any);
+
+      const upsertMock = vi.fn().mockResolvedValue({ error: null });
+      const fromMock = vi.fn().mockReturnValue({ upsert: upsertMock });
+
+      dbServerMocks.createClient.mockReturnValue({
+        auth: {
+          getUser: vi.fn().mockResolvedValue({
+            data: { user: { id: "admin-1" } },
+            error: null,
+          }),
+        },
+        from: fromMock,
+      });
+
+      const res = await saveNotificationEmails(" a@b.com , c@d.com ");
+      expect(res.success).toBe(true);
+      expect(res.emails).toBe("a@b.com, c@d.com");
+      expect(upsertMock).toHaveBeenCalledWith({
+        key: "interactions_notification_emails",
+        value: { emails: "a@b.com, c@d.com" },
+      });
     });
   });
 });
