@@ -51,14 +51,18 @@ jobs:
       CONFLICT_MARKER: '<!-- nextblock-sync-conflict -->'
     steps:
       - name: Checkout deploy branch (full history)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Configure the NextBlock automation identity
+      - name: Configure the committing identity
+        # Author the merge as the GitHub user running the workflow, using their canonical
+        # GitHub noreply email. Vercel blocks deploys whose commit-author email isn't tied
+        # to a real GitHub account, so a synthetic bot email (e.g. nextblock-sync[bot]@…)
+        # is rejected — the actor's github.com noreply is accepted.
         run: |
-          git config user.name "nextblock-sync[bot]"
-          git config user.email "nextblock-sync[bot]@users.noreply.github.com"
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
 
       - name: Fetch upstream
         run: |
