@@ -128,7 +128,7 @@ export function AppShell({
                   (corporateFooter.legalName ||
                     corporateFooter.address ||
                     corporateFooter.supportEmail) && (
-                    <p className="max-w-2xl text-[11px] leading-relaxed text-muted-foreground/80">
+                    <p className="max-w-2xl text-[11px] leading-relaxed text-slate-600">
                       {[corporateFooter.legalName, corporateFooter.address]
                         .filter(Boolean)
                         .join(' · ')}
