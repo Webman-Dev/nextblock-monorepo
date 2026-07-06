@@ -26,6 +26,7 @@ import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { unstable_cache } from 'next/cache';
 import { createStaticSupabaseClient, getSiteSettings } from './lib/site-settings';
 import { DEFAULT_OG_IMAGE } from './lib/seo';
+import { resolveActiveLogo } from '../lib/logos/active-logo';
 import {
   isSupabaseConfigured,
   resolveSupabaseAnonKey,
@@ -212,25 +213,15 @@ const getCachedNavigationMenu = unstable_cache(
 
 const getCachedActiveLogo = unstable_cache(
   async (): Promise<HeaderLogo | null> => {
-    const supabase = createStaticSupabaseClient();
-    const { data, error } = await supabase
-      .from('logos')
-      .select(
-        `
-        *,
-        media:media_id (*)
-      `
-      )
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      console.error('Error fetching cached active logo:', error.message);
+    try {
+      const supabase = createStaticSupabaseClient();
+      // Honor the admin-pinned active logo (site_settings.active_logo_id), else newest.
+      const logo = await resolveActiveLogo(supabase);
+      return (logo as HeaderLogo | null) ?? null;
+    } catch (error) {
+      console.error('Error fetching cached active logo:', error);
       return null;
     }
-
-    return data as HeaderLogo | null;
   },
   ['public-layout-logo'],
   { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS, tags: [PUBLIC_LAYOUT_LOGO_CACHE_TAG] }

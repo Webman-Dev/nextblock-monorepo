@@ -7,7 +7,9 @@ import { DEFAULT_SITE_TITLE } from '../../app/lib/seo';
 import { resolveMediaUrl } from '../media/resolveMediaUrl';
 import { resolveMediaBaseUrl } from '../storage/provider';
 import { resolveSiteUrl } from '../site-url';
-import type { EmailBranding } from './branding-format';
+import { resolveActiveLogo } from '../logos/active-logo';
+import { pickEmailLogoObjectKey } from './branding-format';
+import type { EmailBranding, LogoMediaLike } from './branding-format';
 
 // Server-side resolution of the tenant branding that white-labels every transactional
 // email. The mailer choke point (app/actions/email.ts) and the auth-email logo endpoint
@@ -34,19 +36,11 @@ export type { EmailBranding } from './branding-format';
 async function resolveActiveLogoUrl(): Promise<string | null> {
   try {
     const supabase = getServiceRoleSupabaseClient();
-    const { data } = await supabase
-      .from('logos')
-      .select('media:media_id (object_key, file_path)')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const media = (
-      data as unknown as {
-        media?: { object_key?: string | null; file_path?: string | null } | null;
-      } | null
-    )?.media;
-    const objectKey = media?.object_key ?? media?.file_path ?? null;
+    // Honor the admin-pinned active logo (site_settings.active_logo_id), else newest.
+    const logo = await resolveActiveLogo(supabase);
+    const media = (logo as { media?: LogoMediaLike | null } | null)?.media ?? null;
+    // Prefer the original uploaded file over the AVIF `object_key` (email can't render AVIF).
+    const objectKey = pickEmailLogoObjectKey(media);
     if (!objectKey) return null;
 
     // Pass the resolved base explicitly so the native-Supabase storage URL is honored

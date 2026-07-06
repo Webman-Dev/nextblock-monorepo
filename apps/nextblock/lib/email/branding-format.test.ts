@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EMAIL_BRAND_HEADER_TOKEN,
   applyEmailBranding,
+  pickEmailLogoObjectKey,
   renderEmailBrandHeader,
 } from './branding-format';
 
@@ -85,5 +86,48 @@ describe('applyEmailBranding', () => {
   it('leaves an unrelated body untouched', () => {
     const body = '<h2>New Form Submission</h2>';
     expect(applyEmailBranding(body, { logoUrl: null, siteName: 'Acme Co' })).toBe(body);
+  });
+});
+
+describe('pickEmailLogoObjectKey', () => {
+  it('prefers the original_uploaded variant over the AVIF object_key', () => {
+    const media = {
+      object_key: 'uploads/logo_original.avif',
+      file_path: 'uploads/logo_original.avif',
+      variants: [
+        { objectKey: 'uploads/logo_large.avif', variantLabel: 'large_avif', fileType: 'image/avif' },
+        { objectKey: 'uploads/logo.png', variantLabel: 'original_uploaded', fileType: 'image/png' },
+        { objectKey: 'uploads/logo_original.avif', variantLabel: 'original_avif', fileType: 'image/avif' },
+      ],
+    };
+    expect(pickEmailLogoObjectKey(media)).toBe('uploads/logo.png');
+  });
+
+  it('falls back to object_key when there is no original_uploaded variant (seeded default)', () => {
+    const media = {
+      object_key: 'images/nextblock-logo-small.webp',
+      file_path: null,
+      variants: null,
+    };
+    expect(pickEmailLogoObjectKey(media)).toBe('images/nextblock-logo-small.webp');
+  });
+
+  it('falls back to file_path when object_key is missing', () => {
+    expect(
+      pickEmailLogoObjectKey({ object_key: null, file_path: 'uploads/legacy.png', variants: [] }),
+    ).toBe('uploads/legacy.png');
+  });
+
+  it('ignores an original_uploaded entry with a blank key and falls back', () => {
+    const media = {
+      object_key: 'uploads/logo_original.avif',
+      variants: [{ objectKey: '', variantLabel: 'original_uploaded' }],
+    };
+    expect(pickEmailLogoObjectKey(media)).toBe('uploads/logo_original.avif');
+  });
+
+  it('returns null when there is no media', () => {
+    expect(pickEmailLogoObjectKey(null)).toBeNull();
+    expect(pickEmailLogoObjectKey(undefined)).toBeNull();
   });
 });

@@ -56,18 +56,10 @@ function mapLogo(row: any): InvoiceLogo | null {
   };
 }
 
-export async function getInvoiceBrandingData(client?: SupabaseLikeClient) {
-  const supabase = getSupabaseClient(client);
-  const [settingsResponse, logoResponse] = await Promise.all([
-    supabase
-      .from('site_settings')
-      .select('value')
-      .eq('key', INVOICE_SETTINGS_KEY)
-      .maybeSingle(),
-    supabase
-      .from('logos')
-      .select(
-        `
+// Mirrors apps/nextblock/lib/logos/active-logo.ts (this published lib can't import the app):
+// the operator-pinned active logo (site_settings.active_logo_id), else the newest logo.
+const ACTIVE_LOGO_SETTING_KEY = 'active_logo_id';
+const INVOICE_LOGO_SELECT = `
         id,
         name,
         media:media_id (
@@ -76,16 +68,50 @@ export async function getInvoiceBrandingData(client?: SupabaseLikeClient) {
           width,
           height
         )
-      `
-      )
-      .order('created_at', { ascending: false })
-      .limit(1)
+      `;
+
+async function fetchActiveLogoRow(supabase: SupabaseLikeClient) {
+  const { data: activeSetting } = await supabase
+    .from('site_settings')
+    .select('value')
+    .eq('key', ACTIVE_LOGO_SETTING_KEY)
+    .maybeSingle();
+  const activeValue = activeSetting?.value;
+  const activeId =
+    typeof activeValue === 'string' && activeValue.length > 0 ? activeValue : null;
+
+  if (activeId) {
+    const { data } = await supabase
+      .from('logos')
+      .select(INVOICE_LOGO_SELECT)
+      .eq('id', activeId)
+      .maybeSingle();
+    if (data) return data;
+  }
+
+  const { data } = await supabase
+    .from('logos')
+    .select(INVOICE_LOGO_SELECT)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
+}
+
+export async function getInvoiceBrandingData(client?: SupabaseLikeClient) {
+  const supabase = getSupabaseClient(client);
+  const [settingsResponse, logoRow] = await Promise.all([
+    supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', INVOICE_SETTINGS_KEY)
       .maybeSingle(),
+    fetchActiveLogoRow(supabase),
   ]);
 
   return {
     settings: normalizeInvoiceSettings(settingsResponse.data?.value ?? DEFAULT_INVOICE_SETTINGS),
-    logo: mapLogo(logoResponse.data),
+    logo: mapLogo(logoRow),
   };
 }
 

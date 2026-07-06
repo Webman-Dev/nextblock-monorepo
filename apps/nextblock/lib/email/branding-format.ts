@@ -79,3 +79,45 @@ export function applyEmailBranding(html: string, branding: EmailBranding): strin
   out = out.replace(LEGACY_LOGO_IMG_RE, header);
   return out;
 }
+
+// The `variants` JSONB the upload pipeline writes for a media row (camelCase keys).
+interface MediaVariant {
+  objectKey?: string | null;
+  variantLabel?: string | null;
+  fileType?: string | null;
+}
+
+// The subset of a media row the email logo resolver needs.
+export interface LogoMediaLike {
+  object_key?: string | null;
+  file_path?: string | null;
+  variants?: unknown;
+}
+
+/** Label the upload pipeline gives the untouched original file among a media row's variants. */
+export const ORIGINAL_UPLOAD_VARIANT_LABEL = 'original_uploaded';
+
+/**
+ * Pick the storage key to use for a logo IN EMAIL.
+ *
+ * The image pipeline stores the AVIF derivative as `object_key` — that's what the website
+ * (navbar, blocks) renders for performance — and keeps the ORIGINAL uploaded file among
+ * `variants` under the label `original_uploaded`. Email clients, Outlook especially, can't
+ * render AVIF (or WebP), so for email we prefer that untouched original. Fall back to
+ * `object_key`/`file_path` only when no original variant was kept (e.g. the seeded default
+ * logo, which has no variants). This keeps the site on AVIF while email uses the original.
+ */
+export function pickEmailLogoObjectKey(media: LogoMediaLike | null | undefined): string | null {
+  if (!media) return null;
+  const variants = Array.isArray(media.variants) ? (media.variants as MediaVariant[]) : [];
+  const original = variants.find(
+    (v) =>
+      v &&
+      typeof v === 'object' &&
+      v.variantLabel === ORIGINAL_UPLOAD_VARIANT_LABEL &&
+      typeof v.objectKey === 'string' &&
+      v.objectKey.length > 0,
+  );
+  if (original?.objectKey) return original.objectKey;
+  return media.object_key ?? media.file_path ?? null;
+}
