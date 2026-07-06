@@ -921,21 +921,21 @@ export function ProductForm({
               <Input id="upc_ean" placeholder="000000000" {...register('upc')} className="h-8 text-sm font-mono" readOnly={hasVariants} />
             </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 mt-2">
-            <div className="lg:col-span-2 col-span-2 space-y-1">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-12 gap-2.5 mt-2">
+            <div className={`${isEdit ? 'lg:col-span-3' : 'lg:col-span-4'} col-span-2 space-y-1`}>
               <Label htmlFor="meta_title" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Meta Title</Label>
               <Input id="meta_title" {...register('meta_title')} placeholder="SEO page title (50-60 chars)" className="h-8 text-sm" />
             </div>
-            <div className={`lg:col-span-${isEdit ? '3' : '4'} col-span-2 space-y-1`}>
+            <div className="lg:col-span-4 col-span-2 space-y-1">
               <Label htmlFor="meta_description" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Meta Description</Label>
               <Input id="meta_description" {...register('meta_description')} placeholder="SEO description (150-160 chars)" className="h-8 text-sm" />
             </div>
-            <div className="col-span-2 lg:col-span-6 space-y-1">
+            <div className={`${isEdit ? 'lg:col-span-3' : 'lg:col-span-4'} col-span-2 space-y-1`}>
               <Label htmlFor="custom_canonical" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Canonical URL (optional)</Label>
               <Input id="custom_canonical" {...register('custom_canonical')} placeholder="Blank = self-referencing. Absolute https://… URL or /relative path to override." className="h-8 text-sm" />
             </div>
             {isEdit && (
-              <div className="lg:col-span-1 col-span-2 space-y-1">
+              <div className="lg:col-span-2 col-span-2 space-y-1">
                 <Label htmlFor="status" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Status</Label>
                 <Select onValueChange={(val) => setValue('status', val as any, { shouldDirty: true })} value={watch('status')}>
                   <SelectTrigger className="h-8 text-xs">

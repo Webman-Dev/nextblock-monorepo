@@ -284,7 +284,7 @@ export default function PostForm({
   }
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6 w-full mx-auto px-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4 w-full mx-auto px-6">
       {isEditing && (
         <div className="flex items-center justify-between text-xs text-muted-foreground pb-2 border-b border-border/40 mb-2">
           <span className="font-semibold text-[11px] uppercase tracking-wider text-muted-foreground/80">Post Settings</span>
@@ -314,111 +314,104 @@ export default function PostForm({
            <AlertDescription>{formMessage.text}</AlertDescription>
         </Alert>
       )}
-      <div>
-        <Label htmlFor="title">Title</Label>
-        <Input id="title" name="title" value={title} onChange={handleTitleChange} required className="mt-1" />
+      {/* Row 1: Basic Post Information */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        {/* Title */}
+        <div className="md:col-span-4 flex flex-col gap-1">
+          <Label htmlFor="title" className="text-xs font-medium">Title</Label>
+          <Input id="title" name="title" value={title} onChange={handleTitleChange} required className="h-9" />
+        </div>
+
+        {/* Slug */}
+        <div className="md:col-span-4 flex flex-col gap-1">
+          <Label htmlFor="slug" className="text-xs font-medium">Slug</Label>
+          <Input id="slug" name="slug" value={slug} onChange={(e) => setSlug(e.target.value)} required className="h-9" />
+        </div>
+
+        {/* Language */}
+        <div className="md:col-span-2 flex flex-col gap-1">
+          <Label htmlFor="language_id" className="text-xs font-medium">Language</Label>
+          {availableLanguages.length > 0 ? (
+            <Select name="language_id" value={languageId} onValueChange={setLanguageId} required disabled={isEditing}>
+              <SelectTrigger className="h-9"><SelectValue placeholder="Select language" /></SelectTrigger>
+              <SelectContent>
+                {availableLanguages.map((lang) => (
+                  <SelectItem key={lang.id} value={lang.id.toString()}>{lang.name} ({lang.code})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <p className="text-[10px] text-muted-foreground leading-tight py-2">No languages available. Add languages in CMS settings.</p>
+          )}
+        </div>
+
+        {/* Status */}
+        <div className="md:col-span-2 flex flex-col gap-1">
+          <Label htmlFor="status" className="text-xs font-medium">Status</Label>
+          <Select name="status" value={status} onValueChange={(value) => setStatus(value as PageStatus)} required>
+            <SelectTrigger className="h-9"><SelectValue placeholder="Select status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="published">Published</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      <div>
-        <Label htmlFor="slug">Slug</Label>
-        <Input id="slug" name="slug" value={slug} onChange={(e) => setSlug(e.target.value)} required className="mt-1" />
+      {/* Row 2: Label + Published At */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        {/* Label */}
+        <div className="md:col-span-6 flex flex-col gap-1">
+          <Label htmlFor="label" className="text-xs font-medium">Label</Label>
+          <Input id="label" name="label" value={label} onChange={(e) => setLabel(e.target.value)} className="h-9" placeholder="e.g. Architecture" />
+          <p className="text-[10px] text-muted-foreground leading-tight">Short pill text shown on the article hero and post cards.</p>
+        </div>
+
+        {/* Published At */}
+        <div className="md:col-span-6 flex flex-col gap-1">
+          <Label htmlFor="published_at" className="text-xs font-medium">Published At (Optional)</Label>
+          <Input id="published_at" name="published_at" type="datetime-local" value={publishedAt} onChange={(e) => setPublishedAt(e.target.value)} className="h-9" />
+          <p className="text-[10px] text-muted-foreground leading-tight">Leave blank to publish immediately when status is &apos;Published&apos;.</p>
+        </div>
       </div>
 
-      <div>
-        <Label htmlFor="language_id">Language</Label>
-        {availableLanguages.length > 0 ? (
-        <Select name="language_id" value={languageId} onValueChange={setLanguageId} required disabled={isEditing}>
-          <SelectTrigger className="mt-1"><SelectValue placeholder="Select language" /></SelectTrigger>
-          <SelectContent>
-            {availableLanguages.map((lang) => (
-              <SelectItem key={lang.id} value={lang.id.toString()}>{lang.name} ({lang.code})</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        ) : (
-           <p className="text-sm text-muted-foreground mt-1">No languages available. Please add languages in CMS settings.</p>
-        )}
+      {/* Row 3: Excerpt + Subtitle */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        {/* Excerpt */}
+        <div className="md:col-span-6 flex flex-col gap-1">
+          <Label htmlFor="excerpt" className="text-xs font-medium">Excerpt</Label>
+          <Textarea id="excerpt" name="excerpt" value={excerpt} onChange={(e) => setExcerpt(e.target.value)} className="resize-y text-sm leading-normal" rows={3} placeholder="Short editorial summary for the hero metadata row and article cards" />
+          <p className="text-[10px] text-muted-foreground leading-tight">Used as the short summary above the hero and on public post cards.</p>
+        </div>
+
+        {/* Subtitle */}
+        <div className="md:col-span-6 flex flex-col gap-1">
+          <Label htmlFor="subtitle" className="text-xs font-medium">Subtitle</Label>
+          <Textarea id="subtitle" name="subtitle" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} className="resize-y text-sm leading-normal" rows={3} placeholder="Longer deck shown under the article title" />
+          <p className="text-[10px] text-muted-foreground leading-tight">Displayed as the larger deck under the article title.</p>
+        </div>
       </div>
 
-      <div>
-        <Label htmlFor="label">Label</Label>
-        <Input
-          id="label"
-          name="label"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          className="mt-1"
-          placeholder="e.g. Architecture"
-        />
-        <p className="text-xs text-muted-foreground mt-1">Short pill text shown on the article hero and post cards.</p>
-      </div>
+      {/* Row 4: SEO Settings. Canonical override (optional): blank = self-referencing canonical. */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        {/* Meta Title */}
+        <div className="md:col-span-4 flex flex-col gap-1">
+          <Label htmlFor="meta_title" className="text-xs font-medium">Meta Title (SEO)</Label>
+          <Input id="meta_title" name="meta_title" value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} className="h-9" />
+        </div>
 
-      <div>
-        <Label htmlFor="excerpt">Excerpt</Label>
-        <Textarea
-          id="excerpt"
-          name="excerpt"
-          value={excerpt}
-          onChange={(e) => setExcerpt(e.target.value)}
-          className="mt-1"
-          rows={3}
-          placeholder="Short editorial summary for the hero metadata row and article cards"
-        />
-        <p className="text-xs text-muted-foreground mt-1">Used as the short summary above the hero and on public post cards.</p>
-      </div>
+        {/* Meta Description */}
+        <div className="md:col-span-4 flex flex-col gap-1">
+          <Label htmlFor="meta_description" className="text-xs font-medium">Meta Description (SEO)</Label>
+          <Textarea id="meta_description" name="meta_description" value={metaDescription} onChange={(e) => setMetaDescription(e.target.value)} className="min-h-[36px] h-9 py-1.5 resize-y text-sm leading-normal" rows={1} placeholder="Meta description for search engines..." />
+        </div>
 
-      <div>
-        <Label htmlFor="subtitle">Subtitle</Label>
-        <Textarea
-          id="subtitle"
-          name="subtitle"
-          value={subtitle}
-          onChange={(e) => setSubtitle(e.target.value)}
-          className="mt-1"
-          rows={4}
-          placeholder="Longer deck shown under the article title"
-        />
-        <p className="text-xs text-muted-foreground mt-1">Displayed as the larger deck under the article title.</p>
-      </div>
-
-      <div>
-        <Label htmlFor="status">Status</Label>
-        <Select name="status" value={status} onValueChange={(value) => setStatus(value as PageStatus)} required>
-          <SelectTrigger className="mt-1"><SelectValue placeholder="Select status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="published">Published</SelectItem>
-            <SelectItem value="archived">Archived</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div>
-        <Label htmlFor="published_at">Published At (Optional)</Label>
-        <Input
-          id="published_at"
-          name="published_at"
-          type="datetime-local"
-          value={publishedAt}
-          onChange={(e) => setPublishedAt(e.target.value)}
-          className="mt-1"
-        />
-         <p className="text-xs text-muted-foreground mt-1">Leave blank to publish immediately when status is &apos;Published&apos;.</p>
-      </div>
-
-      <div>
-        <Label htmlFor="meta_title">Meta Title (SEO)</Label>
-        <Input id="meta_title" name="meta_title" value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} className="mt-1" />
-      </div>
-
-      <div>
-        <Label htmlFor="meta_description">Meta Description (SEO)</Label>
-        <Textarea id="meta_description" name="meta_description" value={metaDescription} onChange={(e) => setMetaDescription(e.target.value)} className="mt-1" rows={3} />
-      </div>
-
-      <div>
-        <Label htmlFor="custom_canonical">Canonical URL (SEO, optional)</Label>
-        <Input id="custom_canonical" name="custom_canonical" value={customCanonical} onChange={(e) => setCustomCanonical(e.target.value)} className="mt-1" placeholder="Leave blank to self-reference this article. Absolute https://… URL or /relative path to override." />
+        {/* Canonical URL */}
+        <div className="md:col-span-4 flex flex-col gap-1">
+          <Label htmlFor="custom_canonical" className="text-xs font-medium">Canonical URL (SEO, optional)</Label>
+          <Input id="custom_canonical" name="custom_canonical" value={customCanonical} onChange={(e) => setCustomCanonical(e.target.value)} className="h-9" placeholder="Blank = self-referencing. Absolute https://… URL or /relative path to override." />
+        </div>
       </div>
 
       <FeatureImageField

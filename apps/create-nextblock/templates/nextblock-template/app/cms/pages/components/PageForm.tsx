@@ -352,7 +352,7 @@ export default function PageForm({
         </div>
       </div>
 
-      {/* Row 2: SEO Settings */}
+      {/* Row 2: SEO Settings. Canonical override (optional): blank = self-referencing canonical. */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
         {/* Meta Title */}
         <div className="md:col-span-4 flex flex-col gap-1">
@@ -367,7 +367,7 @@ export default function PageForm({
         </div>
 
         {/* Meta Description */}
-        <div className="md:col-span-8 flex flex-col gap-1">
+        <div className="md:col-span-4 flex flex-col gap-1">
           <Label htmlFor="meta_description" className="text-xs font-medium">Meta Description (SEO)</Label>
           <Textarea
             id="meta_description"
@@ -379,19 +379,19 @@ export default function PageForm({
             placeholder="Meta description for search engines..."
           />
         </div>
-      </div>
 
-      {/* Row 3: Canonical URL override (optional). Blank = self-referencing canonical. */}
-      <div className="flex flex-col gap-1">
-        <Label htmlFor="custom_canonical" className="text-xs font-medium">Canonical URL (SEO, optional)</Label>
-        <Input
-          id="custom_canonical"
-          name="custom_canonical"
-          value={customCanonical}
-          onChange={(e) => setCustomCanonical(e.target.value)}
-          className="h-9"
-          placeholder="Leave blank to self-reference this page. Use an absolute https://… URL or a /relative path to override."
-        />
+        {/* Canonical URL */}
+        <div className="md:col-span-4 flex flex-col gap-1">
+          <Label htmlFor="custom_canonical" className="text-xs font-medium">Canonical URL (SEO, optional)</Label>
+          <Input
+            id="custom_canonical"
+            name="custom_canonical"
+            value={customCanonical}
+            onChange={(e) => setCustomCanonical(e.target.value)}
+            className="h-9"
+            placeholder="Blank = self-referencing. Absolute https://… URL or /relative path to override."
+          />
+        </div>
       </div>
 
       <FeatureImageField
