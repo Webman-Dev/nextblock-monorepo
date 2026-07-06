@@ -1,6 +1,7 @@
 "use server";
 
 import { resolveEmailServerConfig } from '../../lib/config/email-settings';
+import { applyEmailBranding, resolveEmailBranding } from '../../lib/email/branding';
 import nodemailer from 'nodemailer';
 
 interface EmailParams {
@@ -18,6 +19,12 @@ export async function sendEmail({ to, subject, text, html }: EmailParams) {
     throw new Error("Email server is not configured. Configure SMTP in CMS Settings → Configuration → Email.");
   }
 
+  // Single interception point: white-label every outgoing email with the tenant's own
+  // logo + site name (or a text banner when no logo is set). Every app-dispatched email
+  // funnels through here, so branding is applied once, centrally.
+  const branding = await resolveEmailBranding();
+  const brandedHtml = applyEmailBranding(html, branding);
+
   const transporter = nodemailer.createTransport(emailConfig);
 
   const options = {
@@ -25,7 +32,7 @@ export async function sendEmail({ to, subject, text, html }: EmailParams) {
     to,
     subject,
     text,
-    html,
+    html: brandedHtml,
   };
 
   return transporter.sendMail(options);
