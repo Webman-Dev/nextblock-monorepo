@@ -57,6 +57,12 @@ function isSetupAllowlisted(pathname: string): boolean {
     pathname.startsWith('/auth/') ||
     pathname.startsWith('/_next/') ||
     pathname.startsWith('/favicon') ||
+    // Bundled public image assets (the site logo, marketing art). These are referenced by
+    // the public chrome AND transactional-email templates, and the Next Image optimizer
+    // fetches them server-side WITHOUT an auth cookie — so if the gate bounced them to
+    // /setup the optimizer would receive a redirect instead of image bytes and the logo
+    // would render broken ("isn't a valid image … received null"). Always serve them.
+    pathname.startsWith('/images/') ||
     // Crawler-facing static routes: keep them reachable while unprovisioned so a fresh
     // deploy never redirects robots.txt / the sitemap to /setup (which would let crawlers
     // treat the wizard as the canonical entry point).
