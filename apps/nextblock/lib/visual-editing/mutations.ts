@@ -94,11 +94,11 @@ export function formatVisualEditingError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : fallback;
 
   if (isMissingDraftStorageError(message, "content_drafts")) {
-    return "Draft storage is not set up in this database. Apply the content_drafts migration: libs/db/src/supabase/migrations/00000000000014_setup_content_drafts.sql.";
+    return "Draft storage is not set up in this database. Apply the schema (npm run db:migrate or the /setup wizard); content_drafts is created by the baseline schema migration.";
   }
 
   if (isMissingDraftStorageError(message, "product_drafts")) {
-    return "Product draft storage is not set up in this database. Apply the product_drafts migration: libs/db/src/supabase/migrations/00000000000015_setup_product_drafts.sql.";
+    return "Product draft storage is not set up in this database. Apply the schema (npm run db:migrate or the /setup wizard); product_drafts is created by the baseline schema migration.";
   }
 
   return message;

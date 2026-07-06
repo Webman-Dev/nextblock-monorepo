@@ -31,713 +31,644 @@ export const SANDBOX_RESET_SQL = `
   -- Step C: Execute full schema & seed from production migrations
 
 
--- >>> FROM: 00000000000000_setup_foundation_and_enums.sql <<<
--- 00000000000000_setup_foundation_and_enums.sql
--- Consolidated migration preserving original statement order within grouped sections.
+-- >>> FROM: 00000000000000_baseline_schema.sql <<<
+-- AUTO-GENERATED baseline (re-baseline of migrations 000..044). Idempotent; safe to replay.
+-- 00 · schema: enums, functions, tables, sequences, defaults
+-- Regenerate via tools/scripts/rebaseline-transform.mjs. Do not hand-edit.
 
--- 00000000000000_setup_schema_privileges.sql
--- Foundation privileges for the public schema.
+SET check_function_bodies = false;
 
-GRANT USAGE ON SCHEMA public TO postgres;
-GRANT USAGE ON SCHEMA public TO anon;
-GRANT USAGE ON SCHEMA public TO authenticated;
-GRANT USAGE ON SCHEMA public TO service_role;
+CREATE SCHEMA IF NOT EXISTS public;
 
--- 00000000000001_setup_auth_and_content_enums.sql
--- Core enums used by auth and content tables.
+COMMENT ON SCHEMA public IS 'standard public schema';
 
-DO $$
+DO $rb$ BEGIN
+CREATE TYPE public.approval_status AS ENUM (
+    'pending',
+    'approved',
+    'denied'
+);
+EXCEPTION WHEN duplicate_object THEN null; END $rb$;
+
+DO $rb$ BEGIN
+CREATE TYPE public.interaction_type AS ENUM (
+    'review',
+    'comment'
+);
+EXCEPTION WHEN duplicate_object THEN null; END $rb$;
+
+DO $rb$ BEGIN
+CREATE TYPE public.menu_location AS ENUM (
+    'HEADER',
+    'FOOTER',
+    'SIDEBAR'
+);
+EXCEPTION WHEN duplicate_object THEN null; END $rb$;
+
+DO $rb$ BEGIN
+CREATE TYPE public.page_status AS ENUM (
+    'draft',
+    'published',
+    'archived'
+);
+EXCEPTION WHEN duplicate_object THEN null; END $rb$;
+
+DO $rb$ BEGIN
+CREATE TYPE public.revision_type AS ENUM (
+    'snapshot',
+    'diff'
+);
+EXCEPTION WHEN duplicate_object THEN null; END $rb$;
+
+DO $rb$ BEGIN
+CREATE TYPE public.user_role AS ENUM (
+    'ADMIN',
+    'WRITER',
+    'USER'
+);
+EXCEPTION WHEN duplicate_object THEN null; END $rb$;
+
+CREATE OR REPLACE FUNCTION public.apply_order_inventory_deduction(p_order_id uuid) RETURNS void
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+DECLARE
+  v_track_quantities boolean := public.get_ecommerce_track_quantities();
+  v_item record;
+  v_inventory_deducted_at timestamptz;
+  v_sku text;
+  v_current_quantity integer;
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
-    CREATE TYPE public.user_role AS ENUM ('ADMIN', 'WRITER', 'USER');
+  SELECT inventory_deducted_at
+    INTO v_inventory_deducted_at
+  FROM public.orders
+  WHERE id = p_order_id
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_inventory_deducted_at IS NOT NULL THEN
+    RETURN;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'page_status') THEN
-    CREATE TYPE public.page_status AS ENUM ('draft', 'published', 'archived');
+  IF NOT v_track_quantities THEN
+    UPDATE public.orders
+    SET inventory_deducted_at = now()
+    WHERE id = p_order_id;
+
+    RETURN;
   END IF;
-END
+
+  FOR v_item IN
+    SELECT
+      product_id,
+      variant_id,
+      SUM(quantity)::integer AS quantity
+    FROM public.order_items
+    WHERE order_id = p_order_id
+    GROUP BY product_id, variant_id
+  LOOP
+    v_sku := NULL;
+    v_current_quantity := 0;
+
+    IF v_item.variant_id IS NOT NULL THEN
+      SELECT
+        sku,
+        GREATEST(COALESCE(stock_quantity, 0), 0)
+        INTO v_sku,
+             v_current_quantity
+      FROM public.product_variants
+      WHERE id = v_item.variant_id
+      LIMIT 1;
+    ELSIF v_item.product_id IS NOT NULL THEN
+      SELECT
+        sku,
+        GREATEST(COALESCE(stock, 0), 0)
+        INTO v_sku,
+             v_current_quantity
+      FROM public.products
+      WHERE id = v_item.product_id
+      LIMIT 1;
+    END IF;
+
+    IF NULLIF(trim(v_sku), '') IS NULL THEN
+      CONTINUE;
+    END IF;
+
+    INSERT INTO public.inventory_items (sku, quantity)
+    VALUES (v_sku, v_current_quantity)
+    ON CONFLICT (sku) DO NOTHING;
+
+    UPDATE public.inventory_items
+    SET
+      quantity = GREATEST(COALESCE(quantity, 0) - v_item.quantity, 0),
+      updated_at = now()
+    WHERE sku = v_sku;
+  END LOOP;
+
+  UPDATE public.orders
+  SET inventory_deducted_at = now()
+  WHERE id = p_order_id;
+END;
 $$;
 
--- 00000000000002_setup_navigation_and_revision_enums.sql
--- Supporting enums for navigation and revision history.
-
-DO $$
+CREATE OR REPLACE FUNCTION public.assign_order_invoice_metadata(p_order_id uuid, p_paid_at timestamp with time zone DEFAULT now()) RETURNS TABLE(invoice_number text, paid_at timestamp with time zone)
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+DECLARE
+  v_order public.orders%ROWTYPE;
+  v_effective_paid_at timestamptz;
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'menu_location') THEN
-    CREATE TYPE public.menu_location AS ENUM ('HEADER', 'FOOTER', 'SIDEBAR');
+  SELECT *
+    INTO v_order
+  FROM public.orders
+  WHERE id = p_order_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Order % not found', p_order_id;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'revision_type') THEN
-    CREATE TYPE public.revision_type AS ENUM ('snapshot', 'diff');
-  END IF;
-END
+  v_effective_paid_at := COALESCE(v_order.paid_at, p_paid_at, now(), v_order.created_at);
+
+  UPDATE public.orders
+  SET
+    invoice_number = COALESCE(v_order.invoice_number, public.generate_order_invoice_number()),
+    paid_at = v_effective_paid_at
+  WHERE id = p_order_id
+  RETURNING orders.invoice_number, orders.paid_at
+  INTO invoice_number, paid_at;
+
+  RETURN NEXT;
+END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.clear_currency_price_overrides(target_currency text) RETURNS void
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+DECLARE
+  v_target_currency text := upper(trim(target_currency));
+BEGIN
+  IF v_target_currency = '' THEN
+    RETURN;
+  END IF;
 
--- >>> FROM: 00000000000001_setup_cms_core.sql <<<
--- 00000000000001_setup_cms_core.sql
--- Consolidated migration preserving original statement order within grouped sections.
+  UPDATE public.products
+  SET
+    prices = COALESCE(prices, '{}'::jsonb) - v_target_currency,
+    sale_prices = CASE
+      WHEN sale_prices IS NULL THEN NULL
+      WHEN sale_prices - v_target_currency = '{}'::jsonb THEN NULL
+      ELSE sale_prices - v_target_currency
+    END,
+    updated_at = now()
+  WHERE COALESCE(prices, '{}'::jsonb) ? v_target_currency
+     OR COALESCE(sale_prices, '{}'::jsonb) ? v_target_currency;
 
--- 00000000000003_setup_site_settings_and_profiles.sql
--- Global settings, user profiles, and saved addresses.
+  UPDATE public.product_variants
+  SET
+    prices = COALESCE(prices, '{}'::jsonb) - v_target_currency,
+    sale_prices = CASE
+      WHEN sale_prices IS NULL THEN NULL
+      WHEN sale_prices - v_target_currency = '{}'::jsonb THEN NULL
+      ELSE sale_prices - v_target_currency
+    END,
+    updated_at = now()
+  WHERE COALESCE(prices, '{}'::jsonb) ? v_target_currency
+     OR COALESCE(sale_prices, '{}'::jsonb) ? v_target_currency;
+END;
+$$;
 
-CREATE TABLE public.site_settings (
-  key text PRIMARY KEY,
-  value jsonb
+CREATE OR REPLACE FUNCTION public.is_valid_custom_block_fields(candidate jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+  SELECT CASE
+    WHEN jsonb_typeof(candidate) <> 'array' THEN false
+    ELSE
+      NOT EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(candidate) AS field(value)
+        WHERE jsonb_typeof(field.value) <> 'object'
+          OR jsonb_typeof(field.value -> 'key') IS DISTINCT FROM 'string'
+          OR jsonb_typeof(field.value -> 'label') IS DISTINCT FROM 'string'
+          OR jsonb_typeof(field.value -> 'type') IS DISTINCT FROM 'string'
+          OR field.value ->> 'key' !~ '^[a-z][a-z0-9_]*$'
+          OR field.value ->> 'type' NOT IN ('text', 'rich-text', 'image_r2', 'db_relation')
+      )
+      AND (
+        SELECT COUNT(*) = COUNT(DISTINCT field.value ->> 'key')
+        FROM jsonb_array_elements(candidate) AS field(value)
+      )
+  END;
+$_$;
+
+CREATE OR REPLACE FUNCTION public.is_valid_custom_block_layout_schema(candidate jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  SELECT CASE
+    WHEN jsonb_typeof(candidate) <> 'object' THEN false
+    ELSE candidate ->> 'type' IN ('container', 'field_render')
+  END;
+$$;
+
+CREATE TABLE IF NOT EXISTS public.custom_block_definitions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    slug text NOT NULL,
+    name text NOT NULL,
+    description text DEFAULT ''::text NOT NULL,
+    fields jsonb DEFAULT '[]'::jsonb NOT NULL,
+    layout_schema jsonb NOT NULL,
+    is_original boolean DEFAULT true NOT NULL,
+    CONSTRAINT custom_block_definitions_fields_check CHECK (public.is_valid_custom_block_fields(fields)),
+    CONSTRAINT custom_block_definitions_layout_schema_check CHECK (public.is_valid_custom_block_layout_schema(layout_schema)),
+    CONSTRAINT custom_block_definitions_name_check CHECK ((length(TRIM(BOTH FROM name)) > 0)),
+    CONSTRAINT custom_block_definitions_slug_check CHECK ((slug ~ '^[a-z][a-z0-9-]*$'::text))
 );
 
-COMMENT ON TABLE public.site_settings IS 'Key-value store for global site settings.';
+COMMENT ON TABLE public.custom_block_definitions IS 'Registry for user-created block definitions rendered from database JSONB without runtime code compilation.';
 
-CREATE TABLE public.profiles (
-  id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  updated_at timestamptz,
-  full_name text,
-  avatar_url text,
-  website text,
-  github_username text,
-  phone text,
-  role public.user_role NOT NULL DEFAULT 'USER'
-);
+COMMENT ON COLUMN public.custom_block_definitions.fields IS 'Strict JSONB field declarations for data-rendered custom blocks.';
 
-COMMENT ON TABLE public.profiles IS 'Profile information for each user, extending auth.users.';
-COMMENT ON COLUMN public.profiles.id IS 'References auth.users.id';
-COMMENT ON COLUMN public.profiles.role IS 'User role for RBAC.';
+COMMENT ON COLUMN public.custom_block_definitions.layout_schema IS 'Open-ended recursive layout schema consumed by the dynamic layout renderer.';
 
-CREATE TABLE public.user_addresses (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  address_type text NOT NULL CHECK (address_type IN ('billing', 'shipping')),
-  is_default boolean NOT NULL DEFAULT false,
-  recipient_name text,
-  company_name text,
-  line1 text,
-  line2 text,
-  city text,
-  state text,
-  postal_code text,
-  country_code text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+COMMENT ON COLUMN public.custom_block_definitions.is_original IS 'False when a definition was created by duplicating an existing registry row.';
 
-COMMENT ON COLUMN public.user_addresses.company_name IS
-  'Optional company or organization name for the address.';
+CREATE OR REPLACE FUNCTION public.duplicate_block_definition(target_id uuid) RETURNS public.custom_block_definitions
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $_$
+DECLARE
+  source_definition public.custom_block_definitions%ROWTYPE;
+  copied_definition public.custom_block_definitions%ROWTYPE;
+  base_slug text;
+  copy_slug text;
+  copy_index integer := 1;
+BEGIN
+  IF auth.role() <> 'service_role'
+     AND COALESCE((SELECT public.get_current_user_role())::text, '') NOT IN ('ADMIN', 'WRITER') THEN
+    RAISE EXCEPTION 'Not authorized to duplicate custom block definitions.'
+      USING ERRCODE = '42501';
+  END IF;
 
-CREATE UNIQUE INDEX idx_user_addresses_one_default_per_type
-  ON public.user_addresses (user_id, address_type)
-  WHERE is_default = true;
+  SELECT *
+    INTO source_definition
+  FROM public.custom_block_definitions
+  WHERE id = target_id;
 
--- 00000000000004_setup_languages_and_media.sql
--- Core locale and media tables.
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Custom block definition % not found.', target_id
+      USING ERRCODE = 'P0002';
+  END IF;
 
-CREATE TABLE public.languages (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  code text NOT NULL UNIQUE,
-  name text NOT NULL,
-  is_default boolean NOT NULL DEFAULT false,
-  is_active boolean DEFAULT true,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+  base_slug := regexp_replace(source_definition.slug, '-copy(-[0-9]+)?$', '');
+  copy_slug := base_slug || '-copy';
 
-COMMENT ON TABLE public.languages IS 'Stores supported languages for the CMS.';
-COMMENT ON COLUMN public.languages.code IS 'BCP 47 language code.';
+  WHILE EXISTS (
+    SELECT 1
+    FROM public.custom_block_definitions
+    WHERE slug = copy_slug
+  ) LOOP
+    copy_index := copy_index + 1;
+    copy_slug := base_slug || '-copy-' || copy_index;
+  END LOOP;
 
-CREATE UNIQUE INDEX ensure_single_default_language_idx
-  ON public.languages (is_default)
-  WHERE is_default = true;
-
-CREATE TABLE public.media (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  uploader_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  file_name text NOT NULL,
-  object_key text NOT NULL UNIQUE,
-  file_type text,
-  size_bytes bigint,
-  description text,
-  width integer,
-  height integer,
-  blur_data_url text,
-  variants jsonb,
-  file_path text,
-  folder text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-COMMENT ON TABLE public.media IS 'Stores information about uploaded media assets.';
-COMMENT ON COLUMN public.media.object_key IS 'Unique key (path) in Cloudflare R2.';
-COMMENT ON COLUMN public.media.width IS 'Width of the image in pixels.';
-COMMENT ON COLUMN public.media.height IS 'Height of the image in pixels.';
-COMMENT ON COLUMN public.media.blur_data_url IS 'Base64 encoded string for image blur placeholders.';
-COMMENT ON COLUMN public.media.variants IS 'Array of image variant objects.';
-COMMENT ON COLUMN public.media.file_path IS 'Full path to the file in the storage bucket.';
-COMMENT ON COLUMN public.media.folder IS 'Folder path prefix for the R2 object.';
-
--- 00000000000005_setup_translations_and_branding.sql
--- Shared translation storage and logo metadata.
-
-CREATE TABLE public.translations (
-  key text PRIMARY KEY,
-  translations jsonb NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-COMMENT ON COLUMN public.translations.key IS
-  'A unique, slugified identifier (e.g., "sign_in_button_text").';
-COMMENT ON COLUMN public.translations.translations IS
-  'Stores translations as key-value pairs (e.g., {"en": "Sign In", "fr": "S''inscrire"}).';
-
-CREATE TABLE public.logos (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  media_id uuid REFERENCES public.media(id) ON DELETE SET NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-COMMENT ON TABLE public.logos IS 'Stores company and brand logos.';
-COMMENT ON COLUMN public.logos.name IS 'The name of the brand or company for the logo.';
-COMMENT ON COLUMN public.logos.media_id IS 'Foreign key to the media table for the logo image.';
-
-
--- >>> FROM: 00000000000002_setup_content_tables.sql <<<
--- 00000000000002_setup_content_tables.sql
--- Consolidated migration preserving original statement order within grouped sections.
-
--- 00000000000006_setup_pages_and_posts.sql
--- Page and post records.
-
-CREATE TABLE public.posts (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  language_id bigint NOT NULL REFERENCES public.languages(id) ON DELETE CASCADE,
-  author_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  title text NOT NULL,
-  slug text NOT NULL,
-  label text,
-  excerpt text,
-  subtitle text,
-  status public.page_status NOT NULL DEFAULT 'draft',
-  published_at timestamptz,
-  meta_title text,
-  meta_description text,
-  feature_image_id uuid REFERENCES public.media(id) ON DELETE SET NULL,
-  version integer NOT NULL DEFAULT 1,
-  translation_group_id uuid NOT NULL DEFAULT gen_random_uuid(),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT posts_language_id_slug_key UNIQUE (language_id, slug)
-);
-
-COMMENT ON TABLE public.posts IS 'Stores blog posts or news articles.';
-COMMENT ON COLUMN public.posts.slug IS 'URL-friendly identifier, unique per language.';
-COMMENT ON COLUMN public.posts.label IS
-  'Short editorial label rendered as a pill on post hero and article cards.';
-COMMENT ON COLUMN public.posts.excerpt IS
-  'Short editorial summary used in post metadata rows and post cards.';
-COMMENT ON COLUMN public.posts.subtitle IS
-  'Longer deck shown under the post title.';
-COMMENT ON COLUMN public.posts.feature_image_id IS
-  'ID of the media item to be used as the feature image.';
-COMMENT ON COLUMN public.posts.version IS 'Monotonic version number for hybrid revisions.';
-COMMENT ON COLUMN public.posts.translation_group_id IS
-  'Groups different language versions of the same conceptual post.';
-
-CREATE TABLE public.pages (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  language_id bigint NOT NULL REFERENCES public.languages(id) ON DELETE CASCADE,
-  author_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  title text NOT NULL,
-  slug text NOT NULL,
-  status public.page_status NOT NULL DEFAULT 'draft',
-  meta_title text,
-  meta_description text,
-  version integer NOT NULL DEFAULT 1,
-  translation_group_id uuid NOT NULL DEFAULT gen_random_uuid(),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT pages_language_id_slug_key UNIQUE (language_id, slug)
-);
-
-COMMENT ON TABLE public.pages IS 'Stores static pages for the website.';
-COMMENT ON COLUMN public.pages.slug IS 'URL-friendly identifier, unique per language.';
-COMMENT ON COLUMN public.pages.version IS 'Monotonic version number for hybrid revisions.';
-COMMENT ON COLUMN public.pages.translation_group_id IS
-  'Groups different language versions of the same conceptual page.';
-
--- 00000000000007_setup_blocks_and_navigation.sql
--- Content blocks and navigation trees.
-
-CREATE TABLE public.blocks (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  page_id bigint REFERENCES public.pages(id) ON DELETE CASCADE,
-  post_id bigint REFERENCES public.posts(id) ON DELETE CASCADE,
-  language_id bigint NOT NULL REFERENCES public.languages(id) ON DELETE CASCADE,
-  block_type text NOT NULL,
-  content jsonb,
-  "order" integer NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT check_exactly_one_parent CHECK (
-    (page_id IS NOT NULL AND post_id IS NULL)
-    OR (post_id IS NOT NULL AND page_id IS NULL)
+  INSERT INTO public.custom_block_definitions (
+    id,
+    slug,
+    name,
+    description,
+    fields,
+    layout_schema,
+    is_original
   )
-);
+  VALUES (
+    gen_random_uuid(),
+    copy_slug,
+    source_definition.name || ' Copy',
+    source_definition.description,
+    source_definition.fields,
+    source_definition.layout_schema,
+    false
+  )
+  RETURNING *
+    INTO copied_definition;
 
-COMMENT ON TABLE public.blocks IS 'Stores content blocks for pages and posts.';
-COMMENT ON COLUMN public.blocks.block_type IS
-  'Type of the block, e.g., "text", "image".';
-COMMENT ON COLUMN public.blocks.content IS 'JSONB content specific to the block_type.';
-COMMENT ON COLUMN public.blocks.order IS 'Sort order of the block.';
+  RETURN copied_definition;
+END;
+$_$;
 
-CREATE TABLE public.navigation_items (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  language_id bigint NOT NULL REFERENCES public.languages(id) ON DELETE CASCADE,
-  menu_key public.menu_location NOT NULL,
-  label text NOT NULL,
-  url text NOT NULL,
-  parent_id bigint REFERENCES public.navigation_items(id) ON DELETE CASCADE,
-  "order" integer NOT NULL DEFAULT 0,
-  page_id bigint REFERENCES public.pages(id) ON DELETE SET NULL,
-  translation_group_id uuid NOT NULL DEFAULT gen_random_uuid(),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+CREATE OR REPLACE FUNCTION public.format_order_invoice_number(p_value bigint) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  SELECT 'INV-' || lpad(p_value::text, 6, '0');
+$$;
 
-COMMENT ON TABLE public.navigation_items IS 'Stores navigation menu items.';
-COMMENT ON COLUMN public.navigation_items.menu_key IS
-  'Identifies the menu this item belongs to.';
+CREATE OR REPLACE FUNCTION public.generate_order_invoice_number() RETURNS text
+    LANGUAGE sql
+    SET search_path TO ''
+    AS $$
+  SELECT public.format_order_invoice_number(nextval('public.order_invoice_number_seq'));
+$$;
 
--- 00000000000008_setup_revisions.sql
--- Page and post revision history.
+CREATE OR REPLACE FUNCTION public.get_current_user_role() RETURNS public.user_role
+    LANGUAGE sql STABLE
+    SET search_path TO 'public'
+    AS $$
+  SELECT role FROM public.profiles WHERE id = auth.uid();
+$$;
 
-CREATE TABLE public.page_revisions (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  page_id bigint NOT NULL REFERENCES public.pages(id) ON DELETE CASCADE,
-  author_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  version integer NOT NULL,
-  revision_type public.revision_type NOT NULL,
-  content jsonb NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT page_revisions_page_version_key UNIQUE (page_id, version)
-);
+CREATE OR REPLACE FUNCTION public.get_default_currency_code() RETURNS text
+    LANGUAGE sql STABLE
+    SET search_path TO ''
+    AS $$
+  SELECT COALESCE(
+    (
+      SELECT upper(code)
+      FROM public.currencies
+      WHERE is_default = true
+      ORDER BY updated_at DESC, created_at DESC, code ASC
+      LIMIT 1
+    ),
+    'USD'
+  );
+$$;
 
-COMMENT ON TABLE public.page_revisions IS 'Hybrid (snapshot/diff) revisions for pages.';
-COMMENT ON COLUMN public.page_revisions.content IS
-  'If snapshot: full content; if diff: JSON Patch array.';
+CREATE OR REPLACE FUNCTION public.get_ecommerce_track_quantities() RETURNS boolean
+    LANGUAGE plpgsql STABLE
+    SET search_path TO 'public'
+    AS $$
+DECLARE
+  v_value jsonb;
+  v_raw text;
+BEGIN
+  SELECT value
+    INTO v_value
+  FROM public.site_settings
+  WHERE key = 'ecommerce_inventory_settings';
 
-CREATE TABLE public.post_revisions (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  post_id bigint NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
-  author_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  version integer NOT NULL,
-  revision_type public.revision_type NOT NULL,
-  content jsonb NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT post_revisions_post_version_key UNIQUE (post_id, version)
-);
+  IF v_value IS NULL THEN
+    RETURN true;
+  END IF;
 
-COMMENT ON TABLE public.post_revisions IS 'Hybrid (snapshot/diff) revisions for posts.';
-COMMENT ON COLUMN public.post_revisions.content IS
-  'If snapshot: full content; if diff: JSON Patch array.';
+  IF jsonb_typeof(v_value) = 'object' THEN
+    v_raw := NULLIF(v_value->>'track_quantities', '');
+  ELSE
+    v_raw := NULLIF(trim(BOTH '"' FROM v_value::text), '');
+  END IF;
 
+  IF v_raw IS NULL THEN
+    RETURN true;
+  END IF;
 
--- >>> FROM: 00000000000003_setup_catalog_and_licensing.sql <<<
--- 00000000000003_setup_catalog_and_licensing.sql
--- Consolidated migration preserving original statement order within grouped sections.
+  IF lower(v_raw) IN ('false', 'f', '0', 'no', 'off') THEN
+    RETURN false;
+  END IF;
 
--- 00000000000009_setup_products_and_media.sql
--- Core product catalog tables.
+  RETURN true;
+END;
+$$;
 
-CREATE TABLE public.products (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  language_id bigint NOT NULL REFERENCES public.languages(id) ON DELETE CASCADE,
-  translation_group_id uuid NOT NULL DEFAULT gen_random_uuid(),
-  sku text NOT NULL,
-  title text NOT NULL,
-  slug text NOT NULL,
-  product_type text NOT NULL CHECK (product_type IN ('physical', 'digital')),
-  payment_provider text NOT NULL CHECK (payment_provider IN ('stripe', 'freemius')),
-  price integer NOT NULL,
-  prices jsonb NOT NULL DEFAULT '{}'::jsonb,
-  sale_price integer,
-  sale_prices jsonb,
-  stock integer DEFAULT 0,
-  status text NOT NULL CHECK (status IN ('draft', 'active', 'archived')) DEFAULT 'draft',
-  meta_title text,
-  meta_description text,
-  short_description text,
-  description_json jsonb,
-  metadata jsonb,
-  freemius_plan_id text,
-  freemius_product_id text,
-  trial_period_days integer NOT NULL DEFAULT 0 CHECK (trial_period_days >= 0),
-  trial_requires_payment_method boolean NOT NULL DEFAULT false,
-  upc text,
-  is_taxable boolean NOT NULL DEFAULT true,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  CONSTRAINT products_type_provider_consistency_check CHECK (
-    (product_type = 'physical' AND payment_provider = 'stripe')
-    OR (product_type = 'digital' AND payment_provider = 'freemius')
-  ),
-  CONSTRAINT products_language_id_slug_key UNIQUE (language_id, slug),
-  CONSTRAINT products_language_id_sku_key UNIQUE (language_id, sku)
-);
+CREATE OR REPLACE FUNCTION public.get_my_claim(claim text) RETURNS jsonb
+    LANGUAGE sql STABLE
+    SET search_path TO ''
+    AS $$
+  SELECT COALESCE(current_setting('request.jwt.claims', true)::jsonb ->> claim, NULL)::jsonb
+$$;
 
-COMMENT ON COLUMN public.products.is_taxable IS
-  'When true, this product participates in Stripe tax calculation.';
-COMMENT ON COLUMN public.products.prices IS
-  'Regular prices by ISO 4217 code in the smallest currency unit.';
-COMMENT ON COLUMN public.products.sale_prices IS
-  'Sale prices by ISO 4217 code in the smallest currency unit.';
+CREATE OR REPLACE FUNCTION public.handle_blocks_update() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
 
-CREATE TABLE public.product_media (
-  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
-  media_id uuid NOT NULL REFERENCES public.media(id) ON DELETE CASCADE,
-  sort_order integer DEFAULT 0,
-  PRIMARY KEY (product_id, media_id)
-);
+CREATE OR REPLACE FUNCTION public.handle_coupon_freemius_mappings_write() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+BEGIN
+  NEW.freemius_product_id := btrim(NEW.freemius_product_id);
+  NEW.freemius_coupon_code := upper(regexp_replace(btrim(NEW.freemius_coupon_code), '\\s+', '', 'g'));
+  NEW.sync_status := lower(btrim(COALESCE(NEW.sync_status, 'pending')));
+  NEW.updated_at := now();
 
--- 00000000000010_setup_product_variants_and_attributes.sql
--- Variant attributes, terms, and sellable variants.
+  IF NEW.created_at IS NULL THEN
+    NEW.created_at := now();
+  END IF;
 
-CREATE TABLE public.product_attributes (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  slug text NOT NULL UNIQUE,
-  name_translations jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
+  RETURN NEW;
+END;
+$$;
 
-CREATE TABLE public.product_attribute_terms (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  attribute_id uuid NOT NULL REFERENCES public.product_attributes(id) ON DELETE CASCADE,
-  value text NOT NULL,
-  slug text NOT NULL,
-  sort_order integer NOT NULL DEFAULT 0,
-  value_translations jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  CONSTRAINT product_attribute_terms_attribute_id_slug_key UNIQUE (attribute_id, slug)
-);
+CREATE OR REPLACE FUNCTION public.handle_coupons_write() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+BEGIN
+  NEW.code := upper(regexp_replace(btrim(NEW.code), '\\s+', '', 'g'));
+  NEW.name := btrim(NEW.name);
+  NEW.provider_scope := lower(btrim(NEW.provider_scope));
+  NEW.discount_type := lower(btrim(NEW.discount_type));
+  NEW.freemius_sync_status := lower(btrim(COALESCE(NEW.freemius_sync_status, 'not_synced')));
+  NEW.updated_at := now();
 
-CREATE TABLE public.product_variants (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
-  sku text NOT NULL,
-  price_adjustment integer NOT NULL DEFAULT 0,
-  price integer NOT NULL DEFAULT 0,
-  prices jsonb NOT NULL DEFAULT '{}'::jsonb,
-  sale_price integer,
-  sale_prices jsonb,
-  stock_quantity integer NOT NULL DEFAULT 0,
-  upc text,
-  main_media_id uuid REFERENCES public.media(id) ON DELETE SET NULL,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  CONSTRAINT product_variants_product_id_sku_key UNIQUE (product_id, sku)
-);
+  IF NEW.created_at IS NULL THEN
+    NEW.created_at := now();
+  END IF;
 
-COMMENT ON COLUMN public.product_variants.prices IS
-  'Variant regular prices by ISO 4217 code in the smallest currency unit.';
-COMMENT ON COLUMN public.product_variants.sale_prices IS
-  'Variant sale prices by ISO 4217 code in the smallest currency unit.';
+  RETURN NEW;
+END;
+$$;
 
-CREATE TABLE public.inventory_items (
-  sku text PRIMARY KEY,
-  quantity integer NOT NULL DEFAULT 0 CHECK (quantity >= 0),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+CREATE OR REPLACE FUNCTION public.handle_default_currency_change() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.is_default THEN
+      PERFORM public.sync_legacy_price_columns_for_currency(NEW.code);
+    END IF;
+  ELSIF NEW.is_default
+        AND (
+          OLD.is_default IS DISTINCT FROM NEW.is_default
+          OR OLD.code IS DISTINCT FROM NEW.code
+        ) THEN
+    PERFORM public.sync_legacy_price_columns_for_currency(NEW.code);
+  END IF;
 
-COMMENT ON TABLE public.inventory_items IS
-  'Source-of-truth inventory records keyed by sellable SKU.';
-COMMENT ON COLUMN public.inventory_items.sku IS
-  'Global sellable SKU. Matching products or variants share inventory.';
-COMMENT ON COLUMN public.inventory_items.quantity IS
-  'Available quantity for this SKU.';
+  RETURN NEW;
+END;
+$$;
 
-CREATE TABLE public.variant_attribute_mapping (
-  variant_id uuid NOT NULL REFERENCES public.product_variants(id) ON DELETE CASCADE,
-  attribute_term_id uuid NOT NULL REFERENCES public.product_attribute_terms(id) ON DELETE CASCADE,
-  PRIMARY KEY (variant_id, attribute_term_id)
-);
+CREATE OR REPLACE FUNCTION public.handle_inventory_item_change() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+DECLARE
+  v_sku text := COALESCE(NEW.sku, OLD.sku);
+BEGIN
+  PERFORM public.sync_inventory_cache_for_sku(v_sku);
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
 
--- 00000000000011_setup_licensing_and_freemius.sql
--- Package activations and Freemius plan metadata.
+CREATE OR REPLACE FUNCTION public.handle_inventory_items_update() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
 
-CREATE TABLE public.package_activations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  license_key text NOT NULL,
-  instance_name text NOT NULL,
-  package_id text NOT NULL,
-  status text NOT NULL DEFAULT 'active',
-  meta jsonb DEFAULT '{}'::jsonb,
-  last_validated_at timestamptz DEFAULT now(),
-  created_at timestamptz DEFAULT now(),
-  UNIQUE (license_key, package_id)
-);
+CREATE OR REPLACE FUNCTION public.handle_languages_update() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
 
-CREATE TABLE public.freemius_plans (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
-  name text NOT NULL,
-  title text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+CREATE OR REPLACE FUNCTION public.handle_media_update() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
 
-CREATE TABLE public.freemius_pricing (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  plan_id uuid NOT NULL REFERENCES public.freemius_plans(id) ON DELETE CASCADE,
-  api_monthly_price numeric,
-  api_annual_price numeric,
-  api_lifetime_price numeric,
-  override_monthly_price numeric,
-  override_annual_price numeric,
-  override_lifetime_price numeric,
-  license_quota integer,
-  is_active boolean NOT NULL DEFAULT true,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+CREATE OR REPLACE FUNCTION public.handle_navigation_items_update() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
 
+CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+DECLARE
+  admin_flag_set boolean := false;
+  user_role public.user_role;
+  v_full_name text;
+  v_avatar_url text;
+  v_github_username text;
+  v_provider text;
+BEGIN
+  INSERT INTO public.site_settings (key, value)
+  VALUES ('is_admin_created', 'false'::jsonb)
+  ON CONFLICT (key) DO NOTHING;
 
--- >>> FROM: 00000000000004_setup_fulfillment_shipping_taxes_and_currencies.sql <<<
--- 00000000000004_setup_fulfillment_shipping_taxes_and_currencies.sql
--- Consolidated migration preserving original statement order within grouped sections.
+  SELECT COALESCE(value::jsonb::boolean, false)
+    INTO admin_flag_set
+  FROM public.site_settings
+  WHERE key = 'is_admin_created'
+  FOR UPDATE;
 
--- Orders, line items, and invoice numbering primitives.
+  IF admin_flag_set = false THEN
+    user_role := 'ADMIN'::public.user_role;
 
-CREATE TABLE public.orders (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
-  status text NOT NULL CHECK (status IN ('pending', 'trial', 'paid', 'shipped', 'cancelled', 'refunded')) DEFAULT 'pending',
-  total integer NOT NULL,
-  stripe_session_id text UNIQUE,
-  payment_intent_id text,
-  customer_details jsonb,
-  provider text CHECK (provider IN ('stripe', 'freemius')) DEFAULT 'stripe',
-  freemius_product_id text,
-  freemius_plan_id text,
-  freemius_license_id text,
-  freemius_subscription_id text,
-  freemius_trial_id text,
-  freemius_user_id text,
-  freemius_trial_ends_at timestamptz,
-  freemius_last_event_type text,
-  freemius_last_synced_at timestamptz,
-  currency text NOT NULL DEFAULT 'USD',
-  subtotal integer,
-  shipping_total integer,
-  tax_total integer NOT NULL DEFAULT 0,
-  tax_details jsonb,
-  exchange_rate_at_purchase numeric(20,10) NOT NULL DEFAULT 1,
-  inventory_deducted_at timestamptz,
-  invoice_number text,
-  paid_at timestamptz,
-  created_at timestamptz DEFAULT now(),
-  CONSTRAINT orders_exchange_rate_at_purchase_positive CHECK (exchange_rate_at_purchase > 0)
-);
+    UPDATE public.site_settings
+    SET value = 'true'::jsonb
+    WHERE key = 'is_admin_created';
+  ELSE
+    user_role := 'USER'::public.user_role;
+  END IF;
 
-COMMENT ON COLUMN public.orders.currency IS
-  'ISO currency code used for the order totals.';
-COMMENT ON COLUMN public.orders.subtotal IS
-  'Subtotal before shipping and tax, in the smallest currency unit.';
-COMMENT ON COLUMN public.orders.shipping_total IS
-  'Shipping amount before tax, in the smallest currency unit.';
-COMMENT ON COLUMN public.orders.tax_total IS
-  'Total tax amount collected for the order, in the smallest currency unit.';
-COMMENT ON COLUMN public.orders.tax_details IS
-  'Normalized tax breakdown payload sourced from manual rates or finalized Stripe tax data.';
-COMMENT ON COLUMN public.orders.exchange_rate_at_purchase IS
-  'Exchange rate locked at purchase time relative to the store default currency.';
-COMMENT ON COLUMN public.orders.invoice_number IS
-  'Stable printable invoice number assigned once when the order first becomes paid.';
-COMMENT ON COLUMN public.orders.paid_at IS
-  'Timestamp when the order was first marked as paid.';
-COMMENT ON COLUMN public.orders.freemius_license_id IS
-  'Freemius license ID used to reconcile checkout callbacks and webhooks.';
-COMMENT ON COLUMN public.orders.freemius_subscription_id IS
-  'Freemius subscription ID when the order is associated with recurring billing.';
-COMMENT ON COLUMN public.orders.freemius_trial_id IS
-  'Freemius trial ID when checkout starts in trial mode.';
-COMMENT ON COLUMN public.orders.freemius_trial_ends_at IS
-  'Freemius trial expiration timestamp when supplied by checkout or webhook data.';
-COMMENT ON COLUMN public.orders.freemius_last_event_type IS
-  'Last Freemius checkout callback or webhook event applied to the order.';
-COMMENT ON COLUMN public.orders.freemius_last_synced_at IS
-  'Timestamp when Freemius metadata was last reconciled locally.';
+  v_full_name := NEW.raw_user_meta_data->>'full_name';
+  v_avatar_url := NEW.raw_user_meta_data->>'avatar_url';
+  v_provider := NEW.raw_app_meta_data->>'provider';
 
-CREATE UNIQUE INDEX idx_orders_invoice_number_unique
-  ON public.orders (invoice_number)
-  WHERE invoice_number IS NOT NULL;
+  IF v_provider = 'github' OR (NEW.raw_user_meta_data->>'iss') LIKE '%github%' THEN
+    v_github_username := COALESCE(
+      NEW.raw_user_meta_data->>'user_name',
+      NEW.raw_user_meta_data->>'preferred_username'
+    );
+  ELSE
+    v_github_username := NULL;
+  END IF;
 
-CREATE TABLE public.order_items (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id uuid NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
-  product_id uuid REFERENCES public.products(id) ON DELETE SET NULL,
-  variant_id uuid REFERENCES public.product_variants(id) ON DELETE SET NULL,
-  quantity integer NOT NULL,
-  price_at_purchase integer NOT NULL
-);
+  INSERT INTO public.profiles (
+    id,
+    role,
+    full_name,
+    avatar_url,
+    github_username
+  )
+  VALUES (
+    NEW.id,
+    user_role,
+    v_full_name,
+    v_avatar_url,
+    v_github_username
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    avatar_url = EXCLUDED.avatar_url,
+    github_username = EXCLUDED.github_username;
 
-CREATE SEQUENCE public.order_invoice_number_seq
-  START WITH 1
-  INCREMENT BY 1
-  MINVALUE 1
-  NO MAXVALUE
-  CACHE 1;
+  RETURN NEW;
+END;
+$$;
 
--- 00000000000013_setup_shipping_and_taxes.sql
--- Shipping zones, shipping methods, and manual tax rates.
+CREATE OR REPLACE FUNCTION public.handle_pages_update() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
 
-CREATE TABLE public.shipping_zones (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  priority_order integer NOT NULL DEFAULT 0,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
+CREATE OR REPLACE FUNCTION public.handle_posts_update() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
 
-CREATE TABLE public.shipping_zone_locations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  zone_id uuid NOT NULL REFERENCES public.shipping_zones(id) ON DELETE CASCADE,
-  country_code text NOT NULL,
-  state_code text,
-  postal_code text,
-  created_at timestamptz DEFAULT now()
-);
+CREATE OR REPLACE FUNCTION public.handle_product_freemius_sale_coupons_write() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+BEGIN
+  NEW.freemius_product_id := btrim(NEW.freemius_product_id);
+  NEW.freemius_coupon_code := upper(regexp_replace(btrim(NEW.freemius_coupon_code), '\\s+', '', 'g'));
+  NEW.sync_status := lower(btrim(COALESCE(NEW.sync_status, 'pending')));
+  NEW.updated_at := now();
 
-COMMENT ON COLUMN public.shipping_zone_locations.country_code IS
-  'ISO 3166-1 alpha-2 country code.';
-COMMENT ON COLUMN public.shipping_zone_locations.state_code IS
-  'Optional state/province code within the selected country (for example CA, NY, ON, QC). NULL means the whole country.';
-COMMENT ON COLUMN public.shipping_zone_locations.postal_code IS
-  'Optional exact postal code or wildcard pattern. NULL means all postal codes in the matched country/state.';
+  IF NEW.created_at IS NULL THEN
+    NEW.created_at := now();
+  END IF;
 
-CREATE TABLE public.shipping_zone_methods (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  zone_id uuid NOT NULL REFERENCES public.shipping_zones(id) ON DELETE CASCADE,
-  method_type text NOT NULL CHECK (method_type IN ('flat_rate', 'free_shipping')),
-  cost_amount integer NOT NULL DEFAULT 0,
-  cost_currency text NOT NULL DEFAULT 'USD',
-  min_order_amount integer NOT NULL DEFAULT 0,
-  name text NOT NULL,
-  name_translations jsonb NOT NULL DEFAULT '{}'::jsonb,
-  currency_pricing_mode text NOT NULL DEFAULT 'auto',
-  cost_amounts jsonb NOT NULL DEFAULT '{}'::jsonb,
-  min_order_amounts jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  CONSTRAINT shipping_zone_methods_currency_pricing_mode_valid
-    CHECK (currency_pricing_mode IN ('auto', 'manual')),
-  CONSTRAINT shipping_zone_methods_cost_currency_format
-    CHECK (cost_currency ~ '^[A-Z]{3}$')
-);
+  RETURN NEW;
+END;
+$$;
 
-COMMENT ON COLUMN public.shipping_zone_methods.name_translations IS
-  'Localized shipping method labels keyed by language code. Example: {"fr": "Livraison standard"}.';
-COMMENT ON COLUMN public.shipping_zone_methods.currency_pricing_mode IS
-  'Whether this rate uses auto FX conversion from a single source currency or exact manual amounts per currency.';
-COMMENT ON COLUMN public.shipping_zone_methods.cost_amounts IS
-  'Shipping costs by ISO 4217 code in the smallest currency unit.';
-COMMENT ON COLUMN public.shipping_zone_methods.min_order_amounts IS
-  'Minimum order thresholds by ISO 4217 code in the smallest currency unit.';
-
-CREATE TABLE public.tax_rates (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  country_code text NOT NULL,
-  state_code text,
-  tax_name text NOT NULL CHECK (char_length(btrim(tax_name)) > 0),
-  tax_rate numeric(7,4) NOT NULL CHECK (tax_rate >= 0 AND tax_rate <= 100),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-COMMENT ON TABLE public.tax_rates IS
-  'Manual tax rates used for Stripe storefront orders. Multiple rows can exist per jurisdiction to support combined taxes such as GST + PST.';
-COMMENT ON COLUMN public.tax_rates.country_code IS
-  'ISO 3166-1 alpha-2 country code.';
-COMMENT ON COLUMN public.tax_rates.state_code IS
-  'Optional state/province code within country_code. NULL represents a country-wide or federal tax.';
-COMMENT ON COLUMN public.tax_rates.tax_name IS
-  'Display name for the tax component, for example GST, PST, HST, or State Sales Tax.';
-COMMENT ON COLUMN public.tax_rates.tax_rate IS
-  'Percent value, not decimal fraction. Example: 5.0000 means 5%.';
-
-CREATE UNIQUE INDEX tax_rates_country_state_name_key
-  ON public.tax_rates (country_code, COALESCE(state_code, ''), lower(tax_name));
-
--- 00000000000014_setup_currencies.sql
--- Multi-currency configuration.
-
-CREATE TABLE public.currencies (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  code text NOT NULL UNIQUE CHECK (code ~ '^[A-Z]{3}$'),
-  symbol text NOT NULL,
-  exchange_rate numeric(20,10) NOT NULL CHECK (exchange_rate > 0),
-  is_default boolean NOT NULL DEFAULT false,
-  is_active boolean NOT NULL DEFAULT true,
-  rounding_mode text NOT NULL DEFAULT 'none',
-  rounding_increment integer NOT NULL DEFAULT 1,
-  rounding_charm_amount integer,
-  auto_update_exchange_rate boolean NOT NULL DEFAULT true,
-  exchange_rate_updated_at timestamptz,
-  exchange_rate_source text,
-  auto_sync_product_prices boolean NOT NULL DEFAULT false,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT currencies_default_must_be_active CHECK (NOT is_default OR is_active),
-  CONSTRAINT currencies_rounding_mode_valid
-    CHECK (rounding_mode IN ('none', 'nearest', 'up', 'down', 'charm')),
-  CONSTRAINT currencies_rounding_increment_positive
-    CHECK (rounding_increment > 0),
-  CONSTRAINT currencies_rounding_charm_nonnegative
-    CHECK (rounding_charm_amount IS NULL OR rounding_charm_amount >= 0),
-  CONSTRAINT currencies_charm_requires_amount
-    CHECK (rounding_mode <> 'charm' OR rounding_charm_amount IS NOT NULL),
-  CONSTRAINT currencies_default_exchange_rate_is_one
-    CHECK (NOT is_default OR exchange_rate = 1),
-  CONSTRAINT currencies_default_auto_update_disabled
-    CHECK (NOT is_default OR auto_update_exchange_rate = false),
-  CONSTRAINT currencies_default_product_price_sync_disabled
-    CHECK (NOT is_default OR auto_sync_product_prices = false)
-);
-
-COMMENT ON TABLE public.currencies IS
-  'Store currencies available for storefront display and conversion.';
-COMMENT ON COLUMN public.currencies.exchange_rate IS
-  'Relative to the current store default currency. The default currency should have exchange_rate = 1.';
-COMMENT ON COLUMN public.currencies.rounding_mode IS
-  'Rounding strategy applied when prices are auto-converted into this currency.';
-COMMENT ON COLUMN public.currencies.rounding_increment IS
-  'Rounding step in the currency smallest unit. Example: 5 means 0.05 for USD/CAD.';
-COMMENT ON COLUMN public.currencies.rounding_charm_amount IS
-  'Charm ending in the currency smallest unit. Example: 90 means prices like 29.90.';
-COMMENT ON COLUMN public.currencies.auto_update_exchange_rate IS
-  'Whether scheduled FX sync jobs should refresh this currency.';
-COMMENT ON COLUMN public.currencies.exchange_rate_updated_at IS
-  'When this currency exchange rate was last refreshed or manually set.';
-COMMENT ON COLUMN public.currencies.exchange_rate_source IS
-  'Human-readable source for the current exchange rate, such as a provider host or manual override.';
-COMMENT ON COLUMN public.currencies.auto_sync_product_prices IS
-  'Whether storefront product and variant prices in this currency are derived automatically from the store default currency using FX and rounding rules.';
-
-CREATE UNIQUE INDEX idx_currencies_single_default
-  ON public.currencies (is_default)
-  WHERE is_default = true;
-
--- 00000000000017_setup_currency_shipping_and_tax_functions.sql
--- Currency, shipping, and tax helper functions plus dependent constraints.
-
-CREATE OR REPLACE FUNCTION public.handle_shipping_zone_locations_write()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
+CREATE OR REPLACE FUNCTION public.handle_shipping_zone_locations_write() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
 BEGIN
   NEW.country_code = upper(btrim(NEW.country_code));
   NEW.state_code = CASE
@@ -752,11 +683,10 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.handle_tax_rates_write()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
+CREATE OR REPLACE FUNCTION public.handle_tax_rates_write() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
 BEGIN
   NEW.country_code = upper(btrim(NEW.country_code));
   NEW.state_code = CASE
@@ -774,30 +704,66 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.get_default_currency_code()
-RETURNS text
-LANGUAGE sql
-STABLE
-SET search_path = ''
-AS $$
-  SELECT COALESCE(
-    (
-      SELECT upper(code)
-      FROM public.currencies
-      WHERE is_default = true
-      ORDER BY updated_at DESC, created_at DESC, code ASC
-      LIMIT 1
-    ),
-    'USD'
-  );
+CREATE OR REPLACE FUNCTION public.handle_ucp_cart_sessions_update() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.normalize_currency_amount_map(amounts jsonb)
-RETURNS jsonb
-LANGUAGE sql
-IMMUTABLE
-SET search_path = ''
-AS $$
+CREATE OR REPLACE FUNCTION public.is_admin() RETURNS boolean
+    LANGUAGE sql STABLE
+    SET search_path TO 'public'
+    AS $$
+  SELECT role = 'ADMIN' FROM public.profiles WHERE id = auth.uid();
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_valid_currency_amount_map(amounts jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+  SELECT CASE
+    WHEN amounts IS NULL THEN false
+    WHEN jsonb_typeof(amounts) <> 'object' THEN false
+    WHEN amounts = '{}'::jsonb THEN false
+    ELSE NOT EXISTS (
+      SELECT 1
+      FROM jsonb_each(amounts) AS entry
+      WHERE entry.key !~ '^[A-Z]{3}$'
+        OR jsonb_typeof(entry.value) <> 'number'
+        OR entry.value::text !~ '^[0-9]+$'
+    )
+  END;
+$_$;
+
+CREATE OR REPLACE FUNCTION public.is_valid_sale_price_map(prices jsonb, sale_prices jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+  SELECT CASE
+    WHEN sale_prices IS NULL THEN true
+    WHEN jsonb_typeof(sale_prices) <> 'object' THEN false
+    WHEN sale_prices = '{}'::jsonb THEN true
+    WHEN prices IS NULL OR jsonb_typeof(prices) <> 'object' THEN false
+    ELSE NOT EXISTS (
+      SELECT 1
+      FROM jsonb_each(sale_prices) AS entry
+      WHERE entry.key !~ '^[A-Z]{3}$'
+        OR NOT (prices ? entry.key)
+        OR jsonb_typeof(entry.value) <> 'number'
+        OR entry.value::text !~ '^[0-9]+$'
+        OR entry.value::text::numeric > (prices ->> entry.key)::numeric
+    )
+  END;
+$_$;
+
+CREATE OR REPLACE FUNCTION public.normalize_currency_amount_map(amounts jsonb) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
   SELECT CASE
     WHEN amounts IS NULL THEN '{}'::jsonb
     WHEN jsonb_typeof(amounts) <> 'object' THEN amounts
@@ -818,56 +784,54 @@ AS $$
       '{}'::jsonb
     )
   END;
+$_$;
+
+CREATE OR REPLACE FUNCTION public.set_currency_defaults() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+BEGIN
+  NEW.code := upper(trim(NEW.code));
+  NEW.updated_at := now();
+
+  IF NEW.is_default THEN
+    NEW.is_active := true;
+    NEW.exchange_rate := 1;
+    NEW.auto_update_exchange_rate := false;
+    NEW.auto_sync_product_prices := false;
+    NEW.exchange_rate_source := COALESCE(NULLIF(NEW.exchange_rate_source, ''), 'store-default');
+    NEW.exchange_rate_updated_at := COALESCE(NEW.exchange_rate_updated_at, now());
+
+    UPDATE public.currencies
+    SET is_default = false,
+        updated_at = now()
+    WHERE id IS DISTINCT FROM NEW.id
+      AND is_default = true;
+  ELSIF NULLIF(NEW.exchange_rate_source, '') IS NULL THEN
+    NEW.exchange_rate_source := NULL;
+  END IF;
+
+  RETURN NEW;
+END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.is_valid_currency_amount_map(amounts jsonb)
-RETURNS boolean
-LANGUAGE sql
-IMMUTABLE
-SET search_path = ''
-AS $$
-  SELECT CASE
-    WHEN amounts IS NULL THEN false
-    WHEN jsonb_typeof(amounts) <> 'object' THEN false
-    WHEN amounts = '{}'::jsonb THEN false
-    ELSE NOT EXISTS (
-      SELECT 1
-      FROM jsonb_each(amounts) AS entry
-      WHERE entry.key !~ '^[A-Z]{3}$'
-        OR jsonb_typeof(entry.value) <> 'number'
-        OR entry.value::text !~ '^[0-9]+$'
-    )
-  END;
+CREATE OR REPLACE FUNCTION public.set_current_timestamp_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+DECLARE
+  _new record;
+BEGIN
+  _new := NEW;
+  _new.updated_at = now();
+  RETURN _new;
+END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.is_valid_sale_price_map(prices jsonb, sale_prices jsonb)
-RETURNS boolean
-LANGUAGE sql
-IMMUTABLE
-SET search_path = ''
-AS $$
-  SELECT CASE
-    WHEN sale_prices IS NULL THEN true
-    WHEN jsonb_typeof(sale_prices) <> 'object' THEN false
-    WHEN sale_prices = '{}'::jsonb THEN true
-    WHEN prices IS NULL OR jsonb_typeof(prices) <> 'object' THEN false
-    ELSE NOT EXISTS (
-      SELECT 1
-      FROM jsonb_each(sale_prices) AS entry
-      WHERE entry.key !~ '^[A-Z]{3}$'
-        OR NOT (prices ? entry.key)
-        OR jsonb_typeof(entry.value) <> 'number'
-        OR entry.value::text !~ '^[0-9]+$'
-        OR entry.value::text::numeric > (prices ->> entry.key)::numeric
-    )
-  END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.sync_currency_price_maps()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
+CREATE OR REPLACE FUNCTION public.sync_currency_price_maps() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
 DECLARE
   v_default_currency text := public.get_default_currency_code();
   v_price_map_changed boolean := false;
@@ -950,191 +914,154 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.sync_legacy_price_columns_for_currency(target_currency text)
-RETURNS void
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
+CREATE OR REPLACE FUNCTION public.sync_inventory_cache_for_sku(p_sku text) RETURNS void
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
 DECLARE
-  v_target_currency text := upper(trim(target_currency));
+  v_quantity integer := 0;
 BEGIN
-  UPDATE public.products
-  SET
-    prices = CASE
-      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN prices
-      ELSE COALESCE(prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, price)
-    END,
-    sale_prices = CASE
-      WHEN sale_price IS NULL THEN sale_prices
-      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN sale_prices
-      ELSE COALESCE(sale_prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, sale_price)
-    END,
-    price = CASE
-      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN
-        (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
-      ELSE
-        price
-    END,
-    sale_price = CASE
-      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN
-        (sale_prices ->> v_target_currency)::integer
-      ELSE
-        sale_price
-    END,
-    updated_at = now()
-  WHERE
-    NOT (COALESCE(prices, '{}'::jsonb) ? v_target_currency)
-    OR (
-      sale_price IS NOT NULL
-      AND (sale_prices IS NULL OR NOT (sale_prices ? v_target_currency))
-    )
-    OR (
-      COALESCE(prices, '{}'::jsonb) ? v_target_currency
-      AND price IS DISTINCT FROM (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
-    )
-    OR (
-      sale_prices IS NOT NULL
-      AND sale_prices ? v_target_currency
-      AND sale_price IS DISTINCT FROM (sale_prices ->> v_target_currency)::integer
-    );
-
-  UPDATE public.product_variants
-  SET
-    prices = CASE
-      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN prices
-      ELSE COALESCE(prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, price)
-    END,
-    sale_prices = CASE
-      WHEN sale_price IS NULL THEN sale_prices
-      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN sale_prices
-      ELSE COALESCE(sale_prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, sale_price)
-    END,
-    price = CASE
-      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN
-        (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
-      ELSE
-        price
-    END,
-    sale_price = CASE
-      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN
-        (sale_prices ->> v_target_currency)::integer
-      ELSE
-        sale_price
-    END,
-    updated_at = now()
-  WHERE
-    NOT (COALESCE(prices, '{}'::jsonb) ? v_target_currency)
-    OR (
-      sale_price IS NOT NULL
-      AND (sale_prices IS NULL OR NOT (sale_prices ? v_target_currency))
-    )
-    OR (
-      COALESCE(prices, '{}'::jsonb) ? v_target_currency
-      AND price IS DISTINCT FROM (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
-    )
-    OR (
-      sale_prices IS NOT NULL
-      AND sale_prices ? v_target_currency
-      AND sale_price IS DISTINCT FROM (sale_prices ->> v_target_currency)::integer
-    );
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.set_currency_defaults()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
-BEGIN
-  NEW.code := upper(trim(NEW.code));
-  NEW.updated_at := now();
-
-  IF NEW.is_default THEN
-    NEW.is_active := true;
-    NEW.exchange_rate := 1;
-    NEW.auto_update_exchange_rate := false;
-    NEW.auto_sync_product_prices := false;
-    NEW.exchange_rate_source := COALESCE(NULLIF(NEW.exchange_rate_source, ''), 'store-default');
-    NEW.exchange_rate_updated_at := COALESCE(NEW.exchange_rate_updated_at, now());
-
-    UPDATE public.currencies
-    SET is_default = false,
-        updated_at = now()
-    WHERE id IS DISTINCT FROM NEW.id
-      AND is_default = true;
-  ELSIF NULLIF(NEW.exchange_rate_source, '') IS NULL THEN
-    NEW.exchange_rate_source := NULL;
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.handle_default_currency_change()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    IF NEW.is_default THEN
-      PERFORM public.sync_legacy_price_columns_for_currency(NEW.code);
-    END IF;
-  ELSIF NEW.is_default
-        AND (
-          OLD.is_default IS DISTINCT FROM NEW.is_default
-          OR OLD.code IS DISTINCT FROM NEW.code
-        ) THEN
-    PERFORM public.sync_legacy_price_columns_for_currency(NEW.code);
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.clear_currency_price_overrides(target_currency text)
-RETURNS void
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
-DECLARE
-  v_target_currency text := upper(trim(target_currency));
-BEGIN
-  IF v_target_currency = '' THEN
+  IF NULLIF(trim(p_sku), '') IS NULL THEN
     RETURN;
   END IF;
 
-  UPDATE public.products
-  SET
-    prices = COALESCE(prices, '{}'::jsonb) - v_target_currency,
-    sale_prices = CASE
-      WHEN sale_prices IS NULL THEN NULL
-      WHEN sale_prices - v_target_currency = '{}'::jsonb THEN NULL
-      ELSE sale_prices - v_target_currency
-    END,
-    updated_at = now()
-  WHERE COALESCE(prices, '{}'::jsonb) ? v_target_currency
-     OR COALESCE(sale_prices, '{}'::jsonb) ? v_target_currency;
+  SELECT quantity
+    INTO v_quantity
+  FROM public.inventory_items
+  WHERE sku = p_sku
+  LIMIT 1;
+
+  v_quantity := COALESCE(v_quantity, 0);
 
   UPDATE public.product_variants
   SET
-    prices = COALESCE(prices, '{}'::jsonb) - v_target_currency,
-    sale_prices = CASE
-      WHEN sale_prices IS NULL THEN NULL
-      WHEN sale_prices - v_target_currency = '{}'::jsonb THEN NULL
-      ELSE sale_prices - v_target_currency
-    END,
+    stock_quantity = v_quantity,
     updated_at = now()
-  WHERE COALESCE(prices, '{}'::jsonb) ? v_target_currency
-     OR COALESCE(sale_prices, '{}'::jsonb) ? v_target_currency;
+  WHERE sku = p_sku;
+
+  UPDATE public.products AS products
+  SET
+    stock = v_quantity,
+    updated_at = now()
+  WHERE products.sku = p_sku
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.product_variants
+      WHERE product_id = products.id
+    );
+
+  UPDATE public.products AS products
+  SET
+    stock = COALESCE((
+      SELECT SUM(COALESCE(inventory.quantity, 0))
+      FROM public.product_variants AS variants
+      LEFT JOIN public.inventory_items AS inventory
+        ON inventory.sku = variants.sku
+      WHERE variants.product_id = products.id
+    ), 0),
+    updated_at = now()
+  WHERE EXISTS (
+    SELECT 1
+    FROM public.product_variants AS variants
+    WHERE variants.product_id = products.id
+      AND variants.sku = p_sku
+  );
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.sync_shipping_method_currency_maps()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
+CREATE OR REPLACE FUNCTION public.sync_legacy_price_columns_for_currency(target_currency text) RETURNS void
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+DECLARE
+  v_target_currency text := upper(trim(target_currency));
+BEGIN
+  UPDATE public.products
+  SET
+    prices = CASE
+      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN prices
+      ELSE COALESCE(prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, price)
+    END,
+    sale_prices = CASE
+      WHEN sale_price IS NULL THEN sale_prices
+      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN sale_prices
+      ELSE COALESCE(sale_prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, sale_price)
+    END,
+    price = CASE
+      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN
+        (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
+      ELSE
+        price
+    END,
+    sale_price = CASE
+      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN
+        (sale_prices ->> v_target_currency)::integer
+      ELSE
+        sale_price
+    END,
+    updated_at = now()
+  WHERE
+    NOT (COALESCE(prices, '{}'::jsonb) ? v_target_currency)
+    OR (
+      sale_price IS NOT NULL
+      AND (sale_prices IS NULL OR NOT (sale_prices ? v_target_currency))
+    )
+    OR (
+      COALESCE(prices, '{}'::jsonb) ? v_target_currency
+      AND price IS DISTINCT FROM (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
+    )
+    OR (
+      sale_prices IS NOT NULL
+      AND sale_prices ? v_target_currency
+      AND sale_price IS DISTINCT FROM (sale_prices ->> v_target_currency)::integer
+    );
+
+  UPDATE public.product_variants
+  SET
+    prices = CASE
+      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN prices
+      ELSE COALESCE(prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, price)
+    END,
+    sale_prices = CASE
+      WHEN sale_price IS NULL THEN sale_prices
+      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN sale_prices
+      ELSE COALESCE(sale_prices, '{}'::jsonb) || jsonb_build_object(v_target_currency, sale_price)
+    END,
+    price = CASE
+      WHEN COALESCE(prices, '{}'::jsonb) ? v_target_currency THEN
+        (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
+      ELSE
+        price
+    END,
+    sale_price = CASE
+      WHEN sale_prices IS NOT NULL AND sale_prices ? v_target_currency THEN
+        (sale_prices ->> v_target_currency)::integer
+      ELSE
+        sale_price
+    END,
+    updated_at = now()
+  WHERE
+    NOT (COALESCE(prices, '{}'::jsonb) ? v_target_currency)
+    OR (
+      sale_price IS NOT NULL
+      AND (sale_prices IS NULL OR NOT (sale_prices ? v_target_currency))
+    )
+    OR (
+      COALESCE(prices, '{}'::jsonb) ? v_target_currency
+      AND price IS DISTINCT FROM (COALESCE(prices, '{}'::jsonb) ->> v_target_currency)::integer
+    )
+    OR (
+      sale_prices IS NOT NULL
+      AND sale_prices ? v_target_currency
+      AND sale_price IS DISTINCT FROM (sale_prices ->> v_target_currency)::integer
+    );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.sync_shipping_method_currency_maps() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
 DECLARE
   v_source_currency text;
 BEGIN
@@ -1189,5466 +1116,61 @@ BEGIN
 END;
 $$;
 
-ALTER TABLE public.products
-  ADD CONSTRAINT products_prices_is_valid
-    CHECK (public.is_valid_currency_amount_map(prices)),
-  ADD CONSTRAINT products_sale_prices_are_valid
-    CHECK (public.is_valid_sale_price_map(prices, sale_prices));
-
-ALTER TABLE public.product_variants
-  ADD CONSTRAINT product_variants_prices_is_valid
-    CHECK (public.is_valid_currency_amount_map(prices)),
-  ADD CONSTRAINT product_variants_sale_prices_are_valid
-    CHECK (public.is_valid_sale_price_map(prices, sale_prices));
-
-ALTER TABLE public.shipping_zone_methods
-  ADD CONSTRAINT shipping_zone_methods_cost_amounts_valid
-    CHECK (public.is_valid_currency_amount_map(cost_amounts)),
-  ADD CONSTRAINT shipping_zone_methods_min_order_amounts_valid
-    CHECK (public.is_valid_currency_amount_map(min_order_amounts)),
-  ADD CONSTRAINT shipping_zone_methods_cost_amounts_include_source
-    CHECK (cost_amounts ? upper(cost_currency)),
-  ADD CONSTRAINT shipping_zone_methods_min_order_amounts_include_source
-    CHECK (min_order_amounts ? upper(cost_currency));
-
-DROP TRIGGER IF EXISTS on_shipping_zone_locations_write ON public.shipping_zone_locations;
-CREATE TRIGGER on_shipping_zone_locations_write
-  BEFORE INSERT OR UPDATE ON public.shipping_zone_locations
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_shipping_zone_locations_write();
-
-DROP TRIGGER IF EXISTS on_tax_rates_write ON public.tax_rates;
-CREATE TRIGGER on_tax_rates_write
-  BEFORE INSERT OR UPDATE ON public.tax_rates
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_tax_rates_write();
-
-DROP TRIGGER IF EXISTS trg_sync_products_currency_prices ON public.products;
-CREATE TRIGGER trg_sync_products_currency_prices
-  BEFORE INSERT OR UPDATE OF price, sale_price, prices, sale_prices
-  ON public.products
-  FOR EACH ROW
-  EXECUTE FUNCTION public.sync_currency_price_maps();
-
-DROP TRIGGER IF EXISTS trg_sync_product_variants_currency_prices ON public.product_variants;
-CREATE TRIGGER trg_sync_product_variants_currency_prices
-  BEFORE INSERT OR UPDATE OF price, sale_price, prices, sale_prices
-  ON public.product_variants
-  FOR EACH ROW
-  EXECUTE FUNCTION public.sync_currency_price_maps();
-
-DROP TRIGGER IF EXISTS trg_set_currency_defaults ON public.currencies;
-CREATE TRIGGER trg_set_currency_defaults
-  BEFORE INSERT OR UPDATE ON public.currencies
-  FOR EACH ROW
-  EXECUTE FUNCTION public.set_currency_defaults();
-
-DROP TRIGGER IF EXISTS trg_handle_default_currency_change ON public.currencies;
-CREATE TRIGGER trg_handle_default_currency_change
-  AFTER INSERT OR UPDATE ON public.currencies
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_default_currency_change();
-
-DROP TRIGGER IF EXISTS trg_sync_shipping_method_currency_maps ON public.shipping_zone_methods;
-CREATE TRIGGER trg_sync_shipping_method_currency_maps
-  BEFORE INSERT OR UPDATE OF cost_amount, cost_currency, min_order_amount, currency_pricing_mode, cost_amounts, min_order_amounts
-  ON public.shipping_zone_methods
-  FOR EACH ROW
-  EXECUTE FUNCTION public.sync_shipping_method_currency_maps();
-
-GRANT EXECUTE ON FUNCTION public.clear_currency_price_overrides(text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.clear_currency_price_overrides(text) TO service_role;
-
--- 00000000000032_seed_shipping_defaults.sql
--- Default North America shipping zone and methods.
-
-DO $$
+CREATE OR REPLACE FUNCTION public.update_product_ratings() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
 DECLARE
-  v_zone_id uuid;
+  v_product_id uuid;
+  v_avg numeric(3,2);
+  v_count integer;
 BEGIN
-  INSERT INTO public.shipping_zones (name, priority_order)
-  VALUES ('North America', 10)
-  RETURNING id INTO v_zone_id;
-
-  INSERT INTO public.shipping_zone_locations (zone_id, country_code)
-  VALUES
-    (v_zone_id, 'US'),
-    (v_zone_id, 'CA'),
-    (v_zone_id, 'MX');
-
-  INSERT INTO public.shipping_zone_methods (
-    zone_id,
-    method_type,
-    cost_amount,
-    name,
-    min_order_amount,
-    name_translations
-  )
-  VALUES
-    (
-      v_zone_id,
-      'flat_rate',
-      1500,
-      'Standard Shipping',
-      0,
-      '{"fr": "Livraison standard"}'::jsonb
-    ),
-    (
-      v_zone_id,
-      'free_shipping',
-      0,
-      'Free Shipping (Orders over $100)',
-      10000,
-      '{"fr": "Livraison gratuite (commandes de plus de 100 $)"}'::jsonb
-    );
-END
-$$;
-
-
--- >>> FROM: 00000000000005_setup_functions_and_triggers.sql <<<
--- 00000000000005_setup_functions_and_triggers.sql
--- Consolidated migration preserving original statement order within grouped sections.
-
--- 00000000000015_setup_core_functions_and_triggers.sql
--- Shared auth helpers and CMS timestamp triggers.
-
-CREATE OR REPLACE FUNCTION public.get_my_claim(claim text)
-RETURNS jsonb
-LANGUAGE sql
-STABLE
-SET search_path = ''
-AS $$
-  SELECT COALESCE(current_setting('request.jwt.claims', true)::jsonb ->> claim, NULL)::jsonb
-$$;
-
-CREATE OR REPLACE FUNCTION public.get_current_user_role()
-RETURNS public.user_role
-LANGUAGE sql
-STABLE
-SET search_path = public
-AS $$
-  SELECT role FROM public.profiles WHERE id = auth.uid();
-$$;
-
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SET search_path = public
-AS $$
-  SELECT role = 'ADMIN' FROM public.profiles WHERE id = auth.uid();
-$$;
-
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  admin_flag_set boolean := false;
-  user_role public.user_role;
-  v_full_name text;
-  v_avatar_url text;
-  v_github_username text;
-  v_provider text;
-BEGIN
-  INSERT INTO public.site_settings (key, value)
-  VALUES ('is_admin_created', 'false'::jsonb)
-  ON CONFLICT (key) DO NOTHING;
-
-  SELECT COALESCE(value::jsonb::boolean, false)
-    INTO admin_flag_set
-  FROM public.site_settings
-  WHERE key = 'is_admin_created'
-  FOR UPDATE;
-
-  IF admin_flag_set = false THEN
-    user_role := 'ADMIN'::public.user_role;
-
-    UPDATE public.site_settings
-    SET value = 'true'::jsonb
-    WHERE key = 'is_admin_created';
+  -- Determine which product_id we need to update
+  IF TG_OP = 'DELETE' THEN
+    v_product_id := OLD.product_id;
   ELSE
-    user_role := 'USER'::public.user_role;
+    v_product_id := NEW.product_id;
   END IF;
 
-  v_full_name := NEW.raw_user_meta_data->>'full_name';
-  v_avatar_url := NEW.raw_user_meta_data->>'avatar_url';
-  v_provider := NEW.raw_app_meta_data->>'provider';
-
-  IF v_provider = 'github' OR (NEW.raw_user_meta_data->>'iss') LIKE '%github%' THEN
-    v_github_username := COALESCE(
-      NEW.raw_user_meta_data->>'user_name',
-      NEW.raw_user_meta_data->>'preferred_username'
-    );
-  ELSE
-    v_github_username := NULL;
-  END IF;
-
-  INSERT INTO public.profiles (
-    id,
-    role,
-    full_name,
-    avatar_url,
-    github_username
-  )
-  VALUES (
-    NEW.id,
-    user_role,
-    v_full_name,
-    v_avatar_url,
-    v_github_username
-  )
-  ON CONFLICT (id) DO UPDATE SET
-    full_name = EXCLUDED.full_name,
-    avatar_url = EXCLUDED.avatar_url,
-    github_username = EXCLUDED.github_username;
-
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_new_user();
-
-REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
-
-DO $$
-DECLARE
-  missing_user record;
-  v_github_username text;
-  v_full_name text;
-  v_role public.user_role;
-  v_admin_exists boolean;
-BEGIN
-  SELECT EXISTS (SELECT 1 FROM public.profiles WHERE role = 'ADMIN')
-    INTO v_admin_exists;
-
-  FOR missing_user IN
-    SELECT *
-    FROM auth.users
-    WHERE id NOT IN (SELECT id FROM public.profiles)
-    ORDER BY created_at ASC
-  LOOP
-    IF missing_user.raw_app_meta_data->>'provider' = 'github'
-       OR (missing_user.raw_user_meta_data->>'iss') LIKE '%github%' THEN
-      v_github_username := COALESCE(
-        missing_user.raw_user_meta_data->>'user_name',
-        missing_user.raw_user_meta_data->>'preferred_username'
-      );
-    ELSE
-      v_github_username := NULL;
-    END IF;
-
-    v_full_name := missing_user.raw_user_meta_data->>'full_name';
-
-    IF v_admin_exists = false THEN
-      v_role := 'ADMIN';
-      v_admin_exists := true;
-
-      INSERT INTO public.site_settings (key, value)
-      VALUES ('is_admin_created', 'true'::jsonb)
-      ON CONFLICT (key) DO UPDATE
-      SET value = 'true'::jsonb;
-    ELSE
-      v_role := 'USER';
-    END IF;
-
-    INSERT INTO public.profiles (id, role, full_name, avatar_url, github_username)
-    VALUES (
-      missing_user.id,
-      v_role,
-      v_full_name,
-      missing_user.raw_user_meta_data->>'avatar_url',
-      v_github_username
-    )
-    ON CONFLICT (id) DO NOTHING;
-  END LOOP;
-END
-$$;
-
-CREATE OR REPLACE FUNCTION public.set_current_timestamp_updated_at()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
-DECLARE
-  _new record;
-BEGIN
-  _new := NEW;
-  _new.updated_at = now();
-  RETURN _new;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.handle_languages_update()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.handle_media_update()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.handle_posts_update()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.handle_pages_update()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.handle_blocks_update()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.handle_navigation_items_update()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS set_updated_at ON public.translations;
-CREATE TRIGGER set_updated_at
-  BEFORE UPDATE ON public.translations
-  FOR EACH ROW
-  EXECUTE FUNCTION public.set_current_timestamp_updated_at();
-
-DROP TRIGGER IF EXISTS on_languages_update ON public.languages;
-CREATE TRIGGER on_languages_update
-  BEFORE UPDATE ON public.languages
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_languages_update();
-
-DROP TRIGGER IF EXISTS on_media_update ON public.media;
-CREATE TRIGGER on_media_update
-  BEFORE UPDATE ON public.media
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_media_update();
-
-DROP TRIGGER IF EXISTS on_posts_update ON public.posts;
-CREATE TRIGGER on_posts_update
-  BEFORE UPDATE ON public.posts
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_posts_update();
-
-DROP TRIGGER IF EXISTS on_pages_update ON public.pages;
-CREATE TRIGGER on_pages_update
-  BEFORE UPDATE ON public.pages
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_pages_update();
-
-DROP TRIGGER IF EXISTS on_blocks_update ON public.blocks;
-CREATE TRIGGER on_blocks_update
-  BEFORE UPDATE ON public.blocks
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_blocks_update();
-
-DROP TRIGGER IF EXISTS on_navigation_items_update ON public.navigation_items;
-CREATE TRIGGER on_navigation_items_update
-  BEFORE UPDATE ON public.navigation_items
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_navigation_items_update();
-
--- 00000000000016_setup_ecommerce_functions_and_triggers.sql
--- Product RPCs, inventory sync, and invoice helpers.
-
-CREATE OR REPLACE FUNCTION public.get_ecommerce_track_quantities()
-RETURNS boolean
-LANGUAGE plpgsql
-STABLE
-SET search_path = public
-AS $$
-DECLARE
-  v_value jsonb;
-  v_raw text;
-BEGIN
-  SELECT value
-    INTO v_value
-  FROM public.site_settings
-  WHERE key = 'ecommerce_inventory_settings';
-
-  IF v_value IS NULL THEN
-    RETURN true;
-  END IF;
-
-  IF jsonb_typeof(v_value) = 'object' THEN
-    v_raw := NULLIF(v_value->>'track_quantities', '');
-  ELSE
-    v_raw := NULLIF(trim(BOTH '"' FROM v_value::text), '');
-  END IF;
-
-  IF v_raw IS NULL THEN
-    RETURN true;
-  END IF;
-
-  IF lower(v_raw) IN ('false', 'f', '0', 'no', 'off') THEN
-    RETURN false;
-  END IF;
-
-  RETURN true;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.format_order_invoice_number(p_value bigint)
-RETURNS text
-LANGUAGE sql
-IMMUTABLE
-SET search_path = ''
-AS $$
-  SELECT 'INV-' || lpad(p_value::text, 6, '0');
-$$;
-
-CREATE OR REPLACE FUNCTION public.generate_order_invoice_number()
-RETURNS text
-LANGUAGE sql
-VOLATILE
-SET search_path = ''
-AS $$
-  SELECT public.format_order_invoice_number(nextval('public.order_invoice_number_seq'));
-$$;
-
-CREATE OR REPLACE FUNCTION public.assign_order_invoice_metadata(
-  p_order_id uuid,
-  p_paid_at timestamptz DEFAULT now()
-)
-RETURNS TABLE(invoice_number text, paid_at timestamptz)
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-DECLARE
-  v_order public.orders%ROWTYPE;
-  v_effective_paid_at timestamptz;
-BEGIN
-  SELECT *
-    INTO v_order
-  FROM public.orders
-  WHERE id = p_order_id
-  FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Order % not found', p_order_id;
-  END IF;
-
-  v_effective_paid_at := COALESCE(v_order.paid_at, p_paid_at, now(), v_order.created_at);
-
-  UPDATE public.orders
-  SET
-    invoice_number = COALESCE(v_order.invoice_number, public.generate_order_invoice_number()),
-    paid_at = v_effective_paid_at
-  WHERE id = p_order_id
-  RETURNING orders.invoice_number, orders.paid_at
-  INTO invoice_number, paid_at;
-
-  RETURN NEXT;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.upsert_product_with_variants(product_payload jsonb)
-RETURNS uuid
-LANGUAGE plpgsql
-SET search_path = public
-AS $function$
-DECLARE
-  v_product_id uuid := NULLIF(product_payload->>'id', '')::uuid;
-  v_translation_group_id uuid := NULLIF(product_payload->>'translation_group_id', '')::uuid;
-  v_product_type text := CASE
-    WHEN product_payload->>'product_type' IN ('physical', 'digital') THEN
-      product_payload->>'product_type'
-    WHEN NULLIF(product_payload->>'freemius_product_id', '') IS NOT NULL
-      OR NULLIF(product_payload->>'freemius_plan_id', '') IS NOT NULL THEN
-      'digital'
-    ELSE
-      'physical'
-  END;
-  v_payment_provider text := CASE
-    WHEN v_product_type = 'digital' THEN 'freemius'
-    ELSE 'stripe'
-  END;
-  v_variants jsonb := COALESCE(product_payload->'variants', '[]'::jsonb);
-  v_variant jsonb;
-  v_variant_id uuid;
-  v_term_id text;
-  v_has_variants boolean := jsonb_typeof(v_variants) = 'array' AND jsonb_array_length(v_variants) > 0;
-  v_total_variant_stock integer := 0;
-BEGIN
-  IF NOT public.is_admin() THEN
-    RAISE EXCEPTION 'Admin access required';
-  END IF;
-
-  IF v_has_variants THEN
-    SELECT COALESCE(SUM(COALESCE((value->>'stock_quantity')::integer, 0)), 0)
-      INTO v_total_variant_stock
-    FROM jsonb_array_elements(v_variants);
-  END IF;
-
-  IF v_product_id IS NULL THEN
-    INSERT INTO public.products (
-      title,
-      slug,
-      sku,
-      product_type,
-      payment_provider,
-      upc,
-      stock,
-      status,
-      short_description,
-      description_json,
-      metadata,
-      price,
-      prices,
-      sale_price,
-      sale_prices,
-      freemius_plan_id,
-      freemius_product_id,
-      trial_period_days,
-      trial_requires_payment_method,
-      language_id,
-      translation_group_id
-    )
-    VALUES (
-      product_payload->>'title',
-      product_payload->>'slug',
-      product_payload->>'sku',
-      v_product_type,
-      v_payment_provider,
-      NULLIF(product_payload->>'upc', ''),
-      CASE
-        WHEN v_has_variants THEN v_total_variant_stock
-        ELSE COALESCE((product_payload->>'stock')::integer, 0)
-      END,
-      COALESCE(product_payload->>'status', 'draft'),
-      NULLIF(product_payload->>'short_description', ''),
-      product_payload->'description_json',
-      COALESCE(product_payload->'metadata', '{}'::jsonb),
-      COALESCE((product_payload->>'price')::integer, 0),
-      COALESCE(product_payload->'prices', '{}'::jsonb),
-      CASE
-        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
-          (product_payload->>'sale_price')::integer
-        ELSE
-          NULL
-      END,
-      CASE
-        WHEN product_payload ? 'sale_prices' THEN COALESCE(product_payload->'sale_prices', '{}'::jsonb)
-        ELSE NULL
-      END,
-      NULLIF(product_payload->>'freemius_plan_id', ''),
-      NULLIF(product_payload->>'freemius_product_id', ''),
-      COALESCE((product_payload->>'trial_period_days')::integer, 0),
-      COALESCE((product_payload->>'trial_requires_payment_method')::boolean, false),
-      (product_payload->>'language_id')::bigint,
-      COALESCE(v_translation_group_id, gen_random_uuid())
-    )
-    RETURNING id INTO v_product_id;
-  ELSE
-    UPDATE public.products
-    SET
-      title = product_payload->>'title',
-      slug = product_payload->>'slug',
-      sku = product_payload->>'sku',
-      product_type = v_product_type,
-      payment_provider = v_payment_provider,
-      upc = NULLIF(product_payload->>'upc', ''),
-      stock = CASE
-        WHEN v_has_variants THEN v_total_variant_stock
-        ELSE COALESCE((product_payload->>'stock')::integer, 0)
-      END,
-      status = COALESCE(product_payload->>'status', status),
-      short_description = NULLIF(product_payload->>'short_description', ''),
-      description_json = product_payload->'description_json',
-      metadata = COALESCE(product_payload->'metadata', '{}'::jsonb),
-      price = COALESCE((product_payload->>'price')::integer, 0),
-      prices = COALESCE(product_payload->'prices', '{}'::jsonb),
-      sale_price = CASE
-        WHEN product_payload ? 'sale_price' AND product_payload->>'sale_price' <> '' THEN
-          (product_payload->>'sale_price')::integer
-        ELSE
-          NULL
-      END,
-      sale_prices = CASE
-        WHEN product_payload ? 'sale_prices' THEN COALESCE(product_payload->'sale_prices', '{}'::jsonb)
-        ELSE NULL
-      END,
-      freemius_plan_id = NULLIF(product_payload->>'freemius_plan_id', ''),
-      freemius_product_id = NULLIF(product_payload->>'freemius_product_id', ''),
-      trial_period_days = COALESCE((product_payload->>'trial_period_days')::integer, 0),
-      trial_requires_payment_method = COALESCE((product_payload->>'trial_requires_payment_method')::boolean, false),
-      language_id = COALESCE((product_payload->>'language_id')::bigint, language_id),
-      translation_group_id = COALESCE(v_translation_group_id, translation_group_id),
-      updated_at = now()
-    WHERE id = v_product_id;
-
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'Product not found';
-    END IF;
-  END IF;
-
-  DELETE FROM public.variant_attribute_mapping
-  WHERE variant_id IN (
-    SELECT id
-    FROM public.product_variants
+  IF v_product_id IS NOT NULL THEN
+    -- Calculate average and count of approved reviews for this product
+    SELECT COALESCE(avg(rating), 0.00), count(*)
+    INTO v_avg, v_count
+    FROM public.cms_interactions
     WHERE product_id = v_product_id
-  );
+      AND type = 'review'
+      AND status = 'approved';
 
-  DELETE FROM public.product_variants
-  WHERE product_id = v_product_id;
-
-  IF v_has_variants THEN
-    FOR v_variant IN
-      SELECT value FROM jsonb_array_elements(v_variants)
-    LOOP
-      INSERT INTO public.product_variants (
-        product_id,
-        sku,
-        upc,
-        price,
-        prices,
-        sale_price,
-        sale_prices,
-        stock_quantity,
-        main_media_id
-      )
-      VALUES (
-        v_product_id,
-        v_variant->>'sku',
-        NULLIF(v_variant->>'upc', ''),
-        COALESCE((v_variant->>'price')::integer, 0),
-        COALESCE(v_variant->'prices', '{}'::jsonb),
-        CASE
-          WHEN v_variant ? 'sale_price' AND v_variant->>'sale_price' <> '' THEN
-            (v_variant->>'sale_price')::integer
-          ELSE
-            NULL
-        END,
-        CASE
-          WHEN v_variant ? 'sale_prices' THEN COALESCE(v_variant->'sale_prices', '{}'::jsonb)
-          ELSE NULL
-        END,
-        COALESCE((v_variant->>'stock_quantity')::integer, 0),
-        NULLIF(v_variant->>'main_media_id', '')::uuid
-      )
-      RETURNING id INTO v_variant_id;
-
-      FOR v_term_id IN
-        SELECT jsonb_array_elements_text(COALESCE(v_variant->'attribute_term_ids', '[]'::jsonb))
-      LOOP
-        INSERT INTO public.variant_attribute_mapping (variant_id, attribute_term_id)
-        VALUES (v_variant_id, v_term_id::uuid);
-      END LOOP;
-    END LOOP;
+    -- Update products table
+    UPDATE public.products
+    SET average_rating = ROUND(COALESCE(v_avg, 0.00), 2),
+        total_reviews = v_count
+    WHERE id = v_product_id;
   END IF;
 
-  RETURN v_product_id;
-END;
-$function$;
+  -- Handle old product_id if it changed on UPDATE (e.g. transfer of reviews)
+  IF TG_OP = 'UPDATE' AND OLD.product_id IS NOT NULL AND OLD.product_id <> NEW.product_id THEN
+    SELECT COALESCE(avg(rating), 0.00), count(*)
+    INTO v_avg, v_count
+    FROM public.cms_interactions
+    WHERE product_id = OLD.product_id
+      AND type = 'review'
+      AND status = 'approved';
 
-CREATE OR REPLACE FUNCTION public.handle_inventory_items_update()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
+    UPDATE public.products
+    SET average_rating = ROUND(COALESCE(v_avg, 0.00), 2),
+        total_reviews = v_count
+    WHERE id = OLD.product_id;
+  END IF;
+
+  RETURN NULL;
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.sync_inventory_cache_for_sku(p_sku text)
-RETURNS void
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-DECLARE
-  v_quantity integer := 0;
-BEGIN
-  IF NULLIF(trim(p_sku), '') IS NULL THEN
-    RETURN;
-  END IF;
-
-  SELECT quantity
-    INTO v_quantity
-  FROM public.inventory_items
-  WHERE sku = p_sku
-  LIMIT 1;
-
-  v_quantity := COALESCE(v_quantity, 0);
-
-  UPDATE public.product_variants
-  SET
-    stock_quantity = v_quantity,
-    updated_at = now()
-  WHERE sku = p_sku;
-
-  UPDATE public.products AS products
-  SET
-    stock = v_quantity,
-    updated_at = now()
-  WHERE products.sku = p_sku
-    AND NOT EXISTS (
-      SELECT 1
-      FROM public.product_variants
-      WHERE product_id = products.id
-    );
-
-  UPDATE public.products AS products
-  SET
-    stock = COALESCE((
-      SELECT SUM(COALESCE(inventory.quantity, 0))
-      FROM public.product_variants AS variants
-      LEFT JOIN public.inventory_items AS inventory
-        ON inventory.sku = variants.sku
-      WHERE variants.product_id = products.id
-    ), 0),
-    updated_at = now()
-  WHERE EXISTS (
-    SELECT 1
-    FROM public.product_variants AS variants
-    WHERE variants.product_id = products.id
-      AND variants.sku = p_sku
-  );
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.handle_inventory_item_change()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-DECLARE
-  v_sku text := COALESCE(NEW.sku, OLD.sku);
-BEGIN
-  PERFORM public.sync_inventory_cache_for_sku(v_sku);
-  RETURN COALESCE(NEW, OLD);
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.apply_order_inventory_deduction(p_order_id uuid)
-RETURNS void
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-DECLARE
-  v_track_quantities boolean := public.get_ecommerce_track_quantities();
-  v_item record;
-  v_inventory_deducted_at timestamptz;
-  v_sku text;
-  v_current_quantity integer;
-BEGIN
-  SELECT inventory_deducted_at
-    INTO v_inventory_deducted_at
-  FROM public.orders
-  WHERE id = p_order_id
-  FOR UPDATE;
-
-  IF NOT FOUND OR v_inventory_deducted_at IS NOT NULL THEN
-    RETURN;
-  END IF;
-
-  IF NOT v_track_quantities THEN
-    UPDATE public.orders
-    SET inventory_deducted_at = now()
-    WHERE id = p_order_id;
-
-    RETURN;
-  END IF;
-
-  FOR v_item IN
-    SELECT
-      product_id,
-      variant_id,
-      SUM(quantity)::integer AS quantity
-    FROM public.order_items
-    WHERE order_id = p_order_id
-    GROUP BY product_id, variant_id
-  LOOP
-    v_sku := NULL;
-    v_current_quantity := 0;
-
-    IF v_item.variant_id IS NOT NULL THEN
-      SELECT
-        sku,
-        GREATEST(COALESCE(stock_quantity, 0), 0)
-        INTO v_sku,
-             v_current_quantity
-      FROM public.product_variants
-      WHERE id = v_item.variant_id
-      LIMIT 1;
-    ELSIF v_item.product_id IS NOT NULL THEN
-      SELECT
-        sku,
-        GREATEST(COALESCE(stock, 0), 0)
-        INTO v_sku,
-             v_current_quantity
-      FROM public.products
-      WHERE id = v_item.product_id
-      LIMIT 1;
-    END IF;
-
-    IF NULLIF(trim(v_sku), '') IS NULL THEN
-      CONTINUE;
-    END IF;
-
-    INSERT INTO public.inventory_items (sku, quantity)
-    VALUES (v_sku, v_current_quantity)
-    ON CONFLICT (sku) DO NOTHING;
-
-    UPDATE public.inventory_items
-    SET
-      quantity = GREATEST(COALESCE(quantity, 0) - v_item.quantity, 0),
-      updated_at = now()
-    WHERE sku = v_sku;
-  END LOOP;
-
-  UPDATE public.orders
-  SET inventory_deducted_at = now()
-  WHERE id = p_order_id;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS on_inventory_items_update ON public.inventory_items;
-CREATE TRIGGER on_inventory_items_update
-  BEFORE UPDATE ON public.inventory_items
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_inventory_items_update();
-
-DROP TRIGGER IF EXISTS on_inventory_item_change ON public.inventory_items;
-CREATE TRIGGER on_inventory_item_change
-  AFTER INSERT OR UPDATE OF quantity OR DELETE ON public.inventory_items
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_inventory_item_change();
-
-GRANT EXECUTE ON FUNCTION public.get_ecommerce_track_quantities() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_ecommerce_track_quantities() TO service_role;
-GRANT EXECUTE ON FUNCTION public.generate_order_invoice_number() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.generate_order_invoice_number() TO service_role;
-GRANT EXECUTE ON FUNCTION public.assign_order_invoice_metadata(uuid, timestamptz) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.assign_order_invoice_metadata(uuid, timestamptz) TO service_role;
-GRANT EXECUTE ON FUNCTION public.upsert_product_with_variants(jsonb) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.upsert_product_with_variants(jsonb) TO service_role;
-GRANT EXECUTE ON FUNCTION public.sync_inventory_cache_for_sku(text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.sync_inventory_cache_for_sku(text) TO service_role;
-GRANT EXECUTE ON FUNCTION public.apply_order_inventory_deduction(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.apply_order_inventory_deduction(uuid) TO service_role;
-
-
--- >>> FROM: 00000000000006_setup_rls_and_grants.sql <<<
--- 00000000000006_setup_rls_and_grants.sql
--- Consolidated migration preserving original statement order within grouped sections.
-
--- 00000000000018_setup_core_cms_rls.sql
--- RLS, grants, and core admin/public access policies.
-
-GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO service_role;
-
-ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_addresses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.languages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.media ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.translations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.logos ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY profiles_read_policy
-  ON public.profiles
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY profiles_service_role_policy
-  ON public.profiles
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY profiles_update_policy
-  ON public.profiles
-  FOR UPDATE
-  TO authenticated
-  USING (
-    (id = (SELECT auth.uid()))
-    OR ((SELECT public.get_current_user_role()) = 'ADMIN')
-  )
-  WITH CHECK (
-    (id = (SELECT auth.uid()))
-    OR ((SELECT public.get_current_user_role()) = 'ADMIN')
-  );
-
-CREATE POLICY profiles_insert_policy
-  ON public.profiles
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
-
-CREATE POLICY "Users can manage own addresses"
-  ON public.user_addresses
-  FOR ALL
-  TO authenticated
-  USING (user_id = (SELECT auth.uid()))
-  WITH CHECK (user_id = (SELECT auth.uid()));
-
-CREATE POLICY "Service role manages all addresses"
-  ON public.user_addresses
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY languages_read_policy
-  ON public.languages
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY languages_insert_policy
-  ON public.languages
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
-
-CREATE POLICY languages_update_policy
-  ON public.languages
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) = 'ADMIN')
-  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
-
-CREATE POLICY languages_delete_policy
-  ON public.languages
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) = 'ADMIN');
-
-CREATE POLICY media_read_policy
-  ON public.media
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY media_insert_policy
-  ON public.media
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY media_update_policy
-  ON public.media
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY media_delete_policy
-  ON public.media
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY media_service_role_policy
-  ON public.media
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY site_settings_read_policy
-  ON public.site_settings
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY site_settings_insert_policy
-  ON public.site_settings
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY site_settings_update_policy
-  ON public.site_settings
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY site_settings_delete_policy
-  ON public.site_settings
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY translations_read_policy
-  ON public.translations
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY translations_insert_policy
-  ON public.translations
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY translations_update_policy
-  ON public.translations
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY translations_delete_policy
-  ON public.translations
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY logos_read_policy
-  ON public.logos
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY logos_insert_policy
-  ON public.logos
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
-
-CREATE POLICY logos_update_policy
-  ON public.logos
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) = 'ADMIN')
-  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
-
-CREATE POLICY logos_delete_policy
-  ON public.logos
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) = 'ADMIN');
-
--- 00000000000019_setup_content_rls.sql
--- RLS policies for authoring and published content access.
-
-ALTER TABLE public.pages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.blocks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.navigation_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.page_revisions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.post_revisions ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY pages_anon_read_policy
-  ON public.pages
-  FOR SELECT
-  TO anon
-  USING (status = 'published');
-
-CREATE POLICY pages_read_policy
-  ON public.pages
-  FOR SELECT
-  TO authenticated
-  USING (
-    (status = 'published')
-    OR (author_id = (SELECT auth.uid()) AND status <> 'published')
-    OR ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  );
-
-CREATE POLICY pages_insert_policy
-  ON public.pages
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY pages_update_policy
-  ON public.pages
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY pages_delete_policy
-  ON public.pages
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY posts_anon_read_policy
-  ON public.posts
-  FOR SELECT
-  TO anon
-  USING (status = 'published' AND (published_at IS NULL OR published_at <= now()));
-
-CREATE POLICY posts_read_policy
-  ON public.posts
-  FOR SELECT
-  TO authenticated
-  USING (
-    (
-      status = 'published'
-      AND (published_at IS NULL OR published_at <= now())
-    )
-    OR (author_id = (SELECT auth.uid()) AND status <> 'published')
-    OR ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  );
-
-CREATE POLICY posts_insert_policy
-  ON public.posts
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY posts_update_policy
-  ON public.posts
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY posts_delete_policy
-  ON public.posts
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY blocks_anon_read_policy
-  ON public.blocks
-  FOR SELECT
-  TO anon
-  USING (
-    (
-      page_id IS NOT NULL
-      AND EXISTS (
-        SELECT 1
-        FROM public.pages AS p
-        WHERE p.id = blocks.page_id
-          AND p.status = 'published'
-      )
-    )
-    OR (
-      post_id IS NOT NULL
-      AND EXISTS (
-        SELECT 1
-        FROM public.posts AS pt
-        WHERE pt.id = blocks.post_id
-          AND pt.status = 'published'
-          AND (pt.published_at IS NULL OR pt.published_at <= now())
-      )
-    )
-  );
-
-CREATE POLICY blocks_read_policy
-  ON public.blocks
-  FOR SELECT
-  TO authenticated
-  USING (
-    ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-    OR (
-      (
-        page_id IS NOT NULL
-        AND EXISTS (
-          SELECT 1
-          FROM public.pages AS p
-          WHERE p.id = blocks.page_id
-            AND p.status = 'published'
-        )
-      )
-      OR (
-        post_id IS NOT NULL
-        AND EXISTS (
-          SELECT 1
-          FROM public.posts AS pt
-          WHERE pt.id = blocks.post_id
-            AND pt.status = 'published'
-            AND (pt.published_at IS NULL OR pt.published_at <= now())
-        )
-      )
-    )
-  );
-
-CREATE POLICY blocks_insert_policy
-  ON public.blocks
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY blocks_update_policy
-  ON public.blocks
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY blocks_delete_policy
-  ON public.blocks
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY navigation_read_policy
-  ON public.navigation_items
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY navigation_items_insert_policy
-  ON public.navigation_items
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
-
-CREATE POLICY navigation_items_update_policy
-  ON public.navigation_items
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) = 'ADMIN')
-  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
-
-CREATE POLICY navigation_items_delete_policy
-  ON public.navigation_items
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) = 'ADMIN');
-
-CREATE POLICY page_revisions_read_policy
-  ON public.page_revisions
-  FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY page_revisions_insert_policy
-  ON public.page_revisions
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY page_revisions_update_policy
-  ON public.page_revisions
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY page_revisions_delete_policy
-  ON public.page_revisions
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY post_revisions_read_policy
-  ON public.post_revisions
-  FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY post_revisions_insert_policy
-  ON public.post_revisions
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY post_revisions_update_policy
-  ON public.post_revisions
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-CREATE POLICY post_revisions_delete_policy
-  ON public.post_revisions
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
--- 00000000000020_setup_commerce_and_financial_rls.sql
--- Consolidated RLS for commerce, licensing, shipping, tax, and currency tables.
-
-ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.product_media ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.product_attributes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.product_attribute_terms ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.product_variants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.variant_attribute_mapping ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.package_activations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.freemius_plans ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.freemius_pricing ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.shipping_zones ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.shipping_zone_locations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.shipping_zone_methods ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.tax_rates ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.currencies ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Public can view products"
-  ON public.products
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY products_insert_policy
-  ON public.products
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY products_update_policy
-  ON public.products
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY products_delete_policy
-  ON public.products
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Public can view product media"
-  ON public.product_media
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY product_media_insert_policy
-  ON public.product_media
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY product_media_update_policy
-  ON public.product_media
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY product_media_delete_policy
-  ON public.product_media
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Public read product_attributes"
-  ON public.product_attributes
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY product_attributes_insert_policy
-  ON public.product_attributes
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY product_attributes_update_policy
-  ON public.product_attributes
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY product_attributes_delete_policy
-  ON public.product_attributes
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Public read product_attribute_terms"
-  ON public.product_attribute_terms
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY product_attribute_terms_insert_policy
-  ON public.product_attribute_terms
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY product_attribute_terms_update_policy
-  ON public.product_attribute_terms
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY product_attribute_terms_delete_policy
-  ON public.product_attribute_terms
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Public read product_variants"
-  ON public.product_variants
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY product_variants_insert_policy
-  ON public.product_variants
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY product_variants_update_policy
-  ON public.product_variants
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY product_variants_delete_policy
-  ON public.product_variants
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Public read variant_attribute_mapping"
-  ON public.variant_attribute_mapping
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY variant_attribute_mapping_insert_policy
-  ON public.variant_attribute_mapping
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY variant_attribute_mapping_update_policy
-  ON public.variant_attribute_mapping
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY variant_attribute_mapping_delete_policy
-  ON public.variant_attribute_mapping
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Users can view own orders"
-  ON public.orders
-  FOR SELECT
-  TO authenticated
-  USING (
-    ((SELECT public.is_admin()) IS TRUE)
-    OR (user_id = (SELECT auth.uid()))
-  );
-
-CREATE POLICY orders_insert_policy
-  ON public.orders
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY orders_update_policy
-  ON public.orders
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY orders_delete_policy
-  ON public.orders
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Service Role manages orders"
-  ON public.orders
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Users can view own order items"
-  ON public.order_items
-  FOR SELECT
-  TO authenticated
-  USING (
-    ((SELECT public.is_admin()) IS TRUE)
-    OR EXISTS (
-      SELECT 1
-      FROM public.orders
-      WHERE orders.id = order_items.order_id
-        AND orders.user_id = (SELECT auth.uid())
-    )
-  );
-
-CREATE POLICY order_items_insert_policy
-  ON public.order_items
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY order_items_update_policy
-  ON public.order_items
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY order_items_delete_policy
-  ON public.order_items
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Service Role manages order items"
-  ON public.order_items
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Allow service role full access"
-  ON public.package_activations
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Allow authenticated read access"
-  ON public.package_activations
-  FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "Public read access for freemius_plans"
-  ON public.freemius_plans
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY "Public read access for freemius_pricing"
-  ON public.freemius_pricing
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY "Public can view inventory items"
-  ON public.inventory_items
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY inventory_items_insert_policy
-  ON public.inventory_items
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY inventory_items_update_policy
-  ON public.inventory_items
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY inventory_items_delete_policy
-  ON public.inventory_items
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Service Role manages inventory items"
-  ON public.inventory_items
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Public read shipping_zones"
-  ON public.shipping_zones
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY shipping_zones_insert_policy
-  ON public.shipping_zones
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY shipping_zones_update_policy
-  ON public.shipping_zones
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY shipping_zones_delete_policy
-  ON public.shipping_zones
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Public read shipping_zone_locations"
-  ON public.shipping_zone_locations
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY shipping_zone_locations_insert_policy
-  ON public.shipping_zone_locations
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY shipping_zone_locations_update_policy
-  ON public.shipping_zone_locations
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY shipping_zone_locations_delete_policy
-  ON public.shipping_zone_locations
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Public read shipping_zone_methods"
-  ON public.shipping_zone_methods
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY shipping_zone_methods_insert_policy
-  ON public.shipping_zone_methods
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY shipping_zone_methods_update_policy
-  ON public.shipping_zone_methods
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY shipping_zone_methods_delete_policy
-  ON public.shipping_zone_methods
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Public read tax_rates"
-  ON public.tax_rates
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY tax_rates_insert_policy
-  ON public.tax_rates
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY tax_rates_update_policy
-  ON public.tax_rates
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY tax_rates_delete_policy
-  ON public.tax_rates
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Service Role manages tax_rates"
-  ON public.tax_rates
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Public read active currencies"
-  ON public.currencies
-  FOR SELECT
-  TO anon, authenticated
-  USING (is_active = true);
-
-CREATE POLICY currencies_insert_policy
-  ON public.currencies
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY currencies_update_policy
-  ON public.currencies
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY currencies_delete_policy
-  ON public.currencies
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Service role manages currencies"
-  ON public.currencies
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-
--- >>> FROM: 00000000000007_setup_indexes.sql <<<
--- 00000000000007_setup_indexes.sql
--- Consolidated migration preserving original statement order within grouped sections.
-
--- 00000000000021_setup_cms_indexes.sql
--- Supporting indexes for accounts, content, and revisions.
-
-CREATE INDEX idx_user_addresses_user_id
-  ON public.user_addresses (user_id);
-
-CREATE INDEX idx_user_addresses_type
-  ON public.user_addresses (address_type);
-
-CREATE INDEX idx_media_uploader_id
-  ON public.media (uploader_id);
-
-CREATE INDEX media_folder_idx
-  ON public.media (folder);
-
-CREATE INDEX idx_posts_feature_image_id
-  ON public.posts (feature_image_id);
-
-CREATE INDEX idx_posts_author_id
-  ON public.posts (author_id);
-
-CREATE INDEX idx_posts_translation_group_id
-  ON public.posts (translation_group_id);
-
-CREATE INDEX idx_pages_author_id
-  ON public.pages (author_id);
-
-CREATE INDEX idx_pages_translation_group_id
-  ON public.pages (translation_group_id);
-
-CREATE INDEX idx_blocks_language_id
-  ON public.blocks (language_id);
-
-CREATE INDEX idx_blocks_page_id
-  ON public.blocks (page_id);
-
-CREATE INDEX idx_blocks_post_id
-  ON public.blocks (post_id);
-
-CREATE INDEX idx_navigation_items_menu_lang_order
-  ON public.navigation_items (menu_key, language_id, "order");
-
-CREATE INDEX idx_navigation_items_language_id
-  ON public.navigation_items (language_id);
-
-CREATE INDEX idx_navigation_items_page_id
-  ON public.navigation_items (page_id);
-
-CREATE INDEX idx_navigation_items_parent_id
-  ON public.navigation_items (parent_id);
-
-CREATE INDEX idx_logos_media_id
-  ON public.logos (media_id);
-
-CREATE INDEX idx_page_revisions_page_id_version
-  ON public.page_revisions (page_id, version);
-
-CREATE INDEX idx_page_revisions_author_id
-  ON public.page_revisions (author_id);
-
-CREATE INDEX idx_post_revisions_post_id_version
-  ON public.post_revisions (post_id, version);
-
-CREATE INDEX idx_post_revisions_author_id
-  ON public.post_revisions (author_id);
-
--- 00000000000022_setup_commerce_indexes.sql
--- Consolidated commerce, shipping, and financial indexes.
-
-CREATE INDEX idx_products_slug
-  ON public.products (slug);
-
-CREATE INDEX idx_products_translation_group_id
-  ON public.products (translation_group_id);
-
-CREATE INDEX idx_products_prices_gin
-  ON public.products
-  USING gin (prices jsonb_path_ops);
-
-CREATE INDEX idx_product_media_product_id
-  ON public.product_media (product_id);
-
-CREATE INDEX idx_product_media_media_id
-  ON public.product_media (media_id);
-
-CREATE INDEX idx_order_items_order_id
-  ON public.order_items (order_id);
-
-CREATE INDEX idx_order_items_variant_id
-  ON public.order_items (variant_id);
-
-CREATE INDEX idx_order_items_product_id
-  ON public.order_items (product_id);
-
-CREATE INDEX idx_orders_user_id
-  ON public.orders (user_id);
-
-CREATE INDEX idx_orders_freemius_license_id
-  ON public.orders (freemius_license_id)
-  WHERE freemius_license_id IS NOT NULL;
-
-CREATE INDEX idx_orders_freemius_subscription_id
-  ON public.orders (freemius_subscription_id)
-  WHERE freemius_subscription_id IS NOT NULL;
-
-CREATE INDEX idx_orders_freemius_trial_id
-  ON public.orders (freemius_trial_id)
-  WHERE freemius_trial_id IS NOT NULL;
-
-CREATE INDEX idx_package_activations_package_id
-  ON public.package_activations (package_id);
-
-CREATE INDEX idx_package_activations_license_key
-  ON public.package_activations (license_key);
-
-CREATE INDEX idx_freemius_plans_product_id
-  ON public.freemius_plans (product_id);
-
-CREATE INDEX idx_freemius_pricing_plan_id
-  ON public.freemius_pricing (plan_id);
-
-CREATE INDEX idx_product_attribute_terms_attribute_id
-  ON public.product_attribute_terms (attribute_id);
-
-CREATE INDEX idx_product_variants_product_id
-  ON public.product_variants (product_id);
-
-CREATE INDEX idx_product_variants_main_media_id
-  ON public.product_variants (main_media_id);
-
-CREATE INDEX idx_product_variants_prices_gin
-  ON public.product_variants
-  USING gin (prices jsonb_path_ops);
-
-CREATE INDEX idx_variant_attribute_mapping_attribute_term_id
-  ON public.variant_attribute_mapping (attribute_term_id);
-
-CREATE INDEX idx_inventory_items_updated_at
-  ON public.inventory_items (updated_at DESC);
-
-CREATE INDEX idx_shipping_zone_locations_zone_id
-  ON public.shipping_zone_locations (zone_id);
-
-CREATE INDEX idx_shipping_zone_locations_country_state_postal
-  ON public.shipping_zone_locations (country_code, state_code, postal_code);
-
-CREATE INDEX idx_shipping_zone_methods_name_translations
-  ON public.shipping_zone_methods
-  USING gin (name_translations);
-
-CREATE INDEX idx_shipping_zone_methods_zone_id
-  ON public.shipping_zone_methods (zone_id);
-
-CREATE INDEX idx_tax_rates_country_state
-  ON public.tax_rates (country_code, state_code);
-
-
--- >>> FROM: 00000000000008_seed_platform_defaults.sql <<<
--- 00000000000008_seed_platform_defaults.sql
--- Consolidated migration preserving original statement order within grouped sections.
-
--- 00000000000023_seed_platform_defaults.sql
--- Default settings, base languages, and the store currency seed.
-
-INSERT INTO public.site_settings (key, value)
-VALUES ('footer_copyright', '{"en": "© {year} Nextblock CMS. All rights reserved.", "fr": "© {year} Nextblock CMS. Tous droits réservés."}')
-ON CONFLICT (key) DO NOTHING;
-
-INSERT INTO public.site_settings (key, value)
-VALUES ('is_admin_created', 'false'::jsonb)
-ON CONFLICT (key) DO NOTHING;
-
-INSERT INTO public.site_settings (key, value)
-VALUES (
-  'enabled_payment_providers',
-  '{"stripe": false, "freemius": false}'::jsonb
-)
-ON CONFLICT (key) DO NOTHING;
-
-INSERT INTO public.site_settings (key, value)
-VALUES ('site_title', '"NextBlock™ CMS"'::jsonb)
-ON CONFLICT (key) DO NOTHING;
-
-INSERT INTO public.site_settings (key, value)
-VALUES ('site_description', '"NextBlock™ is an open-source CMS on Next.js + Supabase — a visual block editor, blazing-fast multilingual pages, and built-in e-commerce."'::jsonb)
-ON CONFLICT (key) DO NOTHING;
-
-INSERT INTO public.site_settings (key, value)
-VALUES ('site_keywords', '"NextBlock, CMS, Next.js, Supabase, headless CMS, block editor, visual page builder, multilingual, e-commerce, open source"'::jsonb)
-ON CONFLICT (key) DO NOTHING;
-
-INSERT INTO public.site_settings (key, value)
-VALUES (
-  'ecommerce_inventory_settings',
-  '{"track_quantities": true, "enable_taxes": false}'::jsonb
-)
-ON CONFLICT (key) DO UPDATE
-SET value = CASE
-  WHEN jsonb_typeof(site_settings.value) = 'object' THEN
-    jsonb_set(
-      jsonb_set(
-        site_settings.value,
-        '{track_quantities}',
-        COALESCE(
-          site_settings.value->'track_quantities',
-          site_settings.value->'trackQuantities',
-          'true'::jsonb
-        ),
-        true
-      ),
-      '{enable_taxes}',
-      COALESCE(
-        site_settings.value->'enable_taxes',
-        site_settings.value->'enableTaxes',
-        'false'::jsonb
-      ),
-      true
-    )
-  ELSE
-    jsonb_build_object(
-      'track_quantities',
-      CASE
-        WHEN lower(trim(BOTH '"' FROM site_settings.value::text)) IN ('false', 'f', '0', 'no', 'off') THEN false
-        ELSE true
-      END,
-      'enable_taxes',
-      false
-    )
-END;
-
-INSERT INTO public.site_settings (key, value)
-VALUES (
-  'invoice_settings',
-  '{
-    "business_name": "",
-    "email": "",
-    "phone": "",
-    "address": {
-      "line1": "",
-      "line2": "",
-      "city": "",
-      "state": "",
-      "postal_code": "",
-      "country_code": "CA"
-    },
-    "tax_registrations": []
-  }'::jsonb
-)
-ON CONFLICT (key) DO UPDATE
-SET value = CASE
-  WHEN jsonb_typeof(site_settings.value) = 'object' THEN
-    jsonb_build_object(
-      'business_name', COALESCE(site_settings.value->>'business_name', ''),
-      'email', COALESCE(site_settings.value->>'email', ''),
-      'phone', COALESCE(site_settings.value->>'phone', ''),
-      'address', CASE
-        WHEN jsonb_typeof(site_settings.value->'address') = 'object' THEN
-          jsonb_build_object(
-            'line1', COALESCE(site_settings.value->'address'->>'line1', ''),
-            'line2', COALESCE(site_settings.value->'address'->>'line2', ''),
-            'city', COALESCE(site_settings.value->'address'->>'city', ''),
-            'state', COALESCE(site_settings.value->'address'->>'state', ''),
-            'postal_code', COALESCE(site_settings.value->'address'->>'postal_code', ''),
-            'country_code', COALESCE(NULLIF(site_settings.value->'address'->>'country_code', ''), 'CA')
-          )
-        ELSE
-          jsonb_build_object(
-            'line1', '',
-            'line2', '',
-            'city', '',
-            'state', '',
-            'postal_code', '',
-            'country_code', 'CA'
-          )
-      END,
-      'tax_registrations', CASE
-        WHEN jsonb_typeof(site_settings.value->'tax_registrations') = 'array' THEN
-          site_settings.value->'tax_registrations'
-        ELSE
-          '[]'::jsonb
-      END
-    )
-  ELSE
-    '{
-      "business_name": "",
-      "email": "",
-      "phone": "",
-      "address": {
-        "line1": "",
-        "line2": "",
-        "city": "",
-        "state": "",
-        "postal_code": "",
-        "country_code": "CA"
-      },
-      "tax_registrations": []
-    }'::jsonb
-END;
-
-INSERT INTO public.languages (code, name, is_default, is_active)
-VALUES
-  ('en', 'English', true, true),
-  ('fr', 'Français', false, true);
-
-INSERT INTO public.currencies (code, symbol, exchange_rate, is_default, is_active)
-VALUES ('USD', '$', 1, true, true)
-ON CONFLICT (code) DO UPDATE
-SET
-  symbol = EXCLUDED.symbol,
-  exchange_rate = EXCLUDED.exchange_rate,
-  is_default = EXCLUDED.is_default,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
-
-
--- >>> FROM: 00000000000009_seed_translations.sql <<<
--- 00000000000009_seed_translations.sql
--- Consolidated migration preserving original statement order within grouped sections.
-
--- 00000000000024_seed_core_translations.sql
--- Base profile, account, and storefront translations.
-
-INSERT INTO public.translations (key, translations)
-VALUES 
-  ('continue_with_github', '{"en": "Continue with GitHub", "es": "Continuar con GitHub", "fr": "Continuer avec GitHub"}'::jsonb),
-  ('or_continue_with', '{"en": "Or continue with", "es": "O continuar con", "fr": "Ou continuer avec"}'::jsonb),
-  ('customer_profile', '{"en": "Customer Profile", "es": "Perfil de Cliente", "fr": "Profil Client"}'::jsonb),
-  ('personal_information', '{"en": "Personal Information", "es": "Información Personal", "fr": "Informations Personnelles"}'::jsonb),
-  ('full_name', '{"en": "Full Name", "es": "Nombre Completo", "fr": "Nom Complet"}'::jsonb),
-  ('github_username', '{"en": "GitHub Username", "es": "Nombre de usuario de GitHub", "fr": "Nom d''utilisateur GitHub"}'::jsonb),
-  ('github_username_help', '{"en": "Required only for purchasing developer licenses.", "es": "Requerido solo para comprar licencias de desarrollador.", "fr": "Requis uniquement pour l''achat de licences développeur."}'::jsonb),
-  ('phone_number', '{"en": "Phone Number", "es": "Número de Teléfono", "fr": "Numéro de Téléphone"}'::jsonb),
-  ('billing_address', '{"en": "Billing Address", "es": "Dirección de Facturación", "fr": "Adresse de Facturation"}'::jsonb),
-  ('address_line_1', '{"en": "Address Line 1", "es": "Dirección Línea 1", "fr": "Adresse Ligne 1"}'::jsonb),
-  ('address_line_2', '{"en": "Address Line 2 (Optional)", "es": "Dirección Línea 2 (Opcional)", "fr": "Adresse Ligne 2 (Optionnel)"}'::jsonb),
-  ('city', '{"en": "City", "es": "Ciudad", "fr": "Ville"}'::jsonb),
-  ('state_province', '{"en": "State / Province", "es": "Estado / Provincia", "fr": "État / Province"}'::jsonb),
-  ('postal_zip_code', '{"en": "Postal / Zip Code", "es": "Código Postal", "fr": "Code Postal"}'::jsonb),
-  ('country', '{"en": "Country", "es": "País", "fr": "Pays"}'::jsonb),
-  ('save_profile', '{"en": "Save Profile", "es": "Guardar Perfil", "fr": "Enregistrer le Profil"}'::jsonb),
-  ('saving', '{"en": "Saving...", "es": "Guardando...", "fr": "Enregistrement..."}'::jsonb),
-  ('profile_updated_success', '{"en": "Profile updated successfully", "es": "Perfil actualizado con éxito", "fr": "Profil mis à jour avec succès"}'::jsonb),
-  ('profile_update_failed', '{"en": "Failed to update profile", "es": "Error al actualizar el perfil", "fr": "Échec de la mise à jour du profil"}'::jsonb),
-  ('address_required', '{"en": "Address is required", "es": "La dirección es obligatoria", "fr": "L''adresse est requise"}'::jsonb),
-  ('city_required', '{"en": "City is required", "es": "La ciudad es obligatoria", "fr": "La ville est requise"}'::jsonb),
-  ('zip_code_required', '{"en": "Zip Code is required", "es": "El código postal es obligatorio", "fr": "Le code postal est requis"}'::jsonb),
-  ('country_required', '{"en": "Country is required", "es": "El país es obligatorio", "fr": "Le pays est requis"}'::jsonb),
-  ('enter_valid_json', '{"en": "Enter valid JSON for billing address.", "es": "Ingrese JSON válido para la dirección de facturación.", "fr": "Entrez un JSON valide pour l''adresse de facturation."}'::jsonb),
-  ('public_profile', '{"en": "Public Profile", "es": "Perfil Público", "fr": "Profil Public"}'::jsonb),
-  ('details', '{"en": "Account Details", "es": "Detalles de la Cuenta", "fr": "Détails du Compte"}'::jsonb),
-  ('identity', '{"en": "Identity", "es": "Identidad", "fr": "Identité"}'::jsonb),
-  ('website', '{"en": "Website", "es": "Sitio Web", "fr": "Site Web"}'::jsonb),
-  ('avatar_url', '{"en": "Avatar URL", "es": "URL del Avatar", "fr": "URL de l''Avatar"}'::jsonb),
-  ('connect_github', '{"en": "Connect GitHub", "es": "Conectar GitHub", "fr": "Connecter GitHub"}'::jsonb),
-  ('github_link_failed', '{"en": "Failed to link GitHub account", "es": "Error al vincular cuenta de GitHub", "fr": "Échec de la liaison du compte GitHub"}'::jsonb),
-  ('save_changes', '{"en": "Save Changes", "es": "Guardar Cambios", "fr": "Enregistrer les Modifications"}'::jsonb),
-  ('github_connected', '{"en": "GitHub Connected", "es": "GitHub Conectado", "fr": "GitHub Connecté"}'::jsonb),
-  ('linked_to', '{"en": "Linked to", "es": "Vinculado a", "fr": "Lié à"}'::jsonb),
-  ('optional', '{"en": "Optional", "fr": "Optionnel"}'::jsonb),
-  ('shipping_address', '{"en": "Shipping Address", "fr": "Adresse de livraison"}'::jsonb),
-  ('profile_settings_title', '{"en": "Profile Settings", "fr": "Paramètres du profil"}'::jsonb),
-  ('profile_settings_description', '{"en": "Keep your contact details and default addresses up to date for faster checkout.", "fr": "Gardez vos coordonnées et adresses par défaut à jour pour un paiement plus rapide."}'::jsonb),
-  ('profile_not_found', '{"en": "Profile not found.", "fr": "Profil introuvable."}'::jsonb),
-  ('profile_basic_info_help', '{"en": "This information appears on your account and helps us prepare your orders.", "fr": "Ces informations apparaissent sur votre compte et nous aident à préparer vos commandes."}'::jsonb),
-  ('profile_address_defaults_help', '{"en": "These default addresses are prefilled during checkout and can still be edited for each order.", "fr": "Ces adresses par défaut sont préremplies au paiement et restent modifiables pour chaque commande."}'::jsonb),
-  ('use_billing_for_shipping', '{"en": "Use billing address for shipping", "fr": "Utiliser l''adresse de facturation pour la livraison"}'::jsonb),
-  ('profile_use_billing_for_shipping_help', '{"en": "Keep one default address unless you regularly ship somewhere else.", "fr": "Gardez une seule adresse par défaut sauf si vous faites souvent livrer ailleurs."}'::jsonb),
-  ('checkout_complete_billing_address', '{"en": "Please complete your billing address before continuing.", "fr": "Veuillez compléter votre adresse de facturation avant de continuer."}'::jsonb),
-  ('checkout_complete_shipping_address', '{"en": "Please complete your shipping address before continuing.", "fr": "Veuillez compléter votre adresse de livraison avant de continuer."}'::jsonb),
-  ('checkout_prefill_notice', '{"en": "Using your saved account details for {email}. You can still adjust them for this order.", "fr": "Nous utilisons les renseignements enregistrés pour {email}. Vous pouvez toujours les ajuster pour cette commande."}'::jsonb),
-  ('checkout_billing_address_help', '{"en": "We use this address for payment verification and invoicing.", "fr": "Nous utilisons cette adresse pour la vérification du paiement et la facturation."}'::jsonb),
-  ('checkout_use_billing_for_shipping_help', '{"en": "Uncheck this if you want your order delivered to a different address.", "fr": "Décochez ceci si vous souhaitez faire livrer votre commande à une autre adresse."}'::jsonb),
-  ('checkout_shipping_address_help', '{"en": "Choose where physical items should be delivered.", "fr": "Choisissez où les articles physiques doivent être livrés."}'::jsonb),
-  ('checkout_payment_only_notice', '{"en": "Stripe checkout is kept focused on payment because your address details are already collected here.", "fr": "Le paiement Stripe reste centré sur le paiement puisque vos coordonnées sont déjà recueillies ici."}'::jsonb),
-  ('auth.signup_existing_account_hint', '{"en": "That email may already be registered. Try signing in or resetting your password.", "fr": "Cette adresse e-mail est peut-être déjà utilisée. Essayez de vous connecter ou de réinitialiser votre mot de passe."}'::jsonb),
-  ('auth.signup_check_email_profile', '{"en": "Check your email to confirm your account. We''ll bring you to your profile next so you can finish setting up your details.", "fr": "Vérifiez votre e-mail pour confirmer votre compte. Nous vous amènerons ensuite à votre profil pour terminer la configuration de vos renseignements."}'::jsonb),
-  ('ecommerce.add_to_cart', '{"en": "Add to Cart", "fr": "Ajouter au panier"}'::jsonb),
-  ('ecommerce.added_to_cart', '{"en": "Added to cart", "fr": "Ajouté au panier"}'::jsonb),
-  ('ecommerce.added_to_cart_success', '{"en": "{item} added to cart", "fr": "{item} ajouté au panier"}'::jsonb),
-  ('ecommerce.added_to_cart_error', '{"en": "Failed to add item to cart", "fr": "Échec de l''ajout au panier"}'::jsonb),
-  ('ecommerce.no_image', '{"en": "No Image", "fr": "Pas d''image"}'::jsonb),
-  ('ecommerce.view_details', '{"en": "View Details", "fr": "Voir les détails"}'::jsonb),
-  ('ecommerce.item_added_desc', '{"en": "The item has been added to your cart.", "fr": "L''article a été ajouté à votre panier."}'::jsonb),
-  ('ecommerce.checkout', '{"en": "Checkout", "fr": "Paiement"}'::jsonb),
-  ('ecommerce.cart', '{"en": "Cart", "fr": "Panier"}'::jsonb),
-  ('ecommerce.subtotal', '{"en": "Subtotal", "fr": "Sous-total"}'::jsonb),
-  ('ecommerce.shipping', '{"en": "Shipping", "fr": "Livraison"}'::jsonb),
-  ('ecommerce.tax', '{"en": "Tax", "fr": "Taxes"}'::jsonb),
-  ('ecommerce.total', '{"en": "Total", "fr": "Total"}'::jsonb),
-  ('ecommerce.order_summary', '{"en": "Order Summary", "fr": "Résumé de la commande"}'::jsonb),
-  ('ecommerce.order_summary_desc', '{"en": "Review your items before proceeding to payment.", "fr": "Vérifiez vos articles avant de procéder au paiement."}'::jsonb),
-  ('ecommerce.payment_details', '{"en": "Payment Details", "fr": "Détails du paiement"}'::jsonb),
-  ('ecommerce.shipping_info', '{"en": "Shipping Information", "fr": "Informations de livraison"}'::jsonb),
-  ('ecommerce.delivery_notice', '{"en": "Digital product - No shipping required", "fr": "Produit numérique - Aucune livraison requise"}'::jsonb),
-  ('ecommerce.back_to_shop', '{"en": "Back to Shop", "fr": "Retour à la boutique"}'::jsonb),
-  ('ecommerce.empty_cart', '{"en": "Your cart is empty", "fr": "Votre panier est vide"}'::jsonb),
-  ('ecommerce.no_products_found', '{"en": "No products found", "fr": "Aucun produit trouvé"}'::jsonb),
-  ('ecommerce.featured_products', '{"en": "Featured Products", "fr": "Produits vedettes"}'::jsonb),
-  ('ecommerce.latest_products', '{"en": "Latest Products", "fr": "Derniers produits"}'::jsonb),
-  ('ecommerce.search_products', '{"en": "Search products...", "fr": "Rechercher des produits..."}'::jsonb),
-  ('ecommerce.price_low_to_high', '{"en": "Price: Low to High", "fr": "Prix : Croissant"}'::jsonb),
-  ('ecommerce.price_high_to_low', '{"en": "Price: High to Low", "fr": "Prix : Décroissant"}'::jsonb),
-  ('ecommerce.newest', '{"en": "Newest", "fr": "Nouveautés"}'::jsonb),
-  ('ecommerce.filters', '{"en": "Filters", "fr": "Filtres"}'::jsonb),
-  ('ecommerce.apply_filters', '{"en": "Apply Filters", "fr": "Appliquer les filtres"}'::jsonb),
-  ('ecommerce.clear_all', '{"en": "Clear All", "fr": "Tout effacer"}'::jsonb),
-  ('ecommerce.digital_notice', '{"en": "This is a digital product. You will receive access instructions via email after purchase.", "fr": "Ceci est un produit numérique. Vous recevrez les instructions d''accès par e-mail après l''achat."}'::jsonb),
-  ('ecommerce.shopping_cart', '{"en": "Shopping Cart", "fr": "Panier d''achat"}'::jsonb),
-  ('ecommerce.cart_empty', '{"en": "Your cart is empty", "fr": "Votre panier est vide"}'::jsonb),
-  ('ecommerce.cart_empty_description', '{"en": "Looks like you haven''t added anything to your cart yet.", "fr": "On dirait que vous n''avez encore rien ajouté à votre panier."}'::jsonb),
-  ('ecommerce.continue_shopping', '{"en": "Continue Shopping", "fr": "Continuer vos achats"}'::jsonb),
-  ('ecommerce.go_to_shop', '{"en": "Go to Shop", "fr": "Aller à la boutique"}'::jsonb),
-  ('ecommerce.checkout_successful', '{"en": "Checkout Successful", "fr": "Paiement Réussi"}'::jsonb),
-  ('ecommerce.sandbox_notice', '{"en": "This is a Sandbox environment. The Freemius checkout is skipped here for demo purposes.", "fr": "Ceci est un environnement de bac à sable. Le paiement Freemius est sauté ici à des fins de démonstration."}'::jsonb),
-  ('ecommerce.license_notice', '{"en": "To purchase a real license for your self-hosted NextBlock™ instance, visit:", "fr": "Pour acheter une vraie licence pour votre instance NextBlock™ auto-hébergée, visitez :"}'::jsonb),
-  ('ecommerce.purchase_at', '{"en": "Purchase at nextblock.ca", "fr": "Acheter sur nextblock.ca"}'::jsonb),
-  ('ecommerce.qty', '{"en": "Qty", "fr": "Qté"}'::jsonb),
-  ('ecommerce.quantity', '{"en": "Quantity", "fr": "Quantité"}'::jsonb),
-  ('ecommerce.product', '{"en": "Product", "fr": "Produit"}'::jsonb),
-  ('ecommerce.price', '{"en": "Price", "fr": "Prix"}'::jsonb),
-  ('ecommerce.secure_payment', '{"en": "Secure payment processing", "fr": "Traitement sécurisé du paiement"}'::jsonb),
-  ('ecommerce.shipping_taxes_notice', '{"en": "* Taxes and shipping will be calculated on the next step.", "fr": "* Les taxes et les frais de livraison seront calculés à l''étape suivante."}'::jsonb),
-  ('ecommerce.shipping_taxes_calculated', '{"en": "Shipping & taxes calculated at checkout.", "fr": "Livraison et taxes calculées lors du paiement."}'::jsonb),
-  ('ecommerce.email_address', '{"en": "Email Address", "fr": "Adresse e-mail"}'::jsonb),
-  ('ecommerce.pay_now', '{"en": "Pay Now", "fr": "Payer maintenant"}'::jsonb),
-  ('ecommerce.proceed_to_checkout', '{"en": "Proceed to Checkout", "fr": "Passer à la caisse"}'::jsonb),
-  ('ecommerce.processing', '{"en": "Processing...", "fr": "Traitement..."}'::jsonb),
-  ('ecommerce.invalid_email', '{"en": "Please enter a valid email address.", "fr": "Veuillez entrer une adresse e-mail valide."}'::jsonb),
-  ('ecommerce.checkout_failed', '{"en": "Checkout failed: ", "fr": "Le paiement a échoué : "}'::jsonb),
-  ('ecommerce.generic_error', '{"en": "An error occurred. Please try again.", "fr": "Une erreur est survenue. Veuillez réessayer."}'::jsonb),
-  ('ecommerce.checkout_popup_blocked', '{"en": "Checkout popup blocked or failed to load. Falling back to direct link.", "fr": "Le popup de paiement a été bloqué ou n''a pas pu être chargé. Retour au lien direct."}'::jsonb),
-  ('ecommerce.view_full_cart', '{"en": "View Full Cart", "fr": "Voir le panier complet"}'::jsonb),
-  ('ecommerce.ready_to_checkout', '{"en": "Ready to Checkout?", "fr": "Prêt à passer au paiement ?"}'::jsonb),
-  ('ecommerce.sale_badge', '{"en": "Sale {percent}% Off", "fr": "Solde {percent}% de rabais"}'::jsonb),
-  ('ecommerce.low_stock', '{"en": "Only {count} left", "fr": "Plus que {count} en stock"}'::jsonb),
-  ('ecommerce.instant_digital_delivery', '{"en": "Instant Digital Delivery", "fr": "Livraison numérique instantanée"}'::jsonb),
-  ('ecommerce.free_shipping', '{"en": "Free Shipping", "fr": "Livraison gratuite"}'::jsonb),
-  ('ecommerce.secure_checkout', '{"en": "Secure Checkout", "fr": "Paiement sécurisé"}'::jsonb),
-  ('ecommerce.no_description', '{"en": "No description available.", "fr": "Aucune description disponible."}'::jsonb),
-  ('ecommerce.checkout_overlay_title', '{"en": "Order Checkout", "fr": "Paiement de la commande"}'::jsonb),
-  ('ecommerce.email_placeholder', '{"en": "you@example.com", "fr": "vous@exemple.com"}'::jsonb),
-  ('ecommerce.contact_information', '{"en": "Contact Information", "fr": "Informations de contact"}'::jsonb),
-  ('ecommerce.shipping_address', '{"en": "Shipping Address", "fr": "Adresse de livraison"}'::jsonb),
-  ('ecommerce.shipping_method', '{"en": "Shipping Method", "fr": "Mode de livraison"}'::jsonb),
-  ('ecommerce.available_rates', '{"en": "Available Rates", "fr": "Tarifs disponibles"}'::jsonb),
-  ('ecommerce.calculating', '{"en": "Calculating...", "fr": "Calcul en cours..."}'::jsonb),
-  ('ecommerce.select_rate', '{"en": "Select a shipping rate", "fr": "Sélectionnez un tarif de livraison"}'::jsonb),
-  ('ecommerce.enter_postal_code', '{"en": "Enter postal code", "fr": "Entrez le code postal"}'::jsonb),
-  ('ecommerce.free', '{"en": "Free", "fr": "Gratuit"}'::jsonb),
-  ('ecommerce.first_last_name', '{"en": "First & Last Name", "fr": "Nom et prénom"}'::jsonb),
-  ('ecommerce.address', '{"en": "Address", "fr": "Adresse"}'::jsonb),
-  ('ecommerce.city', '{"en": "City", "fr": "Ville"}'::jsonb),
-  ('ecommerce.state_province', '{"en": "State / Province", "fr": "État / Province"}'::jsonb),
-  ('ecommerce.zip_postal', '{"en": "ZIP / Postal Code", "fr": "Code postal"}'::jsonb),
-  ('ecommerce.postal_code', '{"en": "Postal Code", "fr": "Code postal"}'::jsonb),
-  ('ecommerce.zip_postal_code', '{"en": "ZIP / Postal Code", "fr": "Code postal"}'::jsonb),
-  ('ecommerce.estimate_shipping', '{"en": "Estimate Shipping", "fr": "Estimer la livraison"}'::jsonb),
-  ('ecommerce.calculate', '{"en": "Calculate", "fr": "Calculer"}'::jsonb),
-  ('ecommerce.no_rates_found', '{"en": "No shipping rates found for this region.", "fr": "Aucun tarif de livraison trouvé pour cette région."}'::jsonb),
-  ('ecommerce.no_rates_for_region', '{"en": "No shipping rates found for this region.", "fr": "Aucun tarif de livraison trouvé pour cette région."}'::jsonb),
-  ('ecommerce.enter_address_for_rates', '{"en": "Enter your address to see shipping rates.", "fr": "Entrez votre adresse pour voir les tarifs de livraison."}'::jsonb),
-  ('ecommerce.secure_checkout_guarantee', '{"en": "Secure checkout guaranteed", "fr": "Paiement sécurisé garanti"}'::jsonb),
-  ('ecommerce.pricing_unavailable', '{"en": "Pricing unavailable", "fr": "Prix non disponible"}'::jsonb),
-  ('ecommerce.monthly', '{"en": "Monthly", "fr": "Mensuel"}'::jsonb),
-  ('ecommerce.annual', '{"en": "Annual", "fr": "Annuel"}'::jsonb),
-  ('ecommerce.lifetime', '{"en": "Lifetime", "fr": "À vie"}'::jsonb),
-  ('ecommerce.year', '{"en": "year", "fr": "an"}'::jsonb),
-  ('ecommerce.month', '{"en": "month", "fr": "mois"}'::jsonb),
-  ('ecommerce.get_license', '{"en": "Get License", "fr": "Obtenir la licence"}'::jsonb),
-  ('ecommerce.full_name', '{"en": "Full Name", "fr": "Nom complet"}'::jsonb),
-  ('ecommerce.country', '{"en": "Country", "fr": "Pays"}'::jsonb)
-ON CONFLICT (key) DO UPDATE
-SET translations = EXCLUDED.translations;
-
--- 00000000000025_seed_freemius_translations.sql
--- Freemius storefront copy introduced with the licensing expansion.
-
-INSERT INTO public.translations (key, translations) VALUES
-  ('ecommerce.pricing_unavailable', '{"en": "Pricing Unavailable", "es": "Precios no disponibles"}'),
-  ('ecommerce.monthly', '{"en": "Monthly", "es": "Mensual"}'),
-  ('ecommerce.annual', '{"en": "Annual", "es": "Anual"}'),
-  ('ecommerce.lifetime', '{"en": "Lifetime", "es": "De por vida"}'),
-  ('ecommerce.year', '{"en": "year", "es": "año"}'),
-  ('ecommerce.month', '{"en": "month", "es": "mes"}'),
-  ('ecommerce.get_license', '{"en": "Get License", "es": "Obtener Licencia"}'),
-  ('ecommerce.added_to_cart_success', '{"en": "{item} added to your cart.", "es": "{item} añadido al carrito."}'),
-  ('ecommerce.added_to_cart_error', '{"en": "Could not add item to cart.", "es": "No se pudo añadir el artículo al carrito."}'),
-  ('ecommerce.freemius_trial_preference_title', '{"en": "How would you like to start your trial?", "es": "¿Cómo te gustaría comenzar tu prueba?", "fr": "Comment souhaitez-vous commencer votre essai ?"}'),
-  ('ecommerce.freemius_trial_no_card', '{"en": "Start Free Trial (No card required)", "es": "Comenzar prueba gratuita (Sin tarjeta)", "fr": "Commencer l''essai gratuit (Sans carte requise)"}'),
-  ('ecommerce.freemius_trial_with_card', '{"en": "Enter Payment Details Now (Still get full trial length free)", "es": "Ingresar detalles de pago ahora (Aún obtienes toda la duración de la prueba gratis)", "fr": "Entrer les détails de paiement maintenant (Vous bénéficiez toujours de toute la durée de l''essai gratuitement)"}'),
-  ('ecommerce.freemius_trial_with_card_help', '{"en": "You will not be billed until the trial ends. Cancel anytime.", "es": "No se te cobrará hasta que termine la prueba. Cancela en cualquier momento.", "fr": "Vous ne serez pas facturé avant la fin de l''essai. Annulez à tout moment."}')
-ON CONFLICT (key) DO UPDATE
-SET translations = EXCLUDED.translations;
-
--- 00000000000026_seed_product_variation_translation_keys.sql
--- Adds missing storefront translation keys for variable-product UX copy.
-
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'ecommerce.choose_your_options',
-    '{"en": "Choose Your Options", "fr": "Choisissez vos options"}'::jsonb
-  ),
-  (
-    'ecommerce.variant_availability_help',
-    '{"en": "Select a combination to resolve the exact variant price and availability.", "fr": "Selectionnez une combinaison pour afficher le prix exact et la disponibilite de la variante."}'::jsonb
-  ),
-  (
-    'ecommerce.in_stock',
-    '{"en": "{count} in stock", "fr": "{count} en stock"}'::jsonb
-  ),
-  (
-    'ecommerce.out_of_stock',
-    '{"en": "Out of stock", "fr": "Rupture de stock"}'::jsonb
-  ),
-  (
-    'ecommerce.select_options',
-    '{"en": "Select Options", "fr": "Choisir des options"}'::jsonb
-  ),
-  (
-    'ecommerce.variant_selection_required',
-    '{"en": "Select one term from every dropdown to resolve a variation.", "fr": "Selectionnez une valeur dans chaque liste pour afficher la variante correspondante."}'::jsonb
-  )
-ON CONFLICT (key) DO UPDATE
-SET
-  translations = EXCLUDED.translations,
-  updated_at = now();
-
--- 00000000000027_seed_shipping_rate_translations.sql
--- Shipping and tax copy for checkout.
-
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'ecommerce.tax_calculated_on_stripe',
-    '{"en": "Calculated on Stripe", "es": "Calculado en Stripe", "fr": "Calculé sur Stripe"}'::jsonb
-  ),
-  (
-    'checkout_stripe_tax_finalized_notice',
-    '{"en": "Tax will be finalized by Stripe Tax on the payment step.", "es": "El impuesto se finalizará con Stripe Tax en el paso de pago.", "fr": "La taxe sera finalisée par Stripe Tax à l''étape du paiement."}'::jsonb
-  )
-ON CONFLICT (key) DO UPDATE
-SET translations = EXCLUDED.translations;
-
--- 00000000000028_seed_invoice_branding_translations.sql
--- Invoice, branding, and receipt translations.
-
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'branding',
-    '{"en": "Branding", "fr": "Image de marque"}'::jsonb
-  ),
-  (
-    'company_name',
-    '{"en": "Company name", "fr": "Nom de l''entreprise"}'::jsonb
-  ),
-  (
-    'invoice',
-    '{"en": "Invoice", "fr": "Facture"}'::jsonb
-  ),
-  (
-    'invoice_number',
-    '{"en": "Invoice #", "fr": "Facture no"}'::jsonb
-  ),
-  (
-    'paid_on',
-    '{"en": "Paid on", "fr": "Paye le"}'::jsonb
-  ),
-  (
-    'bill_to',
-    '{"en": "Bill to", "fr": "Facturer a"}'::jsonb
-  ),
-  (
-    'ship_to',
-    '{"en": "Ship to", "fr": "Livrer a"}'::jsonb
-  ),
-  (
-    'print_invoice',
-    '{"en": "Print / Save as PDF", "fr": "Imprimer / Enregistrer en PDF"}'::jsonb
-  ),
-  (
-    'tax_registrations',
-    '{"en": "Tax registrations", "fr": "Inscriptions fiscales"}'::jsonb
-  ),
-  (
-    'invoice_settings',
-    '{"en": "Invoice settings", "fr": "Parametres de facture"}'::jsonb
-  ),
-  (
-    'business_name',
-    '{"en": "Business name", "fr": "Nom de l''entreprise"}'::jsonb
-  ),
-  (
-    'order_number',
-    '{"en": "Order #", "fr": "Commande no"}'::jsonb
-  ),
-  (
-    'print_invoice_help',
-    '{"en": "Use your browser print dialog to save this invoice as a PDF.", "fr": "Utilisez la boite de dialogue d''impression de votre navigateur pour enregistrer cette facture en PDF."}'::jsonb
-  ),
-  (
-    'return_home',
-    '{"en": "Return to Home", "fr": "Retour a l''accueil"}'::jsonb
-  ),
-  (
-    'receipt_finalizing',
-    '{"en": "Finalizing your invoice and payment details...", "fr": "Finalisation de votre facture et des details du paiement..."}'::jsonb
-  ),
-  (
-    'receipt_not_ready',
-    '{"en": "Your invoice will appear here once the payment sync is complete.", "fr": "Votre facture apparaitra ici une fois la synchronisation du paiement terminee."}'::jsonb
-  ),
-  (
-    'tax_breakdown',
-    '{"en": "Tax breakdown", "fr": "Detail des taxes"}'::jsonb
-  ),
-  (
-    'amount',
-    '{"en": "Amount", "fr": "Montant"}'::jsonb
-  ),
-  (
-    'price',
-    '{"en": "Price", "fr": "Prix"}'::jsonb
-  ),
-  (
-    'from',
-    '{"en": "From", "fr": "De"}'::jsonb
-  )
-ON CONFLICT (key) DO UPDATE
-SET
-  translations = EXCLUDED.translations,
-  updated_at = now();
-
--- 00000000000029_seed_account_order_translations.sql
--- Adds storefront account navigation, customer order, and password translations.
-
-
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'account_navigation',
-    '{"en": "Account", "fr": "Compte"}'::jsonb
-  ),
-  (
-    'account_orders',
-    '{"en": "Orders", "fr": "Commandes"}'::jsonb
-  ),
-  (
-    'change_my_password',
-    '{"en": "Change my password", "fr": "Changer mon mot de passe"}'::jsonb
-  ),
-  (
-    'profile_orders_title',
-    '{"en": "My orders", "fr": "Mes commandes"}'::jsonb
-  ),
-  (
-    'profile_orders_description',
-    '{"en": "Review your recent purchases and open printable invoices.", "fr": "Consultez vos achats récents et ouvrez vos factures imprimables."}'::jsonb
-  ),
-  (
-    'profile_orders_empty',
-    '{"en": "You do not have any orders yet.", "fr": "Vous n''avez pas encore de commandes."}'::jsonb
-  ),
-  (
-    'profile_order_detail_title',
-    '{"en": "Order invoice", "fr": "Facture de commande"}'::jsonb
-  ),
-  (
-    'profile_order_detail_description',
-    '{"en": "Review and print your finalized invoice.", "fr": "Consultez et imprimez votre facture finalisée."}'::jsonb
-  ),
-  (
-    'profile_order_invoice_pending',
-    '{"en": "The printable invoice will appear here once this order has been finalized.", "fr": "La facture imprimable apparaîtra ici une fois que cette commande aura été finalisée."}'::jsonb
-  ),
-  (
-    'profile_password_title',
-    '{"en": "Change your password", "fr": "Changer votre mot de passe"}'::jsonb
-  ),
-  (
-    'profile_password_description',
-    '{"en": "Update your account password without leaving your profile.", "fr": "Mettez à jour le mot de passe de votre compte sans quitter votre profil."}'::jsonb
-  ),
-  (
-    'new_password',
-    '{"en": "New password", "fr": "Nouveau mot de passe"}'::jsonb
-  ),
-  (
-    'confirm_new_password',
-    '{"en": "Confirm new password", "fr": "Confirmer le nouveau mot de passe"}'::jsonb
-  ),
-  (
-    'password_updated_success',
-    '{"en": "Password updated successfully.", "fr": "Mot de passe mis à jour avec succès."}'::jsonb
-  ),
-  (
-    'password_update_failed',
-    '{"en": "Password update failed.", "fr": "La mise à jour du mot de passe a échoué."}'::jsonb
-  ),
-  (
-    'passwords_do_not_match',
-    '{"en": "Passwords do not match.", "fr": "Les mots de passe ne correspondent pas."}'::jsonb
-  ),
-  (
-    'order_date',
-    '{"en": "Date", "fr": "Date"}'::jsonb
-  ),
-  (
-    'order_status_paid',
-    '{"en": "Paid", "fr": "Payée"}'::jsonb
-  ),
-  (
-    'order_status_pending',
-    '{"en": "Pending", "fr": "En attente"}'::jsonb
-  ),
-  (
-    'order_status_trial',
-    '{"en": "Trial", "fr": "Essai"}'::jsonb
-  ),
-  (
-    'order_status_shipped',
-    '{"en": "Shipped", "fr": "Expédiée"}'::jsonb
-  ),
-  (
-    'order_status_cancelled',
-    '{"en": "Cancelled", "fr": "Annulée"}'::jsonb
-  ),
-  (
-    'order_status_refunded',
-    '{"en": "Refunded", "fr": "Remboursée"}'::jsonb
-  ),
-  (
-    'back_to_orders',
-    '{"en": "Back to orders", "fr": "Retour aux commandes"}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_trial_started',
-    '{"en": "Trial started", "fr": "Essai demarre"}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_order_pending',
-    '{"en": "Order pending", "fr": "Commande en attente"}'::jsonb
-  )
-ON CONFLICT (key) DO UPDATE
-SET translations = EXCLUDED.translations;
-
-
--- 00000000000030_seed_checkout_state_translations.sql
--- Adds checkout state and CTA translations for shipping-gated checkout UX.
-
-
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'select_an_option',
-    '{"en": "Select an option", "es": "Selecciona una opcion", "fr": "Selectionnez une option"}'::jsonb
-  ),
-  (
-    'ecommerce.shipping_method_required',
-    '{"en": "Please select a shipping method before continuing.", "es": "Selecciona un metodo de envio antes de continuar.", "fr": "Veuillez selectionner un mode de livraison avant de continuer."}'::jsonb
-  ),
-  (
-    'ecommerce.waiting_on_address_info',
-    '{"en": "Complete your shipping address to view available shipping options.", "es": "Completa tu direccion de envio para ver las opciones de envio disponibles.", "fr": "Completez votre adresse de livraison pour voir les options de livraison disponibles."}'::jsonb
-  ),
-  (
-    'ecommerce.calculating_shipping',
-    '{"en": "Calculating shipping...", "es": "Calculando el envio...", "fr": "Calcul de la livraison..."}'::jsonb
-  ),
-  (
-    'ecommerce.sandbox_checkout_stripe_description',
-    '{"en": "This simulated step represents the Stripe checkout for physical products.", "es": "Este paso simulado representa el pago de Stripe para productos fisicos.", "fr": "Cette etape simulee represente le paiement Stripe pour les produits physiques."}'::jsonb
-  ),
-  (
-    'ecommerce.sandbox_checkout_freemius_description',
-    '{"en": "This simulated step represents the Freemius checkout for digital products.", "es": "Este paso simulado representa el pago de Freemius para productos digitales.", "fr": "Cette etape simulee represente le paiement Freemius pour les produits numeriques."}'::jsonb
-  ),
-  (
-    'ecommerce.digital_label',
-    '{"en": "Digital", "es": "Digital", "fr": "Numerique"}'::jsonb
-  ),
-  (
-    'ecommerce.physical_label',
-    '{"en": "Physical", "es": "Fisico", "fr": "Physique"}'::jsonb
-  ),
-  (
-    'ecommerce.physical_products',
-    '{"en": "Physical products", "es": "Productos fisicos", "fr": "Produits physiques"}'::jsonb
-  ),
-  (
-    'ecommerce.digital_products',
-    '{"en": "Digital products", "es": "Productos digitales", "fr": "Produits numeriques"}'::jsonb
-  ),
-  (
-    'ecommerce.estimated_total',
-    '{"en": "Estimated total", "es": "Total estimado", "fr": "Total estime"}'::jsonb
-  ),
-  (
-    'ecommerce.stripe_checkout_title',
-    '{"en": "Stripe Checkout", "es": "Pago con Stripe", "fr": "Paiement Stripe"}'::jsonb
-  ),
-  (
-    'ecommerce.stripe_checkout_description',
-    '{"en": "Pay for physical products in one Stripe checkout session.", "es": "Paga los productos fisicos en una sola sesion de Stripe.", "fr": "Payez les produits physiques dans une seule session Stripe."}'::jsonb
-  ),
-  (
-    'ecommerce.item_count_one',
-    '{"en": "{count} item", "es": "{count} articulo", "fr": "{count} article"}'::jsonb
-  ),
-  (
-    'ecommerce.item_count_other',
-    '{"en": "{count} items", "es": "{count} articulos", "fr": "{count} articles"}'::jsonb
-  ),
-  (
-    'ecommerce.physical_subtotal',
-    '{"en": "Physical subtotal", "es": "Subtotal fisico", "fr": "Sous-total physique"}'::jsonb
-  ),
-  (
-    'ecommerce.total_on_stripe',
-    '{"en": "Total on Stripe", "es": "Total en Stripe", "fr": "Total sur Stripe"}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_physical_products',
-    '{"en": "Checkout Physical Products", "es": "Pagar productos fisicos", "fr": "Payer les produits physiques"}'::jsonb
-  ),
-  (
-    'ecommerce.shipping_taxes_collected_on_stripe',
-    '{"en": "Shipping and taxes are only collected during the Stripe step for physical products.", "es": "El envio y los impuestos solo se cobran durante el paso de Stripe para productos fisicos.", "fr": "La livraison et les taxes sont percues uniquement a l''etape Stripe pour les produits physiques."}'::jsonb
-  ),
-  (
-    'ecommerce.freemius_checkout_title',
-    '{"en": "Freemius Checkout", "es": "Pago con Freemius", "fr": "Paiement Freemius"}'::jsonb
-  ),
-  (
-    'ecommerce.freemius_checkout_description',
-    '{"en": "Digital products use the Freemius checkout flow.", "es": "Los productos digitales usan el flujo de pago de Freemius.", "fr": "Les produits numeriques utilisent le flux de paiement Freemius."}'::jsonb
-  ),
-  (
-    'ecommerce.license_count_one',
-    '{"en": "{count} license", "es": "{count} licencia", "fr": "{count} licence"}'::jsonb
-  ),
-  (
-    'ecommerce.license_count_other',
-    '{"en": "{count} licenses", "es": "{count} licencias", "fr": "{count} licences"}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_billing_cycle_monthly',
-    '{"en": "Monthly subscription", "es": "Suscripcion mensual", "fr": "Abonnement mensuel"}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_billing_cycle_annual',
-    '{"en": "Annual subscription", "es": "Suscripcion anual", "fr": "Abonnement annuel"}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_billing_cycle_lifetime',
-    '{"en": "Lifetime subscription", "es": "Suscripcion de por vida", "fr": "Abonnement a vie"}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_product',
-    '{"en": "Checkout {title}", "es": "Pagar {title}", "fr": "Paiement de {title}"}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_digital_product',
-    '{"en": "Checkout Digital Product", "es": "Pagar producto digital", "fr": "Payer le produit numerique"}'::jsonb
-  ),
-  (
-    'ecommerce.digital_subtotal',
-    '{"en": "Digital subtotal", "es": "Subtotal digital", "fr": "Sous-total numerique"}'::jsonb
-  ),
-  (
-    'ecommerce.freemius_multi_checkout_notice',
-    '{"en": "Freemius licenses are completed one at a time, so each digital product gets its own checkout action.", "es": "Las licencias de Freemius se completan una por una, por lo que cada producto digital tiene su propia accion de pago.", "fr": "Les licences Freemius se finalisent une a la fois, donc chaque produit numerique a sa propre action de paiement."}'::jsonb
-  ),
-  (
-    'ecommerce.freemius_tax_notice',
-    '{"en": "Taxes and compliance for digital products are handled inside the Freemius checkout.", "es": "Los impuestos y la conformidad para los productos digitales se gestionan dentro del pago de Freemius.", "fr": "Les taxes et la conformite pour les produits numeriques sont gerees dans le paiement Freemius."}'::jsonb
-  ),
-  (
-    'continue_checkout',
-    '{"en": "Continue Checkout", "fr": "Continuer le paiement"}'::jsonb
-  ),
-  (
-    'checkout_success_sync_failed',
-    '{"en": "We could not finalize your invoice yet. Please refresh shortly.", "fr": "Nous n''avons pas encore pu finaliser votre facture. Veuillez rafraichir la page sous peu."}'::jsonb
-  ),
-  (
-    'ecommerce.shipping_country_required',
-    '{"en": "Country is required to calculate shipping.", "fr": "Le pays est requis pour calculer la livraison."}'::jsonb
-  ),
-  (
-    'ecommerce.shipping_calculation_failed',
-    '{"en": "We couldn''t calculate shipping right now. Please try again.", "fr": "Nous n''avons pas pu calculer la livraison pour le moment. Veuillez reessayer."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_license_inactive',
-    '{"en": "The ecommerce module license is inactive.", "fr": "La licence du module ecommerce est inactive."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_invalid_items',
-    '{"en": "Your checkout items could not be processed.", "fr": "Les articles de votre commande n''ont pas pu etre traites."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_provider_items_required',
-    '{"en": "Each checkout step must include items assigned to a payment provider.", "fr": "Chaque etape de paiement doit inclure des articles associes a un fournisseur de paiement."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_mixed_provider_steps',
-    '{"en": "Products with different payment providers must be purchased in separate checkout steps.", "fr": "Les produits utilisant differents fournisseurs de paiement doivent etre achetes en etapes separees."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_freemius_single_item',
-    '{"en": "Freemius products must be purchased one at a time.", "fr": "Les produits Freemius doivent etre achetes un a la fois."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_billing_address_required',
-    '{"en": "A billing address is required to continue checkout.", "fr": "Une adresse de facturation est requise pour continuer le paiement."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_internal_server_error',
-    '{"en": "Something went wrong while preparing your checkout. Please try again.", "fr": "Une erreur s''est produite lors de la preparation de votre paiement. Veuillez reessayer."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_missing_session_id',
-    '{"en": "We couldn''t find a checkout session to finalize.", "fr": "Nous n''avons pas trouve de session de paiement a finaliser."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_payment_pending',
-    '{"en": "Your payment is still pending.", "fr": "Votre paiement est toujours en attente."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_success_order_not_found',
-    '{"en": "We couldn''t find the order linked to this checkout.", "fr": "Nous n''avons pas trouve la commande liee a ce paiement."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_success_invalid_reference',
-    '{"en": "This checkout reference can''t be finalized from this page.", "fr": "Cette reference de paiement ne peut pas etre finalisee depuis cette page."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_success_inventory_update_failed',
-    '{"en": "We couldn''t update inventory for this order.", "fr": "Nous n''avons pas pu mettre a jour l''inventaire pour cette commande."}'::jsonb
-  ),
-  (
-    'ecommerce.checkout_success_status_update_failed',
-    '{"en": "We couldn''t update the order status.", "fr": "Nous n''avons pas pu mettre a jour le statut de la commande."}'::jsonb
-  ),
-  (
-    'ecommerce.unknown_error',
-    '{"en": "Unknown error", "es": "Error desconocido", "fr": "Erreur inconnue"}'::jsonb
-  )
-ON CONFLICT (key) DO UPDATE
-SET
-  translations = EXCLUDED.translations,
-  updated_at = now();
-
-
--- 00000000000031_seed_french_freemius_translation_fixes.sql
--- Restores French translations that were overwritten by the Freemius ecommerce expansion seed.
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'ecommerce.pricing_unavailable',
-    jsonb_build_object(
-      'en', 'Pricing Unavailable',
-      'es', 'Precios no disponibles',
-      'fr', 'Tarification indisponible'
-    )
-  ),
-  (
-    'ecommerce.monthly',
-    jsonb_build_object(
-      'en', 'Monthly',
-      'es', 'Mensual',
-      'fr', 'Mensuel'
-    )
-  ),
-  (
-    'ecommerce.annual',
-    jsonb_build_object(
-      'en', 'Annual',
-      'es', 'Anual',
-      'fr', 'Annuel'
-    )
-  ),
-  (
-    'ecommerce.lifetime',
-    jsonb_build_object(
-      'en', 'Lifetime',
-      'es', 'De por vida',
-      'fr', 'À vie'
-    )
-  ),
-  (
-    'ecommerce.year',
-    jsonb_build_object(
-      'en', 'year',
-      'es', 'año',
-      'fr', 'an'
-    )
-  ),
-  (
-    'ecommerce.month',
-    jsonb_build_object(
-      'en', 'month',
-      'es', 'mes',
-      'fr', 'mois'
-    )
-  ),
-  (
-    'ecommerce.get_license',
-    jsonb_build_object(
-      'en', 'Get License',
-      'es', 'Obtener Licencia',
-      'fr', 'Obtenir la licence'
-    )
-  ),
-  (
-    'ecommerce.added_to_cart_success',
-    jsonb_build_object(
-      'en', '{item} added to your cart.',
-      'es', '{item} añadido al carrito.',
-      'fr', '{item} ajouté à votre panier.'
-    )
-  ),
-  (
-    'ecommerce.added_to_cart_error',
-    jsonb_build_object(
-      'en', 'Could not add item to cart.',
-      'es', 'No se pudo añadir el artículo al carrito.',
-      'fr', 'Impossible d''ajouter l''article au panier.'
-    )
-  )
-ON CONFLICT (key) DO UPDATE
-SET translations =
-  COALESCE(public.translations.translations, '{}'::jsonb)
-  || jsonb_build_object('fr', EXCLUDED.translations->>'fr');
-
--- 00000000000032_seed_global_search_translations.sql
--- Global storefront search copy.
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'edit_product',
-    '{"en": "Edit Product", "fr": "Modifier le produit"}'::jsonb
-  ),
-  (
-    'global_search.trigger',
-    '{"en": "Search", "fr": "Rechercher"}'::jsonb
-  ),
-  (
-    'global_search.title',
-    '{"en": "Search", "fr": "Rechercher"}'::jsonb
-  ),
-  (
-    'global_search.description',
-    '{"en": "Search published pages, posts, and products.", "fr": "Rechercher dans les pages, articles et produits publies."}'::jsonb
-  ),
-  (
-    'global_search.placeholder',
-    '{"en": "Search...", "fr": "Rechercher..."}'::jsonb
-  ),
-  (
-    'global_search.filter_all',
-    '{"en": "All", "fr": "Tout"}'::jsonb
-  ),
-  (
-    'global_search.filter_pages',
-    '{"en": "Pages", "fr": "Pages"}'::jsonb
-  ),
-  (
-    'global_search.filter_posts',
-    '{"en": "Posts", "fr": "Articles"}'::jsonb
-  ),
-  (
-    'global_search.filter_products',
-    '{"en": "Products", "fr": "Produits"}'::jsonb
-  ),
-  (
-    'global_search.result_page',
-    '{"en": "Page", "fr": "Page"}'::jsonb
-  ),
-  (
-    'global_search.result_post',
-    '{"en": "Post", "fr": "Article"}'::jsonb
-  ),
-  (
-    'global_search.result_product',
-    '{"en": "Product", "fr": "Produit"}'::jsonb
-  ),
-  (
-    'global_search.recent',
-    '{"en": "Recent", "fr": "Recents"}'::jsonb
-  ),
-  (
-    'global_search.error_title',
-    '{"en": "Search is unavailable.", "fr": "La recherche est indisponible."}'::jsonb
-  ),
-  (
-    'global_search.error_description',
-    '{"en": "Please try again in a moment.", "fr": "Veuillez reessayer dans un instant."}'::jsonb
-  ),
-  (
-    'global_search.empty_title',
-    '{"en": "No results found.", "fr": "Aucun resultat trouve."}'::jsonb
-  ),
-  (
-    'global_search.empty_description',
-    '{"en": "Try another search term.", "fr": "Essayez un autre terme de recherche."}'::jsonb
-  )
-ON CONFLICT (key) DO UPDATE
-SET
-  translations = EXCLUDED.translations,
-  updated_at = now();
-
-
--- >>> FROM: 00000000000010_seed_content_scaffold.sql <<<
--- 00000000000010_seed_content_scaffold.sql
--- Consolidated migration preserving original statement order within grouped sections.
-
--- 00000000000033_seed_logo_and_content_scaffold.sql
--- Foundational translations, logo assets, and starter content scaffolding.
-
-
--- 1. Translations
--- Merged from multiple translation seed files
-INSERT INTO public.translations (key, translations) VALUES
-('sign_in', '{"en": "Sign in", "fr": "Connexion"}'),
-('sign_up', '{"en": "Sign up", "fr": "Inscription"}'),
-('sign_out', '{"en": "Sign out", "fr": "Déconnexion"}'),
-('dont_have_account', '{"en": "Don''t have an account?", "fr": "Pas encore de compte ?"}'),
-('email', '{"en": "Email", "fr": "Email"}'),
-('you_at_example_com', '{"en": "you@example.com", "fr": "vous@example.com"}'),
-('password', '{"en": "Password", "fr": "Mot de passe"}'),
-('forgot_password', '{"en": "Forgot Password?", "fr": "Mot de passe oublié ?"}'),
-('your_password', '{"en": "Your password", "fr": "Votre mot de passe"}'),
-('signing_in_pending', '{"en": "Signing In...", "fr": "Connexion en cours..."}'),
-('already_have_account', '{"en": "Already have an account?", "fr": "Déjà un compte ?"}'),
-('signing_up_pending', '{"en": "Signing up...", "fr": "Inscription en cours..."}'),
-('reset_password', '{"en": "Reset Password", "fr": "Réinitialiser le mot de passe"}'),
-('auth.signup_form_description', '{"en": "Create your account in one quick step. We''ll email you a confirmation link before you finish your profile.", "fr": "Créez votre compte en une étape rapide. Nous vous enverrons un lien de confirmation avant de terminer votre profil."}'),
-('auth.signup_success_badge', '{"en": "Signup received", "fr": "Inscription reçue"}'),
-('auth.signup_success_title', '{"en": "Check your inbox", "fr": "Vérifiez votre boîte de réception"}'),
-('auth.signup_success_step_confirm', '{"en": "Open the email we sent and confirm your address.", "fr": "Ouvrez l''e-mail envoyé et confirmez votre adresse."}'),
-('auth.signup_success_step_profile', '{"en": "After confirmation, we''ll bring you to your profile to finish setup.", "fr": "Après confirmation, nous vous amènerons à votre profil pour terminer la configuration."}'),
-('auth.signup_success_step_spam', '{"en": "If it doesn''t arrive soon, check spam, junk, or promotions.", "fr": "S''il n''arrive pas bientôt, vérifiez les dossiers spam, indésirables ou promotions."}'),
-('auth.signup_use_different_email', '{"en": "Use a different email", "fr": "Utiliser une autre adresse e-mail"}'),
-('auth.back_to_sign_in', '{"en": "Back to sign in", "fr": "Retour à la connexion"}'),
-('auth.signup_rate_limit', '{"en": "You''re trying too quickly. Please wait a moment before requesting another confirmation email.", "fr": "Vous allez trop vite. Veuillez attendre un instant avant de demander un nouvel e-mail de confirmation."}'),
-('blog_prefix', '{"en": "article", "fr": "article"}'),
-('edit_page', '{"en": "Edit Page", "fr": "Éditer la page"}'),
-('edit_post', '{"en": "Edit Post", "fr": "Éditer l''article"}'),
-('open_main_menu', '{"en": "Open main menu", "fr": "Ouvrir le menu principal"}'),
-('mobile_navigation_menu', '{"en": "Mobile navigation menu", "fr": "Menu de navigation mobile"}'),
-('cms_dashboard', '{"en": "CMS Dashboard", "fr": "Tableau de bord CMS"}'),
-('update_env_file_warning', '{"en": "Please update .env.local file with anon key and url", "fr": "Veuillez mettre à jour .env.local avec l''anon key et l''URL"}'),
-('greeting', '{"en": "Hey, {username}!", "fr": "Salut, {username} !"}'),
-('theme_switcher', '{"en": "Theme Switcher", "fr": "Sélecteur de thème"}'),
-('theme_light', '{"en": "Light", "fr": "Clair"}'),
-('theme_dark', '{"en": "Dark", "fr": "Sombre"}'),
-('theme_system', '{"en": "System", "fr": "Système"}'),
-('theme_vibrant', '{"en": "Vibrant", "fr": "Vibrant"}'),
-('sandbox_mode_banner', '{"en": "Sandbox Mode: Data is public and resets every 15 minutes.", "fr": "Mode Sandbox : Les données sont publiques et réinitialisées toutes les 15 minutes."}'),
-('demo_access_title', '{"en": "Demo Access", "fr": "Accès Démo"}'),
-('demo_access_desc', '{"en": "This is a demo site. You may use the following credentials to access the admin section:", "fr": "Ceci est un site de démonstration. Vous pouvez utiliser les identifiants suivants pour accéder à l''administration :"}'),
-('demo_user_label', '{"en": "User:", "fr": "Utilisateur :"}'),
-('demo_password_label', '{"en": "Password:", "fr": "Mot de passe :"}')
-ON CONFLICT (key) DO UPDATE
-SET translations = EXCLUDED.translations;
-
-
--- 2. Site Logo
-DO $$
-DECLARE
-  v_logo_media_id UUID := gen_random_uuid();
-  v_admin_id UUID;
-BEGIN
-  -- Get an admin user ID to set as uploader (optional, fallback to NULL)
-  SELECT id INTO v_admin_id FROM public.profiles WHERE role = 'ADMIN' LIMIT 1;
-
-  -- Insert the logo into the media table
-  INSERT INTO public.media (id, uploader_id, file_name, object_key, file_type, size_bytes, description)
-  VALUES (
-    v_logo_media_id,
-    v_admin_id,
-    'nextblock-logo-small.webp',
-    'images/nextblock-logo-small.webp',
-    'image/webp',
-    10000,
-    'NextBlock™ Site Logo'
-  )
-  ON CONFLICT (object_key) DO UPDATE
-  SET
-    file_name = excluded.file_name,
-    file_type = excluded.file_type,
-    description = excluded.description
-  RETURNING id INTO v_logo_media_id;
-
-  -- Insert the logo into the logos table
-  INSERT INTO public.logos (name, media_id)
-  VALUES ('NextBlock™ Logo', v_logo_media_id)
-  ON CONFLICT DO NOTHING; -- Assuming name is not unique but we don't want to double insert if running multiple times? No unique constraint on name.
-  -- Actually, logos table has no unique constraint on name. 
-  -- But since this is a seed, we might want to avoid duplicates if run multiple times.
-  -- Let's check if it exists.
-  IF NOT EXISTS (SELECT 1 FROM public.logos WHERE name = 'NextBlock™ Logo') THEN
-     INSERT INTO public.logos (name, media_id) VALUES ('NextBlock™ Logo', v_logo_media_id);
-  END IF;
-
-END $$;
-
-
-
--- 3. Foundational Content (Pages & Posts Structure)
-DO $$
-DECLARE
-  v_home_page_group_id uuid := gen_random_uuid();
-  v_blog_page_group_id uuid := gen_random_uuid();
-  v_how_it_works_post_group_id uuid := gen_random_uuid();
-  v_setup_post_group_id uuid := gen_random_uuid();
-  v_commerce_post_group_id uuid := gen_random_uuid();
-  v_contact_page_group_id uuid := gen_random_uuid();
-  v_en_lang_id bigint;
-  v_fr_lang_id bigint;
-  v_architecture_media_id uuid;
-  v_extensibility_media_id uuid;
-  v_included_media_id uuid;
-  v_setup_media_id uuid;
-  v_commerce_plan_media_id uuid;
-  v_commerce_media_id uuid;
-BEGIN
-  SELECT id INTO v_en_lang_id FROM public.languages WHERE code = 'en' LIMIT 1;
-  SELECT id INTO v_fr_lang_id FROM public.languages WHERE code = 'fr' LIMIT 1;
-
-  IF v_en_lang_id IS NULL OR v_fr_lang_id IS NULL THEN
-    RAISE EXCEPTION 'Required languages (en, fr) not found.';
-  END IF;
-
-  INSERT INTO public.pages (language_id, title, slug, status, translation_group_id)
-  VALUES (v_en_lang_id, 'Home', 'home', 'published', v_home_page_group_id)
-  ON CONFLICT (language_id, slug) DO UPDATE SET title = EXCLUDED.title, status = EXCLUDED.status;
-
-  INSERT INTO public.pages (language_id, title, slug, status, translation_group_id)
-  VALUES (v_fr_lang_id, 'Accueil', 'accueil', 'published', v_home_page_group_id)
-  ON CONFLICT (language_id, slug) DO UPDATE SET title = EXCLUDED.title, status = EXCLUDED.status;
-
-  INSERT INTO public.pages (language_id, title, slug, status, translation_group_id)
-  VALUES (v_en_lang_id, 'Articles', 'articles', 'published', v_blog_page_group_id)
-  ON CONFLICT (language_id, slug) DO UPDATE SET title = EXCLUDED.title, status = EXCLUDED.status;
-
-  INSERT INTO public.pages (language_id, title, slug, status, translation_group_id)
-  VALUES (v_fr_lang_id, 'Articles', 'articles', 'published', v_blog_page_group_id)
-  ON CONFLICT (language_id, slug) DO UPDATE SET title = EXCLUDED.title, status = EXCLUDED.status;
-
-  INSERT INTO public.pages (language_id, title, slug, status, translation_group_id)
-  VALUES (v_en_lang_id, 'Contact Us', 'contact', 'published', v_contact_page_group_id)
-  ON CONFLICT (language_id, slug) DO UPDATE SET title = EXCLUDED.title, status = EXCLUDED.status;
-
-  INSERT INTO public.pages (language_id, title, slug, status, translation_group_id)
-  VALUES (v_fr_lang_id, 'Contactez-nous', 'contact', 'published', v_contact_page_group_id)
-  ON CONFLICT (language_id, slug) DO UPDATE SET title = EXCLUDED.title, status = EXCLUDED.status;
-
-  v_architecture_media_id := gen_random_uuid();
-  INSERT INTO public.media (id, file_name, object_key, file_type, size_bytes, width, height, description)
-  VALUES (
-    v_architecture_media_id,
-    'NBcover.webp',
-    'images/NBcover.webp',
-    'image/webp',
-    180000,
-    1024,
-    572,
-    'NextBlock™ architecture overview cover image'
-  )
-  ON CONFLICT (object_key) DO UPDATE
-  SET
-    file_name = EXCLUDED.file_name,
-    width = EXCLUDED.width,
-    height = EXCLUDED.height,
-    description = EXCLUDED.description
-  RETURNING id INTO v_architecture_media_id;
-
-  v_extensibility_media_id := gen_random_uuid();
-  INSERT INTO public.media (id, file_name, object_key, file_type, size_bytes, width, height, description)
-  VALUES (
-    v_extensibility_media_id,
-    'extensibility.webp',
-    'images/extensibility.webp',
-    'image/webp',
-    246808,
-    1024,
-    559,
-    'NextBlock™ extensibility editorial artwork'
-  )
-  ON CONFLICT (object_key) DO UPDATE
-  SET
-    file_name = EXCLUDED.file_name,
-    width = EXCLUDED.width,
-    height = EXCLUDED.height,
-    description = EXCLUDED.description
-  RETURNING id INTO v_extensibility_media_id;
-
-  v_included_media_id := gen_random_uuid();
-  INSERT INTO public.media (id, file_name, object_key, file_type, size_bytes, width, height, description)
-  VALUES (
-    v_included_media_id,
-    'included.webp',
-    'images/included.webp',
-    'image/webp',
-    237478,
-    1024,
-    559,
-    'NextBlock™ getting-started platform artwork'
-  )
-  ON CONFLICT (object_key) DO UPDATE
-  SET
-    file_name = EXCLUDED.file_name,
-    width = EXCLUDED.width,
-    height = EXCLUDED.height,
-    description = EXCLUDED.description
-  RETURNING id INTO v_included_media_id;
-
-  v_setup_media_id := gen_random_uuid();
-  INSERT INTO public.media (id, file_name, object_key, file_type, size_bytes, width, height, description)
-  VALUES (
-    v_setup_media_id,
-    'programmer-upscaled.webp',
-    'images/programmer-upscaled.webp',
-    'image/webp',
-    780000,
-    8192,
-    2632,
-    'NextBlock™ setup guide cover image'
-  )
-  ON CONFLICT (object_key) DO UPDATE
-  SET
-    file_name = EXCLUDED.file_name,
-    width = EXCLUDED.width,
-    height = EXCLUDED.height,
-    description = EXCLUDED.description
-  RETURNING id INTO v_setup_media_id;
-
-  v_commerce_plan_media_id := gen_random_uuid();
-  INSERT INTO public.media (id, file_name, object_key, file_type, size_bytes, width, height, description)
-  VALUES (
-    v_commerce_plan_media_id,
-    'commerce-plan.webp',
-    'images/commerce-plan.webp',
-    'image/webp',
-    269854,
-    1024,
-    559,
-    'NextBlock™ commerce roadmap artwork'
-  )
-  ON CONFLICT (object_key) DO UPDATE
-  SET
-    file_name = EXCLUDED.file_name,
-    width = EXCLUDED.width,
-    height = EXCLUDED.height,
-    description = EXCLUDED.description
-  RETURNING id INTO v_commerce_plan_media_id;
-
-  v_commerce_media_id := gen_random_uuid();
-  INSERT INTO public.media (id, file_name, object_key, file_type, size_bytes, width, height, description)
-  VALUES (
-    v_commerce_media_id,
-    'commerce-wide.webp',
-    'images/commerce-wide.webp',
-    'image/webp',
-    250584,
-    1024,
-    434,
-    'NextBlock™ Commerce editorial feature image'
-  )
-  ON CONFLICT (object_key) DO UPDATE
-  SET
-    file_name = EXCLUDED.file_name,
-    width = EXCLUDED.width,
-    height = EXCLUDED.height,
-    description = EXCLUDED.description
-  RETURNING id INTO v_commerce_media_id;
-
-  INSERT INTO public.posts (language_id, title, slug, label, status, excerpt, subtitle, translation_group_id, feature_image_id)
-  VALUES (
-    v_en_lang_id,
-    'How NextBlock™ Works: A Look Under the Hood',
-    'how-nextblock-works',
-    'Architecture',
-    'published',
-    'Under the hood of the monorepo, block registry, and editor stack that power NextBlock.',
-    'A guided tour of the monorepo, block registry, editor stack, and open-core architecture behind NextBlock.',
-    v_how_it_works_post_group_id,
-    v_architecture_media_id
-  )
-  ON CONFLICT (language_id, slug) DO UPDATE
-  SET
-    title = EXCLUDED.title,
-    label = EXCLUDED.label,
-    excerpt = EXCLUDED.excerpt,
-    subtitle = EXCLUDED.subtitle,
-    status = EXCLUDED.status,
-    feature_image_id = EXCLUDED.feature_image_id;
-
-  INSERT INTO public.posts (language_id, title, slug, label, status, excerpt, subtitle, translation_group_id, feature_image_id)
-  VALUES (
-    v_fr_lang_id,
-    'Comment NextBlock™ Fonctionne : Regard Sous le Capot',
-    'comment-nextblock-fonctionne',
-    'Architecture',
-    'published',
-    'Sous le capot du monorepo, du registre de blocs et de l editeur qui propulsent NextBlock.',
-    'Une visite guidee du monorepo, du registre de blocs, de l editeur et de l architecture open-core de NextBlock.',
-    v_how_it_works_post_group_id,
-    v_architecture_media_id
-  )
-  ON CONFLICT (language_id, slug) DO UPDATE
-  SET
-    title = EXCLUDED.title,
-    label = EXCLUDED.label,
-    excerpt = EXCLUDED.excerpt,
-    subtitle = EXCLUDED.subtitle,
-    status = EXCLUDED.status,
-    feature_image_id = EXCLUDED.feature_image_id;
-
-  INSERT INTO public.posts (language_id, title, slug, label, status, excerpt, subtitle, translation_group_id, feature_image_id)
-  VALUES (
-    v_en_lang_id,
-    'How to Setup NextBlock: From Scratch',
-    'how-to-setup-nextblock',
-    'Getting Started',
-    'published',
-    'Installation paths, launch checklists, and setup notes for teams adopting NextBlock.',
-    'Two clear ways to launch NextBlock: the full monorepo for contributors, or the CLI for a fast standalone setup.',
-    v_setup_post_group_id,
-    v_setup_media_id
-  )
-  ON CONFLICT (language_id, slug) DO UPDATE
-  SET
-    title = EXCLUDED.title,
-    label = EXCLUDED.label,
-    excerpt = EXCLUDED.excerpt,
-    subtitle = EXCLUDED.subtitle,
-    status = EXCLUDED.status,
-    feature_image_id = EXCLUDED.feature_image_id;
-
-  INSERT INTO public.posts (language_id, title, slug, label, status, excerpt, subtitle, translation_group_id, feature_image_id)
-  VALUES (
-    v_fr_lang_id,
-    'Comment Configurer NextBlock™ : Guide Complet',
-    'comment-configurer-nextblock',
-    'Mise En Route',
-    'published',
-    'Parcours d installation, checklist de lancement et notes de configuration pour adopter NextBlock.',
-    'Deux chemins simples pour lancer NextBlock™ : le monorepo complet pour les contributeurs, ou le CLI pour un demarrage rapide.',
-    v_setup_post_group_id,
-    v_setup_media_id
-  )
-  ON CONFLICT (language_id, slug) DO UPDATE
-  SET
-    title = EXCLUDED.title,
-    label = EXCLUDED.label,
-    excerpt = EXCLUDED.excerpt,
-    subtitle = EXCLUDED.subtitle,
-    status = EXCLUDED.status,
-    feature_image_id = EXCLUDED.feature_image_id;
-
-  INSERT INTO public.posts (language_id, title, slug, label, status, excerpt, subtitle, translation_group_id, feature_image_id)
-  VALUES (
-    v_en_lang_id,
-    'NextBlock™ Commerce: Multi-Currency, Tax Sync & Beyond',
-    'nextblock-commerce-guide',
-    'Commerce',
-    'published',
-    'Storefront architecture, checkout flows, and premium commerce capabilities inside NextBlock.',
-    'A closer look at the commerce module, from multi-currency and tax sync to shipping, inventory, and provider-aware checkout.',
-    v_commerce_post_group_id,
-    v_commerce_media_id
-  )
-  ON CONFLICT (language_id, slug) DO UPDATE
-  SET
-    title = EXCLUDED.title,
-    label = EXCLUDED.label,
-    excerpt = EXCLUDED.excerpt,
-    subtitle = EXCLUDED.subtitle,
-    status = EXCLUDED.status,
-    feature_image_id = EXCLUDED.feature_image_id;
-
-  INSERT INTO public.posts (language_id, title, slug, status, excerpt, translation_group_id, feature_image_id)
-  VALUES (
-    v_fr_lang_id,
-    'NextBlock™ Commerce : Multi-Devises, Taxes Automatiques et Plus',
-    'guide-commerce-nextblock',
-    'published',
-    'Un apercu du module commerce : multi-devises, sync taxes, expédition, inventaire et paiements connectes.',
-    v_commerce_post_group_id,
-    v_commerce_media_id
-  )
-  ON CONFLICT (language_id, slug) DO UPDATE
-  SET
-    title = EXCLUDED.title,
-    excerpt = EXCLUDED.excerpt,
-    status = EXCLUDED.status,
-    feature_image_id = EXCLUDED.feature_image_id;
-
-  UPDATE public.posts
-  SET
-    label = 'Architecture',
-    excerpt = 'Under the hood of the monorepo, block registry, and editor stack that power NextBlock.',
-    subtitle = 'A guided tour of the monorepo, block registry, editor stack, and open-core architecture behind NextBlock.'
-  WHERE slug = 'how-nextblock-works';
-
-  UPDATE public.posts
-  SET
-    label = 'Architecture',
-    excerpt = 'Sous le capot du monorepo, du registre de blocs et de l editeur qui propulsent NextBlock.',
-    subtitle = 'Une visite guidee du monorepo, du registre de blocs, de l editeur et de l architecture open-core de NextBlock.'
-  WHERE slug = 'comment-nextblock-fonctionne';
-
-  UPDATE public.posts
-  SET
-    label = 'Getting Started',
-    excerpt = 'Installation paths, launch checklists, and setup notes for teams adopting NextBlock.',
-    subtitle = 'Two clear ways to launch NextBlock: the full monorepo for contributors, or the CLI for a fast standalone setup.'
-  WHERE slug = 'how-to-setup-nextblock';
-
-  UPDATE public.posts
-  SET
-    label = 'Mise En Route',
-    excerpt = 'Parcours d installation, checklist de lancement et notes de configuration pour adopter NextBlock.',
-    subtitle = 'Deux chemins simples pour lancer NextBlock™ : le monorepo complet pour les contributeurs, ou le CLI pour un demarrage rapide.'
-  WHERE slug = 'comment-configurer-nextblock';
-
-  UPDATE public.posts
-  SET
-    label = 'Commerce',
-    excerpt = 'Storefront architecture, checkout flows, and premium commerce capabilities inside NextBlock.',
-    subtitle = 'A closer look at the commerce module, from multi-currency and tax sync to shipping, inventory, and provider-aware checkout.'
-  WHERE slug = 'nextblock-commerce-guide';
-
-  UPDATE public.posts
-  SET
-    label = 'Commerce',
-    excerpt = 'Architecture boutique, parcours de paiement et fonctions commerce premium au coeur de NextBlock.',
-    subtitle = 'Un apercu du module commerce : multi-devises, sync taxes, expedition, inventaire et paiements connectes.'
-  WHERE slug = 'guide-commerce-nextblock';
-
-END $$;
-
--- English Home + Blog blocks
-DO $seed$
-DECLARE
-  v_en_lang_id BIGINT;
-  v_home_page_id BIGINT;
-  v_blog_page_id BIGINT;
-  v_contact_page_id BIGINT;
-BEGIN
-  SELECT id INTO v_en_lang_id FROM public.languages WHERE code = 'en' LIMIT 1;
-  IF v_en_lang_id IS NULL THEN RAISE EXCEPTION 'English language not found.'; END IF;
-
-  SELECT id INTO v_home_page_id FROM public.pages WHERE slug = 'home' AND language_id = v_en_lang_id ORDER BY created_at DESC LIMIT 1;
-  IF v_home_page_id IS NULL THEN RAISE EXCEPTION 'English Home page not found.'; END IF;
-
-  SELECT id INTO v_blog_page_id FROM public.pages WHERE slug = 'articles' AND language_id = v_en_lang_id ORDER BY created_at DESC LIMIT 1;
-  IF v_blog_page_id IS NULL THEN RAISE EXCEPTION 'English Articles page not found.'; END IF;
-
-  SELECT id INTO v_contact_page_id FROM public.pages WHERE slug = 'contact' AND language_id = v_en_lang_id ORDER BY created_at DESC LIMIT 1;
-  IF v_contact_page_id IS NULL THEN RAISE EXCEPTION 'English Contact page not found.'; END IF;
-
-  DELETE FROM public.blocks WHERE page_id = v_home_page_id;
-  DELETE FROM public.blocks WHERE page_id = v_blog_page_id;
-  DELETE FROM public.blocks WHERE page_id = v_contact_page_id;
-
-  INSERT INTO public.blocks (page_id, language_id, block_type, content, "order") VALUES
-  (v_home_page_id, v_en_lang_id, 'hero',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":50},{"color":"#1e293b","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"xl","vertical_alignment":"center","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<h1 class=''text-5xl md:text-6xl font-extrabold tracking-tight text-white text-center leading-tight''>Build <span class=''relative inline-block mx-1 group''><span class=''absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-400 translate-y-1 md:translate-y-2 transform -skew-x-12 rounded-sm shadow-lg group-hover:skew-x-0 transition-transform duration-300 ease-out''></span><span class=''relative text-white italic px-1''>Blazing-Fast</span></span><br class=''md:hidden'' /> Websites.</h1>"}},{"block_type":"text","content":{"html_content":"<p class=''text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4 leading-relaxed''>NextBlock™ is the open-source, developer-first Next.js CMS that merges 100% Lighthouse scores with a powerful visual block editor.</p>"}},{"block_type":"button","content":{"text":"Get Started","url":"/article/how-to-setup-nextblock","variant":"default","size":"lg","position":"center"}},{"block_type":"button","content":{"text":"View on GitHub","url":"https://github.com/nextblock-cms/nextblock","variant":"outline","size":"lg","position":"center"}},{"block_type":"text","content":{"html_content":"<div class=''flex flex-wrap justify-center gap-6 text-sm uppercase tracking-wide text-slate-400 mt-8''><a href=''https://github.com/nextblock-cms'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>GitHub</a><a href=''https://x.com/NextBlockCMS'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>X</a><a href=''https://www.linkedin.com/in/nextblock/'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>LinkedIn</a><a href=''https://dev.to/nextblockcms'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>Dev.to</a><a href=''https://www.npmjs.com/~nextblockcms'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>npm</a></div>"}}],[{"block_type":"text","content":{"html_content":"<div class=''p-10 border border-white/10 rounded-3xl bg-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden group''><div class=''absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500''></div><div class=''relative z-10''><p class=''text-xs text-white uppercase tracking-widest font-semibold mb-2''>Why teams switch</p><p class=''text-3xl font-bold text-white mb-2''>100% Lighthouse</p><p class=''text-base text-slate-300 mb-6''>Edge-rendered marketing sites, launches, and docs with uncompromising performance.</p><ul class=''space-y-3 text-sm text-slate-200''><li><span class=''text-blue-400 mr-2''>&#10003;</span> Next.js 16 with ISR and edge caching</li><li><span class=''text-blue-400 mr-2''>&#10003;</span> Supabase auth, data, and storage</li><li><span class=''text-blue-400 mr-2''>&#10003;</span> Notion-style block editor powered by Tiptap</li></ul><div class=''mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-lg''><img src=''/images/NBcover.webp'' alt=''Nextblock cover showcasing dashboards and blocks'' class=''w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700'' fetchpriority=''high'' /></div></div></div>"}}]]}'::jsonb, 0),
-
-  (v_home_page_id, v_en_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":2,"text_content":"Key Features: The Three Pillars of NextBlock™","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-lg text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ is a holistic platform that unites performance, editorial experience, and developer control so every stakeholder delivers their best work.</p>"}},{"block_type":"text","content":{"html_content":"<div class=''grid gap-8 md:grid-cols-3 mt-12''><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 backdrop-blur-sm hover:bg-slate-100 dark:hover:bg-white/10 transition-colors duration-300''><div class=''w-12 h-12 rounded-xl flex items-center justify-center text-black dark:text-white mb-6''><svg class=''w-6 h-6'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M13 10V3L4 14h7v7l9-11h-7z''></path></svg></div><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Built for Speed.</h3><p class=''text-sm text-slate-600 dark:text-slate-400 leading-relaxed''>Architected for 100% Lighthouse scores with global delivery and near-instant FCP.</p><ul class=''mt-6 space-y-3 text-sm text-slate-600 dark:text-slate-400''><li><strong class=''text-slate-800 dark:text-slate-200''>Edge Caching &amp; ISR:</strong> Serve pages worldwide.</li><li><strong class=''text-slate-800 dark:text-slate-200''>Critical CSS:</strong> Inline styles to eliminate blocking.</li><li><strong class=''text-slate-800 dark:text-slate-200''>Image Opt:</strong> AVIF &amp; blurred placeholders.</li></ul></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 backdrop-blur-sm hover:bg-slate-100 dark:hover:bg-white/10 transition-colors duration-300''><div class=''w-12 h-12 rounded-xl flex items-center justify-center text-black dark:text-white mb-6''><svg class=''w-6 h-6'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z''></path></svg></div><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Editor-First Experience.</h3><p class=''text-sm text-slate-600 dark:text-slate-400 leading-relaxed''>A low-code, Notion-style block editor empowers teams to ship pages without engineering help.</p><ul class=''mt-6 space-y-3 text-sm text-slate-600 dark:text-slate-400''><li><strong class=''text-slate-800 dark:text-slate-200''>Notion-Style:</strong> Slash commands &amp; drag-and-drop.</li><li><strong class=''text-slate-800 dark:text-slate-200''>Bilingual:</strong> Manage locales from one interface.</li><li><strong class=''text-slate-800 dark:text-slate-200''>History:</strong> Restore any version with a click.</li></ul></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 backdrop-blur-sm hover:bg-slate-100 dark:hover:bg-white/10 transition-colors duration-300''><div class=''w-12 h-12 bg-white/50 dark:bg-white/10 rounded-xl flex items-center justify-center mb-6''><svg class=''w-6 h-6 text-slate-900 dark:text-white'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10''></path></svg></div><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Infinitely Extensible.</h3><p class=''text-sm text-slate-700 dark:text-slate-200 leading-relaxed''>Open-source control with a clean Nx monorepo and a typed SDK for limitless customization.</p><ul class=''mt-6 space-y-3 text-sm text-slate-700 dark:text-slate-200''><li><strong class=''text-slate-900 dark:text-white''>Open Source:</strong> Own the code &amp; data forever.</li><li><strong class=''text-slate-900 dark:text-white''>Nx Monorepo:</strong> Scale confidently.</li><li><strong class=''text-slate-900 dark:text-white''>Developer SDK:</strong> Scaffold blocks in minutes.</li></ul></div></div>"}}]]}'::jsonb, 1),
-
-  (v_home_page_id, v_en_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"180deg","stops":[{"color":"#0f172a","position":0},{"color":"#020817","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<h2 class=''text-3xl md:text-4xl font-bold text-white text-center mb-6''>Built with the Best.</h2>"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-400 text-center max-w-2xl mx-auto''>Every layer of NextBlock™ leans on proven developer-first technology so the platform feels familiar, performant, and trustworthy from day one.</p><div class=''grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 mt-10 text-sm font-semibold text-center text-white''><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Next.js</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>React</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Supabase</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Stripe</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Tailwind</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Tiptap</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Vercel</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Nx</div></div>"}},{"block_type":"text","content":{"html_content":"<h2 class=''text-3xl md:text-4xl font-bold text-white text-center mb-6 mt-16''>Powerful for Developers. Intuitive for Editors.</h2>"}},{"block_type":"text","content":{"html_content":"<div class=''grid md:grid-cols-2 gap-8 mt-10 text-white''><div class=''p-8 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm''><h3 class=''text-xl font-bold mb-6 text-blue-400''>For Content Creators</h3><ul class=''space-y-4 text-sm text-slate-300''><li><strong class=''text-white block mb-1''>Intuitive Block Editor</strong>Drag-and-drop layouts with a Notion-like interface.</li><li><strong class=''text-white block mb-1''>Rich Content Blocks</strong>Deploy heroes, galleries, testimonials, and more in one click.</li><li><strong class=''text-white block mb-1''>Effortless Media Management</strong>Organize assets with folders, tags, and bulk actions.</li><li><strong class=''text-white block mb-1''>Worry-Free Revisions</strong>Automatic version history with instant restore.</li></ul></div><div class=''p-8 rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-sm''><h3 class=''text-xl font-bold mb-6 text-purple-400''>For Developers</h3><ul class=''space-y-4 text-sm text-slate-300''><li><strong class=''text-white block mb-1''>Next.js 16 Core</strong>Server Components, ISR, and Edge Functions ready out of the box.</li><li><strong class=''text-white block mb-1''>Supabase Integration</strong>Postgres, auth, storage, and real-time APIs without glue code.</li><li><strong class=''text-white block mb-1''>Monorepo Ready</strong>Nx-powered dev experience for scalable architectures.</li><li><strong class=''text-white block mb-1''>Extensible Block SDK</strong>Ship fully typed custom blocks and widgets.</li></ul></div></div>"}}]]}'::jsonb, 2),
-  (v_home_page_id, v_en_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#022c22","position":0},{"color":"#0f172a","position":50},{"color":"#020817","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"xl","vertical_alignment":"center","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<p class=''text-xs uppercase tracking-[0.25em] text-emerald-400 font-bold mb-4''>Now Available — Premium Module</p><h2 class=''text-4xl md:text-5xl font-bold text-white mb-6 leading-tight''>Turn Your CMS Into<br/>a Full Storefront.</h2><p class=''text-lg text-slate-300 max-w-2xl leading-relaxed mb-8''>NextBlock™ Commerce transforms your content platform into a complete e-commerce engine. Products, checkout, multi-currency, taxes, shipping, invoices — all natively integrated into the block editor you already know.</p>"}},{"block_type":"button","content":{"text":"Explore Commerce Features →","url":"/article/nextblock-commerce-guide","variant":"default","size":"lg"}},{"block_type":"button","content":{"text":"Get a License","url":"https://nextblock.dev/product/nextblock-commerce-pro-commerce-license","variant":"outline","size":"lg"}}],[{"block_type":"text","content":{"html_content":"<div class=''rounded-3xl overflow-hidden border border-emerald-500/20 bg-gradient-to-br from-white/5 to-emerald-500/5 shadow-2xl p-6 backdrop-blur-sm''><img src=''/images/commerce-square.webp'' alt=''NextBlock™ Commerce dashboard showing product management'' class=''w-full h-auto rounded-2xl shadow-lg'' /><div class=''mt-4 grid grid-cols-3 gap-3 text-center''><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>∞</p><p class=''text-xs text-slate-400''>Currencies</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>2</p><p class=''text-xs text-slate-400''>Providers</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>Auto</p><p class=''text-xs text-slate-400''>Tax Sync</p></div></div></div>"}}]]}'::jsonb, 3),
-
-  (v_home_page_id, v_en_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":2,"text_content":"Everything You Need to Sell Online","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-lg text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto mb-12''>NextBlock™ Commerce ships a complete e-commerce toolkit so you can go from catalog to checkout without third-party plugins.</p><div class=''grid gap-6 md:grid-cols-2 lg:grid-cols-3''><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Multi-Currency</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Real-time FX rates, rounding modes, charm pricing, and automatic product price sync across unlimited currencies.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Tax Automation</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Manual stacked tax rates (GST + PST) or fully automatic calculation via Stripe Tax — you choose.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Shipping Zones</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Zone-based rate resolution with country and state matching, per-currency pricing, and free-shipping thresholds.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Stripe &amp; Freemius Checkout</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Stripe for physical products, Freemius for digital licensing — provider-aware checkout with inventory validation.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Inventory Tracking</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Automatic quantity deduction on payment with resilient fallback paths and variant-level stock management.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Orders &amp; Invoices</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Full order lifecycle management, stable invoice numbering, printable documents, and exportable order reports.</p></div></div>"}}]]}'::jsonb, 4),
-
-  (v_home_page_id, v_en_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#1e1b4b","position":0},{"color":"#0f172a","position":50},{"color":"#020817","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"xl","vertical_alignment":"center","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<div class=''rounded-3xl overflow-hidden border border-violet-500/20 bg-gradient-to-br from-white/5 to-violet-500/5 shadow-2xl p-6 backdrop-blur-sm''><img src=''/images/cortex-ai-square.webp'' alt=''NextBlock™ Cortex AI dashboard showing block generator'' class=''w-full h-auto rounded-2xl shadow-lg'' /><div class=''mt-4 grid grid-cols-3 gap-3 text-center''><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>OpenRouter</p><p class=''text-xs text-slate-400''>AI Gateway</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>BYOK</p><p class=''text-xs text-slate-400''>Cost Control</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>Zod</p><p class=''text-xs text-slate-400''>Typed Blocks</p></div></div></div>"}}],[{"block_type":"text","content":{"html_content":"<p class=''text-xs uppercase tracking-[0.25em] text-violet-400 font-bold mb-4''>Now Available — AI Copilot</p><h2 class=''text-4xl md:text-5xl font-bold text-white mb-6 leading-tight''>Supercharge Your<br/>Content with AI.</h2><p class=''text-lg text-slate-300 max-w-2xl leading-relaxed mb-8''>NextBlock™ Cortex AI brings native block-level intelligence directly to your editor. Generate copy, refactor structures, and automate translations in one click, built directly on our high-performance architecture.</p>"}},{"block_type":"button","content":{"text":"Explore AI Capabilities →","url":"/article/nextblock-cortex-ai-guide","variant":"default","size":"lg"}},{"block_type":"button","content":{"text":"Get a License","url":"https://nextblock.dev/product/nextblock-cortex-ai-cortex-ai-license","variant":"outline","size":"lg"}}]]}'::jsonb, 5),
-
-  (v_home_page_id, v_en_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":2,"text_content":"More Than a CMS. An Ecosystem.","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ is building a sustainable open-core roadmap so the platform grows with your business.</p>"}},{"block_type":"text","content":{"html_content":"<div class=''grid gap-6 lg:grid-cols-[0.75fr_1.25fr] mt-10 items-stretch''><div class=''overflow-hidden rounded-[2rem] border border-slate-200 dark:border-white/10 bg-slate-950 shadow-2xl''><img src=''/images/goals.webp'' alt=''Roadmap board outlining the NextBlock™ ecosystem and premium module direction'' class=''h-full w-full object-cover'' /><div class=''border-t border-white/10 bg-slate-950/95 px-6 py-5''><p class=''text-xs uppercase tracking-[0.24em] text-emerald-300 mb-2 font-bold''>Roadmap in motion</p><p class=''text-sm text-slate-300 mb-0''>Commerce ships first, then the broader ecosystem grows around plugins, blocks, and partner-built modules.</p></div></div><div class=''grid gap-6''><div class=''p-10 rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-500/5 dark:to-white/5 hover:border-emerald-500/40 transition-colors''><p class=''text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-2 font-bold''>Available now</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>NextBlock™ Commerce</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Transform your site into a composable storefront with products, checkout, multi-currency pricing, tax automation, and commerce blocks that live beside your editorial content.</p></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-violet-500/30 transition-colors''><p class=''text-xs uppercase tracking-wide text-violet-700 dark:text-violet-300 mb-2 font-bold''>Build the future</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Plugin and block marketplace</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>A community marketplace gives developers room to publish, sell, and distribute custom blocks, themes, integrations, and partner modules.</p></div></div></div>"}},{"block_type":"heading","content":{"level":2,"text_content":"Join Our Community.","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-600 dark:text-slate-400 text-center mx-auto''>NextBlock™ is being built in the open. Star the repo, share feedback, and help define the future of performance-first content management.</p>"}},{"block_type":"text","content":{"html_content":"<div class=''grid gap-4 md:grid-cols-3 mt-10 text-sm''><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://github.com/nextblock-cms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>GitHub</strong><span class=''text-slate-600 dark:text-slate-400''>Star the repo &amp; contribute</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://x.com/NextBlockCMS'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>X (Twitter)</strong><span class=''text-slate-600 dark:text-slate-400''>Follow updates &amp; announcements</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://dev.to/nextblockcms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>Dev.to</strong><span class=''text-slate-600 dark:text-slate-400''>Read technical deep dives</span></a></div>"}}]]}'::jsonb, 6),
-
-  (v_home_page_id, v_en_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"180deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<h2 class=''text-3xl md:text-4xl font-bold text-center text-white mb-4''>Have Questions?</h2>"}},{"block_type":"text","content":{"html_content":"<p class=''text-center text-lg text-slate-300 mx-auto mb-8''>NextBlock™ partners with early adopters to co-build features, sponsor modules, and shape the product direction.</p>"}},{"block_type":"button","content":{"text":"Get in Touch","url":"/contact","variant":"default","size":"lg","position":"center"}}]]}'::jsonb, 6),
-
-  (v_blog_page_id, v_en_lang_id, 'hero',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#020817","position":0},{"color":"#1e293b","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<p class=''text-sm uppercase tracking-[0.3em] text-blue-400 font-bold text-center md:text-left mb-4''>The Nextblock Journal</p>"}},{"block_type":"text","content":{"html_content":"<h2 class=''text-4xl md:text-5xl font-bold text-white text-center md:text-left mb-6''>Deep dives into performance, DX, and visual editing.</h2>"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-300 text-lg max-w-xl mx-auto md:mx-0 text-center md:text-left leading-relaxed''>Explore architectural walkthroughs, Supabase recipes, and block editor experiments written by the Nextblock core team.</p>"}},{"block_type":"button","content":{"text":"Explore Articles","url":"/articles#latest","variant":"default","size":"lg"}},{"block_type":"button","content":{"text":"Subscribe for Updates","url":"https://github.com/nextblock-cms/nextblock/discussions","variant":"outline","size":"lg"}}],[{"block_type":"text","content":{"html_content":"<div class=''h-full flex items-center justify-center rounded-3xl overflow-hidden border border-white/10 bg-white/5 shadow-2xl p-4 backdrop-blur-sm''><img src=''/images/developer.webp'' alt=''Developer working with the Nextblock stack'' class=''w-full object-cover rounded-2xl shadow-lg'' style=''max-width: 400px;'' /></div>"}}]]}'::jsonb, 0),
-
-  (v_blog_page_id, v_en_lang_id, 'posts_grid',
-  '{"postsPerPage":6,"columns":3,"showPagination":true,"title":"Latest Deep Dives"}'::jsonb, 1);
-
-  DELETE FROM public.navigation_items WHERE menu_key = 'HEADER' AND language_id = v_en_lang_id;
-
-  INSERT INTO public.navigation_items (language_id, menu_key, label, url, "order", page_id) VALUES
-    (v_en_lang_id, 'HEADER', 'Home', '/', 0, v_home_page_id),
-    (v_en_lang_id, 'HEADER', 'Articles', '/articles', 1, v_blog_page_id),
-    (v_en_lang_id, 'HEADER', 'Contact', '/contact', 3, v_contact_page_id);
-
-  INSERT INTO public.blocks (page_id, language_id, block_type, content, "order") VALUES
-  (v_contact_page_id, v_en_lang_id, 'hero', '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":1,"text_content":"Let''s Build the Future Together","textAlign":"center","textColor":"white"}},{"block_type":"text","content":{"html_content":"<p class=''text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4''>NextBlock™ is an open-source project driven by community feedback. We''d love to hear your thoughts, ideas, or questions.</p>"}}]]}'::jsonb, 0),
-  (v_contact_page_id, v_en_lang_id, 'section', '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"lg","bottom":"lg"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<div class=''max-w-2xl mx-auto text-center''><h2 class=''text-2xl font-bold mb-4''>Open Source & Community Driven</h2><p class=''text-slate-600 dark:text-slate-400 mb-6''>NextBlock™ is built in the open. We rely on developers and editors like you to help us define the roadmap. Whether it''s a bug report, a feature request, or just a shoutout, every message helps us move faster.</p></div>"}}]]}'::jsonb, 1),
-  (v_contact_page_id, v_en_lang_id, 'form', '{"recipient_email":"foo@bar.com","submit_button_text":"Send Message","success_message":"Thank you for your feedback! We''ll get back to you soon.","fields":[{"temp_id":"name","label":"Name","field_type":"text","is_required":true,"placeholder":"Your name"},{"temp_id":"email","label":"Email","field_type":"email","is_required":true,"placeholder":"your@email.com"},{"temp_id":"message","label":"Message","field_type":"textarea","is_required":true,"placeholder":"How can we help?"}]}'::jsonb, 2);
-END;
-$seed$;
-SELECT id AS home_page_id
-FROM public.pages
-WHERE slug = 'home'
-  AND language_id = (SELECT id FROM public.languages WHERE code = 'en' LIMIT 1)
-ORDER BY created_at DESC
-LIMIT 1;
-
-SELECT id AS blog_page_id
-FROM public.pages
-WHERE slug = 'articles'
-  AND language_id = (SELECT id FROM public.languages WHERE code = 'en' LIMIT 1)
-ORDER BY created_at DESC
-LIMIT 1;
--- French Home + Blog blocks
-DO $seed_fr$
-DECLARE
-  v_fr_lang_id BIGINT;
-  v_home_page_fr_id BIGINT;
-  v_blog_page_fr_id BIGINT;
-  v_contact_page_fr_id BIGINT;
-BEGIN
-  SELECT id INTO v_fr_lang_id FROM public.languages WHERE code = 'fr' LIMIT 1;
-  IF v_fr_lang_id IS NULL THEN RAISE EXCEPTION 'French language not found.'; END IF;
-
-  SELECT id INTO v_home_page_fr_id FROM public.pages WHERE slug = 'accueil' AND language_id = v_fr_lang_id ORDER BY created_at DESC LIMIT 1;
-  SELECT id INTO v_blog_page_fr_id FROM public.pages WHERE slug = 'articles' AND language_id = v_fr_lang_id ORDER BY created_at DESC LIMIT 1;
-  SELECT id INTO v_contact_page_fr_id FROM public.pages WHERE slug = 'contact' AND language_id = v_fr_lang_id ORDER BY created_at DESC LIMIT 1;
-
-  IF v_home_page_fr_id IS NULL THEN RAISE EXCEPTION 'French home page not found.'; END IF;
-  IF v_blog_page_fr_id IS NULL THEN RAISE EXCEPTION 'French articles page not found.'; END IF;
-  IF v_contact_page_fr_id IS NULL THEN RAISE EXCEPTION 'French contact page not found.'; END IF;
-
-  DELETE FROM public.blocks WHERE page_id IN (v_home_page_fr_id, v_blog_page_fr_id, v_contact_page_fr_id);
-
-  DELETE FROM public.navigation_items WHERE menu_key = 'HEADER' AND language_id = v_fr_lang_id;
-
-  INSERT INTO public.navigation_items (language_id, menu_key, label, url, "order", page_id) VALUES
-    (v_fr_lang_id, 'HEADER', 'Accueil', '/accueil', 0, v_home_page_fr_id),
-    (v_fr_lang_id, 'HEADER', 'Articles', '/articles', 1, v_blog_page_fr_id),
-    (v_fr_lang_id, 'HEADER', 'Contact', '/contact', 3, v_contact_page_fr_id);
-
-  INSERT INTO public.blocks (page_id, language_id, block_type, content, "order") VALUES
-  (v_contact_page_fr_id, v_fr_lang_id, 'hero', '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":1,"text_content":"Bâtissons le futur ensemble","textAlign":"center","textColor":"white"}},{"block_type":"text","content":{"html_content":"<p class=''text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4''>NextBlock™ est un projet open-source propulsé par vos retours. Nous serions ravis d''entendre vos idées ou vos questions.</p>"}}]]}'::jsonb, 0),
-  (v_contact_page_fr_id, v_fr_lang_id, 'section', '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"padding":{"top":"lg","bottom":"lg"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<div class=''max-w-2xl mx-auto text-center''><h2 class=''text-2xl font-bold mb-4''>Open Source & Communautaire</h2><p class=''text-slate-600 dark:text-slate-400 mb-6''>NextBlock™ est construit en public. Nous comptons sur les développeurs et éditeurs comme vous pour définir notre roadmap. Qu''il s''agisse d''un bug, d''une suggestion ou d''un simple salut, chaque message compte.</p></div>"}}]]}'::jsonb, 1),
-  (v_contact_page_fr_id, v_fr_lang_id, 'form', '{"recipient_email":"foo@bar.com","submit_button_text":"Envoyer le message","success_message":"Merci pour vos retours ! Nous vous répondrons bientôt.","fields":[{"temp_id":"nom","label":"Nom","field_type":"text","is_required":true,"placeholder":"Votre nom"},{"temp_id":"email","label":"Email","field_type":"email","is_required":true,"placeholder":"votre@email.com"},{"temp_id":"message","label":"Message","field_type":"textarea","is_required":true,"placeholder":"Comment pouvons-nous vous aider ?"}]}'::jsonb, 2);
-
-  INSERT INTO public.blocks (page_id, language_id, block_type, content, "order") VALUES
-  (v_home_page_fr_id, v_fr_lang_id, 'hero',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":50},{"color":"#1e293b","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"xl","vertical_alignment":"center","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<h1 class=''text-5xl md:text-6xl font-bold tracking-tight text-white text-center drop-shadow-lg''>Créez des sites <span class=''relative inline-block mx-1 group''><span class=''absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-400 translate-y-1 md:translate-y-2 transform -skew-x-12 rounded-sm shadow-lg group-hover:skew-x-0 transition-transform duration-300 ease-out''></span><span class=''relative text-white italic px-1''>Ultra-Rapides</span></span><br class=''md:hidden'' />.</h1>"}},{"block_type":"text","content":{"html_content":"<p class=''text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4 leading-relaxed''>NextBlock™ est le CMS Next.js open-source alliant scores Lighthouse parfaits et éditeur visuel puissant.</p>"}},{"block_type":"button","content":{"text":"Commencer","url":"/article/comment-configurer-nextblock","variant":"default","size":"lg","position":"center"}},{"block_type":"button","content":{"text":"Voir sur GitHub","url":"https://github.com/nextblock-cms/nextblock","variant":"outline","size":"lg","position":"center"}},{"block_type":"text","content":{"html_content":"<div class=''flex flex-wrap justify-center gap-6 text-sm uppercase tracking-wide text-slate-400 mt-8''><a href=''https://github.com/nextblock-cms'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>GitHub</a><a href=''https://x.com/NextBlockCMS'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>X</a><a href=''https://www.linkedin.com/in/nextblock/'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>LinkedIn</a><a href=''https://dev.to/nextblockcms'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>Dev.to</a><a href=''https://www.npmjs.com/~nextblockcms'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>npm</a></div>"}}],[{"block_type":"text","content":{"html_content":"<div class=''p-10 border border-white/10 rounded-3xl bg-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden group''><div class=''absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500''></div><div class=''relative z-10''><p class=''text-xs text-white uppercase tracking-widest font-semibold mb-2''>Pourquoi migrer</p><p class=''text-3xl font-bold text-white mb-2''>100% Lighthouse</p><p class=''text-base text-slate-300 mb-6''>Sites marketing et docs rendus à l''edge avec des performances irréprochables.</p><ul class=''space-y-3 text-sm text-slate-200''><li><span class=''text-blue-400 mr-2''>&#10003;</span> Next.js 16 avec ISR et cache edge</li><li><span class=''text-blue-400 mr-2''>&#10003;</span> Supabase pour l''auth, les données et le stockage</li><li><span class=''text-blue-400 mr-2''>&#10003;</span> Éditeur de blocs type Notion sur Tiptap</li></ul><div class=''mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-lg''><img src=''/images/NBcover.webp'' alt=''Couverture Nextblock'' class=''w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700'' fetchpriority=''high'' /></div></div></div>"}}]]}'::jsonb, 0),
-
-  (v_home_page_fr_id, v_fr_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":2,"text_content":"Fonctionnalités clés : les trois piliers de NextBlock™","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-lg text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ unifie performances, expérience éditoriale et contrôle développeur pour que chaque équipe livre son meilleur travail.</p>"}},{"block_type":"text","content":{"html_content":"<div class=''grid gap-8 md:grid-cols-3 mt-12''><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 backdrop-blur-sm hover:bg-slate-100 dark:hover:bg-white/10 transition-colors duration-300''><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Vitesse Extrême.</h3><p class=''text-sm text-slate-600 dark:text-slate-400 leading-relaxed''>Pensé pour des scores Lighthouse parfaits avec une diffusion mondiale.</p><ul class=''mt-6 space-y-3 text-sm text-slate-600 dark:text-slate-400''><li><strong class=''text-slate-800 dark:text-slate-200''>Edge Caching:</strong> Servez vos pages partout.</li><li><strong class=''text-slate-800 dark:text-slate-200''>Critical CSS:</strong> Styles en ligne pour éviter les blocages.</li><li><strong class=''text-slate-800 dark:text-slate-200''>Images Opt:</strong> AVIF et placeholders floutés.</li></ul></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 backdrop-blur-sm hover:bg-slate-100 dark:hover:bg-white/10 transition-colors duration-300''><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Expérience Éditeur.</h3><p class=''text-sm text-slate-600 dark:text-slate-400 leading-relaxed''>Un éditeur façon Notion pour publier sans dépendre des développeurs.</p><ul class=''mt-6 space-y-3 text-sm text-slate-600 dark:text-slate-400''><li><strong class=''text-slate-800 dark:text-slate-200''>Visuel:</strong> Héros, galeries, témoignages.</li><li><strong class=''text-slate-800 dark:text-slate-200''>Média:</strong> Dossiers, tags et actions groupées.</li><li><strong class=''text-slate-800 dark:text-slate-200''>Historique:</strong> Restauration complète.</li></ul></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 backdrop-blur-sm hover:bg-slate-100 dark:hover:bg-white/10 transition-colors duration-300''><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Extensible à l''Infini.</h3><p class=''text-sm text-slate-700 dark:text-slate-200 leading-relaxed''>Un socle Next.js + Supabase modulaire, extensible et auto-hébergeable.</p><ul class=''mt-6 space-y-3 text-sm text-slate-700 dark:text-slate-200''><li><strong class=''text-slate-900 dark:text-white''>SDK de blocs:</strong> Composants typés.</li><li><strong class=''text-slate-900 dark:text-white''>CLI:</strong> Générez modules en minutes.</li><li><strong class=''text-slate-900 dark:text-white''>Monorepo Nx:</strong> Dépendances maintenables.</li></ul></div></div>"}}]]}'::jsonb, 1),
-
-  (v_home_page_fr_id, v_fr_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"180deg","stops":[{"color":"#0f172a","position":0},{"color":"#020817","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<h2 class=''text-3xl md:text-4xl font-bold text-white text-center mb-6''>Conçu avec les meilleurs outils.</h2>"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-400 text-center max-w-2xl mx-auto''>Chaque couche de NextBlock™ repose sur des technologies éprouvées pour une expérience familière et performante.</p><div class=''grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 mt-10 text-sm font-semibold text-center text-white''><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Next.js</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>React</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Supabase</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Stripe</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Tailwind</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Tiptap</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Vercel</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Nx</div></div>"}},{"block_type":"text","content":{"html_content":"<h2 class=''text-3xl md:text-4xl font-bold text-white text-center mb-6 mt-16''>Puissant pour les développeurs. Intuitif pour les éditeurs.</h2>"}},{"block_type":"text","content":{"html_content":"<div class=''grid md:grid-cols-2 gap-8 mt-10 text-white''><div class=''p-8 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm''><h3 class=''text-xl font-bold mb-6 text-blue-400''>Pour les créateurs</h3><ul class=''space-y-4 text-sm text-slate-300''><li><strong class=''text-white block mb-1''>Éditeur de blocs</strong>Glisser-déposer façon Notion.</li><li><strong class=''text-white block mb-1''>Blocs riches</strong>Héros, galeries, témoignages.</li><li><strong class=''text-white block mb-1''>Médiathèque</strong>Dossiers, tags et actions groupées.</li><li><strong class=''text-white block mb-1''>Versions sécurisées</strong>Historique et restauration instantanée.</li></ul></div><div class=''p-8 rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-sm''><h3 class=''text-xl font-bold mb-6 text-purple-400''>Pour les développeurs</h3><ul class=''space-y-4 text-sm text-slate-300''><li><strong class=''text-white block mb-1''>Next.js 16</strong>Server Components, ISR et Edge prêts à l''emploi.</li><li><strong class=''text-white block mb-1''>Supabase</strong>Postgres, auth, stockage, temps réel.</li><li><strong class=''text-white block mb-1''>Monorepo Nx</strong>Dépendances lisibles et centrales.</li><li><strong class=''text-white block mb-1''>SDK de blocs</strong>Widgets typés et extensibles.</li></ul></div></div>"}}]]}'::jsonb, 2),
-  (v_home_page_fr_id, v_fr_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#022c22","position":0},{"color":"#0f172a","position":50},{"color":"#020817","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"xl","vertical_alignment":"center","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<p class=''text-xs uppercase tracking-[0.25em] text-emerald-400 font-bold mb-4''>Disponible — Module Premium</p><h2 class=''text-4xl md:text-5xl font-bold text-white mb-6 leading-tight''>Transformez votre CMS<br/>en vitrine complète.</h2><p class=''text-lg text-slate-300 max-w-2xl leading-relaxed mb-8''>NextBlock™ Commerce transforme votre plateforme de contenu en moteur e-commerce complet. Produits, checkout, multi-devises, taxes, expédition, factures — le tout intégré nativement dans l''éditeur de blocs que vous connaissez déjà.</p>"}},{"block_type":"button","content":{"text":"Découvrir Commerce →","url":"/article/guide-commerce-nextblock","variant":"default","size":"lg"}},{"block_type":"button","content":{"text":"Obtenir une licence","url":"https://nextblock.dev/product/nextblock-commerce-pro-commerce-license","variant":"outline","size":"lg"}}],[{"block_type":"text","content":{"html_content":"<div class=''rounded-3xl overflow-hidden border border-emerald-500/20 bg-gradient-to-br from-white/5 to-emerald-500/5 shadow-2xl p-6 backdrop-blur-sm''><img src=''/images/commerce-square.webp'' alt=''Tableau de bord NextBlock™ Commerce'' class=''w-full h-auto rounded-2xl shadow-lg'' /><div class=''mt-4 grid grid-cols-3 gap-3 text-center''><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>∞</p><p class=''text-xs text-slate-400''>Devises</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>2</p><p class=''text-xs text-slate-400''>Fournisseurs</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>Auto</p><p class=''text-xs text-slate-400''>Taxes</p></div></div></div>"}}]]}'::jsonb, 3),
-
-  (v_home_page_fr_id, v_fr_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":2,"text_content":"Tout pour vendre en ligne","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-lg text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto mb-12''>NextBlock™ Commerce livre une boîte à outils e-commerce complète pour aller du catalogue au paiement sans plugins tiers.</p><div class=''grid gap-6 md:grid-cols-2 lg:grid-cols-3''><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Multi-Devises</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Taux de change en temps réel, modes d''arrondi, prix charme et synchronisation automatique sur toutes les devises.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Taxes Automatiques</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Taux manuels empilés (TPS + TVQ) ou calcul automatique via Stripe Tax — à vous de choisir.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Zones d''Expédition</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Résolution par pays et état, tarification par devise et seuils de livraison gratuite.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Stripe &amp; Freemius</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Stripe pour les produits physiques, Freemius pour les licences numériques — checkout intelligent avec validation d''inventaire.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Suivi d''Inventaire</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Déduction automatique des quantités au paiement avec gestion des stocks par variante.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Commandes &amp; Factures</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Gestion du cycle de vie des commandes, numérotation stable des factures et rapports de commandes exportables.</p></div></div>"}}]]}'::jsonb, 4),
-
-  (v_home_page_fr_id, v_fr_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#1e1b4b","position":0},{"color":"#0f172a","position":50},{"color":"#020817","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"xl","vertical_alignment":"center","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<div class=''rounded-3xl overflow-hidden border border-violet-500/20 bg-gradient-to-br from-white/5 to-violet-500/5 shadow-2xl p-6 backdrop-blur-sm''><img src=''/images/cortex-ai-square.webp'' alt=''Tableau de bord NextBlock™ Cortex AI montrant le générateur de blocs'' class=''w-full h-auto rounded-2xl shadow-lg'' /><div class=''mt-4 grid grid-cols-3 gap-3 text-center''><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>OpenRouter</p><p class=''text-xs text-slate-400''>Passerelle IA</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>BYOK</p><p class=''text-xs text-slate-400''>Contrôle des coûts</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>Zod</p><p class=''text-xs text-slate-400''>Blocs typés</p></div></div></div>"}}],[{"block_type":"text","content":{"html_content":"<p class=''text-xs uppercase tracking-[0.25em] text-violet-400 font-bold mb-4''>Disponible — Copilote IA</p><h2 class=''text-4xl md:text-5xl font-bold text-white mb-6 leading-tight''>Boostez votre<br/>contenu avec l''IA.</h2><p class=''text-lg text-slate-300 max-w-2xl leading-relaxed mb-8''>NextBlock™ Cortex AI apporte une intelligence native au niveau des blocs directement dans votre éditeur. Générez du texte, restructurez vos contenus et automatisez les traductions en un clic, le tout propulsé par notre architecture haute performance.</p>"}},{"block_type":"button","content":{"text":"Découvrir l''IA →","url":"/article/nextblock-cortex-ai-guide","variant":"default","size":"lg"}},{"block_type":"button","content":{"text":"Obtenir une licence","url":"https://nextblock.dev/product/nextblock-cortex-ai-cortex-ai-license","variant":"outline","size":"lg"}}]]}'::jsonb, 5),
-
-  (v_home_page_fr_id, v_fr_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"none"},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"heading","content":{"level":2,"text_content":"Plus qu''un CMS. Un écosystème.","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ construit une feuille de route open-core durable qui évolue avec votre activité.</p>"}},{"block_type":"text","content":{"html_content":"<div class=''grid gap-6 lg:grid-cols-[0.75fr_1.25fr] mt-10 items-stretch''><div class=''overflow-hidden rounded-[2rem] border border-slate-200 dark:border-white/10 bg-slate-950 shadow-2xl''><img src=''/images/goals.webp'' alt=''Tableau de roadmap montrant la direction de l''ecosysteme NextBlock™ et des modules premium'' class=''h-full w-full object-cover'' /><div class=''border-t border-white/10 bg-slate-950/95 px-6 py-5''><p class=''text-xs uppercase tracking-[0.24em] text-emerald-300 mb-2 font-bold''>Roadmap en mouvement</p><p class=''text-sm text-slate-300 mb-0''>Le commerce arrive en premier, puis l''ecosysteme s''etend avec des plugins, des blocs et des modules construits par les partenaires.</p></div></div><div class=''grid gap-6''><div class=''p-10 rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-500/5 dark:to-white/5 hover:border-emerald-500/40 transition-colors''><p class=''text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-2 font-bold''>Disponible maintenant</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>NextBlock™ Commerce</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Transformez votre site en vitrine composable avec produits, checkout, tarification multi-devise, taxes automatiques et blocs commerce relies a votre contenu editorial.</p></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-violet-500/30 transition-colors''><p class=''text-xs uppercase tracking-wide text-violet-700 dark:text-violet-300 mb-2 font-bold''>Construire la suite</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Marketplace de plugins et blocs</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Une marketplace communautaire ouvrira la voie a la publication, la vente et la distribution de blocs, themes, integrations et modules partenaires.</p></div></div></div>"}},{"block_type":"heading","content":{"level":2,"text_content":"Rejoignez la communauté.","textAlign":"center"}},{"block_type":"text","content":{"html_content":"<p class=''text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ se construit en public. Ajoutez une étoile, partagez vos retours et façonnez l''avenir du CMS orienté performance.</p>"}},{"block_type":"text","content":{"html_content":"<div class=''grid gap-4 md:grid-cols-3 mt-10 text-sm''><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://github.com/nextblock-cms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>GitHub</strong><span class=''text-slate-600 dark:text-slate-400''>Ajoutez une étoile &amp; contribuez</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://x.com/NextBlockCMS'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>X (Twitter)</strong><span class=''text-slate-600 dark:text-slate-400''>Suivez les annonces</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://dev.to/nextblockcms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>Dev.to</strong><span class=''text-slate-600 dark:text-slate-400''>Lisez nos articles techniques</span></a></div>"}}]]}'::jsonb, 6),
-
-  (v_home_page_fr_id, v_fr_lang_id, 'section',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"180deg","stops":[{"color":"#020817","position":0},{"color":"#0f172a","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":1},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<h2 class=''text-3xl md:text-4xl font-bold text-center text-white mb-4''>Des questions ?</h2>"}},{"block_type":"text","content":{"html_content":"<p class=''text-center text-base text-slate-300 max-w-2xl mx-auto''>NextBlock™ co-construit avec des partenaires : fonctionnalités, modules sponsorisés et direction produit.</p>"}},{"block_type":"button","content":{"text":"Nous contacter","url":"mailto:info@nextblock.dev","variant":"default","size":"lg","position":"center"}}]]}'::jsonb, 7),
-
-  (v_blog_page_fr_id, v_fr_lang_id, 'hero',
-  '{"container_type":"container","background":{"type":"gradient","gradient":{"type":"linear","direction":"135deg","stops":[{"color":"#020817","position":0},{"color":"#1e293b","position":100}]}},"responsive_columns":{"mobile":1,"tablet":1,"desktop":2},"column_gap":"lg","padding":{"top":"xl","bottom":"xl"},"column_blocks":[[{"block_type":"text","content":{"html_content":"<p class=''text-sm uppercase tracking-[0.3em] text-blue-400 font-bold text-center md:text-left mb-4''>Le journal Nextblock</p>"}},{"block_type":"text","content":{"html_content":"<h2 class=''text-4xl md:text-5xl font-bold text-white text-center md:text-left mb-6''>Plongées dans la performance, l''expérience dev et l''édition visuelle.</h2>"}},{"block_type":"text","content":{"html_content":"<p class=''text-lg max-w-xl mx-auto md:mx-0 text-center md:text-left text-slate-300 leading-relaxed''>Walkthroughs d''architecture, recettes Supabase et expérimentations éditeur écrits par l''équipe Nextblock.</p>"}},{"block_type":"button","content":{"text":"Explorer les articles","url":"/articles#latest","variant":"default","size":"lg"}},{"block_type":"button","content":{"text":"S''abonner aux mises à jour","url":"https://github.com/nextblock-cms/nextblock/discussions","variant":"outline","size":"lg"}}],[{"block_type":"text","content":{"html_content":"<div class=''rounded-3xl overflow-hidden border border-white/10 bg-white/5 shadow-2xl p-4 backdrop-blur-sm''><img src=''/images/developer.webp'' alt=''Développeur travaillant avec la stack Nextblock'' class=''w-full object-cover rounded-2xl shadow-lg'' style=''max-width: 400px;'' /></div>"}}]]}'::jsonb, 0),
-
-  (v_blog_page_fr_id, v_fr_lang_id, 'posts_grid',
-  '{"postsPerPage":6,"columns":3,"showPagination":true,"title":"Derniers articles"}'::jsonb, 1);
-END;
-$seed_fr$;
-
--- Convert seeded 'hero' block types to 'section' with is_hero = true
-UPDATE public.blocks
-SET
-  block_type = 'section',
-  content = COALESCE(content, '{}'::jsonb) || '{"is_hero": true}'::jsonb
-WHERE block_type = 'hero';
-
--- Post content blocks for all 3 posts (EN + FR)
-WITH target_posts AS (
-  SELECT id, language_id, slug
-  FROM public.posts
-  WHERE slug IN ('how-nextblock-works', 'comment-nextblock-fonctionne', 'how-to-setup-nextblock', 'comment-configurer-nextblock', 'nextblock-commerce-guide', 'guide-commerce-nextblock')
-),
-purged AS (
-  DELETE FROM public.blocks
-  WHERE post_id IN (SELECT id FROM target_posts)
-)
-INSERT INTO public.blocks (post_id, language_id, block_type, content, "order")
-
--- Post 1 EN: How NextBlock™ Works
-SELECT tp.id, tp.language_id, 'text', jsonb_build_object('html_content',
-$$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock™ is designed so the hosted CMS, the open-source starter, and the developer tooling all feel like the same product. The shared Nx workspace, typed block contracts, and reusable editor package keep product polish and developer velocity moving together.</p>
-
-<div class='grid gap-4 md:grid-cols-3 my-10'>
-  <div class='rounded-3xl border border-sky-200/70 bg-sky-50/70 p-6 dark:border-sky-500/20 dark:bg-sky-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-200'>One codebase</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Shared foundation</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Marketing pages, CMS screens, and the starter template evolve together instead of drifting apart.</p>
-  </div>
-  <div class='rounded-3xl border border-indigo-200/70 bg-indigo-50/70 p-6 dark:border-indigo-500/20 dark:bg-indigo-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-indigo-700 dark:text-indigo-200'>Typed content</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Blocks with guardrails</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Zod schemas, defaults, and renderer contracts make every custom block safer to ship.</p>
-  </div>
-  <div class='rounded-3xl border border-emerald-200/70 bg-emerald-50/70 p-6 dark:border-emerald-500/20 dark:bg-emerald-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Editorial UX</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Product-grade editing</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>The Tiptap layer gives editors a richer surface without hiding the underlying HTML power.</p>
-  </div>
-</div>
-
-<div class='flex flex-col md:flex-row gap-8 items-start my-12'>
-  <div class='w-full md:w-3/5 space-y-4'>
-    <h2>Monorepo Layout and Dependency Flow</h2>
-    <p>The <code>apps/nextblock</code> directory contains the production Next.js experience, including the public site and authenticated CMS shell. The <code>apps/create-nextblock</code> CLI mirrors that foundation so teams can start from the same product decisions instead of rebuilding them from scratch.</p>
-    <ul class='list-disc pl-6 space-y-2 text-sm'>
-      <li><strong>@nextblock-cms/ui</strong> - UI components, tokens, and shared design primitives</li>
-      <li><strong>@nextblock-cms/utils</strong> - translations, environment guards, and storage helpers</li>
-      <li><strong>@nextblock-cms/db</strong> - migrations, typed database access, and generated types</li>
-      <li><strong>@nextblock-cms/editor</strong> - the reusable Tiptap v3 editing surface</li>
-      <li><strong>@nextblock-cms/sdk</strong> - typed contracts for block authorship and validation</li>
-      <li><strong>@nextblock-cms/ecommerce</strong> - the premium commerce module when activated</li>
-    </ul>
-    <p>Run <code>nx graph</code> and you can see exactly how changes ripple through the workspace. Path aliases from <code>tsconfig.base.json</code> and the shared Tailwind setup help keep design parity between marketing pages, admin screens, and generated projects.</p>
-  </div>
-  <aside class='w-full md:w-2/5 rounded-[2rem] border border-slate-200/80 bg-white p-4 shadow-xl dark:border-white/10 dark:bg-white/5'>
-    <img src='/images/nx-graph.webp' alt='Nx project graph preview showing apps and shared libraries linked together' class='w-full h-auto rounded-2xl object-cover' />
-    <p class='mt-3 text-sm text-slate-500 dark:text-slate-400'>Nx makes every workspace relationship visible, which is exactly why the starter, CMS, and packages stay aligned.</p>
-  </aside>
-</div>
-
-<figure class='my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10'>
-  <img src='/images/extensibility.webp' alt='NextBlock™ extensibility artwork showing the CMS connected to reusable modules and integrations' class='w-full h-auto object-cover' />
-  <figcaption class='border-t border-white/10 px-6 py-4 text-sm text-slate-300'>A single visual system spans content modeling, editing, and future premium modules like commerce.</figcaption>
-</figure>
-
-<h2>Block Registry as Product Surface</h2>
-<p>The block registry in <code>apps/nextblock/lib/blocks/blockRegistry.ts</code> is the source of truth for available block types, Zod schemas, starter content, and editor or renderer components. Today that includes everything from <code>text</code> and <code>heading</code> to <code>section</code>, <code>posts_grid</code>, <code>checkout</code>, and <code>product_details</code>.</p>
-<p>Sections support nested column arrays, so layouts can be composed like real pages instead of flat content lists. Helpers such as <code>getBlockDefinition()</code>, <code>getInitialContent()</code>, and <code>validateBlockContent()</code> keep that flexibility strongly typed.</p>
-
-<h2>The Editing Layer</h2>
-<p>The <code>@nextblock-cms/editor</code> package wraps Tiptap v3 into a reusable editorial surface with slash commands, floating and bubble menus, drag handles, tables, task lists, character counts, and syntax-highlighted code blocks. It deliberately preserves richer HTML so advanced teams are not boxed into a simplified subset.</p>
-
-<h2>Inside the CMS Shell</h2>
-<p>Within <code>apps/nextblock/app/cms</code>, each feature area follows a repeatable pattern: list pages, create and edit routes, scoped client components, and server actions that wrap Supabase mutations. The result feels consistent for editors while keeping credentials and permissions on the server side.</p>
-
-<h2>Open Core Without Product Drift</h2>
-<p>The core CMS is open source under AGPL. Premium modules like <code>@nextblock-cms/ecommerce</code> remain source-available but are activated through <code>package_activations</code> and <code>verifyPackageOnline()</code>. That means the same shell can stay clean for open-source users while revealing commerce surfaces only when the license is active.</p>
-
-<h2>Why It Holds Together</h2>
-<p>The Nx workspace keeps libraries honest, the Next.js app enforces UI consistency, Supabase migrations codify access rules, and the Tiptap editor gives collaborators the same authoring experience regardless of deployment. When a team runs <code>npm create nextblock</code>, they inherit the full operating model, not just a pile of files.</p>$$
-), 0 FROM target_posts tp WHERE tp.slug = 'how-nextblock-works'
-
-UNION ALL
-
--- Post 1 FR: Comment NextBlock™ fonctionne
-SELECT tp.id, tp.language_id, 'text', jsonb_build_object('html_content',
-$$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock™ relie le CMS h&eacute;berg&eacute;, le starter open source et les outils dev dans un m&ecirc;me socle produit. Le workspace Nx, les contrats de blocs typ&eacute;s et l'&eacute;diteur partag&eacute; permettent d'avancer vite sans sacrifier la coh&eacute;rence.</p>
-
-<div class='grid gap-4 md:grid-cols-3 my-10'>
-  <div class='rounded-3xl border border-sky-200/70 bg-sky-50/70 p-6 dark:border-sky-500/20 dark:bg-sky-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-200'>Socle unique</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Une m&ecirc;me base</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Le site public, le shell CMS et le starter gardent les m&ecirc;mes choix produit et la m&ecirc;me direction visuelle.</p>
-  </div>
-  <div class='rounded-3xl border border-indigo-200/70 bg-indigo-50/70 p-6 dark:border-indigo-500/20 dark:bg-indigo-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-indigo-700 dark:text-indigo-200'>Contenu typ&eacute;</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Blocs avec garde-fous</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Sch&eacute;mas Zod, contenus par d&eacute;faut et contrats de rendu rendent les extensions plus s&ucirc;res &agrave; maintenir.</p>
-  </div>
-  <div class='rounded-3xl border border-emerald-200/70 bg-emerald-50/70 p-6 dark:border-emerald-500/20 dark:bg-emerald-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Exp&eacute;rience &eacute;ditoriale</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Edition premium</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>La couche Tiptap donne aux &eacute;diteurs une interface riche sans masquer la puissance HTML pour les cas avanc&eacute;s.</p>
-  </div>
-</div>
-
-<div class='flex flex-col md:flex-row gap-8 items-start my-12'>
-  <div class='w-full md:w-3/5 space-y-4'>
-    <h2>Architecture monorepo et flux de d&eacute;pendances</h2>
-    <p>Le dossier <code>apps/nextblock</code> contient l'exp&eacute;rience Next.js en production, incluant le site public et le shell CMS authentifi&eacute;. Le CLI <code>apps/create-nextblock</code> reprend cette base pour que les nouveaux projets partent des m&ecirc;mes d&eacute;cisions produit.</p>
-    <ul class='list-disc pl-6 space-y-2 text-sm'>
-      <li><strong>@nextblock-cms/ui</strong> - composants UI, tokens et primitives visuelles partag&eacute;es</li>
-      <li><strong>@nextblock-cms/utils</strong> - traductions, gardes d'environnement et helpers de stockage</li>
-      <li><strong>@nextblock-cms/db</strong> - migrations, acc&egrave;s base typ&eacute; et types g&eacute;n&eacute;r&eacute;s</li>
-      <li><strong>@nextblock-cms/editor</strong> - la surface d'&eacute;dition Tiptap v3 r&eacute;utilisable</li>
-      <li><strong>@nextblock-cms/sdk</strong> - contrats typ&eacute;s pour l'auteuring et la validation des blocs</li>
-      <li><strong>@nextblock-cms/ecommerce</strong> - le module commerce premium lorsqu'il est activ&eacute;</li>
-    </ul>
-    <p>Lancez <code>nx graph</code> et vous voyez imm&eacute;diatement comment un changement se propage. Les alias de <code>tsconfig.base.json</code> et la configuration Tailwind partag&eacute;e aident &agrave; garder une vraie parit&eacute; entre marketing, back-office et projets g&eacute;n&eacute;r&eacute;s.</p>
-  </div>
-  <aside class='w-full md:w-2/5 rounded-[2rem] border border-slate-200/80 bg-white p-4 shadow-xl dark:border-white/10 dark:bg-white/5'>
-    <img src='/images/nx-graph.webp' alt='Apercu du graphe Nx montrant les applications et librairies partagees' class='w-full h-auto rounded-2xl object-cover' />
-    <p class='mt-3 text-sm text-slate-500 dark:text-slate-400'>Nx rend visibles les relations du workspace, ce qui aide le starter, le CMS et les packages a rester alignes.</p>
-  </aside>
-</div>
-
-<figure class='my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10'>
-  <img src='/images/extensibility.webp' alt='Visuel NextBlock™ montrant le CMS relie a des modules reutilisables et des integrations' class='w-full h-auto object-cover' />
-  <figcaption class='border-t border-white/10 px-6 py-4 text-sm text-slate-300'>Un seul langage visuel relie la modelisation de contenu, l'edition et les futurs modules premium comme le commerce.</figcaption>
-</figure>
-
-<h2>Le registre de blocs comme surface produit</h2>
-<p>Le registre dans <code>apps/nextblock/lib/blocks/blockRegistry.ts</code> d&eacute;finit les types disponibles, les sch&eacute;mas Zod, les contenus de d&eacute;part et les composants d'&eacute;dition ou de rendu. On y trouve aujourd'hui des blocs comme <code>text</code>, <code>heading</code>, <code>section</code>, <code>posts_grid</code>, <code>checkout</code> et <code>product_details</code>.</p>
-<p>Les sections supportent des colonnes imbriqu&eacute;es, ce qui permet de composer de vraies pages plut&ocirc;t qu'une simple liste de contenu. Des helpers comme <code>getBlockDefinition()</code>, <code>getInitialContent()</code> and <code>validateBlockContent()</code> gardent cette flexibilit&eacute; bien typ&eacute;e.</p>
-
-<h2>La couche d'edition</h2>
-<p>Le package <code>@nextblock-cms/editor</code> enveloppe Tiptap v3 dans une surface &eacute;ditoriale r&eacute;utilisable avec slash commands, menus contextuels, drag handles, tableaux, listes de taches, compteurs et blocs de code. Le but est de conserver un HTML riche quand une equipe en a besoin.</p>
-
-<h2>A l'interieur du shell CMS</h2>
-<p>Dans <code>apps/nextblock/app/cms</code>, chaque zone suit un motif lisible : pages de liste, routes de creation et d'edition, composants clients cibles et server actions qui encapsulent les mutations Supabase. Les editeurs y gagnent une interface coherente et les identifiants restent cote serveur.</p>
-
-<h2>Open core sans derive produit</h2>
-<p>Le coeur du CMS est open source sous AGPL. Les modules premium comme <code>@nextblock-cms/ecommerce</code> restent disponibles en source mais sont actives via <code>package_activations</code> et <code>verifyPackageOnline()</code>. Le meme shell peut donc rester simple pour l'open source tout en deverrouillant les surfaces commerce au bon moment.</p>
-
-<h2>Pourquoi l'ensemble tient</h2>
-<p>Le workspace Nx garde les librairies honnetes, l'app Next.js maintient la coherence UI, les migrations Supabase codifient les regles d'acces, et l'editeur Tiptap donne la meme experience de contribution quel que soit le deploiement. Quand une equipe lance <code>npm create nextblock</code>, elle recupere une facon de travailler complete, pas juste des fichiers.</p>$$
-), 0 FROM target_posts tp WHERE tp.slug = 'comment-nextblock-fonctionne'
-
-UNION ALL
-
--- Post 2 EN: How to Setup NextBlock™
-SELECT tp.id, tp.language_id, 'text', jsonb_build_object('html_content',
-$$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>There are two strong ways to start with NextBlock: clone the full monorepo if you want the whole platform, or scaffold a standalone app if you want to ship quickly. Both paths land you on the same editorial model, design system, and CMS foundation.</p>
-
-<div class='rounded-[2rem] border border-blue-200 bg-blue-50/80 p-6 my-10 dark:border-blue-500/20 dark:bg-blue-500/10'>
-  <p class='text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200'>Choose your path</p>
-  <div class='grid gap-6 md:grid-cols-2 mt-5'>
-    <div class='rounded-2xl border border-blue-100 bg-white p-5 dark:border-blue-500/10 dark:bg-slate-900/40'>
-      <h3 class='mt-0 text-xl text-slate-900 dark:text-white'>Monorepo</h3>
-      <p class='text-sm text-slate-600 dark:text-slate-300'>Best for contributors, plugin authors, and teams that want direct access to every app and shared package.</p>
-    </div>
-    <div class='rounded-2xl border border-blue-100 bg-white p-5 dark:border-blue-500/10 dark:bg-slate-900/40'>
-      <h3 class='mt-0 text-xl text-slate-900 dark:text-white'>CLI starter</h3>
-      <p class='text-sm text-slate-600 dark:text-slate-300'>Best for launching a production-ready Next.js project with NextBlock™ already wired in and easy to deploy.</p>
-    </div>
-  </div>
-</div>
-
-<figure class='my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10'>
-  <img src='/images/included.webp' alt='NextBlock™ platform artwork showing the CMS, blocks, and integrations that ship together' class='w-full h-auto object-cover' />
-  <figcaption class='border-t border-white/10 px-6 py-4 text-sm text-slate-300'>Whichever path you choose, you still inherit the same block editor, CMS shell, and shared product language.</figcaption>
-</figure>
-
-<h2>Path 1: Clone the Monorepo</h2>
-<p>This route is ideal when you want the full Nx workspace and every internal package available locally.</p>
-
-<div class='grid gap-6 md:grid-cols-2 my-8'>
-  <div class='rounded-3xl border border-slate-200/80 bg-slate-50 p-6 dark:border-white/10 dark:bg-white/5'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400'>You get</p>
-    <ul class='mt-4 list-disc pl-5 space-y-2 text-sm'>
-      <li>The public site, CMS app, CLI source, and shared libraries</li>
-      <li>Direct access to <code>libs/</code> for custom block and package work</li>
-      <li>Workspace tools like <code>nx graph</code> for dependency visibility</li>
-    </ul>
-  </div>
-  <div class='rounded-3xl border border-slate-200/80 bg-slate-50 p-6 dark:border-white/10 dark:bg-white/5'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400'>Good fit for</p>
-    <ul class='mt-4 list-disc pl-5 space-y-2 text-sm'>
-      <li>Core contributors and maintainers</li>
-      <li>Teams building custom modules or premium extensions</li>
-      <li>Agencies that want end-to-end control over the platform</li>
-    </ul>
-  </div>
-</div>
-
-<pre><code>git clone https://github.com/nextblock-cms/nextblock.git
-cd nextblock
-npm install
-npm run setup</code></pre>
-
-<p>The <code>npm run setup</code> wizard creates <code>.env.local</code>, asks for your Supabase keys, can wire up R2 and SMTP, links the Supabase CLI, and pushes the schema with <code>npm run db:push</code>.</p>
-
-<p>Then start the app:</p>
-<pre><code>npx nx serve nextblock</code></pre>
-
-<p>Useful monorepo commands:</p>
-<pre><code># Build every workspace package
-npm run all-builds
-
-# Lint the main application
-npm run nx:lint:nextblock
-
-# Regenerate database types
-npm run db:types
-
-# Inspect workspace relationships
-npx nx graph</code></pre>
-
-<h2>Path 2: Use the CLI Starter</h2>
-<p>If your goal is to launch quickly, the CLI gives you a standalone Next.js app with NextBlock™ already embedded.</p>
-
-<pre><code>npm create nextblock@latest my-site
-cd my-site</code></pre>
-
-<p>The CLI copies a production-ready template, rewrites workspace imports to published packages, and can run the same setup flow for you. Your result is a normal Next.js app with no Nx requirement.</p>
-
-<p>Configure your environment in <code>.env.local</code>:</p>
-<pre><code>NEXT_PUBLIC_SUPABASE_URL=your-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-NEXT_PUBLIC_URL=http://localhost:3000</code></pre>
-
-<p>Push the schema and start developing:</p>
-<pre><code>npm run db:push
-npm run dev</code></pre>
-
-<div class='rounded-3xl border border-amber-200 bg-amber-50/80 p-6 my-8 dark:border-amber-500/20 dark:bg-amber-500/10'>
-  <p class='text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200'>Tip</p>
-  <p class='mb-0 text-sm text-slate-700 dark:text-slate-200'>The CLI path is the fastest way to evaluate NextBlock™ with your own content model before you decide whether you need the full workspace.</p>
-</div>
-
-<h2>Activating Premium Modules</h2>
-<p>For CLI-generated projects, the commerce package can be activated with a single command:</p>
-<pre><code>npx create-nextblock activate ecommerce</code></pre>
-<p>This injects wrappers for <code>/cms/orders</code>, <code>/cms/products</code>, <code>/checkout</code>, and the checkout API, all gated through <code>verifyPackageOnline()</code> so premium routes stay aligned with your license.</p>
-
-<h2>Deployment</h2>
-<p>NextBlock™ deploys like a standard Next.js app. Push to Vercel, Netlify, or any Node.js host, then make sure your server-side environment variables such as the Supabase service role, Stripe keys, and <code>CRON_SECRET</code> are configured in that environment.</p>$$
-), 0 FROM target_posts tp WHERE tp.slug = 'how-to-setup-nextblock'
-
-UNION ALL
-
--- Post 2 FR: Comment configurer NextBlock™
-SELECT tp.id, tp.language_id, 'text', jsonb_build_object('html_content',
-$$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>Il existe deux bonnes facons de lancer NextBlock™ : cloner le monorepo complet si vous voulez toute la plateforme, ou partir du CLI si vous voulez aller vite. Dans les deux cas, vous retrouvez le meme modele editorial, le meme shell CMS et la meme base produit.</p>
-
-<div class='rounded-[2rem] border border-blue-200 bg-blue-50/80 p-6 my-10 dark:border-blue-500/20 dark:bg-blue-500/10'>
-  <p class='text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200'>Choisissez votre chemin</p>
-  <div class='grid gap-6 md:grid-cols-2 mt-5'>
-    <div class='rounded-2xl border border-blue-100 bg-white p-5 dark:border-blue-500/10 dark:bg-slate-900/40'>
-      <h3 class='mt-0 text-xl text-slate-900 dark:text-white'>Monorepo</h3>
-      <p class='text-sm text-slate-600 dark:text-slate-300'>Ideal pour les contributeurs, auteurs de plugins et equipes qui veulent travailler directement dans tous les packages partages.</p>
-    </div>
-    <div class='rounded-2xl border border-blue-100 bg-white p-5 dark:border-blue-500/10 dark:bg-slate-900/40'>
-      <h3 class='mt-0 text-xl text-slate-900 dark:text-white'>Starter CLI</h3>
-      <p class='text-sm text-slate-600 dark:text-slate-300'>Ideal pour demarrer une app Next.js prete a deployer avec NextBlock™ deja integre.</p>
-    </div>
-  </div>
-</div>
-
-<figure class='my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10'>
-  <img src='/images/included.webp' alt='Visuel NextBlock™ montrant le CMS, les blocs et les integrations qui arrivent ensemble' class='w-full h-auto object-cover' />
-  <figcaption class='border-t border-white/10 px-6 py-4 text-sm text-slate-300'>Quel que soit le chemin choisi, vous heritez du meme editeur de blocs, du meme shell CMS et du meme langage produit.</figcaption>
-</figure>
-
-<h2>Chemin 1 : cloner le monorepo</h2>
-<p>Cette option est la meilleure si vous voulez tout le workspace Nx et chaque package interne disponible en local.</p>
-
-<div class='grid gap-6 md:grid-cols-2 my-8'>
-  <div class='rounded-3xl border border-slate-200/80 bg-slate-50 p-6 dark:border-white/10 dark:bg-white/5'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400'>Vous obtenez</p>
-    <ul class='mt-4 list-disc pl-5 space-y-2 text-sm'>
-      <li>Le site public, l'app CMS, le code du CLI et les librairies partagees</li>
-      <li>Un acces direct a <code>libs/</code> pour les blocs et modules personnalises</li>
-      <li>Les outils de workspace comme <code>nx graph</code> pour visualiser les dependances</li>
-    </ul>
-  </div>
-  <div class='rounded-3xl border border-slate-200/80 bg-slate-50 p-6 dark:border-white/10 dark:bg-white/5'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400'>Bon choix pour</p>
-    <ul class='mt-4 list-disc pl-5 space-y-2 text-sm'>
-      <li>Les mainteneurs et contributeurs coeur</li>
-      <li>Les equipes qui construisent des extensions sur mesure</li>
-      <li>Les agences qui veulent un controle complet de la plateforme</li>
-    </ul>
-  </div>
-</div>
-
-<pre><code>git clone https://github.com/nextblock-cms/nextblock.git
-cd nextblock
-npm install
-npm run setup</code></pre>
-
-<p>L'assistant <code>npm run setup</code> cree <code>.env.local</code>, demande vos cles Supabase, peut brancher R2 et SMTP, lie le CLI Supabase, puis pousse le schema avec <code>npm run db:push</code>.</p>
-
-<p>Puis lancez l'application :</p>
-<pre><code>npx nx serve nextblock</code></pre>
-
-<p>Commandes utiles dans le monorepo :</p>
-<pre><code># Build de tous les packages
-npm run all-builds
-
-# Lint de l'application principale
-npm run nx:lint:nextblock
-
-# Regenerer les types base de donnees
-npm run db:types
-
-# Inspecter les relations du workspace
-npx nx graph</code></pre>
-
-<h2>Chemin 2 : utiliser le starter CLI</h2>
-<p>Si votre but est d'aller vite, le CLI vous donne une app Next.js autonome avec NextBlock™ deja integre.</p>
-
-<pre><code>npm create nextblock@latest mon-site
-cd mon-site</code></pre>
-
-<p>Le CLI copie un template pret pour la production, remplace les imports workspace par les packages publies, et peut lancer la meme configuration initiale. Le resultat reste une app Next.js classique, sans dependance a Nx.</p>
-
-<p>Configurez votre environnement dans <code>.env.local</code> :</p>
-<pre><code>NEXT_PUBLIC_SUPABASE_URL=your-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-NEXT_PUBLIC_URL=http://localhost:3000</code></pre>
-
-<p>Poussez le schema puis demarrez :</p>
-<pre><code>npm run db:push
-npm run dev</code></pre>
-
-<div class='rounded-3xl border border-amber-200 bg-amber-50/80 p-6 my-8 dark:border-amber-500/20 dark:bg-amber-500/10'>
-  <p class='text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200'>Conseil</p>
-  <p class='mb-0 text-sm text-slate-700 dark:text-slate-200'>Le chemin CLI est le moyen le plus rapide d'evaluer NextBlock™ avec votre propre modele de contenu avant de passer, si besoin, au workspace complet.</p>
-</div>
-
-<h2>Activer les modules premium</h2>
-<p>Pour un projet genere via le CLI, le package commerce peut etre active avec une seule commande :</p>
-<pre><code>npx create-nextblock activate ecommerce</code></pre>
-<p>Cette commande injecte les wrappers pour <code>/cms/orders</code>, <code>/cms/products</code>, <code>/checkout</code> et l'API checkout, le tout protege par <code>verifyPackageOnline()</code> afin de garder les routes premium alignees avec la licence.</p>
-
-<h2>Deploiement</h2>
-<p>NextBlock™ se deploie comme une app Next.js standard. Publiez sur Vercel, Netlify ou tout hebergeur Node.js, puis configurez les variables serveur comme la cle service role Supabase, les cles Stripe et <code>CRON_SECRET</code>.</p>$$
-), 0 FROM target_posts tp WHERE tp.slug = 'comment-configurer-nextblock'
-
-UNION ALL
-
--- Post 3 EN: NextBlock™ Commerce Guide
-SELECT tp.id, tp.language_id, 'text', jsonb_build_object('html_content',
-$$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock™ Commerce is the first premium module in the ecosystem: a source-available storefront layer that plugs directly into the same editorial system as the CMS. It is built for teams that want content, catalog, and checkout to live inside one product surface instead of three disconnected tools.</p>
-
-<div class='grid gap-4 md:grid-cols-3 my-10'>
-  <div class='rounded-3xl border border-emerald-200/70 bg-emerald-50/70 p-6 dark:border-emerald-500/20 dark:bg-emerald-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Commerce core</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Catalog + checkout</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Products, variants, orders, shipping, and invoices all plug into the existing CMS shell.</p>
-  </div>
-  <div class='rounded-3xl border border-sky-200/70 bg-sky-50/70 p-6 dark:border-sky-500/20 dark:bg-sky-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-200'>Global selling</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Multi-currency ready</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Automatic FX sync, rounding strategies, and per-product overrides keep international pricing practical.</p>
-  </div>
-  <div class='rounded-3xl border border-indigo-200/70 bg-indigo-50/70 p-6 dark:border-indigo-500/20 dark:bg-indigo-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-indigo-700 dark:text-indigo-200'>Operator workflow</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Provider-aware flow</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Stripe and Freemius are handled differently so the storefront can stay clean without hiding complexity.</p>
-  </div>
-</div>
-
-<h2>Product Catalog</h2>
-<p>Commerce supports physical and digital products with variants, attributes, localized product media, independent pricing, SKUs, and stock levels. Product assets stay in the same media library editors already use for marketing pages, so content and commerce teams are not working in separate silos.</p>
-
-<h2>Multi-Currency Engine</h2>
-<p>The pricing engine is built for real-world stores, not just a demo checkout:</p>
-<ul>
-  <li><strong>Unlimited currencies</strong> with ISO codes, symbols, and stored exchange rates</li>
-  <li><strong>Automatic FX sync</strong> from Frankfurter or a custom provider via <code>FX_API_BASE_URL</code></li>
-  <li><strong>Rounding modes</strong> including nearest, up, down, and charm pricing like <code>9.99</code></li>
-  <li><strong>Store-managed auto-sync</strong> so product prices convert when rates refresh</li>
-  <li><strong>Rebasing</strong> when the default currency changes</li>
-  <li><strong>Per-product overrides</strong> when a catalog item needs explicit pricing in specific markets</li>
-</ul>
-
-<h2>Tax Automation</h2>
-<p>Teams can stay manual when they need control, or delegate tax math to Stripe Tax when they want automation:</p>
-<div class='grid md:grid-cols-2 gap-6 my-6'>
-  <div class='p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5'>
-    <h4 class='font-bold text-slate-900 dark:text-white mb-2'>Manual mode</h4>
-    <p class='text-sm text-slate-600 dark:text-slate-400'>Define rates by country and optional state or province. Stacked taxes such as GST + PST are supported, and tax lines are stored in <code>orders.tax_details</code>.</p>
-  </div>
-  <div class='p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5'>
-    <h4 class='font-bold text-slate-900 dark:text-white mb-2'>Automatic mode</h4>
-    <p class='text-sm text-slate-600 dark:text-slate-400'>Stripe Tax calculates the final amounts. Product and shipping tax codes travel with the line items, and the webhook resync replaces provisional values with final totals.</p>
-  </div>
-</div>
-
-<h2>Shipping and Checkout</h2>
-<p>Shipping zones match by country and state or province, support localized method names, per-currency pricing, free-shipping thresholds, and priority-based fallbacks when an exact match is not found.</p>
-<p>The checkout layer is provider-aware:</p>
-<ul>
-  <li><strong>Stripe</strong> handles physical goods, inventory checks, shipping calculation, tax, customer upserts, and Checkout Sessions</li>
-  <li><strong>Freemius</strong> handles digital licensing, plan resolution, and checkout URLs with sandbox support</li>
-  <li>Mixed-provider carts are rejected so the buyer journey stays understandable</li>
-</ul>
-
-<figure class='my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10'>
-  <img src='/images/commerce-plan.webp' alt='Commerce roadmap board outlining premium module goals and future storefront capabilities for NextBlock™' class='w-full h-auto object-cover' />
-  <figcaption class='border-t border-white/10 px-6 py-4 text-sm text-slate-300'>Commerce is positioned as the first premium module in a larger roadmap, which makes it feel like part of a growing platform instead of a bolt-on add-on.</figcaption>
-</figure>
-
-<h2>Inventory, Orders, and Invoices</h2>
-<p>When quantity tracking is enabled, checkout validates requested quantities against <code>inventory_items</code>. On payment confirmation, <code>apply_order_inventory_deduction()</code> reduces stock with a resilient fallback path that can use direct SQL if the RPC layer fails.</p>
-<ul>
-  <li>Order statuses move from <code>pending</code> to <code>paid</code> to <code>shipped</code>, with cancellation and refund states available too</li>
-  <li>Invoice numbering is generated through database functions for consistency</li>
-  <li>Printable invoice documents pull from <code>invoice_settings</code></li>
-  <li>Customers can review order history and invoice access from the storefront side</li>
-  <li><strong>Coming soon:</strong> exportable order reporting and analytics dashboards</li>
-</ul>
-
-<h2>Commerce Surfaces Inside the CMS</h2>
-<p>When the ecommerce package is active, the CMS exposes product list, create, and edit views with media and variants, inventory management, order detail screens, shipping configuration, payment provider settings, tax setup, and currency management. The important part is not only that those screens exist, but that they feel native inside the same shell your content team is already using.</p>$$
-), 0 FROM target_posts tp WHERE tp.slug = 'nextblock-commerce-guide'
-
-UNION ALL
-
--- Post 3 FR: Guide Commerce NextBlock™
-SELECT tp.id, tp.language_id, 'text', jsonb_build_object('html_content',
-$$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock™ Commerce est le premier module premium de l'ecosysteme : une couche storefront source-available qui se branche directement sur le meme systeme editorial que le CMS. L'objectif est de rapprocher contenu, catalogue et checkout dans une seule surface produit.</p>
-
-<div class='grid gap-4 md:grid-cols-3 my-10'>
-  <div class='rounded-3xl border border-emerald-200/70 bg-emerald-50/70 p-6 dark:border-emerald-500/20 dark:bg-emerald-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Base commerce</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Catalogue + checkout</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Produits, variantes, commandes, livraison et factures vivent dans le meme shell CMS.</p>
-  </div>
-  <div class='rounded-3xl border border-sky-200/70 bg-sky-50/70 p-6 dark:border-sky-500/20 dark:bg-sky-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-200'>Vente globale</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Multi-devise</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Sync FX automatique, strategies d'arrondi et overrides par produit rendent les prix internationaux realistes.</p>
-  </div>
-  <div class='rounded-3xl border border-indigo-200/70 bg-indigo-50/70 p-6 dark:border-indigo-500/20 dark:bg-indigo-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-indigo-700 dark:text-indigo-200'>Workflow operateur</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Par fournisseur</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Stripe et Freemius sont traites differemment pour garder un parcours d'achat propre sans cacher la complexite.</p>
-  </div>
-</div>
-
-<h2>Catalogue produits</h2>
-<p>Le module gere produits physiques et numeriques avec variantes, attributs, medias localises, prix independants, SKU et niveaux de stock. Les assets produits restent dans la meme bibliotheque media que les pages marketing, ce qui evite de separer equipes contenu et equipes commerce.</p>
-
-<h2>Moteur multi-devise</h2>
-<p>Le moteur tarifaire vise un vrai usage boutique, pas seulement une demo :</p>
-<ul>
-  <li><strong>Devises illimitees</strong> avec codes ISO, symboles et taux stockes</li>
-  <li><strong>Synchronisation FX automatique</strong> depuis Frankfurter ou un provider custom via <code>FX_API_BASE_URL</code></li>
-  <li><strong>Modes d'arrondi</strong> dont nearest, up, down et prix charme comme <code>9.99</code></li>
-  <li><strong>Auto-sync magasin</strong> pour convertir les prix quand les taux changent</li>
-  <li><strong>Rebasement</strong> lorsqu'on change la devise par defaut</li>
-  <li><strong>Overrides par produit</strong> quand un article demande un prix fixe sur certains marches</li>
-</ul>
-
-<h2>Taxes automatiques</h2>
-<p>Les equipes peuvent rester en mode manuel ou confier le calcul a Stripe Tax :</p>
-<div class='grid md:grid-cols-2 gap-6 my-6'>
-  <div class='p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5'>
-    <h4 class='font-bold text-slate-900 dark:text-white mb-2'>Mode manuel</h4>
-    <p class='text-sm text-slate-600 dark:text-slate-400'>Definition des taux par pays et eventuellement par province. Les taxes empilees comme TPS + TVQ sont supportees, avec stockage dans <code>orders.tax_details</code>.</p>
-  </div>
-  <div class='p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5'>
-    <h4 class='font-bold text-slate-900 dark:text-white mb-2'>Mode automatique</h4>
-    <p class='text-sm text-slate-600 dark:text-slate-400'>Stripe Tax calcule les montants finaux. Les codes fiscaux voyagent avec les line items et le webhook remplace les valeurs provisoires par les montants definitifs.</p>
-  </div>
-</div>
-
-<h2>Livraison et checkout</h2>
-<p>Les zones de livraison correspondent par pays et etat ou province, gerent des noms localises, des prix par devise, des seuils de livraison gratuite, et des fallbacks par priorite quand aucune correspondance exacte n'est trouvee.</p>
-<p>Le checkout est conscient du fournisseur :</p>
-<ul>
-  <li><strong>Stripe</strong> gere les biens physiques, les verifications d'inventaire, la livraison, les taxes, les clients et les Checkout Sessions</li>
-  <li><strong>Freemius</strong> gere les licences numeriques, la resolution des plans et les URLs de checkout avec support sandbox</li>
-  <li>Les paniers melangeant plusieurs fournisseurs sont refuses pour garder un parcours plus clair</li>
-</ul>
-
-<figure class='my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10'>
-  <img src='/images/commerce-plan.webp' alt='Tableau de roadmap commerce montrant les objectifs premium et les futures capacites storefront de NextBlock™' class='w-full h-auto object-cover' />
-  <figcaption class='border-t border-white/10 px-6 py-4 text-sm text-slate-300'>Le commerce est presente comme le premier module premium d'une feuille de route plus large, ce qui renforce l'idee d'une vraie plateforme en croissance.</figcaption>
-</figure>
-
-<h2>Inventaire, commandes et factures</h2>
-<p>Quand le suivi des quantites est actif, le checkout valide les demandes contre <code>inventory_items</code>. A la confirmation du paiement, <code>apply_order_inventory_deduction()</code> retire le stock avec un chemin de repli resilient si la couche RPC echoue.</p>
-<ul>
-  <li>Les statuts de commande passent de <code>pending</code> a <code>paid</code> puis <code>shipped</code>, avec annulation et remboursement si besoin</li>
-  <li>La numerotation des factures est geree par des fonctions SQL pour rester coherente</li>
-  <li>Les documents facture tirent leurs informations de <code>invoice_settings</code></li>
-  <li>Les clients peuvent consulter leur historique et leurs factures</li>
-  <li><strong>Bientot :</strong> exports de commandes et tableaux de bord analytiques</li>
-</ul>
-
-<h2>Surfaces commerce dans le CMS</h2>
-<p>Quand le package ecommerce est actif, le CMS expose les vues produit, edition avec medias et variantes, gestion d'inventaire, detail des commandes, configuration livraison, parametres de paiement, taxes et devises. L'enjeu principal est que tout cela paraisse natif dans le meme shell que l'equipe contenu utilise deja.</p>$$
-), 0 FROM target_posts tp WHERE tp.slug = 'guide-commerce-nextblock';
-
-
--- >>> FROM: 00000000000011_setup_cortex_ai_settings.sql <<<
--- 00000000000011_setup_cortex_ai_settings.sql
--- NextBlock Cortex AI settings and sensitive BYOK policy hardening.
-
-COMMENT ON TABLE public.site_settings IS 'Key-value store for global site settings. Sensitive keys such as Cortex AI BYOK are protected by row-level policies.';
-
-DROP POLICY IF EXISTS site_settings_read_policy ON public.site_settings;
-DROP POLICY IF EXISTS site_settings_insert_policy ON public.site_settings;
-DROP POLICY IF EXISTS site_settings_update_policy ON public.site_settings;
-DROP POLICY IF EXISTS site_settings_delete_policy ON public.site_settings;
-DROP POLICY IF EXISTS site_settings_sensitive_read_policy ON public.site_settings;
-DROP POLICY IF EXISTS site_settings_sensitive_insert_policy ON public.site_settings;
-DROP POLICY IF EXISTS site_settings_sensitive_update_policy ON public.site_settings;
-DROP POLICY IF EXISTS site_settings_sensitive_delete_policy ON public.site_settings;
-
-CREATE POLICY site_settings_read_policy
-  ON public.site_settings
-  FOR SELECT
-  TO public
-  USING (
-    key <> 'cortex_ai_openrouter_api_key'
-    OR (
-      key = 'cortex_ai_openrouter_api_key'
-      AND (SELECT auth.role()) = 'authenticated'
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  );
-
-CREATE POLICY site_settings_insert_policy
-  ON public.site_settings
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    (
-      key <> 'cortex_ai_openrouter_api_key'
-      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-    )
-    OR (
-      key = 'cortex_ai_openrouter_api_key'
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  );
-
-CREATE POLICY site_settings_update_policy
-  ON public.site_settings
-  FOR UPDATE
-  TO authenticated
-  USING (
-    (
-      key <> 'cortex_ai_openrouter_api_key'
-      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-    )
-    OR (
-      key = 'cortex_ai_openrouter_api_key'
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  )
-  WITH CHECK (
-    (
-      key <> 'cortex_ai_openrouter_api_key'
-      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-    )
-    OR (
-      key = 'cortex_ai_openrouter_api_key'
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  );
-
-CREATE POLICY site_settings_delete_policy
-  ON public.site_settings
-  FOR DELETE
-  TO authenticated
-  USING (
-    (
-      key <> 'cortex_ai_openrouter_api_key'
-      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-    )
-    OR (
-      key = 'cortex_ai_openrouter_api_key'
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  );
-
-
--- >>> FROM: 00000000000012_setup_commerce_coupons.sql <<<
--- 00000000000012_setup_commerce_coupons.sql
--- Unified commerce coupons for Stripe and Freemius checkout.
-
-CREATE TABLE public.coupons (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  code text NOT NULL,
-  name text NOT NULL,
-  internal_note text,
-  provider_scope text NOT NULL DEFAULT 'all',
-  discount_type text NOT NULL,
-  discount_amount integer NOT NULL,
-  is_active boolean NOT NULL DEFAULT true,
-  starts_at timestamptz,
-  ends_at timestamptz,
-  redemption_limit integer,
-  redemptions_count integer NOT NULL DEFAULT 0,
-  freemius_sync_status text NOT NULL DEFAULT 'not_synced',
-  freemius_sync_error text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT coupons_code_not_blank CHECK (char_length(btrim(code)) > 0),
-  CONSTRAINT coupons_name_not_blank CHECK (char_length(btrim(name)) > 0),
-  CONSTRAINT coupons_provider_scope_valid
-    CHECK (provider_scope IN ('all', 'stripe', 'freemius')),
-  CONSTRAINT coupons_discount_type_valid
-    CHECK (discount_type IN ('percent', 'fixed')),
-  CONSTRAINT coupons_discount_amount_positive
-    CHECK (discount_amount > 0),
-  CONSTRAINT coupons_percent_amount_valid
-    CHECK (discount_type <> 'percent' OR discount_amount <= 100),
-  CONSTRAINT coupons_redemption_limit_positive
-    CHECK (redemption_limit IS NULL OR redemption_limit > 0),
-  CONSTRAINT coupons_redemptions_count_nonnegative
-    CHECK (redemptions_count >= 0),
-  CONSTRAINT coupons_date_window_valid
-    CHECK (starts_at IS NULL OR ends_at IS NULL OR starts_at < ends_at),
-  CONSTRAINT coupons_freemius_sync_status_valid
-    CHECK (freemius_sync_status IN ('not_synced', 'pending', 'synced', 'failed', 'not_required'))
-);
-
-CREATE UNIQUE INDEX coupons_code_unique
-  ON public.coupons (upper(code));
-
-COMMENT ON TABLE public.coupons IS
-  'Unified commerce coupons managed by NextBlock CMS and applied through provider-aware checkout.';
-COMMENT ON COLUMN public.coupons.provider_scope IS
-  'Provider eligibility: all, stripe, or freemius.';
-COMMENT ON COLUMN public.coupons.discount_amount IS
-  'Percent value for percent coupons, or fixed minor-unit amount for fixed coupons.';
-COMMENT ON COLUMN public.coupons.freemius_sync_status IS
-  'Aggregate status for syncing this coupon to Freemius product coupon records.';
-
-CREATE TABLE public.coupon_products (
-  coupon_id uuid NOT NULL REFERENCES public.coupons(id) ON DELETE CASCADE,
-  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (coupon_id, product_id)
-);
-
-COMMENT ON TABLE public.coupon_products IS
-  'Optional product allow-list for coupons. No rows means all products in the provider scope are eligible.';
-
-CREATE TABLE public.coupon_freemius_mappings (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  coupon_id uuid NOT NULL REFERENCES public.coupons(id) ON DELETE CASCADE,
-  product_id uuid REFERENCES public.products(id) ON DELETE SET NULL,
-  freemius_product_id text NOT NULL,
-  freemius_coupon_id text,
-  freemius_coupon_code text NOT NULL,
-  sync_status text NOT NULL DEFAULT 'pending',
-  sync_error text,
-  remote_payload jsonb,
-  last_synced_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT coupon_freemius_mappings_product_not_blank
-    CHECK (char_length(btrim(freemius_product_id)) > 0),
-  CONSTRAINT coupon_freemius_mappings_code_not_blank
-    CHECK (char_length(btrim(freemius_coupon_code)) > 0),
-  CONSTRAINT coupon_freemius_mappings_sync_status_valid
-    CHECK (sync_status IN ('pending', 'synced', 'failed', 'deleted'))
-);
-
-CREATE UNIQUE INDEX coupon_freemius_mappings_coupon_product_unique
-  ON public.coupon_freemius_mappings (coupon_id, freemius_product_id);
-
-CREATE TABLE public.coupon_redemptions (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  coupon_id uuid REFERENCES public.coupons(id) ON DELETE SET NULL,
-  order_id uuid REFERENCES public.orders(id) ON DELETE CASCADE,
-  coupon_code text NOT NULL,
-  provider text NOT NULL CHECK (provider IN ('stripe', 'freemius')),
-  discount_total integer NOT NULL DEFAULT 0 CHECK (discount_total >= 0),
-  user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
-  customer_email text,
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-  redeemed_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT coupon_redemptions_code_not_blank CHECK (char_length(btrim(coupon_code)) > 0)
-);
-
-CREATE UNIQUE INDEX coupon_redemptions_order_unique
-  ON public.coupon_redemptions (order_id)
-  WHERE order_id IS NOT NULL;
-
-ALTER TABLE public.orders
-  ADD COLUMN coupon_id uuid REFERENCES public.coupons(id) ON DELETE SET NULL,
-  ADD COLUMN coupon_code text,
-  ADD COLUMN discount_total integer NOT NULL DEFAULT 0 CHECK (discount_total >= 0),
-  ADD COLUMN discount_details jsonb;
-
-COMMENT ON COLUMN public.orders.coupon_code IS
-  'Coupon code applied to the order at checkout time.';
-COMMENT ON COLUMN public.orders.discount_total IS
-  'Total discount applied to this order in the smallest currency unit.';
-COMMENT ON COLUMN public.orders.discount_details IS
-  'Provider-aware coupon quote details captured at checkout.';
-
-CREATE OR REPLACE FUNCTION public.handle_coupons_write()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
-BEGIN
-  NEW.code := upper(regexp_replace(btrim(NEW.code), '\\s+', '', 'g'));
-  NEW.name := btrim(NEW.name);
-  NEW.provider_scope := lower(btrim(NEW.provider_scope));
-  NEW.discount_type := lower(btrim(NEW.discount_type));
-  NEW.freemius_sync_status := lower(btrim(COALESCE(NEW.freemius_sync_status, 'not_synced')));
-  NEW.updated_at := now();
-
-  IF NEW.created_at IS NULL THEN
-    NEW.created_at := now();
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.handle_coupon_freemius_mappings_write()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
-BEGIN
-  NEW.freemius_product_id := btrim(NEW.freemius_product_id);
-  NEW.freemius_coupon_code := upper(regexp_replace(btrim(NEW.freemius_coupon_code), '\\s+', '', 'g'));
-  NEW.sync_status := lower(btrim(COALESCE(NEW.sync_status, 'pending')));
-  NEW.updated_at := now();
-
-  IF NEW.created_at IS NULL THEN
-    NEW.created_at := now();
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS on_coupons_write ON public.coupons;
-CREATE TRIGGER on_coupons_write
-  BEFORE INSERT OR UPDATE ON public.coupons
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_coupons_write();
-
-DROP TRIGGER IF EXISTS on_coupon_freemius_mappings_write ON public.coupon_freemius_mappings;
-CREATE TRIGGER on_coupon_freemius_mappings_write
-  BEFORE INSERT OR UPDATE ON public.coupon_freemius_mappings
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_coupon_freemius_mappings_write();
-
-CREATE INDEX idx_coupons_active_dates
-  ON public.coupons (is_active, starts_at, ends_at);
-
-CREATE INDEX idx_coupon_products_product_id
-  ON public.coupon_products (product_id);
-
-CREATE INDEX idx_coupon_freemius_mappings_product_id
-  ON public.coupon_freemius_mappings (product_id)
-  WHERE product_id IS NOT NULL;
-
-CREATE INDEX idx_coupon_freemius_mappings_freemius_product_id
-  ON public.coupon_freemius_mappings (freemius_product_id);
-
-CREATE INDEX idx_coupon_redemptions_coupon_id
-  ON public.coupon_redemptions (coupon_id);
-
-CREATE INDEX idx_coupon_redemptions_user_id
-  ON public.coupon_redemptions (user_id)
-  WHERE user_id IS NOT NULL;
-
-CREATE INDEX idx_orders_coupon_id
-  ON public.orders (coupon_id)
-  WHERE coupon_id IS NOT NULL;
-
-ALTER TABLE public.coupons ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.coupon_products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.coupon_freemius_mappings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.coupon_redemptions ENABLE ROW LEVEL SECURITY;
-
-GRANT ALL ON public.coupons TO authenticated, service_role;
-GRANT ALL ON public.coupon_products TO authenticated, service_role;
-GRANT ALL ON public.coupon_freemius_mappings TO authenticated, service_role;
-GRANT ALL ON public.coupon_redemptions TO authenticated, service_role;
-
-CREATE POLICY coupons_admin_select_policy
-  ON public.coupons
-  FOR SELECT
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY coupons_admin_insert_policy
-  ON public.coupons
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY coupons_admin_update_policy
-  ON public.coupons
-  FOR UPDATE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY coupons_admin_delete_policy
-  ON public.coupons
-  FOR DELETE
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY coupons_service_role_policy
-  ON public.coupons
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY coupon_products_admin_policy
-  ON public.coupon_products
-  FOR ALL
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY coupon_products_service_role_policy
-  ON public.coupon_products
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY coupon_freemius_mappings_admin_policy
-  ON public.coupon_freemius_mappings
-  FOR ALL
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY coupon_freemius_mappings_service_role_policy
-  ON public.coupon_freemius_mappings
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY coupon_redemptions_admin_select_policy
-  ON public.coupon_redemptions
-  FOR SELECT
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY coupon_redemptions_service_role_policy
-  ON public.coupon_redemptions
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-
--- >>> FROM: 00000000000013_setup_cortex_ai_db_mutation_audit.sql <<<
--- 00000000000013_setup_cortex_ai_db_mutation_audit.sql
--- Durable audit trail for confirmed Cortex AI database mutations.
-
-CREATE TABLE IF NOT EXISTS public.cortex_ai_db_mutation_audit (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  actor_user_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  tool_name text NOT NULL,
-  action_name text NOT NULL,
-  target_tables text[] NOT NULL DEFAULT '{}'::text[],
-  operation_summary text NOT NULL,
-  payload_hash text NOT NULL,
-  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
-  preview jsonb NOT NULL DEFAULT '{}'::jsonb,
-  status text NOT NULL CHECK (status IN ('success', 'failure')),
-  error_message text,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-COMMENT ON TABLE public.cortex_ai_db_mutation_audit IS
-  'Audit trail for confirmed Cortex AI database mutation attempts.';
-COMMENT ON COLUMN public.cortex_ai_db_mutation_audit.payload IS
-  'Redacted tool input payload for the confirmed mutation attempt.';
-COMMENT ON COLUMN public.cortex_ai_db_mutation_audit.preview IS
-  'Redacted confirmation preview shown before the mutation was confirmed.';
-
-ALTER TABLE public.cortex_ai_db_mutation_audit ENABLE ROW LEVEL SECURITY;
-
-GRANT SELECT, INSERT ON public.cortex_ai_db_mutation_audit TO authenticated, service_role;
-
-DROP POLICY IF EXISTS cortex_ai_db_mutation_audit_admin_read_policy
-  ON public.cortex_ai_db_mutation_audit;
-
-CREATE POLICY cortex_ai_db_mutation_audit_admin_read_policy
-  ON public.cortex_ai_db_mutation_audit
-  FOR SELECT
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) = 'ADMIN');
-
-DROP POLICY IF EXISTS cortex_ai_db_mutation_audit_service_role_policy
-  ON public.cortex_ai_db_mutation_audit;
-
-CREATE POLICY cortex_ai_db_mutation_audit_service_role_policy
-  ON public.cortex_ai_db_mutation_audit
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-
--- >>> FROM: 00000000000014_setup_content_drafts.sql <<<
--- 00000000000014_setup_content_drafts.sql
--- Draft snapshots for front-end visual editing.
-
-CREATE TABLE IF NOT EXISTS public.content_drafts (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  parent_type text NOT NULL CHECK (parent_type IN ('page', 'post')),
-  parent_id bigint NOT NULL,
-  author_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  base_version integer NOT NULL DEFAULT 1,
-  meta jsonb NOT NULL DEFAULT '{}'::jsonb,
-  blocks jsonb NOT NULL DEFAULT '[]'::jsonb,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT content_drafts_parent_unique UNIQUE (parent_type, parent_id),
-  CONSTRAINT content_drafts_blocks_array CHECK (jsonb_typeof(blocks) = 'array'),
-  CONSTRAINT content_drafts_meta_object CHECK (jsonb_typeof(meta) = 'object')
-);
-
-ALTER TABLE public.content_drafts
-  ADD COLUMN IF NOT EXISTS parent_type text,
-  ADD COLUMN IF NOT EXISTS parent_id bigint,
-  ADD COLUMN IF NOT EXISTS author_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS base_version integer NOT NULL DEFAULT 1,
-  ADD COLUMN IF NOT EXISTS meta jsonb NOT NULL DEFAULT '{}'::jsonb,
-  ADD COLUMN IF NOT EXISTS blocks jsonb NOT NULL DEFAULT '[]'::jsonb,
-  ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
-  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'content_drafts_parent_unique'
-      AND conrelid = 'public.content_drafts'::regclass
-  ) THEN
-    ALTER TABLE public.content_drafts
-      ADD CONSTRAINT content_drafts_parent_unique UNIQUE (parent_type, parent_id);
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'content_drafts_blocks_array'
-      AND conrelid = 'public.content_drafts'::regclass
-  ) THEN
-    ALTER TABLE public.content_drafts
-      ADD CONSTRAINT content_drafts_blocks_array CHECK (jsonb_typeof(blocks) = 'array');
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'content_drafts_meta_object'
-      AND conrelid = 'public.content_drafts'::regclass
-  ) THEN
-    ALTER TABLE public.content_drafts
-      ADD CONSTRAINT content_drafts_meta_object CHECK (jsonb_typeof(meta) = 'object');
-  END IF;
-END $$;
-
-COMMENT ON TABLE public.content_drafts IS
-  'Draft snapshots used by Draft Mode and front-end visual editing before publishing to live page/post rows.';
-COMMENT ON COLUMN public.content_drafts.parent_type IS
-  'The content table this draft belongs to: page or post.';
-COMMENT ON COLUMN public.content_drafts.parent_id IS
-  'ID of the page or post being drafted.';
-COMMENT ON COLUMN public.content_drafts.base_version IS
-  'Published page/post version the draft was created from.';
-COMMENT ON COLUMN public.content_drafts.meta IS
-  'Draft page/post metadata snapshot.';
-COMMENT ON COLUMN public.content_drafts.blocks IS
-  'Ordered draft block snapshot, including block ids, block types, content, language ids, and order values.';
-
-CREATE INDEX IF NOT EXISTS content_drafts_author_id_idx ON public.content_drafts (author_id);
-CREATE INDEX IF NOT EXISTS content_drafts_parent_idx ON public.content_drafts (parent_type, parent_id);
-CREATE INDEX IF NOT EXISTS content_drafts_updated_at_idx ON public.content_drafts (updated_at DESC);
-
-DROP TRIGGER IF EXISTS on_content_drafts_update ON public.content_drafts;
-CREATE TRIGGER on_content_drafts_update
-  BEFORE UPDATE ON public.content_drafts
-  FOR EACH ROW
-  EXECUTE FUNCTION public.set_current_timestamp_updated_at();
-
-ALTER TABLE public.content_drafts ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS content_drafts_select_policy
-  ON public.content_drafts;
-
-CREATE POLICY content_drafts_select_policy
-  ON public.content_drafts
-  FOR SELECT
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-DROP POLICY IF EXISTS content_drafts_insert_policy
-  ON public.content_drafts;
-
-CREATE POLICY content_drafts_insert_policy
-  ON public.content_drafts
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-DROP POLICY IF EXISTS content_drafts_update_policy
-  ON public.content_drafts;
-
-CREATE POLICY content_drafts_update_policy
-  ON public.content_drafts
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-DROP POLICY IF EXISTS content_drafts_delete_policy
-  ON public.content_drafts;
-
-CREATE POLICY content_drafts_delete_policy
-  ON public.content_drafts
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-
--- >>> FROM: 00000000000015_setup_product_drafts.sql <<<
--- 00000000000015_setup_product_drafts.sql
--- Product draft snapshots for front-end visual editing.
-
-CREATE TABLE IF NOT EXISTS public.product_drafts (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
-  author_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  meta jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT product_drafts_product_unique UNIQUE (product_id),
-  CONSTRAINT product_drafts_meta_object CHECK (jsonb_typeof(meta) = 'object')
-);
-
-ALTER TABLE public.product_drafts
-  ADD COLUMN IF NOT EXISTS product_id uuid REFERENCES public.products(id) ON DELETE CASCADE,
-  ADD COLUMN IF NOT EXISTS author_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS meta jsonb NOT NULL DEFAULT '{}'::jsonb,
-  ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
-  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'product_drafts_product_unique'
-      AND conrelid = 'public.product_drafts'::regclass
-  ) THEN
-    ALTER TABLE public.product_drafts
-      ADD CONSTRAINT product_drafts_product_unique UNIQUE (product_id);
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'product_drafts_meta_object'
-      AND conrelid = 'public.product_drafts'::regclass
-  ) THEN
-    ALTER TABLE public.product_drafts
-      ADD CONSTRAINT product_drafts_meta_object CHECK (jsonb_typeof(meta) = 'object');
-  END IF;
-END $$;
-
-COMMENT ON TABLE public.product_drafts IS
-  'Draft product metadata snapshots used by Draft Mode and front-end visual editing before publishing to live product rows.';
-COMMENT ON COLUMN public.product_drafts.product_id IS
-  'ID of the product being drafted.';
-COMMENT ON COLUMN public.product_drafts.meta IS
-  'Draft product metadata snapshot. Front-end visual editing currently mutates visible title, short_description, and description_json fields.';
-
-CREATE INDEX IF NOT EXISTS product_drafts_author_id_idx ON public.product_drafts (author_id);
-CREATE INDEX IF NOT EXISTS product_drafts_product_id_idx ON public.product_drafts (product_id);
-CREATE INDEX IF NOT EXISTS product_drafts_updated_at_idx ON public.product_drafts (updated_at DESC);
-
-DROP TRIGGER IF EXISTS on_product_drafts_update ON public.product_drafts;
-CREATE TRIGGER on_product_drafts_update
-  BEFORE UPDATE ON public.product_drafts
-  FOR EACH ROW
-  EXECUTE FUNCTION public.set_current_timestamp_updated_at();
-
-ALTER TABLE public.product_drafts ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS product_drafts_select_policy
-  ON public.product_drafts;
-
-CREATE POLICY product_drafts_select_policy
-  ON public.product_drafts
-  FOR SELECT
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-DROP POLICY IF EXISTS product_drafts_insert_policy
-  ON public.product_drafts;
-
-CREATE POLICY product_drafts_insert_policy
-  ON public.product_drafts
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-DROP POLICY IF EXISTS product_drafts_update_policy
-  ON public.product_drafts;
-
-CREATE POLICY product_drafts_update_policy
-  ON public.product_drafts
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-DROP POLICY IF EXISTS product_drafts_delete_policy
-  ON public.product_drafts;
-
-CREATE POLICY product_drafts_delete_policy
-  ON public.product_drafts
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-
--- >>> FROM: 00000000000016_add_feature_image_to_pages.sql <<<
-ALTER TABLE public.pages
-ADD COLUMN IF NOT EXISTS feature_image_id uuid REFERENCES public.media(id) ON DELETE SET NULL;
-
-COMMENT ON COLUMN public.pages.feature_image_id IS
-  'ID of the media item to be used as the page feature image.';
-
-CREATE INDEX IF NOT EXISTS idx_pages_feature_image_id
-  ON public.pages (feature_image_id);
-
-
--- >>> FROM: 00000000000017_add_product_blocks.sql <<<
--- 00000000000017_add_product_blocks.sql
--- Migration to support modular block editor for product descriptions.
-
--- 1. Add product_id column to public.blocks
-ALTER TABLE public.blocks
-  ADD COLUMN product_id uuid REFERENCES public.products(id) ON DELETE CASCADE;
-
--- 2. Drop the old parent constraint on public.blocks
-ALTER TABLE public.blocks
-  DROP CONSTRAINT IF EXISTS check_exactly_one_parent;
-
--- 3. Add the updated parent constraint supporting product_id
-ALTER TABLE public.blocks
-  ADD CONSTRAINT check_exactly_one_parent CHECK (
-    (page_id IS NOT NULL AND post_id IS NULL AND product_id IS NULL)
-    OR (post_id IS NOT NULL AND page_id IS NULL AND product_id IS NULL)
-    OR (product_id IS NOT NULL AND page_id IS NULL AND post_id IS NULL)
-  );
-
--- 4. Add blocks column to product_drafts table
-ALTER TABLE public.product_drafts
-  ADD COLUMN IF NOT EXISTS blocks jsonb NOT NULL DEFAULT '[]'::jsonb;
-
--- 5. Add check constraint to ensure product_drafts.blocks is a JSON array
-ALTER TABLE public.product_drafts
-  DROP CONSTRAINT IF EXISTS product_drafts_blocks_array;
-
-ALTER TABLE public.product_drafts
-  ADD CONSTRAINT product_drafts_blocks_array CHECK (jsonb_typeof(blocks) = 'array');
-
--- 6. Migrate existing product description_json to blocks
-INSERT INTO public.blocks (product_id, language_id, block_type, content, "order")
-SELECT
-  id as product_id,
-  language_id,
-  'text' as block_type,
-  jsonb_build_object('html_content', COALESCE(description_json#>>'{}', '')) as content,
-  0 as "order"
-FROM public.products
-WHERE description_json IS NOT NULL AND (description_json#>>'{}') <> ''
-ON CONFLICT DO NOTHING;
-
--- 7. Recreate blocks_anon_read_policy
-DROP POLICY IF EXISTS blocks_anon_read_policy ON public.blocks;
-CREATE POLICY blocks_anon_read_policy
-  ON public.blocks
-  FOR SELECT
-  TO anon
-  USING (
-    (
-      page_id IS NOT NULL
-      AND EXISTS (
-        SELECT 1
-        FROM public.pages AS p
-        WHERE p.id = blocks.page_id
-          AND p.status = 'published'
-      )
-    )
-    OR (
-      post_id IS NOT NULL
-      AND EXISTS (
-        SELECT 1
-        FROM public.posts AS pt
-        WHERE pt.id = blocks.post_id
-          AND pt.status = 'published'
-          AND (pt.published_at IS NULL OR pt.published_at <= now())
-      )
-    )
-    OR (
-      product_id IS NOT NULL
-      AND EXISTS (
-        SELECT 1
-        FROM public.products AS pr
-        WHERE pr.id = blocks.product_id
-          AND pr.status = 'active'
-      )
-    )
-  );
-
--- 8. Recreate blocks_read_policy
-DROP POLICY IF EXISTS blocks_read_policy ON public.blocks;
-CREATE POLICY blocks_read_policy
-  ON public.blocks
-  FOR SELECT
-  TO authenticated
-  USING (
-    ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-    OR (
-      (
-        page_id IS NOT NULL
-        AND EXISTS (
-          SELECT 1
-          FROM public.pages AS p
-          WHERE p.id = blocks.page_id
-            AND p.status = 'published'
-        )
-      )
-      OR (
-        post_id IS NOT NULL
-        AND EXISTS (
-          SELECT 1
-          FROM public.posts AS pt
-          WHERE pt.id = blocks.post_id
-            AND pt.status = 'published'
-            AND (pt.published_at IS NULL OR pt.published_at <= now())
-        )
-      )
-      OR (
-        product_id IS NOT NULL
-        AND EXISTS (
-          SELECT 1
-          FROM public.products AS pr
-          WHERE pr.id = blocks.product_id
-            AND pr.status = 'active'
-        )
-      )
-    )
-  );
-
-
--- >>> FROM: 00000000000018_setup_bot_protection_settings.sql <<<
--- 00000000000018_setup_bot_protection_settings.sql
--- NextBlock Bot Protection settings and sensitive keys policy hardening.
-
-COMMENT ON TABLE public.site_settings IS 'Key-value store for global site settings. Sensitive keys such as Cortex AI BYOK and Bot Protection Secret Key are protected by row-level policies.';
-
-DROP POLICY IF EXISTS site_settings_read_policy ON public.site_settings;
-DROP POLICY IF EXISTS site_settings_insert_policy ON public.site_settings;
-DROP POLICY IF EXISTS site_settings_update_policy ON public.site_settings;
-DROP POLICY IF EXISTS site_settings_delete_policy ON public.site_settings;
-
-CREATE POLICY site_settings_read_policy
-  ON public.site_settings
-  FOR SELECT
-  TO public
-  USING (
-    key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
-    OR (
-      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
-      AND (SELECT auth.role()) = 'authenticated'
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  );
-
-CREATE POLICY site_settings_insert_policy
-  ON public.site_settings
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    (
-      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
-      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-    )
-    OR (
-      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  );
-
-CREATE POLICY site_settings_update_policy
-  ON public.site_settings
-  FOR UPDATE
-  TO authenticated
-  USING (
-    (
-      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
-      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-    )
-    OR (
-      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  )
-  WITH CHECK (
-    (
-      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
-      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-    )
-    OR (
-      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  );
-
-CREATE POLICY site_settings_delete_policy
-  ON public.site_settings
-  FOR DELETE
-  TO authenticated
-  USING (
-    (
-      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
-      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-    )
-    OR (
-      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret')
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  );
-
-
--- >>> FROM: 00000000000019_add_product_categories.sql <<<
--- 00000000000019_add_product_categories.sql
--- Migration adding categories and many-to-many product_categories join table.
-
-CREATE TABLE IF NOT EXISTS public.categories (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  slug text NOT NULL UNIQUE,
-  description text,
-  created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS public.product_categories (
-  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
-  category_id uuid NOT NULL REFERENCES public.categories(id) ON DELETE CASCADE,
-  PRIMARY KEY (product_id, category_id)
-);
-
--- Indexing foreign keys for performance
-CREATE INDEX IF NOT EXISTS idx_product_categories_product_id ON public.product_categories(product_id);
-CREATE INDEX IF NOT EXISTS idx_product_categories_category_id ON public.product_categories(category_id);
-
--- Documenting the tables
-COMMENT ON TABLE public.categories IS 'Product categories for organizing catalog items.';
-COMMENT ON TABLE public.product_categories IS 'Junction table mapping products to multiple categories.';
-
--- Enable Row Level Security (RLS)
-ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.product_categories ENABLE ROW LEVEL SECURITY;
-
--- Define RLS Policies
-CREATE POLICY "Public can view categories"
-  ON public.categories
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY "Public can view product_categories"
-  ON public.product_categories
-  FOR SELECT
-  TO public
-  USING (true);
-
-CREATE POLICY "Admin can manage categories"
-  ON public.categories
-  FOR ALL
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY "Admin can manage product_categories"
-  ON public.product_categories
-  FOR ALL
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
--- Define Grants for roles
-GRANT SELECT ON public.categories TO anon;
-GRANT ALL ON public.categories TO authenticated;
-GRANT ALL ON public.categories TO service_role;
-
-GRANT SELECT ON public.product_categories TO anon;
-GRANT ALL ON public.product_categories TO authenticated;
-GRANT ALL ON public.product_categories TO service_role;
-
-
--- >>> FROM: 00000000000020_add_category_translations.sql <<<
--- 00000000000020_add_category_translations.sql
--- Add name_translations and description_translations columns to public.categories.
-
-ALTER TABLE public.categories
-ADD COLUMN IF NOT EXISTS name_translations jsonb NOT NULL DEFAULT '{}'::jsonb,
-ADD COLUMN IF NOT EXISTS description_translations jsonb NOT NULL DEFAULT '{}'::jsonb;
-
--- Comment on columns
-COMMENT ON COLUMN public.categories.name_translations IS 'Translated category names (e.g. {"fr": "Numérique"}).';
-COMMENT ON COLUMN public.categories.description_translations IS 'Translated category descriptions.';
-
-
--- >>> FROM: 00000000000021_migrate_hero_blocks_to_sections.sql <<<
--- 00000000000021_migrate_hero_blocks_to_sections.sql
--- Migration to convert 'hero' block types to 'section' block types with {"is_hero": true} content.
-
--- 1. Migrate active blocks
-UPDATE public.blocks
-SET
-  block_type = 'section',
-  content = COALESCE(content, '{}'::jsonb) || '{"is_hero": true}'::jsonb
-WHERE block_type = 'hero';
-
--- 2. Migrate content drafts containing hero blocks
-UPDATE public.content_drafts
-SET blocks = (
-  SELECT COALESCE(
-    jsonb_agg(
-      CASE
-        WHEN elem.value->>'block_type' = 'hero' THEN
-          jsonb_set(elem.value, '{block_type}', '"section"'::jsonb) ||
-          jsonb_build_object('content', COALESCE(elem.value->'content', '{}'::jsonb) || '{"is_hero": true}'::jsonb)
-        ELSE elem.value
-      END
-    ),
-    '[]'::jsonb
-  )
-  FROM jsonb_array_elements(public.content_drafts.blocks) AS elem(value)
-)
-WHERE public.content_drafts.blocks @> '[{"block_type": "hero"}]';
-
-
-
-
--- >>> FROM: 00000000000022_seed_cortex_ai_guide_post.sql <<<
--- 00000000000022_seed_cortex_ai_guide_post.sql
--- Adds the Cortex AI guide post linked from the seeded home page CTA.
-
-
-DO $$
-DECLARE
-  v_en_lang_id bigint;
-  v_cortex_media_id uuid;
-  v_cortex_post_id bigint;
-BEGIN
-  SELECT id INTO v_en_lang_id
-  FROM public.languages
-  WHERE code = 'en'
-  LIMIT 1;
-
-  IF v_en_lang_id IS NULL THEN
-    RAISE EXCEPTION 'English language not found.';
-  END IF;
-
-  INSERT INTO public.media AS seed_media (
-    file_name,
-    object_key,
-    file_path,
-    file_type,
-    size_bytes,
-    width,
-    height,
-    folder,
-    description
-  )
-  VALUES (
-    'cortex-ai.webp',
-    'images/cortex-ai.webp',
-    'images/cortex-ai.webp',
-    'image/webp',
-    298588,
-    1024,
-    571,
-    'images',
-    'NextBlock Cortex AI editorial feature image'
-  )
-  ON CONFLICT (object_key) DO UPDATE
-  SET
-    file_name = COALESCE(seed_media.file_name, EXCLUDED.file_name),
-    file_path = COALESCE(seed_media.file_path, EXCLUDED.file_path),
-    file_type = COALESCE(seed_media.file_type, EXCLUDED.file_type),
-    size_bytes = COALESCE(seed_media.size_bytes, EXCLUDED.size_bytes),
-    width = COALESCE(seed_media.width, EXCLUDED.width),
-    height = COALESCE(seed_media.height, EXCLUDED.height),
-    folder = COALESCE(seed_media.folder, EXCLUDED.folder),
-    description = COALESCE(seed_media.description, EXCLUDED.description),
-    updated_at = now()
-  RETURNING id INTO v_cortex_media_id;
-
-  INSERT INTO public.posts (
-    language_id,
-    title,
-    slug,
-    label,
-    status,
-    excerpt,
-    subtitle,
-    published_at,
-    meta_title,
-    meta_description,
-    translation_group_id,
-    feature_image_id
-  )
-  VALUES (
-    v_en_lang_id,
-    'NextBlock Cortex AI Guide',
-    'nextblock-cortex-ai-guide',
-    'AI Copilot',
-    'published',
-    'A practical guide to Cortex AI, the block-aware assistant for model routing, BYOK controls, and faster editorial production inside NextBlock.',
-    'See how Cortex AI brings structured generation, provider choice, and safer content workflows directly into the NextBlock editor.',
-    now(),
-    'NextBlock Cortex AI Guide',
-    'Learn how NextBlock Cortex AI helps teams generate, refine, and translate structured block content with model routing and BYOK controls.',
-    gen_random_uuid(),
-    v_cortex_media_id
-  )
-  ON CONFLICT (language_id, slug) DO NOTHING
-  RETURNING id INTO v_cortex_post_id;
-
-  IF v_cortex_post_id IS NULL THEN
-    SELECT id INTO v_cortex_post_id
-    FROM public.posts
-    WHERE language_id = v_en_lang_id
-      AND slug = 'nextblock-cortex-ai-guide'
-    LIMIT 1;
-
-    UPDATE public.posts
-    SET
-      feature_image_id = v_cortex_media_id,
-      updated_at = now()
-    WHERE id = v_cortex_post_id
-      AND feature_image_id IS NULL;
-  END IF;
-
-  IF v_cortex_post_id IS NULL THEN
-    RAISE EXCEPTION 'Unable to create or find Cortex AI guide post.';
-  END IF;
-
-  INSERT INTO public.blocks (post_id, language_id, block_type, content, "order")
-  SELECT
-    v_cortex_post_id,
-    v_en_lang_id,
-    'text',
-    jsonb_build_object('html_content', $cortex_ai_html$
-<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock Cortex AI is the AI layer built for the way NextBlock pages are actually composed. Instead of treating your site like a blank document, it understands blocks, sections, editor constraints, and the model choices your team wants to use.</p>
-
-<div class='grid gap-4 md:grid-cols-3 my-10'>
-  <div class='rounded-3xl border border-violet-200/70 bg-violet-50/80 p-6 dark:border-violet-500/20 dark:bg-violet-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Model routing</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Pick the right model</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Route generation through OpenRouter or your configured provider strategy so each task can balance speed, quality, and cost.</p>
-  </div>
-  <div class='rounded-3xl border border-sky-200/70 bg-sky-50/80 p-6 dark:border-sky-500/20 dark:bg-sky-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-200'>BYOK control</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Use your own keys</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Keep provider credentials under your control while still giving editors a clean, guided AI workflow in the CMS.</p>
-  </div>
-  <div class='rounded-3xl border border-emerald-200/70 bg-emerald-50/80 p-6 dark:border-emerald-500/20 dark:bg-emerald-500/10'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Typed output</p>
-    <h3 class='mt-3 text-xl font-semibold text-slate-900 dark:text-white'>Generate valid blocks</h3>
-    <p class='mt-3 text-sm text-slate-600 dark:text-slate-300'>Schema-aware generation helps AI output land as usable page structure instead of loose copy that needs a rebuild.</p>
-  </div>
-</div>
-
-<h2>Why Cortex AI Belongs Inside the Editor</h2>
-<p>Generic chat tools can draft copy, but they do not know the difference between a hero, a card grid, a product description, and a localized article. Cortex AI lives closer to the editing surface, so generation can respect the same block contracts that render on the public site.</p>
-<p>That makes AI useful for practical production work: drafting a landing section, tightening an excerpt, expanding a product story, translating a post, or reshaping a rough idea into a block layout that already fits the system.</p>
-
-<div class='rounded-[2rem] border border-slate-200/80 bg-slate-50/90 p-6 my-10 dark:border-white/10 dark:bg-slate-900/70'>
-  <p class='text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Editorial workflow</p>
-  <div class='grid gap-5 md:grid-cols-2 mt-5'>
-    <div class='rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-slate-950/50'>
-      <h3 class='mt-0 text-xl text-slate-900 dark:text-white'>Faster first drafts</h3>
-      <p class='text-sm text-slate-600 dark:text-slate-300'>Start with a structured prompt and get a section, article outline, or product narrative that already matches the site voice.</p>
-    </div>
-    <div class='rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-slate-950/50'>
-      <h3 class='mt-0 text-xl text-slate-900 dark:text-white'>Cleaner revisions</h3>
-      <p class='text-sm text-slate-600 dark:text-slate-300'>Ask for shorter, clearer, more technical, more polished, or locale-ready output without leaving the content screen.</p>
-    </div>
-  </div>
-</div>
-
-<h2>Model Routing and Cost Control</h2>
-<p>Cortex AI is designed around provider choice. Teams can route requests through the configured AI gateway, choose task-appropriate models, and keep bring-your-own-key setups separate from the editor experience. Editors get a simple control surface while developers keep the operational knobs.</p>
-<ul>
-  <li>Use fast, inexpensive models for drafts, variations, and rewrites</li>
-  <li>Reserve stronger models for long-form strategy, technical copy, or difficult transformations</li>
-  <li>Keep provider keys and routing defaults in the server-side configuration layer</li>
-  <li>Make cost and quality decisions without changing the public rendering system</li>
-</ul>
-
-<h2>Block-Aware Generation</h2>
-<p>The important shift is that Cortex AI is not just writing text. It is meant to produce content that can map back to NextBlock surfaces: section copy, article bodies, product descriptions, headings, calls to action, and localized variants. That reduces the cleanup step that usually happens after copying AI text from a separate tool.</p>
-<p>Because the output is shaped around existing block contracts, the generated content feels native in the editor and predictable on the frontend.</p>
-
-<h2>Safer Team Workflows</h2>
-<p>AI works best when it is helpful without becoming invisible infrastructure. Cortex AI keeps humans in the loop: editors review the output, developers control the available providers, and the CMS keeps the generated content inside the same revision and publishing flow as everything else.</p>
-
-<h2>A Practical Launch Flow</h2>
-<ol>
-  <li>Draft the article, landing section, or product story from a focused prompt.</li>
-  <li>Refine the result against the brand voice and target audience.</li>
-  <li>Generate a localized version or shorter excerpt for cards and metadata.</li>
-  <li>Review the content in the NextBlock editor, publish, and keep iterating through normal revisions.</li>
-</ol>
-
-<p>Cortex AI turns the CMS into a more capable production surface: not a replacement for editorial judgment, but a faster way to shape good ideas into structured pages that are ready to ship.</p>
-$cortex_ai_html$),
-    0
-  WHERE NOT EXISTS (
-    SELECT 1
-    FROM public.blocks
-    WHERE post_id = v_cortex_post_id
-  );
-END $$;
-
-
-
--- >>> FROM: 00000000000023_setup_custom_block_definitions.sql <<<
--- Custom block definition registry for data-rendered user blocks.
-
-CREATE OR REPLACE FUNCTION public.is_valid_custom_block_fields(candidate jsonb)
-RETURNS boolean
-LANGUAGE sql
-IMMUTABLE
-SET search_path = ''
-AS $$
-  SELECT CASE
-    WHEN jsonb_typeof(candidate) <> 'array' THEN false
-    ELSE
-      NOT EXISTS (
-        SELECT 1
-        FROM jsonb_array_elements(candidate) AS field(value)
-        WHERE jsonb_typeof(field.value) <> 'object'
-          OR jsonb_typeof(field.value -> 'key') IS DISTINCT FROM 'string'
-          OR jsonb_typeof(field.value -> 'label') IS DISTINCT FROM 'string'
-          OR jsonb_typeof(field.value -> 'type') IS DISTINCT FROM 'string'
-          OR field.value ->> 'key' !~ '^[a-z][a-z0-9_]*$'
-          OR field.value ->> 'type' NOT IN ('text', 'rich-text', 'image_r2', 'db_relation')
-      )
-      AND (
-        SELECT COUNT(*) = COUNT(DISTINCT field.value ->> 'key')
-        FROM jsonb_array_elements(candidate) AS field(value)
-      )
-  END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.is_valid_custom_block_layout_schema(candidate jsonb)
-RETURNS boolean
-LANGUAGE sql
-IMMUTABLE
-SET search_path = ''
-AS $$
-  SELECT CASE
-    WHEN jsonb_typeof(candidate) <> 'object' THEN false
-    ELSE candidate ->> 'type' IN ('container', 'field_render')
-  END;
-$$;
-
-CREATE TABLE IF NOT EXISTS public.custom_block_definitions (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  slug text NOT NULL UNIQUE CHECK (slug ~ '^[a-z][a-z0-9-]*$'),
-  name text NOT NULL CHECK (length(trim(name)) > 0),
-  description text NOT NULL DEFAULT '',
-  fields jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (public.is_valid_custom_block_fields(fields)),
-  layout_schema jsonb NOT NULL CHECK (public.is_valid_custom_block_layout_schema(layout_schema)),
-  is_original boolean NOT NULL DEFAULT true
-);
-
-COMMENT ON TABLE public.custom_block_definitions IS
-  'Registry for user-created block definitions rendered from database JSONB without runtime code compilation.';
-COMMENT ON COLUMN public.custom_block_definitions.fields IS
-  'Strict JSONB field declarations for data-rendered custom blocks.';
-COMMENT ON COLUMN public.custom_block_definitions.layout_schema IS
-  'Open-ended recursive layout schema consumed by the dynamic layout renderer.';
-COMMENT ON COLUMN public.custom_block_definitions.is_original IS
-  'False when a definition was created by duplicating an existing registry row.';
-
-CREATE INDEX IF NOT EXISTS idx_custom_block_definitions_is_original
-  ON public.custom_block_definitions (is_original);
-
-CREATE OR REPLACE FUNCTION public.duplicate_block_definition(target_id uuid)
-RETURNS public.custom_block_definitions
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  source_definition public.custom_block_definitions%ROWTYPE;
-  copied_definition public.custom_block_definitions%ROWTYPE;
-  base_slug text;
-  copy_slug text;
-  copy_index integer := 1;
-BEGIN
-  IF auth.role() <> 'service_role'
-     AND COALESCE((SELECT public.get_current_user_role())::text, '') NOT IN ('ADMIN', 'WRITER') THEN
-    RAISE EXCEPTION 'Not authorized to duplicate custom block definitions.'
-      USING ERRCODE = '42501';
-  END IF;
-
-  SELECT *
-    INTO source_definition
-  FROM public.custom_block_definitions
-  WHERE id = target_id;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Custom block definition % not found.', target_id
-      USING ERRCODE = 'P0002';
-  END IF;
-
-  base_slug := regexp_replace(source_definition.slug, '-copy(-[0-9]+)?$', '');
-  copy_slug := base_slug || '-copy';
-
-  WHILE EXISTS (
-    SELECT 1
-    FROM public.custom_block_definitions
-    WHERE slug = copy_slug
-  ) LOOP
-    copy_index := copy_index + 1;
-    copy_slug := base_slug || '-copy-' || copy_index;
-  END LOOP;
-
-  INSERT INTO public.custom_block_definitions (
-    id,
-    slug,
-    name,
-    description,
-    fields,
-    layout_schema,
-    is_original
-  )
-  VALUES (
-    gen_random_uuid(),
-    copy_slug,
-    source_definition.name || ' Copy',
-    source_definition.description,
-    source_definition.fields,
-    source_definition.layout_schema,
-    false
-  )
-  RETURNING *
-    INTO copied_definition;
-
-  RETURN copied_definition;
-END;
-$$;
-
-ALTER TABLE public.custom_block_definitions ENABLE ROW LEVEL SECURITY;
-
-GRANT SELECT ON public.custom_block_definitions TO anon, authenticated, service_role;
-GRANT INSERT, UPDATE, DELETE ON public.custom_block_definitions TO authenticated;
-GRANT ALL ON public.custom_block_definitions TO service_role;
-
-DROP POLICY IF EXISTS custom_block_definitions_public_read_policy
-  ON public.custom_block_definitions;
-
-CREATE POLICY custom_block_definitions_public_read_policy
-  ON public.custom_block_definitions
-  FOR SELECT
-  TO public
-  USING (true);
-
-DROP POLICY IF EXISTS custom_block_definitions_insert_policy
-  ON public.custom_block_definitions;
-
-CREATE POLICY custom_block_definitions_insert_policy
-  ON public.custom_block_definitions
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-DROP POLICY IF EXISTS custom_block_definitions_update_policy
-  ON public.custom_block_definitions;
-
-CREATE POLICY custom_block_definitions_update_policy
-  ON public.custom_block_definitions
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  WITH CHECK ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-DROP POLICY IF EXISTS custom_block_definitions_delete_policy
-  ON public.custom_block_definitions;
-
-CREATE POLICY custom_block_definitions_delete_policy
-  ON public.custom_block_definitions
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'));
-
-DROP POLICY IF EXISTS custom_block_definitions_service_role_policy
-  ON public.custom_block_definitions;
-
-CREATE POLICY custom_block_definitions_service_role_policy
-  ON public.custom_block_definitions
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-REVOKE ALL ON FUNCTION public.duplicate_block_definition(uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.duplicate_block_definition(uuid) TO authenticated, service_role;
-
-
--- >>> FROM: 00000000000024_setup_ucp_cart_sessions.sql <<<
--- 00000000000019_setup_ucp_cart_sessions.sql
--- Persist Universal Commerce Protocol cart sessions for agentic cart handoff.
-
-CREATE TABLE IF NOT EXISTS public.ucp_cart_sessions (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  status text NOT NULL DEFAULT 'active'
-    CHECK (status IN ('active', 'cancelled', 'completed')),
-  currency text NOT NULL DEFAULT 'USD',
-  locale text,
-  buyer_identity jsonb NOT NULL DEFAULT '{}'::jsonb,
-  context jsonb NOT NULL DEFAULT '{}'::jsonb,
-  signals jsonb NOT NULL DEFAULT '{}'::jsonb,
-  attribution jsonb NOT NULL DEFAULT '{}'::jsonb,
-  line_items jsonb NOT NULL DEFAULT '[]'::jsonb,
-  totals jsonb NOT NULL DEFAULT '[]'::jsonb,
-  checkout_url text,
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  expires_at timestamptz NOT NULL DEFAULT (now() + interval '7 days'),
-  CONSTRAINT ucp_cart_sessions_buyer_identity_object
-    CHECK (jsonb_typeof(buyer_identity) = 'object'),
-  CONSTRAINT ucp_cart_sessions_context_object
-    CHECK (jsonb_typeof(context) = 'object'),
-  CONSTRAINT ucp_cart_sessions_signals_object
-    CHECK (jsonb_typeof(signals) = 'object'),
-  CONSTRAINT ucp_cart_sessions_attribution_object
-    CHECK (jsonb_typeof(attribution) = 'object'),
-  CONSTRAINT ucp_cart_sessions_line_items_array
-    CHECK (jsonb_typeof(line_items) = 'array'),
-  CONSTRAINT ucp_cart_sessions_totals_array
-    CHECK (jsonb_typeof(totals) = 'array'),
-  CONSTRAINT ucp_cart_sessions_metadata_object
-    CHECK (jsonb_typeof(metadata) = 'object')
-);
-
-CREATE INDEX IF NOT EXISTS idx_ucp_cart_sessions_status_expires_at
-  ON public.ucp_cart_sessions (status, expires_at);
-
-CREATE INDEX IF NOT EXISTS idx_ucp_cart_sessions_created_at
-  ON public.ucp_cart_sessions (created_at DESC);
-
-CREATE OR REPLACE FUNCTION public.handle_ucp_cart_sessions_update()
-RETURNS trigger AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_handle_ucp_cart_sessions_update
-  ON public.ucp_cart_sessions;
-
-CREATE TRIGGER trg_handle_ucp_cart_sessions_update
-  BEFORE UPDATE ON public.ucp_cart_sessions
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_ucp_cart_sessions_update();
-
-ALTER TABLE public.ucp_cart_sessions ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS ucp_cart_sessions_service_role_policy
-  ON public.ucp_cart_sessions;
-
-CREATE POLICY ucp_cart_sessions_service_role_policy
-  ON public.ucp_cart_sessions
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.ucp_cart_sessions TO service_role;
-GRANT EXECUTE ON FUNCTION public.handle_ucp_cart_sessions_update() TO service_role;
-
-
--- >>> FROM: 00000000000025_add_sale_schedule_columns.sql <<<
--- 00000000000025_add_sale_schedule_columns.sql
--- Scheduled pricing for products and variants:
---   * sale_start_at / sale_end_at gate the existing sale_price / sale_prices into a time window.
---   * scheduled_price / scheduled_prices / scheduled_price_at hold a pending permanent
---     regular-price change that takes effect once scheduled_price_at has passed.
--- Enforcement is read-time (see resolveEffectivePriceForCurrency); no cron is required.
--- Also adds a mapping table for auto-generated, time-bounded Freemius sale coupons.
-
--- ---------------------------------------------------------------------------
--- 1. Schedule columns on products
--- ---------------------------------------------------------------------------
-ALTER TABLE public.products
-  ADD COLUMN IF NOT EXISTS sale_start_at timestamptz,
-  ADD COLUMN IF NOT EXISTS sale_end_at timestamptz,
-  ADD COLUMN IF NOT EXISTS scheduled_price integer,
-  ADD COLUMN IF NOT EXISTS scheduled_prices jsonb,
-  ADD COLUMN IF NOT EXISTS scheduled_price_at timestamptz;
-
-ALTER TABLE public.products
-  ADD CONSTRAINT products_sale_window_valid
-    CHECK (sale_start_at IS NULL OR sale_end_at IS NULL OR sale_start_at < sale_end_at);
-
-COMMENT ON COLUMN public.products.sale_start_at IS
-  'Inclusive start of the scheduled sale window (UTC). NULL means no lower bound.';
-COMMENT ON COLUMN public.products.sale_end_at IS
-  'Exclusive end of the scheduled sale window (UTC). NULL means no upper bound. Both NULL = always-on sale.';
-COMMENT ON COLUMN public.products.scheduled_price IS
-  'Pending regular price (smallest currency unit) applied once scheduled_price_at has passed.';
-COMMENT ON COLUMN public.products.scheduled_prices IS
-  'Pending multi-currency regular prices by ISO 4217 code, applied once scheduled_price_at has passed.';
-COMMENT ON COLUMN public.products.scheduled_price_at IS
-  'Effective timestamp (UTC) for the pending regular-price change.';
-
-CREATE INDEX IF NOT EXISTS products_sale_window_idx
-  ON public.products (sale_start_at, sale_end_at)
-  WHERE sale_start_at IS NOT NULL OR sale_end_at IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS products_scheduled_price_idx
-  ON public.products (scheduled_price_at)
-  WHERE scheduled_price_at IS NOT NULL;
-
--- ---------------------------------------------------------------------------
--- 2. Schedule columns on product_variants
--- ---------------------------------------------------------------------------
-ALTER TABLE public.product_variants
-  ADD COLUMN IF NOT EXISTS sale_start_at timestamptz,
-  ADD COLUMN IF NOT EXISTS sale_end_at timestamptz,
-  ADD COLUMN IF NOT EXISTS scheduled_price integer,
-  ADD COLUMN IF NOT EXISTS scheduled_prices jsonb,
-  ADD COLUMN IF NOT EXISTS scheduled_price_at timestamptz;
-
-ALTER TABLE public.product_variants
-  ADD CONSTRAINT product_variants_sale_window_valid
-    CHECK (sale_start_at IS NULL OR sale_end_at IS NULL OR sale_start_at < sale_end_at);
-
-COMMENT ON COLUMN public.product_variants.sale_start_at IS
-  'Inclusive start of the scheduled sale window (UTC) for this variant. NULL means no lower bound.';
-COMMENT ON COLUMN public.product_variants.sale_end_at IS
-  'Exclusive end of the scheduled sale window (UTC) for this variant. NULL means no upper bound.';
-COMMENT ON COLUMN public.product_variants.scheduled_price IS
-  'Pending regular price (smallest currency unit) applied once scheduled_price_at has passed.';
-COMMENT ON COLUMN public.product_variants.scheduled_prices IS
-  'Pending multi-currency regular prices by ISO 4217 code, applied once scheduled_price_at has passed.';
-COMMENT ON COLUMN public.product_variants.scheduled_price_at IS
-  'Effective timestamp (UTC) for the pending regular-price change.';
-
-CREATE INDEX IF NOT EXISTS product_variants_sale_window_idx
-  ON public.product_variants (sale_start_at, sale_end_at)
-  WHERE sale_start_at IS NOT NULL OR sale_end_at IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS product_variants_scheduled_price_idx
-  ON public.product_variants (scheduled_price_at)
-  WHERE scheduled_price_at IS NOT NULL;
-
--- ---------------------------------------------------------------------------
--- 3. Redefine upsert_product_with_variants to persist the sale-window columns.
---    The form write path goes exclusively through this RPC; the scheduled_price*
---    columns are written by the bulk importer via direct service-role UPDATE and
---    therefore are intentionally NOT part of this function.
---    Body copied from migration 00000000000005 with sale_start_at / sale_end_at added.
--- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.upsert_product_with_variants(product_payload jsonb)
-RETURNS uuid
-LANGUAGE plpgsql
-SET search_path = public
-AS $function$
+CREATE OR REPLACE FUNCTION public.upsert_product_with_variants(product_payload jsonb) RETURNS uuid
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
 DECLARE
   v_product_id uuid := NULLIF(product_payload->>'id', '')::uuid;
   v_translation_group_id uuid := NULLIF(product_payload->>'translation_group_id', '')::uuid;
@@ -6881,2332 +1403,3984 @@ BEGIN
 
   RETURN v_product_id;
 END;
-$function$;
-
-GRANT EXECUTE ON FUNCTION public.upsert_product_with_variants(jsonb) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.upsert_product_with_variants(jsonb) TO service_role;
-
--- ---------------------------------------------------------------------------
--- 4. Mapping table for auto-generated, time-bounded Freemius sale coupons.
---    One auto-sale coupon per product. Kept separate from the admin \`coupons\`
---    table so generated sale coupons do not appear in the Coupons UI.
--- ---------------------------------------------------------------------------
-CREATE TABLE public.product_freemius_sale_coupons (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
-  freemius_product_id text NOT NULL,
-  freemius_plan_id text,
-  freemius_coupon_id text,
-  freemius_coupon_code text NOT NULL,
-  discount_percent integer,
-  starts_at timestamptz,
-  ends_at timestamptz,
-  is_active boolean NOT NULL DEFAULT false,
-  sync_status text NOT NULL DEFAULT 'pending',
-  sync_error text,
-  remote_payload jsonb,
-  last_synced_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT product_freemius_sale_coupons_product_unique UNIQUE (product_id),
-  CONSTRAINT product_freemius_sale_coupons_fm_product_not_blank
-    CHECK (char_length(btrim(freemius_product_id)) > 0),
-  CONSTRAINT product_freemius_sale_coupons_code_not_blank
-    CHECK (char_length(btrim(freemius_coupon_code)) > 0),
-  CONSTRAINT product_freemius_sale_coupons_discount_valid
-    CHECK (discount_percent IS NULL OR (discount_percent > 0 AND discount_percent <= 100)),
-  CONSTRAINT product_freemius_sale_coupons_window_valid
-    CHECK (starts_at IS NULL OR ends_at IS NULL OR starts_at < ends_at),
-  CONSTRAINT product_freemius_sale_coupons_sync_status_valid
-    CHECK (sync_status IN ('pending', 'synced', 'failed', 'deleted'))
-);
-
-COMMENT ON TABLE public.product_freemius_sale_coupons IS
-  'Auto-generated, time-bounded Freemius coupons that enforce a scheduled sale on a Freemius product at Freemius-hosted checkout.';
-
-CREATE INDEX idx_product_freemius_sale_coupons_freemius_product_id
-  ON public.product_freemius_sale_coupons (freemius_product_id);
-
-CREATE OR REPLACE FUNCTION public.handle_product_freemius_sale_coupons_write()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
-BEGIN
-  NEW.freemius_product_id := btrim(NEW.freemius_product_id);
-  NEW.freemius_coupon_code := upper(regexp_replace(btrim(NEW.freemius_coupon_code), '\\s+', '', 'g'));
-  NEW.sync_status := lower(btrim(COALESCE(NEW.sync_status, 'pending')));
-  NEW.updated_at := now();
-
-  IF NEW.created_at IS NULL THEN
-    NEW.created_at := now();
-  END IF;
-
-  RETURN NEW;
-END;
 $$;
 
-DROP TRIGGER IF EXISTS on_product_freemius_sale_coupons_write ON public.product_freemius_sale_coupons;
-CREATE TRIGGER on_product_freemius_sale_coupons_write
-  BEFORE INSERT OR UPDATE ON public.product_freemius_sale_coupons
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_product_freemius_sale_coupons_write();
-
-ALTER TABLE public.product_freemius_sale_coupons ENABLE ROW LEVEL SECURITY;
-
-GRANT ALL ON public.product_freemius_sale_coupons TO authenticated, service_role;
-
-CREATE POLICY product_freemius_sale_coupons_admin_policy
-  ON public.product_freemius_sale_coupons
-  FOR ALL
-  TO authenticated
-  USING (((SELECT public.is_admin()) IS TRUE))
-  WITH CHECK (((SELECT public.is_admin()) IS TRUE));
-
-CREATE POLICY product_freemius_sale_coupons_service_role_policy
-  ON public.product_freemius_sale_coupons
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-
--- >>> FROM: 00000000000026_seed_on_sale_translation.sql <<<
--- 00000000000026_seed_on_sale_translation.sql
--- Storefront "On Sale" badge label (shown on product cards when a scheduled
--- sale is currently active). Seeded across the supported storefront languages.
-
-INSERT INTO public.translations (key, translations)
-VALUES
-  ('ecommerce.on_sale', '{"en": "On Sale", "fr": "En solde", "es": "En oferta"}'::jsonb)
-ON CONFLICT (key) DO UPDATE
-SET translations = EXCLUDED.translations;
-
-
--- >>> FROM: 00000000000027_setup_privacy_and_mfa.sql <<<
--- 00000000000027_setup_privacy_and_mfa.sql
--- Canadian privacy compliance (Quebec Law 25 / CASL) + two-factor authentication.
---
--- Adds:
---   * privacy_consent_logs    - immutable audit trail of consent decisions (service-role writes only)
---   * user_security_settings  - per-user MFA configuration (totp | email)
---   * user_trusted_devices    - revocable "remember this device" records that gate the 2FA bypass
---   * email_2fa_challenges    - short-lived hashed 6-digit email codes (service-role only)
--- Seeds:
---   * privacy_settings / security_settings defaults into site_settings
---   * /privacy-policy + /terms-of-service pages (EN + FR) as text blocks, with the
---     Terms aligned to NextBlock's actual license (AGPL-3.0, see LICENSE.md)
---   * the remember_this_device sign-in translation
---
--- Conventions mirror existing migrations: gen_random_uuid(), timestamptz DEFAULT now(),
--- explicit per-table GRANTs, RLS with service_role FOR ALL and role-scoped authenticated policies.
-
--- ---------------------------------------------------------------------------
--- 1. privacy_consent_logs
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.privacy_consent_logs (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  consent_token text NOT NULL UNIQUE,
-  categories jsonb NOT NULL DEFAULT '{"necessary": true, "analytics": false, "marketing": false}'::jsonb
-    CHECK (jsonb_typeof(categories) = 'object'),
-  ip_masked text,
-  user_agent text,
-  created_at timestamptz NOT NULL DEFAULT now()
+CREATE TABLE IF NOT EXISTS public.blocks (
+    id bigint NOT NULL,
+    page_id bigint,
+    post_id bigint,
+    language_id bigint NOT NULL,
+    block_type text NOT NULL,
+    content jsonb,
+    "order" integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    product_id uuid,
+    CONSTRAINT check_exactly_one_parent CHECK ((((page_id IS NOT NULL) AND (post_id IS NULL) AND (product_id IS NULL)) OR ((post_id IS NOT NULL) AND (page_id IS NULL) AND (product_id IS NULL)) OR ((product_id IS NOT NULL) AND (page_id IS NULL) AND (post_id IS NULL))))
 );
 
-COMMENT ON TABLE public.privacy_consent_logs IS
-  'Immutable audit log of visitor consent decisions for Quebec Law 25 / PIPEDA accountability.';
-COMMENT ON COLUMN public.privacy_consent_logs.consent_token IS
-  'Opaque token also stored in the nb_consent_preference cookie to correlate a decision with its record.';
-COMMENT ON COLUMN public.privacy_consent_logs.ip_masked IS
-  'Partially masked IP (e.g. 203.0.113.x) - never store a full address for an analytics/marketing consent log.';
+COMMENT ON TABLE public.blocks IS 'Stores content blocks for pages and posts.';
 
-CREATE INDEX IF NOT EXISTS idx_privacy_consent_logs_created_at
-  ON public.privacy_consent_logs (created_at DESC);
+COMMENT ON COLUMN public.blocks.block_type IS 'Type of the block, e.g., "text", "image".';
 
-ALTER TABLE public.privacy_consent_logs ENABLE ROW LEVEL SECURITY;
+COMMENT ON COLUMN public.blocks.content IS 'JSONB content specific to the block_type.';
 
-GRANT SELECT ON public.privacy_consent_logs TO authenticated;
-GRANT ALL ON public.privacy_consent_logs TO service_role;
+COMMENT ON COLUMN public.blocks."order" IS 'Sort order of the block.';
 
-DROP POLICY IF EXISTS privacy_consent_logs_admin_read_policy ON public.privacy_consent_logs;
-CREATE POLICY privacy_consent_logs_admin_read_policy
-  ON public.privacy_consent_logs
-  FOR SELECT
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) = 'ADMIN');
-
-DROP POLICY IF EXISTS privacy_consent_logs_service_role_policy ON public.privacy_consent_logs;
-CREATE POLICY privacy_consent_logs_service_role_policy
-  ON public.privacy_consent_logs
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
--- ---------------------------------------------------------------------------
--- 2. user_security_settings
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.user_security_settings (
-  user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  mfa_enabled boolean NOT NULL DEFAULT false,
-  mfa_type text CHECK (mfa_type IN ('totp', 'email')),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-COMMENT ON TABLE public.user_security_settings IS
-  'Per-user multi-factor configuration. mfa_type is NULL until a factor is enrolled.';
-
-ALTER TABLE public.user_security_settings ENABLE ROW LEVEL SECURITY;
-
-GRANT SELECT, INSERT, UPDATE ON public.user_security_settings TO authenticated;
-GRANT ALL ON public.user_security_settings TO service_role;
-
-DROP POLICY IF EXISTS user_security_settings_select_own_policy ON public.user_security_settings;
-CREATE POLICY user_security_settings_select_own_policy
-  ON public.user_security_settings
-  FOR SELECT
-  TO authenticated
-  USING ((SELECT auth.uid()) = user_id);
-
-DROP POLICY IF EXISTS user_security_settings_insert_own_policy ON public.user_security_settings;
-CREATE POLICY user_security_settings_insert_own_policy
-  ON public.user_security_settings
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT auth.uid()) = user_id);
-
-DROP POLICY IF EXISTS user_security_settings_update_own_policy ON public.user_security_settings;
-CREATE POLICY user_security_settings_update_own_policy
-  ON public.user_security_settings
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT auth.uid()) = user_id)
-  WITH CHECK ((SELECT auth.uid()) = user_id);
-
-DROP POLICY IF EXISTS user_security_settings_service_role_policy ON public.user_security_settings;
-CREATE POLICY user_security_settings_service_role_policy
-  ON public.user_security_settings
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
--- ---------------------------------------------------------------------------
--- 3. user_trusted_devices  ("Remember this device")
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.user_trusted_devices (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  device_hash text NOT NULL UNIQUE,
-  browser_metadata text,
-  expires_at timestamptz NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-COMMENT ON TABLE public.user_trusted_devices IS
-  'SHA-256 hashes of trusted-device tokens. A 2FA bypass is only honoured when a non-expired row matches the cookie token, so deleting a row instantly revokes trust.';
-COMMENT ON COLUMN public.user_trusted_devices.device_hash IS
-  'SHA-256 of the raw token held in the nb_trusted_device cookie. The raw token is never stored.';
-
-CREATE INDEX IF NOT EXISTS idx_user_trusted_devices_user_id
-  ON public.user_trusted_devices (user_id);
-CREATE INDEX IF NOT EXISTS idx_user_trusted_devices_expires_at
-  ON public.user_trusted_devices (expires_at);
-
-ALTER TABLE public.user_trusted_devices ENABLE ROW LEVEL SECURITY;
-
-GRANT SELECT, DELETE ON public.user_trusted_devices TO authenticated;
-GRANT ALL ON public.user_trusted_devices TO service_role;
-
--- Users can list their own devices (Security panel) and revoke them, but creation
--- happens server-side via the service role so the raw token is hashed before storage.
-DROP POLICY IF EXISTS user_trusted_devices_select_own_policy ON public.user_trusted_devices;
-CREATE POLICY user_trusted_devices_select_own_policy
-  ON public.user_trusted_devices
-  FOR SELECT
-  TO authenticated
-  USING ((SELECT auth.uid()) = user_id);
-
-DROP POLICY IF EXISTS user_trusted_devices_delete_own_policy ON public.user_trusted_devices;
-CREATE POLICY user_trusted_devices_delete_own_policy
-  ON public.user_trusted_devices
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT auth.uid()) = user_id);
-
-DROP POLICY IF EXISTS user_trusted_devices_service_role_policy ON public.user_trusted_devices;
-CREATE POLICY user_trusted_devices_service_role_policy
-  ON public.user_trusted_devices
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
--- ---------------------------------------------------------------------------
--- 4. email_2fa_challenges  (service-role only - codes are sensitive)
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.email_2fa_challenges (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  token_hash text NOT NULL,
-  expires_at timestamptz NOT NULL,
-  consumed_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-COMMENT ON TABLE public.email_2fa_challenges IS
-  'Short-lived SHA-256 hashes of 6-digit email verification codes. Readable/writable only by the service role.';
-
-CREATE INDEX IF NOT EXISTS idx_email_2fa_challenges_user_id
-  ON public.email_2fa_challenges (user_id);
-CREATE INDEX IF NOT EXISTS idx_email_2fa_challenges_expires_at
-  ON public.email_2fa_challenges (expires_at);
-
-ALTER TABLE public.email_2fa_challenges ENABLE ROW LEVEL SECURITY;
-
-GRANT ALL ON public.email_2fa_challenges TO service_role;
-
--- No authenticated/anon grants and no permissive authenticated policy: all access
--- flows through service-role server actions.
-DROP POLICY IF EXISTS email_2fa_challenges_service_role_policy ON public.email_2fa_challenges;
-CREATE POLICY email_2fa_challenges_service_role_policy
-  ON public.email_2fa_challenges
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
--- ---------------------------------------------------------------------------
--- 5. Default site_settings (do not clobber existing admin edits)
--- ---------------------------------------------------------------------------
-INSERT INTO public.site_settings (key, value) VALUES
-  ('privacy_settings', '{
-    "banner_enabled": true,
-    "gtm_id": "",
-    "ga_measurement_id": "",
-    "custom_scripts": "",
-    "corporate": { "legal_name": "", "address": "", "support_email": "" }
-  }'::jsonb),
-  ('security_settings', '{
-    "trusted_device_days": 30,
-    "enforce_staff_2fa": false
-  }'::jsonb)
-ON CONFLICT (key) DO NOTHING;
-
--- ---------------------------------------------------------------------------
--- 6. Seed /privacy-policy and /terms-of-service pages (EN + FR) as text blocks.
---    Pages are metadata-only; the actual copy lives in blocks.content.html_content.
---    The Terms reflect NextBlock's real license (AGPL-3.0, per LICENSE.md).
--- ---------------------------------------------------------------------------
-DO $seed$
-DECLARE
-  v_en bigint;
-  v_fr bigint;
-  v_privacy_group uuid;
-  v_terms_group uuid;
-  v_page_id bigint;
-BEGIN
-  SELECT id INTO v_en FROM public.languages WHERE code = 'en' LIMIT 1;
-  SELECT id INTO v_fr FROM public.languages WHERE code = 'fr' LIMIT 1;
-
-  IF v_en IS NULL THEN
-    RAISE NOTICE 'Default language "en" not found; skipping privacy/terms page seed.';
-    RETURN;
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'public.blocks'::regclass AND attname = 'id' AND attidentity <> '') THEN
+    ALTER TABLE public.blocks ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+        SEQUENCE NAME public.blocks_id_seq
+        START WITH 1
+        INCREMENT BY 1
+        NO MINVALUE
+        NO MAXVALUE
+        CACHE 1
+    );
   END IF;
-
-  -- Reuse an existing translation_group_id if these pages were seeded before.
-  SELECT translation_group_id INTO v_privacy_group
-    FROM public.pages WHERE slug = 'privacy-policy' AND language_id = v_en LIMIT 1;
-  IF v_privacy_group IS NULL THEN v_privacy_group := gen_random_uuid(); END IF;
-
-  SELECT translation_group_id INTO v_terms_group
-    FROM public.pages WHERE slug = 'terms-of-service' AND language_id = v_en LIMIT 1;
-  IF v_terms_group IS NULL THEN v_terms_group := gen_random_uuid(); END IF;
-
-  -- ----- Privacy Policy (EN) -----
-  INSERT INTO public.pages (language_id, title, slug, status, meta_title, meta_description, translation_group_id)
-  VALUES (
-    v_en, 'Privacy Policy', 'privacy-policy', 'published',
-    'Privacy Policy',
-    'How we collect, use, disclose, and protect your personal information under Quebec Law 25, PIPEDA, and CASL.',
-    v_privacy_group
-  )
-  ON CONFLICT (language_id, slug) DO UPDATE
-    SET title = EXCLUDED.title, status = EXCLUDED.status,
-        meta_title = EXCLUDED.meta_title, meta_description = EXCLUDED.meta_description
-  RETURNING id INTO v_page_id;
-
-  DELETE FROM public.blocks WHERE page_id = v_page_id;
-  INSERT INTO public.blocks (page_id, language_id, block_type, content, "order")
-  VALUES (v_page_id, v_en, 'text', jsonb_build_object('html_content', $html$
-<h1>Privacy Policy</h1>
-<p><em>Last updated: June 4, 2026</em></p>
-<p>NextBlock™ CMS ("we", "us", or "our") respects your privacy and is committed to protecting your personal information in accordance with Quebec's <em>Act respecting the protection of personal information in the private sector</em> (Law 25), the federal <em>Personal Information Protection and Electronic Documents Act</em> (PIPEDA), and Canada's Anti-Spam Legislation (CASL).</p>
-
-<h2>1. Person responsible for personal information</h2>
-<p>Our Privacy Officer is responsible for our compliance with applicable privacy laws. You may reach them at <a href="mailto:privacy@nextblock.dev">privacy@nextblock.dev</a>.</p>
-
-<h2>2. What we collect</h2>
-<ul>
-  <li><strong>Account information</strong> &mdash; name, email address, and credentials when you register.</li>
-  <li><strong>Usage and device data</strong> &mdash; collected only with your consent through analytics technologies.</li>
-  <li><strong>Communications</strong> &mdash; messages you send us and your marketing preferences.</li>
-</ul>
-
-<h2>3. Why we collect it and your consent</h2>
-<p>We collect personal information for clearly identified purposes: to provide and secure our services, to communicate with you, and &mdash; only with your express, opt-in consent &mdash; for analytics and marketing. Consistent with Law 25, non-essential cookies and trackers remain disabled until you actively accept them, and you may withdraw your consent at any time.</p>
-
-<h2>4. Cookies and tracking technologies</h2>
-<p>Strictly necessary cookies keep the site working and require no consent. Analytics and marketing technologies are loaded <strong>only after</strong> you opt in through our consent banner. Your choice is recorded so we can honour it and demonstrate accountability.</p>
-
-<h2>5. Disclosure and sharing</h2>
-<p>We do not sell your personal information. We share it only with service providers who help us operate the platform under contractual confidentiality obligations, or where required by law.</p>
-
-<h2>6. Retention</h2>
-<p>We keep personal information only for as long as necessary to fulfil the purposes described above or as required by law, after which it is securely destroyed or anonymized.</p>
-
-<h2>7. Your rights</h2>
-<p>Subject to applicable law, you have the right to access, rectify, and delete your personal information, to withdraw consent, to data portability, and to be informed about automated processing. To exercise these rights, contact our Privacy Officer at <a href="mailto:privacy@nextblock.dev">privacy@nextblock.dev</a>.</p>
-
-<h2>8. Commercial electronic messages (CASL)</h2>
-<p>We send commercial electronic messages only with your consent. Every message identifies us and includes a working unsubscribe mechanism that we honour promptly.</p>
-
-<h2>9. Safeguards</h2>
-<p>We use appropriate physical, organizational, and technological measures &mdash; including encryption in transit and access controls &mdash; to protect personal information against loss, theft, and unauthorized access.</p>
-
-<h2>10. Open-source software</h2>
-<p>NextBlock™ CMS is free, open-source software distributed under the GNU Affero General Public License v3. When you self-host NextBlock, you are the operator responsible for the personal information processed by your own deployment, and this policy serves as a starting point you may adapt to your organization.</p>
-
-<h2>11. Changes to this policy</h2>
-<p>We may update this policy from time to time. Material changes will be communicated through the site, and the "last updated" date will be revised.</p>
-
-<h2>12. Contact us</h2>
-<p>Questions or complaints? Contact NextBlock™ CMS at <a href="mailto:privacy@nextblock.dev">privacy@nextblock.dev</a>. You may also contact the Commission d'accès à l'information du Québec or the Office of the Privacy Commissioner of Canada.</p>
-$html$), 0);
-
-  -- ----- Privacy Policy (FR) -----
-  IF v_fr IS NOT NULL THEN
-    INSERT INTO public.pages (language_id, title, slug, status, meta_title, meta_description, translation_group_id)
-    VALUES (
-      v_fr, 'Politique de confidentialité', 'politique-de-confidentialite', 'published',
-      'Politique de confidentialité',
-      'Comment nous recueillons, utilisons, communiquons et protégeons vos renseignements personnels en vertu de la Loi 25, de la LPRPDE et de la LCAP.',
-      v_privacy_group
-    )
-    ON CONFLICT (language_id, slug) DO UPDATE
-      SET title = EXCLUDED.title, status = EXCLUDED.status,
-          meta_title = EXCLUDED.meta_title, meta_description = EXCLUDED.meta_description
-    RETURNING id INTO v_page_id;
-
-    DELETE FROM public.blocks WHERE page_id = v_page_id;
-    INSERT INTO public.blocks (page_id, language_id, block_type, content, "order")
-    VALUES (v_page_id, v_fr, 'text', jsonb_build_object('html_content', $html$
-<h1>Politique de confidentialité</h1>
-<p><em>Dernière mise à jour : 4 juin 2026</em></p>
-<p>NextBlock™ CMS (« nous ») respecte votre vie privée et s'engage à protéger vos renseignements personnels conformément à la <em>Loi sur la protection des renseignements personnels dans le secteur privé</em> du Québec (Loi 25), à la <em>Loi sur la protection des renseignements personnels et les documents électroniques</em> (LPRPDE) et à la Loi canadienne anti-pourriel (LCAP).</p>
-
-<h2>1. Responsable de la protection des renseignements personnels</h2>
-<p>Notre responsable de la protection des renseignements personnels veille au respect des lois applicables. Vous pouvez le joindre à <a href="mailto:privacy@nextblock.dev">privacy@nextblock.dev</a>.</p>
-
-<h2>2. Renseignements que nous recueillons</h2>
-<ul>
-  <li><strong>Renseignements de compte</strong> &mdash; nom, adresse courriel et identifiants lors de l'inscription.</li>
-  <li><strong>Données d'utilisation et d'appareil</strong> &mdash; recueillies uniquement avec votre consentement au moyen de technologies d'analyse.</li>
-  <li><strong>Communications</strong> &mdash; les messages que vous nous envoyez et vos préférences marketing.</li>
-</ul>
-
-<h2>3. Finalités et consentement</h2>
-<p>Nous recueillons des renseignements personnels à des fins clairement déterminées : fournir et sécuriser nos services, communiquer avec vous et &mdash; uniquement avec votre consentement exprès &mdash; à des fins d'analyse et de marketing. Conformément à la Loi 25, les témoins et traceurs non essentiels demeurent désactivés tant que vous ne les avez pas acceptés, et vous pouvez retirer votre consentement en tout temps.</p>
-
-<h2>4. Témoins et technologies de suivi</h2>
-<p>Les témoins strictement nécessaires assurent le fonctionnement du site et ne requièrent aucun consentement. Les technologies d'analyse et de marketing ne sont chargées qu'<strong>après</strong> votre consentement explicite. Votre choix est enregistré afin de le respecter.</p>
-
-<h2>5. Communication à des tiers</h2>
-<p>Nous ne vendons pas vos renseignements personnels. Nous ne les communiquons qu'à des fournisseurs qui nous aident à exploiter la plateforme, sous obligation de confidentialité, ou lorsque la loi l'exige.</p>
-
-<h2>6. Conservation</h2>
-<p>Nous ne conservons les renseignements personnels que le temps nécessaire aux fins décrites ou exigé par la loi, après quoi ils sont détruits ou anonymisés de façon sécuritaire.</p>
-
-<h2>7. Vos droits</h2>
-<p>Sous réserve de la loi applicable, vous avez le droit d'accéder à vos renseignements, de les rectifier et de les supprimer, de retirer votre consentement, à la portabilité de vos données et d'être informé du traitement automatisé. Pour exercer ces droits, écrivez à <a href="mailto:privacy@nextblock.dev">privacy@nextblock.dev</a>.</p>
-
-<h2>8. Messages électroniques commerciaux (LCAP)</h2>
-<p>Nous n'envoyons des messages électroniques commerciaux qu'avec votre consentement. Chaque message nous identifie et comporte un mécanisme de désabonnement fonctionnel que nous respectons rapidement.</p>
-
-<h2>9. Mesures de sécurité</h2>
-<p>Nous employons des mesures physiques, organisationnelles et technologiques appropriées &mdash; dont le chiffrement en transit et le contrôle des accès &mdash; pour protéger vos renseignements.</p>
-
-<h2>10. Logiciel libre</h2>
-<p>NextBlock™ CMS est un logiciel libre et à code source ouvert distribué sous la licence publique générale GNU Affero v3. Lorsque vous hébergez NextBlock vous-même, vous êtes l'exploitant responsable des renseignements personnels traités par votre propre instance, et la présente politique vous sert de point de départ adaptable à votre organisation.</p>
-
-<h2>11. Modifications</h2>
-<p>Nous pouvons mettre à jour cette politique. Les changements importants seront communiqués sur le site et la date de mise à jour sera révisée.</p>
-
-<h2>12. Nous joindre</h2>
-<p>Des questions ou des plaintes ? Contactez NextBlock™ CMS à <a href="mailto:privacy@nextblock.dev">privacy@nextblock.dev</a>. Vous pouvez aussi vous adresser à la Commission d'accès à l'information du Québec.</p>
-$html$), 0);
-  END IF;
-
-  -- ----- Terms of Service (EN) -- aligned with the AGPL-3.0 (LICENSE.md) -----
-  INSERT INTO public.pages (language_id, title, slug, status, meta_title, meta_description, translation_group_id)
-  VALUES (
-    v_en, 'Terms of Service', 'terms-of-service', 'published',
-    'Terms of Service',
-    'The terms governing your use of NextBlock™ CMS, free and open-source software licensed under the AGPL-3.0.',
-    v_terms_group
-  )
-  ON CONFLICT (language_id, slug) DO UPDATE
-    SET title = EXCLUDED.title, status = EXCLUDED.status,
-        meta_title = EXCLUDED.meta_title, meta_description = EXCLUDED.meta_description
-  RETURNING id INTO v_page_id;
-
-  DELETE FROM public.blocks WHERE page_id = v_page_id;
-  INSERT INTO public.blocks (page_id, language_id, block_type, content, "order")
-  VALUES (v_page_id, v_en, 'text', jsonb_build_object('html_content', $html$
-<h1>Terms of Service</h1>
-<p><em>Last updated: June 4, 2026</em></p>
-
-<h2>1. Acceptance of terms</h2>
-<p>By accessing or using NextBlock™ CMS and the services we provide (the "Services"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Services.</p>
-
-<h2>2. Free and open-source software</h2>
-<p>NextBlock™ CMS is free, open-source software licensed under the <strong>GNU Affero General Public License, version 3 (AGPL-3.0)</strong> or, at your option, any later version. You are free to run, study, share, and modify the software under the terms of that license. A copy of the license is distributed with the software and is also available at <a href="https://www.gnu.org/licenses/agpl-3.0.html">gnu.org/licenses/agpl-3.0.html</a>.</p>
-<p>Copyright © 2025 NextBlock™ CMS.</p>
-
-<h2>3. Source code availability</h2>
-<p>In accordance with section 13 of the AGPL-3.0, if you run a modified version of NextBlock™ CMS and make it available to users over a network, you must prominently offer those users access to the Corresponding Source of your modified version, free of charge, through a standard or customary means of facilitating copying of software.</p>
-
-<h2>4. Trademarks</h2>
-<p>The AGPL-3.0 grants broad rights to the software's source code but does <strong>not</strong> grant any rights to our trade names, trademarks, or service marks. "NextBlock™", the NextBlock™ CMS name, and associated logos remain our property and may not be used in a way that suggests endorsement or affiliation without our prior written permission.</p>
-
-<h2>5. Accounts and acceptable use</h2>
-<p>If you create an account, you are responsible for safeguarding your credentials and for all activity under your account, and you agree to notify us promptly of any unauthorized use. You agree not to misuse the Services, including by attempting to disrupt them, access them without authorization, or use them for unlawful purposes.</p>
-
-<h2>6. No warranty</h2>
-<p>As stated in section 15 of the AGPL-3.0, the software is provided "as is", without warranty of any kind, either expressed or implied, including, without limitation, the implied warranties of merchantability and fitness for a particular purpose. The entire risk as to the quality and performance of the software is with you.</p>
-
-<h2>7. Limitation of liability</h2>
-<p>As stated in section 16 of the AGPL-3.0, and to the fullest extent permitted by applicable law, in no event will any copyright holder, or any other party who modifies or conveys the software, be liable to you for damages, including any general, special, incidental, or consequential damages arising out of the use or inability to use the software.</p>
-
-<h2>8. Governing law</h2>
-<p>These Terms are governed by the laws of the Province of Quebec and the federal laws of Canada applicable therein, without regard to conflict-of-law principles. Nothing in these Terms limits any mandatory consumer-protection rights you may have under those laws.</p>
-
-<h2>9. Changes</h2>
-<p>We may revise these Terms from time to time. Material changes will be communicated through the Services, and continued use of the Services after changes take effect constitutes acceptance of the revised Terms.</p>
-
-<h2>10. Contact</h2>
-<p>Questions about these Terms? Contact NextBlock™ CMS at <a href="mailto:privacy@nextblock.dev">privacy@nextblock.dev</a>.</p>
-$html$), 0);
-
-  -- ----- Terms of Service (FR) -- aligned with the AGPL-3.0 (LICENSE.md) -----
-  IF v_fr IS NOT NULL THEN
-    INSERT INTO public.pages (language_id, title, slug, status, meta_title, meta_description, translation_group_id)
-    VALUES (
-      v_fr, 'Conditions d''utilisation', 'conditions-utilisation', 'published',
-      'Conditions d''utilisation',
-      'Les conditions régissant votre utilisation de NextBlock™ CMS, un logiciel libre sous licence AGPL-3.0.',
-      v_terms_group
-    )
-    ON CONFLICT (language_id, slug) DO UPDATE
-      SET title = EXCLUDED.title, status = EXCLUDED.status,
-          meta_title = EXCLUDED.meta_title, meta_description = EXCLUDED.meta_description
-    RETURNING id INTO v_page_id;
-
-    DELETE FROM public.blocks WHERE page_id = v_page_id;
-    INSERT INTO public.blocks (page_id, language_id, block_type, content, "order")
-    VALUES (v_page_id, v_fr, 'text', jsonb_build_object('html_content', $html$
-<h1>Conditions d'utilisation</h1>
-<p><em>Dernière mise à jour : 4 juin 2026</em></p>
-
-<h2>1. Acceptation des conditions</h2>
-<p>En accédant à NextBlock™ CMS et aux services que nous fournissons (les « Services ») ou en les utilisant, vous acceptez d'être lié par les présentes conditions d'utilisation. Si vous n'êtes pas d'accord, n'utilisez pas les Services.</p>
-
-<h2>2. Logiciel libre et à code source ouvert</h2>
-<p>NextBlock™ CMS est un logiciel libre et à code source ouvert distribué sous la <strong>licence publique générale GNU Affero, version 3 (AGPL-3.0)</strong> ou, à votre choix, toute version ultérieure. Vous êtes libre d'exécuter, d'étudier, de partager et de modifier le logiciel selon les termes de cette licence. Une copie de la licence est fournie avec le logiciel et est aussi disponible à <a href="https://www.gnu.org/licenses/agpl-3.0.html">gnu.org/licenses/agpl-3.0.html</a>.</p>
-<p>Droit d'auteur © 2025 NextBlock™ CMS.</p>
-
-<h2>3. Disponibilité du code source</h2>
-<p>Conformément à l'article 13 de l'AGPL-3.0, si vous exploitez une version modifiée de NextBlock™ CMS et la rendez accessible à des utilisateurs sur un réseau, vous devez offrir clairement à ces utilisateurs l'accès au code source correspondant de votre version modifiée, gratuitement, par un moyen usuel de copie de logiciels.</p>
-
-<h2>4. Marques de commerce</h2>
-<p>L'AGPL-3.0 accorde de larges droits sur le code source du logiciel, mais <strong>n'accorde aucun droit</strong> sur nos noms commerciaux, marques de commerce ou marques de service. « NextBlock™ », le nom NextBlock™ CMS et les logos associés demeurent notre propriété et ne peuvent être utilisés d'une manière laissant entendre une approbation ou une affiliation sans notre autorisation écrite préalable.</p>
-
-<h2>5. Comptes et utilisation acceptable</h2>
-<p>Si vous créez un compte, vous êtes responsable de la protection de vos identifiants et de toute activité effectuée à partir de votre compte, et vous vous engagez à nous aviser rapidement de toute utilisation non autorisée. Vous vous engagez à ne pas détourner les Services, notamment en tentant de les perturber, d'y accéder sans autorisation ou de les utiliser à des fins illégales.</p>
-
-<h2>6. Absence de garantie</h2>
-<p>Comme l'énonce l'article 15 de l'AGPL-3.0, le logiciel est fourni « tel quel », sans garantie d'aucune sorte, expresse ou implicite, y compris, sans s'y limiter, les garanties implicites de qualité marchande et d'adéquation à un usage particulier. Vous assumez l'entièreté du risque quant à la qualité et au rendement du logiciel.</p>
-
-<h2>7. Limitation de responsabilité</h2>
-<p>Comme l'énonce l'article 16 de l'AGPL-3.0, et dans toute la mesure permise par la loi applicable, en aucun cas un titulaire de droits d'auteur ou toute autre partie qui modifie ou transmet le logiciel ne saurait être tenu responsable envers vous de dommages, y compris tout dommage général, spécial, accessoire ou consécutif découlant de l'utilisation ou de l'impossibilité d'utiliser le logiciel.</p>
-
-<h2>8. Droit applicable</h2>
-<p>Les présentes conditions sont régies par les lois de la province de Québec et les lois fédérales du Canada qui y sont applicables, sans égard aux règles de conflit de lois. Rien dans les présentes conditions ne limite les droits impératifs de protection du consommateur dont vous pourriez bénéficier en vertu de ces lois.</p>
-
-<h2>9. Modifications</h2>
-<p>Nous pouvons réviser ces conditions de temps à autre. Les changements importants seront communiqués au moyen des Services, et l'utilisation continue des Services après leur entrée en vigueur vaut acceptation.</p>
-
-<h2>10. Nous joindre</h2>
-<p>Des questions sur ces conditions ? Contactez NextBlock™ CMS à <a href="mailto:privacy@nextblock.dev">privacy@nextblock.dev</a>.</p>
-$html$), 0);
-  END IF;
-
-  RAISE NOTICE 'Seeded privacy-policy and terms-of-service pages.';
-END;
-$seed$;
-
--- ---------------------------------------------------------------------------
--- 7. UI translations introduced with this feature
--- ---------------------------------------------------------------------------
-INSERT INTO public.translations (key, translations) VALUES
-  ('remember_this_device', '{"en": "Remember this device", "fr": "Se souvenir de cet appareil"}'::jsonb)
-ON CONFLICT (key) DO UPDATE
-SET translations = EXCLUDED.translations;
-
-
--- >>> FROM: 00000000000028_clear_advisor_warnings.sql <<<
--- 00000000000028_clear_advisor_warnings.sql
--- Resolve Supabase Advisor (database linter) warnings without changing application
--- behaviour. Every statement is idempotent and safe to re-run.
---
---   1. 0011 function_search_path_mutable
---      public.handle_ucp_cart_sessions_update() had no pinned search_path.
---   2. 0029 authenticated_security_definer_function_executable
---      public.duplicate_block_definition(uuid) ran as SECURITY DEFINER and was
---      callable by every signed-in user. RLS + per-action grants already enforce
---      ADMIN/WRITER, so it is switched to SECURITY INVOKER (it also keeps its own
---      explicit role check). ADMIN/WRITER behaviour is unchanged.
---   3/4. 0006 multiple_permissive_policies
---      public.categories and public.product_categories each had a FOR ALL
---      "Admin can manage ..." policy that overlapped the "Public can view ..."
---      SELECT policy for the authenticated role. The FOR ALL policy is split into
---      INSERT/UPDATE/DELETE so a SELECT is evaluated against a single permissive
---      policy while admin write access is preserved.
---
--- (The leaked-password and MFA-options advisor items are Auth dashboard settings,
---  not schema, and are intentionally not addressed here.)
-
--- ---------------------------------------------------------------------------
--- 1. Pin search_path on the UCP cart-session updated_at trigger function.
---    The body only calls now() (pg_catalog, always implicitly searched), so an
---    empty search_path is safe and matches the convention already used by
---    public.is_valid_custom_block_fields (migration 00000000000023).
--- ---------------------------------------------------------------------------
-ALTER FUNCTION public.handle_ucp_cart_sessions_update() SET search_path = '';
-
--- ---------------------------------------------------------------------------
--- 2. duplicate_block_definition: SECURITY DEFINER -> SECURITY INVOKER.
---    The function still raises 42501 for non-ADMIN/WRITER callers, and the
---    underlying SELECT/INSERT are already gated by custom_block_definitions RLS
---    plus the authenticated SELECT/INSERT grants, so the function no longer needs
---    to run with the definer's elevated privileges.
--- ---------------------------------------------------------------------------
-ALTER FUNCTION public.duplicate_block_definition(uuid) SECURITY INVOKER;
-
--- ---------------------------------------------------------------------------
--- 3. categories: split the FOR ALL admin policy so SELECT has one permissive
---    policy (the public-read policy). Admin reads still flow through that policy
---    (USING true); admin writes are preserved via the per-action policies below.
--- ---------------------------------------------------------------------------
-DROP POLICY IF EXISTS "Admin can manage categories" ON public.categories;
-
-DROP POLICY IF EXISTS "Admin can insert categories" ON public.categories;
-CREATE POLICY "Admin can insert categories"
-  ON public.categories
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.is_admin()) IS TRUE);
-
-DROP POLICY IF EXISTS "Admin can update categories" ON public.categories;
-CREATE POLICY "Admin can update categories"
-  ON public.categories
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.is_admin()) IS TRUE)
-  WITH CHECK ((SELECT public.is_admin()) IS TRUE);
-
-DROP POLICY IF EXISTS "Admin can delete categories" ON public.categories;
-CREATE POLICY "Admin can delete categories"
-  ON public.categories
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.is_admin()) IS TRUE);
-
--- ---------------------------------------------------------------------------
--- 4. product_categories: same split as categories.
--- ---------------------------------------------------------------------------
-DROP POLICY IF EXISTS "Admin can manage product_categories" ON public.product_categories;
-
-DROP POLICY IF EXISTS "Admin can insert product_categories" ON public.product_categories;
-CREATE POLICY "Admin can insert product_categories"
-  ON public.product_categories
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.is_admin()) IS TRUE);
-
-DROP POLICY IF EXISTS "Admin can update product_categories" ON public.product_categories;
-CREATE POLICY "Admin can update product_categories"
-  ON public.product_categories
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.is_admin()) IS TRUE)
-  WITH CHECK ((SELECT public.is_admin()) IS TRUE);
-
-DROP POLICY IF EXISTS "Admin can delete product_categories" ON public.product_categories;
-CREATE POLICY "Admin can delete product_categories"
-  ON public.product_categories
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.is_admin()) IS TRUE);
-
-
--- >>> FROM: 00000000000029_refresh_setup_article.sql <<<
--- Refresh the seeded "How to Setup NextBlock" tutorial (EN + FR) so it matches the
--- current installer flow:
---   * \`npm run setup\` now requires Supabase + Cloudflare R2 + SMTP up front,
---   * \`npx nx serve nextblock\` serves on http://localhost:4200, and
---   * the first account to sign up automatically becomes the admin (email confirmation on).
---
--- Forward-only and idempotent: it replaces the single text block of the two setup-article
--- posts seeded in 00000000000010_seed_content_scaffold.sql. Safe to re-run; a no-op if the
--- posts do not exist.
-
-WITH target_posts AS (
-  SELECT id, language_id, slug
-  FROM public.posts
-  WHERE slug IN ('how-to-setup-nextblock', 'comment-configurer-nextblock')
-),
-purged AS (
-  DELETE FROM public.blocks
-  WHERE post_id IN (SELECT id FROM target_posts)
-)
-INSERT INTO public.blocks (post_id, language_id, block_type, content, "order")
-
--- EN: How to Setup NextBlock
-SELECT tp.id, tp.language_id, 'text', jsonb_build_object('html_content',
-$$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>There are two strong ways to start with NextBlock: clone the full monorepo if you want the whole platform, or scaffold a standalone app if you want to ship quickly. Both paths land you on the same editorial model, design system, and CMS foundation.</p>
-
-<div class='rounded-[2rem] border border-blue-200 bg-blue-50/80 p-6 my-10 dark:border-blue-500/20 dark:bg-blue-500/10'>
-  <p class='text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200'>Choose your path</p>
-  <div class='grid gap-6 md:grid-cols-2 mt-5'>
-    <div class='rounded-2xl border border-blue-100 bg-white p-5 dark:border-blue-500/10 dark:bg-slate-900/40'>
-      <h3 class='mt-0 text-xl text-slate-900 dark:text-white'>Monorepo</h3>
-      <p class='text-sm text-slate-600 dark:text-slate-300'>Best for contributors, plugin authors, and teams that want direct access to every app and shared package.</p>
-    </div>
-    <div class='rounded-2xl border border-blue-100 bg-white p-5 dark:border-blue-500/10 dark:bg-slate-900/40'>
-      <h3 class='mt-0 text-xl text-slate-900 dark:text-white'>CLI starter</h3>
-      <p class='text-sm text-slate-600 dark:text-slate-300'>Best for launching a production-ready Next.js project with NextBlock&trade; already wired in and easy to deploy.</p>
-    </div>
-  </div>
-</div>
-
-<figure class='my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10'>
-  <img src='/images/included.webp' alt='NextBlock&trade; platform artwork showing the CMS, blocks, and integrations that ship together' class='w-full h-auto object-cover' />
-  <figcaption class='border-t border-white/10 px-6 py-4 text-sm text-slate-300'>Whichever path you choose, you still inherit the same block editor, CMS shell, and shared product language.</figcaption>
-</figure>
-
-<div class='rounded-[2rem] border border-amber-200 bg-amber-50/80 p-6 my-10 dark:border-amber-500/20 dark:bg-amber-500/10'>
-  <p class='text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200'>Before you start</p>
-  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>The setup wizard asks for credentials from three services, so create them first:</p>
-  <ul class='mt-4 list-disc pl-6 space-y-2 text-sm text-slate-700 dark:text-slate-200'>
-    <li><strong>Supabase project</strong> &ndash; Reference ID (Project Settings &gt; General), connection string (Connect &gt; Direct connection &gt; URI), the anon and service_role keys, and a Personal Access Token (Account &gt; Access Tokens).</li>
-    <li><strong>Cloudflare R2 bucket</strong> &ndash; create a bucket, enable its Public Development URL, and create an Account API token with Object Read &amp; Write. Copy the Access Key ID and Secret Access Key (shown only once).</li>
-    <li><strong>SMTP credentials</strong> &ndash; SMTP2GO works very well; required so Supabase can email the confirmation link your first admin needs to sign in.</li>
-  </ul>
-</div>
-
-<h2>Path 1: Clone the Monorepo</h2>
-<p>This route is ideal when you want the full Nx workspace and every internal package available locally.</p>
-
-<div class='grid gap-6 md:grid-cols-2 my-8'>
-  <div class='rounded-3xl border border-slate-200/80 bg-slate-50 p-6 dark:border-white/10 dark:bg-white/5'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400'>You get</p>
-    <ul class='mt-4 list-disc pl-5 space-y-2 text-sm'>
-      <li>The public site, CMS app, CLI source, and shared libraries</li>
-      <li>Direct access to <code>libs/</code> for custom block and package work</li>
-      <li>Workspace tools like <code>nx graph</code> for dependency visibility</li>
-    </ul>
-  </div>
-  <div class='rounded-3xl border border-slate-200/80 bg-slate-50 p-6 dark:border-white/10 dark:bg-white/5'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400'>Good fit for</p>
-    <ul class='mt-4 list-disc pl-5 space-y-2 text-sm'>
-      <li>Core contributors and maintainers</li>
-      <li>Teams building custom modules or premium extensions</li>
-      <li>Agencies that want end-to-end control over the platform</li>
-    </ul>
-  </div>
-</div>
-
-<pre><code>git clone https://github.com/nextblock-cms/nextblock.git
-cd nextblock
-npm install
-npm run setup</code></pre>
-
-<p>The <code>npm run setup</code> wizard creates <code>.env.local</code>, collects your Supabase, Cloudflare R2, and SMTP details, generates local secrets (<code>CRON_SECRET</code>, <code>DRAFT_MODE_SECRET</code>, <code>REVALIDATE_SECRET_TOKEN</code>), links the Supabase CLI, and applies the full schema to your database with <code>npm run db:migrate:fresh</code>.</p>
-
-<p>Then start the app:</p>
-<pre><code>npx nx serve nextblock</code></pre>
-
-<div class='rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 my-8 dark:border-emerald-500/20 dark:bg-emerald-500/10'>
-  <p class='text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>First login</p>
-  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>The dev server runs at <code>http://localhost:4200</code>. Open <code>/sign-up</code> and create your account &ndash; the first account to register automatically becomes the admin. Confirm your email (or confirm the user in Supabase &gt; Authentication &gt; Users), then sign in to reach the CMS at <code>/cms/dashboard</code>.</p>
-</div>
-
-<p>Useful monorepo commands:</p>
-<pre><code># Build every workspace package
-npm run all-builds
-
-# Lint the main application
-npm run nx:lint:nextblock
-
-# Regenerate database types
-npm run db:types
-
-# Inspect workspace relationships
-npx nx graph</code></pre>
-
-<h2>Path 2: Use the CLI Starter</h2>
-<p>If your goal is to launch quickly, the CLI gives you a standalone Next.js app with NextBlock&trade; already embedded.</p>
-
-<pre><code>npm create nextblock@latest my-site
-cd my-site</code></pre>
-
-<p>The CLI copies a production-ready template, rewrites workspace imports to published packages, and can run the same setup flow for you. Your result is a normal Next.js app with no Nx requirement, so <code>npm run dev</code> serves it on <code>http://localhost:3000</code>.</p>
-
-<p>Configure your environment in <code>.env.local</code>:</p>
-<pre><code>NEXT_PUBLIC_SUPABASE_URL=your-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-NEXT_PUBLIC_URL=http://localhost:3000</code></pre>
-
-<p>Push the schema and start developing:</p>
-<pre><code>npm run db:push
-npm run dev</code></pre>
-
-<div class='rounded-3xl border border-amber-200 bg-amber-50/80 p-6 my-8 dark:border-amber-500/20 dark:bg-amber-500/10'>
-  <p class='text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200'>Tip</p>
-  <p class='mb-0 text-sm text-slate-700 dark:text-slate-200'>The CLI path is the fastest way to evaluate NextBlock&trade; with your own content model before you decide whether you need the full workspace.</p>
-</div>
-
-<h2>Activating Premium Modules</h2>
-<p>For CLI-generated projects, the commerce package can be activated with a single command:</p>
-<pre><code>npx create-nextblock activate ecommerce</code></pre>
-<p>This injects wrappers for <code>/cms/orders</code>, <code>/cms/products</code>, <code>/checkout</code>, and the checkout API, all gated through <code>verifyPackageOnline()</code> so premium routes stay aligned with your license.</p>
-
-<h2>Deployment</h2>
-<p>NextBlock&trade; deploys like a standard Next.js app. Push to Vercel, Netlify, or any Node.js host, then make sure your server-side environment variables such as the Supabase service role, R2 credentials, SMTP, and <code>CRON_SECRET</code> are configured in that environment, and set <code>NEXT_PUBLIC_URL</code> to your production domain.</p>$$
-), 0 FROM target_posts tp WHERE tp.slug = 'how-to-setup-nextblock'
-
-UNION ALL
-
--- FR: Comment configurer NextBlock
-SELECT tp.id, tp.language_id, 'text', jsonb_build_object('html_content',
-$$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>Il existe deux bonnes facons de lancer NextBlock&trade; : cloner le monorepo complet si vous voulez toute la plateforme, ou partir du CLI si vous voulez aller vite. Dans les deux cas, vous retrouvez le meme modele editorial, le meme shell CMS et la meme base produit.</p>
-
-<div class='rounded-[2rem] border border-blue-200 bg-blue-50/80 p-6 my-10 dark:border-blue-500/20 dark:bg-blue-500/10'>
-  <p class='text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200'>Choisissez votre chemin</p>
-  <div class='grid gap-6 md:grid-cols-2 mt-5'>
-    <div class='rounded-2xl border border-blue-100 bg-white p-5 dark:border-blue-500/10 dark:bg-slate-900/40'>
-      <h3 class='mt-0 text-xl text-slate-900 dark:text-white'>Monorepo</h3>
-      <p class='text-sm text-slate-600 dark:text-slate-300'>Ideal pour les contributeurs, auteurs de plugins et equipes qui veulent travailler directement dans tous les packages partages.</p>
-    </div>
-    <div class='rounded-2xl border border-blue-100 bg-white p-5 dark:border-blue-500/10 dark:bg-slate-900/40'>
-      <h3 class='mt-0 text-xl text-slate-900 dark:text-white'>Starter CLI</h3>
-      <p class='text-sm text-slate-600 dark:text-slate-300'>Ideal pour demarrer une app Next.js prete a deployer avec NextBlock&trade; deja integre.</p>
-    </div>
-  </div>
-</div>
-
-<figure class='my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10'>
-  <img src='/images/included.webp' alt='Visuel NextBlock&trade; montrant le CMS, les blocs et les integrations qui arrivent ensemble' class='w-full h-auto object-cover' />
-  <figcaption class='border-t border-white/10 px-6 py-4 text-sm text-slate-300'>Quel que soit le chemin choisi, vous heritez du meme editeur de blocs, du meme shell CMS et du meme langage produit.</figcaption>
-</figure>
-
-<div class='rounded-[2rem] border border-amber-200 bg-amber-50/80 p-6 my-10 dark:border-amber-500/20 dark:bg-amber-500/10'>
-  <p class='text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200'>Avant de commencer</p>
-  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>L'assistant de configuration demande des identifiants de trois services, alors creez-les d'abord :</p>
-  <ul class='mt-4 list-disc pl-6 space-y-2 text-sm text-slate-700 dark:text-slate-200'>
-    <li><strong>Projet Supabase</strong> &ndash; Reference ID (Project Settings &gt; General), chaine de connexion (Connect &gt; Direct connection &gt; URI), les cles anon et service_role, et un Personal Access Token (Account &gt; Access Tokens).</li>
-    <li><strong>Bucket Cloudflare R2</strong> &ndash; creez un bucket, activez son Public Development URL, et creez un Account API token avec Object Read &amp; Write. Copiez l'Access Key ID et la Secret Access Key (affichee une seule fois).</li>
-    <li><strong>Identifiants SMTP</strong> &ndash; SMTP2GO fonctionne tres bien ; requis pour que Supabase envoie le lien de confirmation dont votre premier admin a besoin pour se connecter.</li>
-  </ul>
-</div>
-
-<h2>Chemin 1 : cloner le monorepo</h2>
-<p>Cette option est la meilleure si vous voulez tout le workspace Nx et chaque package interne disponible en local.</p>
-
-<div class='grid gap-6 md:grid-cols-2 my-8'>
-  <div class='rounded-3xl border border-slate-200/80 bg-slate-50 p-6 dark:border-white/10 dark:bg-white/5'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400'>Vous obtenez</p>
-    <ul class='mt-4 list-disc pl-5 space-y-2 text-sm'>
-      <li>Le site public, l'app CMS, le code du CLI et les librairies partagees</li>
-      <li>Un acces direct a <code>libs/</code> pour les blocs et modules personnalises</li>
-      <li>Les outils de workspace comme <code>nx graph</code> pour visualiser les dependances</li>
-    </ul>
-  </div>
-  <div class='rounded-3xl border border-slate-200/80 bg-slate-50 p-6 dark:border-white/10 dark:bg-white/5'>
-    <p class='text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400'>Bon choix pour</p>
-    <ul class='mt-4 list-disc pl-5 space-y-2 text-sm'>
-      <li>Les mainteneurs et contributeurs coeur</li>
-      <li>Les equipes qui construisent des extensions sur mesure</li>
-      <li>Les agences qui veulent un controle complet de la plateforme</li>
-    </ul>
-  </div>
-</div>
-
-<pre><code>git clone https://github.com/nextblock-cms/nextblock.git
-cd nextblock
-npm install
-npm run setup</code></pre>
-
-<p>L'assistant <code>npm run setup</code> cree <code>.env.local</code>, collecte vos identifiants Supabase, Cloudflare R2 et SMTP, genere les secrets locaux (<code>CRON_SECRET</code>, <code>DRAFT_MODE_SECRET</code>, <code>REVALIDATE_SECRET_TOKEN</code>), lie le CLI Supabase et applique le schema complet a votre base avec <code>npm run db:migrate:fresh</code>.</p>
-
-<p>Puis lancez l'application :</p>
-<pre><code>npx nx serve nextblock</code></pre>
-
-<div class='rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 my-8 dark:border-emerald-500/20 dark:bg-emerald-500/10'>
-  <p class='text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Premiere connexion</p>
-  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>Le serveur de dev tourne sur <code>http://localhost:4200</code>. Ouvrez <code>/sign-up</code> et creez votre compte &ndash; le premier compte inscrit devient automatiquement l'administrateur. Confirmez votre email (ou confirmez l'utilisateur dans Supabase &gt; Authentication &gt; Users), puis connectez-vous pour acceder au CMS sur <code>/cms/dashboard</code>.</p>
-</div>
-
-<p>Commandes utiles dans le monorepo :</p>
-<pre><code># Build de tous les packages
-npm run all-builds
-
-# Lint de l'application principale
-npm run nx:lint:nextblock
-
-# Regenerer les types base de donnees
-npm run db:types
-
-# Inspecter les relations du workspace
-npx nx graph</code></pre>
-
-<h2>Chemin 2 : utiliser le starter CLI</h2>
-<p>Si votre but est d'aller vite, le CLI vous donne une app Next.js autonome avec NextBlock&trade; deja integre.</p>
-
-<pre><code>npm create nextblock@latest mon-site
-cd mon-site</code></pre>
-
-<p>Le CLI copie un template pret pour la production, remplace les imports workspace par les packages publies, et peut lancer la meme configuration initiale. Le resultat reste une app Next.js classique, sans dependance a Nx, donc <code>npm run dev</code> la sert sur <code>http://localhost:3000</code>.</p>
-
-<p>Configurez votre environnement dans <code>.env.local</code> :</p>
-<pre><code>NEXT_PUBLIC_SUPABASE_URL=your-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-NEXT_PUBLIC_URL=http://localhost:3000</code></pre>
-
-<p>Poussez le schema puis demarrez :</p>
-<pre><code>npm run db:push
-npm run dev</code></pre>
-
-<div class='rounded-3xl border border-amber-200 bg-amber-50/80 p-6 my-8 dark:border-amber-500/20 dark:bg-amber-500/10'>
-  <p class='text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200'>Conseil</p>
-  <p class='mb-0 text-sm text-slate-700 dark:text-slate-200'>Le chemin CLI est le moyen le plus rapide d'evaluer NextBlock&trade; avec votre propre modele de contenu avant de passer, si besoin, au workspace complet.</p>
-</div>
-
-<h2>Activer les modules premium</h2>
-<p>Pour un projet genere via le CLI, le package commerce peut etre active avec une seule commande :</p>
-<pre><code>npx create-nextblock activate ecommerce</code></pre>
-<p>Cette commande injecte les wrappers pour <code>/cms/orders</code>, <code>/cms/products</code>, <code>/checkout</code> et l'API checkout, le tout protege par <code>verifyPackageOnline()</code> afin de garder les routes premium alignees avec la licence.</p>
-
-<h2>Deploiement</h2>
-<p>NextBlock&trade; se deploie comme une app Next.js standard. Publiez sur Vercel, Netlify ou tout hebergeur Node.js, puis configurez les variables serveur comme la cle service role Supabase, les identifiants R2, le SMTP et <code>CRON_SECRET</code>, et definissez <code>NEXT_PUBLIC_URL</code> sur votre domaine de production.</p>$$
-), 0 FROM target_posts tp WHERE tp.slug = 'comment-configurer-nextblock';
-
-
--- >>> FROM: 00000000000030_setup_system_configuration.sql <<<
--- 00000000000030_setup_system_configuration.sql
--- First-Boot Setup Wizard: global system configuration.
---
--- Adds a dedicated, RLS-locked \`system_configuration\` table that holds settings the
--- browser /setup wizard manages and that don't belong in the public key-value
--- \`site_settings\` store. It is a singleton (exactly one row, id = 1).
---
--- Shape:
---   auto_accept_signups boolean  -- when true, new public sign-ups skip outbound email
---                                   verification (the signup route uses a service-role
---                                   admin.createUser({ email_confirm: true }) path).
---   settings            jsonb    -- forward-compatible catch-all for future feature
---                                   toggles ({} by default). Do NOT store true secrets
---                                   here (Turnstile/AI secrets keep living in their
---                                   existing site_settings sensitive keys).
---
--- Access is locked to the ADMIN role for normal clients (NextBlock has no separate
--- "super-admin" tier — ADMIN is the top level). The service_role retains full access
--- so the wizard can seed/read it before any admin exists.
-
-CREATE TABLE IF NOT EXISTS public.system_configuration (
-  id integer PRIMARY KEY DEFAULT 1,
-  auto_accept_signups boolean NOT NULL DEFAULT false,
-  settings jsonb NOT NULL DEFAULT '{}'::jsonb,
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT system_configuration_singleton CHECK (id = 1)
+END $rb$;
+
+CREATE TABLE IF NOT EXISTS public.categories (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    slug text NOT NULL,
+    description text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    name_translations jsonb DEFAULT '{}'::jsonb NOT NULL,
+    description_translations jsonb DEFAULT '{}'::jsonb NOT NULL
 );
 
-COMMENT ON TABLE public.system_configuration IS
-  'Singleton (id = 1) of global setup-wizard configuration. ADMIN-only via RLS; never store secrets in settings.';
-
--- Seed the single row so reads always find it.
-INSERT INTO public.system_configuration (id, auto_accept_signups, settings)
-VALUES (1, false, '{}'::jsonb)
-ON CONFLICT (id) DO NOTHING;
-
-ALTER TABLE public.system_configuration ENABLE ROW LEVEL SECURITY;
-
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.system_configuration TO authenticated;
-GRANT ALL ON public.system_configuration TO service_role;
-
--- ADMIN-only for every operation by authenticated clients.
-DROP POLICY IF EXISTS system_configuration_admin_select ON public.system_configuration;
-CREATE POLICY system_configuration_admin_select
-  ON public.system_configuration
-  FOR SELECT
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) = 'ADMIN');
-
-DROP POLICY IF EXISTS system_configuration_admin_insert ON public.system_configuration;
-CREATE POLICY system_configuration_admin_insert
-  ON public.system_configuration
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
-
-DROP POLICY IF EXISTS system_configuration_admin_update ON public.system_configuration;
-CREATE POLICY system_configuration_admin_update
-  ON public.system_configuration
-  FOR UPDATE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) = 'ADMIN')
-  WITH CHECK ((SELECT public.get_current_user_role()) = 'ADMIN');
-
-DROP POLICY IF EXISTS system_configuration_admin_delete ON public.system_configuration;
-CREATE POLICY system_configuration_admin_delete
-  ON public.system_configuration
-  FOR DELETE
-  TO authenticated
-  USING ((SELECT public.get_current_user_role()) = 'ADMIN');
-
--- Service role bypasses the ADMIN checks (used by the wizard before an admin exists,
--- and by the signup route to read auto_accept_signups as an anonymous visitor).
-DROP POLICY IF EXISTS system_configuration_service_role_all ON public.system_configuration;
-CREATE POLICY system_configuration_service_role_all
-  ON public.system_configuration
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-
--- >>> FROM: 00000000000031_seed_footer_navigation.sql <<<
--- 00000000000031_seed_footer_navigation.sql
--- Seed editable FOOTER navigation items (EN + FR).
---
--- The public footer used to hard-code its "Privacy Policy" and "Terms of Service"
--- links in apps/nextblock/components/AppShell.tsx. This migration turns them into
--- real navigation_items rows under the FOOTER menu so they are editable from the
--- CMS (/cms/navigation) like any other menu, and so the French footer points at
--- the localized page slugs.
---
--- Targets the legal pages seeded by 00000000000027_setup_privacy_and_mfa.sql:
---   EN  /privacy-policy            FR  /politique-de-confidentialite
---   EN  /terms-of-service          FR  /conditions-utilisation
---
--- Idempotent: re-running replaces the FOOTER rows it owns (matched by URL) and
--- reuses their translation_group_id so EN/FR stay linked across re-runs.
-DO $seed_footer$
-DECLARE
-  v_en bigint;
-  v_fr bigint;
-  v_privacy_group uuid;
-  v_terms_group uuid;
-  v_en_privacy_page bigint;
-  v_fr_privacy_page bigint;
-  v_en_terms_page bigint;
-  v_fr_terms_page bigint;
-BEGIN
-  SELECT id INTO v_en FROM public.languages WHERE code = 'en' LIMIT 1;
-  SELECT id INTO v_fr FROM public.languages WHERE code = 'fr' LIMIT 1;
-
-  IF v_en IS NULL THEN
-    RAISE NOTICE 'Default language "en" not found; skipping footer navigation seed.';
-    RETURN;
-  END IF;
-
-  -- Reuse existing translation groups if these footer items were seeded before,
-  -- so EN <-> FR stay paired and re-runs do not orphan translations.
-  SELECT translation_group_id INTO v_privacy_group
-    FROM public.navigation_items
-    WHERE menu_key = 'FOOTER' AND url = '/privacy-policy' LIMIT 1;
-  IF v_privacy_group IS NULL THEN v_privacy_group := gen_random_uuid(); END IF;
-
-  SELECT translation_group_id INTO v_terms_group
-    FROM public.navigation_items
-    WHERE menu_key = 'FOOTER' AND url = '/terms-of-service' LIMIT 1;
-  IF v_terms_group IS NULL THEN v_terms_group := gen_random_uuid(); END IF;
-
-  -- Best-effort link each item to its underlying page (ON DELETE SET NULL keeps
-  -- the link working even if a page is later removed; url remains the source of truth).
-  SELECT id INTO v_en_privacy_page
-    FROM public.pages WHERE slug = 'privacy-policy' AND language_id = v_en LIMIT 1;
-  SELECT id INTO v_en_terms_page
-    FROM public.pages WHERE slug = 'terms-of-service' AND language_id = v_en LIMIT 1;
-
-  -- Remove any prior copies of the footer links we own, then re-insert cleanly.
-  DELETE FROM public.navigation_items
-    WHERE menu_key = 'FOOTER'
-      AND url IN (
-        '/privacy-policy', '/terms-of-service',
-        '/politique-de-confidentialite', '/conditions-utilisation'
-      );
-
-  -- ----- English footer -----
-  INSERT INTO public.navigation_items
-    (language_id, menu_key, label, url, "order", page_id, translation_group_id)
-  VALUES
-    (v_en, 'FOOTER', 'Privacy Policy',    '/privacy-policy',    0, v_en_privacy_page, v_privacy_group),
-    (v_en, 'FOOTER', 'Terms of Service',  '/terms-of-service',  1, v_en_terms_page,   v_terms_group);
-
-  -- ----- French footer (only if the French language exists) -----
-  IF v_fr IS NOT NULL THEN
-    SELECT id INTO v_fr_privacy_page
-      FROM public.pages WHERE slug = 'politique-de-confidentialite' AND language_id = v_fr LIMIT 1;
-    SELECT id INTO v_fr_terms_page
-      FROM public.pages WHERE slug = 'conditions-utilisation' AND language_id = v_fr LIMIT 1;
-
-    INSERT INTO public.navigation_items
-      (language_id, menu_key, label, url, "order", page_id, translation_group_id)
-    VALUES
-      (v_fr, 'FOOTER', 'Politique de confidentialité', '/politique-de-confidentialite', 0, v_fr_privacy_page, v_privacy_group),
-      (v_fr, 'FOOTER', 'Conditions d''utilisation',    '/conditions-utilisation',       1, v_fr_terms_page,   v_terms_group);
-  END IF;
-
-  RAISE NOTICE 'Seeded FOOTER navigation items (Privacy Policy, Terms of Service).';
-END;
-$seed_footer$;
-
-
--- >>> FROM: 00000000000032_neutralize_seeded_contact_emails.sql <<<
--- 00000000000032_neutralize_seeded_contact_emails.sql
--- Remove the original authors' contact addresses from seeded content so a
--- downloaded / self-hosted copy of NextBlock never routes mail to us.
---
--- Earlier migrations baked real addresses into block content:
---   * 00000000000027 seeded \`privacy@nextblock.dev\` across the Privacy Policy and
---     Terms pages (EN + FR), as visible text and \`mailto:\` links.
---   * 00000000000010 seeded a \`mailto:info@nextblock.dev\` CTA on the French home
---     page (the English page correctly links to /contact), and \`foo@bar.com\` as
---     the contact form recipient.
---
--- Migrations are append-only, so this is a forward-only data fix rather than an
--- edit of those files. Each statement is idempotent (a no-op once applied).
---
--- The \`{{privacy_email}}\` token is resolved at render time by the app
--- (apps/nextblock/lib/privacy/contact-emails.ts): admin "Support email" setting
--- -> SANDBOX_PRIVACY_EMAIL env (sandbox only) -> privacy@example.com fallback.
-
--- 1. Privacy / Terms legal pages: swap the hard-coded address for a merge tag.
-UPDATE public.blocks
-SET content = replace(content::text, 'privacy@nextblock.dev', '{{privacy_email}}')::jsonb
-WHERE content::text LIKE '%privacy@nextblock.dev%';
-
--- 2. French home "Nous contacter" CTA: point at the contact form like the English
---    page instead of a mailto to our inbox.
-UPDATE public.blocks
-SET content = replace(content::text, 'mailto:info@nextblock.dev', '/contact')::jsonb
-WHERE content::text LIKE '%mailto:info@nextblock.dev%';
-
--- 3. Contact form default recipient: use a neutral placeholder. In sandbox the
---    app overrides this with SANDBOX_CONTACT_EMAIL at submit time.
-UPDATE public.blocks
-SET content = replace(content::text, 'foo@bar.com', 'contact@example.com')::jsonb
-WHERE content::text LIKE '%foo@bar.com%';
-
-
--- >>> FROM: 00000000000033_setup_config_settings.sql <<<
--- 00000000000033_setup_config_settings.sql
--- DB-backed CMS configuration: move SMTP and payment-provider credentials out of
--- environment variables and into \`site_settings\`. Secret rows (email_secret,
--- payment_secret) hold AES-256-GCM envelopes and are restricted to ADMIN / service_role,
--- extending the sensitive-key masking established in migration 018. Public rows hold
--- non-secret config (SMTP host/from, publishable keys, provider flags) and the dashboard
--- onboarding state.
---
--- This re-issues ALL FOUR site_settings policies because the masked-key list is embedded
--- in each policy body and Postgres has no incremental "add a key" operation.
-
-COMMENT ON TABLE public.site_settings IS 'Key-value store for global site settings. Sensitive keys (Cortex AI BYOK, Bot Protection Secret, Email secret, Payment secret) hold encrypted envelopes and are restricted to ADMIN via row-level policies.';
-
-DROP POLICY IF EXISTS site_settings_read_policy ON public.site_settings;
-DROP POLICY IF EXISTS site_settings_insert_policy ON public.site_settings;
-DROP POLICY IF EXISTS site_settings_update_policy ON public.site_settings;
-DROP POLICY IF EXISTS site_settings_delete_policy ON public.site_settings;
-
-CREATE POLICY site_settings_read_policy
-  ON public.site_settings
-  FOR SELECT
-  TO public
-  USING (
-    key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
-    OR (
-      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
-      AND (SELECT auth.role()) = 'authenticated'
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  );
-
-CREATE POLICY site_settings_insert_policy
-  ON public.site_settings
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    (
-      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
-      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-    )
-    OR (
-      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  );
-
-CREATE POLICY site_settings_update_policy
-  ON public.site_settings
-  FOR UPDATE
-  TO authenticated
-  USING (
-    (
-      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
-      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-    )
-    OR (
-      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  )
-  WITH CHECK (
-    (
-      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
-      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-    )
-    OR (
-      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  );
-
-CREATE POLICY site_settings_delete_policy
-  ON public.site_settings
-  FOR DELETE
-  TO authenticated
-  USING (
-    (
-      key NOT IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
-      AND (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER')
-    )
-    OR (
-      key IN ('cortex_ai_openrouter_api_key', 'bot_protection_secret', 'email_secret', 'payment_secret')
-      AND (SELECT public.get_current_user_role()) = 'ADMIN'
-    )
-  );
-
--- Seed the new configuration rows (idempotent). Secret rows are created on first save
--- from the CMS, so they are intentionally not seeded here.
-INSERT INTO public.site_settings (key, value)
-VALUES ('email_public', '{"host": "", "port": "", "fromEmail": "", "fromName": "", "secure": true}'::jsonb)
-ON CONFLICT (key) DO NOTHING;
-
-INSERT INTO public.site_settings (key, value)
-VALUES ('payment_public', '{"stripe": {"publishableKey": ""}, "freemius": {"developerId": "", "publicKey": "", "productId": "", "sandboxEnabled": false}}'::jsonb)
-ON CONFLICT (key) DO NOTHING;
-
-INSERT INTO public.site_settings (key, value)
-VALUES ('onboarding_state', '{"dismissed": false, "skipped": []}'::jsonb)
-ON CONFLICT (key) DO NOTHING;
-
-
--- >>> FROM: 00000000000034_enable_staff_2fa_reminder_default.sql <<<
--- 00000000000034_enable_staff_2fa_reminder_default.sql
--- Turn the "Encourage staff to enable 2FA" policy ON by default. The reminder banner is
--- now implemented (shown to ADMIN/WRITER accounts without a second factor); migration 027
--- seeded this flag to false, so flip the existing security_settings row to true. Admins can
--- still turn it off afterward. The sandbox never enforces it (handled at runtime), so the
--- stored value here is harmless after a sandbox reset.
-
-UPDATE public.site_settings
-SET value = jsonb_set(coalesce(value, '{}'::jsonb), '{enforce_staff_2fa}', 'true'::jsonb)
-WHERE key = 'security_settings';
-
--- Cover the unlikely case where the row is missing (it is seeded in migration 027).
-INSERT INTO public.site_settings (key, value)
-VALUES ('security_settings', '{"trusted_device_days": 30, "enforce_staff_2fa": true}'::jsonb)
-ON CONFLICT (key) DO NOTHING;
-
-
--- >>> FROM: 00000000000035_reassert_advisor_fixes.sql <<<
--- 00000000000035_reassert_advisor_fixes.sql
--- Re-assert two Supabase Advisor (database linter) fixes that were first applied in
--- migration 00000000000028 but can be lost when a database is restored/reset to a
--- pre-028 state while its migration history still records 028 as applied (so the forward
--- tooling never re-runs it). These two advisors reappeared, so we re-apply the fixes in a
--- forward-only, idempotent way. No application behaviour changes.
---
---   1. 0011 function_search_path_mutable
---      public.handle_ucp_cart_sessions_update() needs a pinned search_path.
---   2. 0029 authenticated_security_definer_function_executable
---      public.duplicate_block_definition(uuid) must run as SECURITY INVOKER (it already
---      keeps its own ADMIN/WRITER role check and is gated by custom_block_definitions RLS).
-
--- 1. Pin the search_path. Re-create the function with SET search_path baked into its
---    definition (not just an ALTER) so a future CREATE OR REPLACE can't silently drop it.
---    The body only calls now() (pg_catalog, always implicitly searched), so an empty
---    search_path is safe. CREATE OR REPLACE keeps the function OID, so the existing
---    trg_handle_ucp_cart_sessions_update trigger and the service_role grant are preserved.
-CREATE OR REPLACE FUNCTION public.handle_ucp_cart_sessions_update()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
--- 2. Ensure the duplicate helper runs with the caller's privileges. The function body
---    (unchanged) still raises 42501 for non-ADMIN/WRITER callers, and its SELECT/INSERT
---    are gated by custom_block_definitions RLS, so it does not need definer privileges.
-ALTER FUNCTION public.duplicate_block_definition(uuid) SECURITY INVOKER;
-
-
--- >>> FROM: 00000000000036_setup_system_alerts.sql <<<
--- System notification layer for the automated upstream-update architecture.
---
--- \`system_alerts\` is the single sink that every update track writes into:
---   * Track A (the .github/workflows/nextblock-sync.yml GitHub Action) inserts a
---     'merge_conflict' row via the Supabase REST API when an upstream merge can't be
---     auto-resolved, so the CMS dashboard can point an operator at GitHub to sort it.
---   * Track B (the runtime update engine, app/api/cms/check-updates) inserts a
---     'runtime_update_available' row for non-git installs (npm create / local / Docker)
---     with a download link to the latest verified release tarball.
--- The dashboard banner (cms/layout.tsx -> SystemAlertsBanner) renders unresolved rows.
---
--- Writers always use the service-role key (REST API / getServiceRoleSupabaseClient),
--- which bypasses RLS; RLS below only governs who can READ/RESOLVE from the dashboard.
-
-create table if not exists public.system_alerts (
-  id uuid primary key default gen_random_uuid(),
-  -- The notification kind. Constrained to the two tracks this system emits; widen the
-  -- CHECK in a later migration if new alert kinds are added.
-  alert_type text not null check (alert_type in ('merge_conflict', 'runtime_update_available')),
-  title text not null,
-  message text not null,
-  -- Structured context for deep-linking the banner CTA, e.g.
-  --   merge_conflict           -> { "repo": "owner/name", "branch": "...", "action_url": "https://github.com/owner/name/branches" }
-  --   runtime_update_available -> { "latest_version": "0.11.0", "download_url": "https://github.com/.../v0.11.0.tar.gz" }
-  metadata jsonb not null default '{}'::jsonb,
-  is_resolved boolean not null default false,
-  resolved_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-comment on table public.system_alerts is 'System notifications for the automated upstream-update architecture (merge conflicts, runtime updates available). Written by service-role; read by ADMINs.';
-comment on column public.system_alerts.alert_type is 'One of: merge_conflict, runtime_update_available.';
-comment on column public.system_alerts.metadata is 'Structured deep-link context for the dashboard banner CTA (repo/branch/action_url or latest_version/download_url).';
-comment on column public.system_alerts.is_resolved is 'When true the alert is hidden from the dashboard banner.';
-
--- Banner query: unresolved alerts, newest first.
-create index if not exists idx_system_alerts_unresolved
-  on public.system_alerts (is_resolved, created_at desc);
-
--- Keep updated_at fresh on every mutation (same helper used across the schema).
-drop trigger if exists trg_system_alerts_updated_at on public.system_alerts;
-create trigger trg_system_alerts_updated_at
-  before update on public.system_alerts
-  for each row
-  execute function public.set_current_timestamp_updated_at();
-
-alter table public.system_alerts enable row level security;
-
--- Only authenticated ADMINs may view alerts in the dashboard. WRITERs and the public
--- anon role get zero rows (RLS default-deny: no policy applies to them).
-drop policy if exists system_alerts_select_admin on public.system_alerts;
-create policy system_alerts_select_admin
-  on public.system_alerts
-  for select
-  to authenticated
-  using ((select public.get_current_user_role()) = 'ADMIN');
-
--- ADMINs may resolve (dismiss) alerts from the dashboard. Inserts are service-role only
--- (RLS-bypassing), so there is intentionally no INSERT policy.
-drop policy if exists system_alerts_update_admin on public.system_alerts;
-create policy system_alerts_update_admin
-  on public.system_alerts
-  for update
-  to authenticated
-  using ((select public.get_current_user_role()) = 'ADMIN')
-  with check ((select public.get_current_user_role()) = 'ADMIN');
-
--- Base table privileges (RLS still filters rows on top of these). Mirrors the grant
--- model the rest of the schema uses; service_role keeps full access for the writers.
-grant select, update on public.system_alerts to authenticated;
-grant all on public.system_alerts to service_role;
-
-
--- >>> FROM: 00000000000037_refresh_setup_article_install_paths.sql <<<
--- Rewrite the seeded "How to Setup NextBlock" tutorial (EN + FR) around the four
--- current installation paths:
---   1. One-click Deploy on Vercel (Supabase Marketplace integration, zero env vars),
---   2. npm create nextblock (standalone app, browser /setup wizard on :3000),
---   3. git clone -> npm install -> npx nx serve nextblock (browser /setup wizard on :4200),
---   4. git clone -> npm install -> npm run docker:setup (fully local, non-interactive).
---
--- Also sets the posts' meta_title / meta_description (previously unset — SEO title fell
--- back to posts.title and the description to posts.subtitle) and refreshes
--- title / subtitle / excerpt for both languages. Slugs are intentionally unchanged:
--- 'how-to-setup-nextblock' and 'comment-configurer-nextblock' are public URLs and are
--- also mapped to the tutorial presentation (post-article--tutorial) by slug.
---
--- Forward-only and idempotent: it updates the two posts rows and replaces their single
--- text block (same pattern as 00000000000029). Safe to re-run; a no-op if the posts
--- do not exist.
-
--- EN post metadata
-UPDATE public.posts
-SET
-  title = 'How to Install NextBlock: Every Setup Option Explained',
-  subtitle = 'Four ways to launch NextBlock: a one-click Vercel deploy, npm create nextblock, git clone with the browser setup wizard, or a fully local Docker stack.',
-  excerpt = 'Every way to install NextBlock — one-click cloud deploy, CLI scaffold, git clone, or self-hosted Docker — with copy-paste steps for each.',
-  meta_title = 'How to Install NextBlock CMS — Vercel, CLI, Git or Docker',
-  meta_description = 'Install NextBlock in minutes — one-click Vercel deploy, npm create nextblock, git clone, or self-hosted Docker. No config files, no manual SQL.'
-WHERE slug = 'how-to-setup-nextblock';
-
--- FR post metadata
-UPDATE public.posts
-SET
-  title = $meta$Installer NextBlock : toutes les options expliquées$meta$,
-  subtitle = $meta$Quatre façons de lancer NextBlock : déploiement Vercel en un clic, npm create nextblock, git clone avec l'assistant dans le navigateur, ou une pile Docker 100 % locale.$meta$,
-  excerpt = $meta$Toutes les façons d'installer NextBlock — cloud en un clic, CLI, git clone ou Docker auto-hébergé — avec les étapes à copier-coller.$meta$,
-  meta_title = $meta$Installer NextBlock — Vercel, CLI, Git ou Docker$meta$,
-  meta_description = $meta$Installez NextBlock en quelques minutes : déploiement Vercel en un clic, npm create nextblock, git clone ou Docker auto-hébergé. Sans config ni SQL.$meta$
-WHERE slug = 'comment-configurer-nextblock';
-
-WITH target_posts AS (
-  SELECT id, language_id, slug
-  FROM public.posts
-  WHERE slug IN ('how-to-setup-nextblock', 'comment-configurer-nextblock')
-),
-purged AS (
-  DELETE FROM public.blocks
-  WHERE post_id IN (SELECT id FROM target_posts)
-)
-INSERT INTO public.blocks (post_id, language_id, block_type, content, "order")
-
--- EN: How to Install NextBlock
-SELECT tp.id, tp.language_id, 'text', jsonb_build_object('html_content',
-$$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock is an open-source, AI-native Next.js CMS built on Supabase — and installing it no longer involves config files, terminal wizards, or manual SQL. There are four ways to get running, and they all end in the same place: a browser <strong>setup wizard</strong> that connects your database, configures media storage, and creates your admin account for you. Pick the path that fits, follow the steps, and you will be publishing in minutes.</p>
-
-<div class='grid gap-5 md:grid-cols-2 my-10'>
-  <a href='#one-click-vercel' class='block rounded-[1.75rem] border border-blue-200 bg-blue-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-blue-500/20 dark:bg-blue-500/10'>
-    <p class='mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200'>Fastest &middot; about 3 minutes</p>
-    <h3 class='mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>One-click deploy on Vercel</h3>
-    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>A live production site with a managed database. No terminal, no environment variables, nothing to copy.</p>
-  </a>
-  <a href='#npm-create' class='block rounded-[1.75rem] border border-violet-200 bg-violet-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-violet-500/20 dark:bg-violet-500/10'>
-    <p class='mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Recommended for new projects</p>
-    <h3 class='mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>npm create nextblock</h3>
-    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>Scaffold a standalone Next.js app with NextBlock built in, then finish setup in your browser.</p>
-  </a>
-  <a href='#git-clone' class='block rounded-[1.75rem] border border-emerald-200 bg-emerald-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-emerald-500/20 dark:bg-emerald-500/10'>
-    <p class='mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Full source code</p>
-    <h3 class='mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>Clone the repository</h3>
-    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>Run the complete monorepo — the CMS, every package, and the docs. Made for contributors and platform teams.</p>
-  </a>
-  <a href='#docker' class='block rounded-[1.75rem] border border-amber-200 bg-amber-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-amber-500/20 dark:bg-amber-500/10'>
-    <p class='mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200'>100% local &middot; no accounts</p>
-    <h3 class='mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>Self-hosted with Docker</h3>
-    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>One command boots the entire stack on your machine — database, auth, storage, and the CMS. No cloud services at all.</p>
-  </a>
-</div>
-
-<p class='text-sm text-slate-500 dark:text-slate-400'>Not sure which to pick? If you want a live website with the least effort, choose <a href='#one-click-vercel'>Vercel</a>. If you want a local project to build on, choose <a href='#npm-create'>npm create nextblock</a>.</p>
-
-<figure class='my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10'>
-  <img src='/images/included.webp' alt='NextBlock CMS platform overview showing the block editor, CMS dashboard, and integrations included with every installation' class='w-full h-auto object-cover' />
-  <figcaption class='border-t border-white/10 px-6 py-4 text-sm text-slate-300'>Whichever path you choose, you get the same block editor, the same CMS, and the same database schema.</figcaption>
-</figure>
-
-<h2 id='one-click-vercel'>Option 1: One-Click Deploy on Vercel</h2>
-<p>The fastest way to get a production NextBlock site. One button creates your own copy of NextBlock on GitHub, provisions a managed Supabase database, and deploys the site — you never open a terminal or copy a single key.</p>
-<ol class='space-y-2'>
-  <li><strong>Click Deploy to Vercel</strong> and sign in — Vercel clones NextBlock into a new repository you own.</li>
-  <li><strong>Create the Supabase database</strong> when prompted: pick a name and a region. Vercel connects it to the project and injects the keys before the first build.</li>
-  <li><strong>Open your new site</strong> once the build finishes. Every fresh instance takes you straight to the setup wizard.</li>
-  <li><strong>Create your administrator account.</strong> It is confirmed instantly — no verification email — and you land in the CMS dashboard.</li>
-</ol>
-<div class='my-8'>
-  <a href='https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&amp;project-name=nextblock&amp;repository-name=nextblock&amp;stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D' target='_blank' rel='noopener' class='inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white no-underline shadow-lg hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'>Deploy to Vercel &rarr;</a>
-</div>
-<div class='rounded-3xl border border-blue-200 bg-blue-50/80 p-6 my-8 dark:border-blue-500/20 dark:bg-blue-500/10'>
-  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200'>Zero configuration</p>
-  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>There are no environment variables to fill in. Media storage automatically uses your connected Supabase project, security secrets are derived for you, and database migrations run automatically on every production build. Adding a custom domain later? Set <code>NEXT_PUBLIC_URL</code> in your Vercel project and redeploy.</p>
-</div>
-<p>Your site also keeps itself current: the dashboard checklist includes a one-click <strong>Connect GitHub</strong> step that installs a daily workflow syncing your copy with the latest NextBlock release.</p>
-
-<h2 id='npm-create'>Option 2: Scaffold a Project with npm create nextblock</h2>
-<p>The best starting point for building your own site. The CLI scaffolds a standalone Next.js application with NextBlock already wired in — no monorepo, no workspace tooling — and hands everything else to the browser wizard.</p>
-<p>Before you start, install <a href='https://nodejs.org' target='_blank' rel='noopener'>Node.js 20 or newer</a> (it includes npm), then create a free project at <a href='https://supabase.com' target='_blank' rel='noopener'>supabase.com</a> (or pick the CLI's Docker mode during creation and skip cloud accounts entirely).</p>
-<pre><code>npm create nextblock@latest my-site
-cd my-site
-npm run dev</code></pre>
-<p>Open <code>http://localhost:3000/setup</code> and let the wizard take over:</p>
-<ol class='space-y-2'>
-  <li><strong>Connect Supabase</strong> — paste your project URL, publishable (anon) key, secret (service role) key, and a personal access token so the wizard can apply the database schema for you.</li>
-  <li><strong>Choose media storage</strong> — plug in a Cloudflare R2 bucket for images and files, or leave it blank to use your connected Supabase project's storage.</li>
-  <li><strong>Create your administrator</strong> — the wizard applies every migration, generates the app secrets, writes <code>.env.local</code>, creates your confirmed admin account, and signs you in. Restart <code>npm run dev</code> once afterwards so the fresh environment is baked into the app.</li>
-</ol>
-<div class='rounded-3xl border border-violet-200 bg-violet-50/80 p-6 my-8 dark:border-violet-500/20 dark:bg-violet-500/10'>
-  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Premium modules</p>
-  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>Need a store? One command adds products, checkout, orders, and coupons — license-gated and ready when you are: <code>npx create-nextblock activate ecommerce</code></p>
-</div>
-
-<h2 id='git-clone'>Option 3: Clone the Repository</h2>
-<p>Run the full Nx monorepo: the CMS application, every shared package, the CLI source, and the documentation. This is the path for contributors, plugin authors, and teams that customize the platform itself.</p>
-<pre><code>git clone https://github.com/nextblock-cms/nextblock.git
-cd nextblock
-npm install
-npx nx serve nextblock</code></pre>
-<p>Open <code>http://localhost:4200</code> — a fresh install redirects every page to <code>/setup</code>, where the same three-step wizard connects Supabase, configures storage, and creates your admin. It validates your keys, writes <code>.env.local</code> with generated secrets, and applies all migrations over the Supabase Management API — no Supabase CLI required.</p>
-<div class='rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 my-8 dark:border-emerald-500/20 dark:bg-emerald-500/10'>
-  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>No terminal setup</p>
-  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>Configuration moved entirely to the browser — there is no interactive terminal step anymore. When the wizard finishes you are signed in as the administrator; restart the dev server once afterwards so the fresh environment is baked into the app bundle.</p>
-</div>
-
-<h2 id='docker'>Option 4: Self-Hosted with Docker</h2>
-<p>Everything runs on your machine: Supabase's Postgres and auth engines, a PostgREST API behind a Kong gateway, S3-compatible MinIO storage, and the CMS itself. No Supabase account, no Vercel, no email service — ideal for evaluations, air-gapped environments, and anyone who wants a fully self-hosted CMS with complete data ownership.</p>
-<p>With <a href='https://www.docker.com/products/docker-desktop/' target='_blank' rel='noopener'>Docker Desktop</a> installed and running:</p>
-<pre><code>git clone https://github.com/nextblock-cms/nextblock.git
-cd nextblock
-npm install
-npm run docker:setup</code></pre>
-<p>The command asks nothing: it generates secure keys, builds the stack, applies every migration, and starts the services. When it finishes, open <code>http://localhost:3000</code> — the setup wizard already has the database and MinIO storage wired up, so the only step left is creating your administrator (confirmed instantly, no email required).</p>
-<div class='rounded-3xl border border-amber-200 bg-amber-50/80 p-6 my-8 dark:border-amber-500/20 dark:bg-amber-500/10'>
-  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200'>Day-2 commands</p>
-  <pre class='mt-4 mb-0'><code># rebuild and restart the stack
-npm run docker:up
-
-# stop the stack (your data persists in Docker volumes)
-npm run docker:down
-
-# follow the application logs
-npm run docker:logs</code></pre>
-</div>
-
-<h2 id='after-install'>After You Install: Your First 10 Minutes</h2>
-<p>Every path drops you at <code>/cms/dashboard</code>, signed in as the first administrator. A built-in onboarding checklist walks you through the rest:</p>
-<ul class='space-y-2'>
-  <li><strong>Add your branding</strong> — upload your logo and set the site title.</li>
-  <li><strong>Set your footer</strong> — copyright line and footer navigation.</li>
-  <li><strong>Configure email (SMTP)</strong> — under Settings, so password resets and invitations can send.</li>
-  <li><strong>Optional extras</strong> — connect analytics, enable bot protection, and (on Vercel) turn on automatic updates.</li>
-</ul>
-<p>From there, see how the platform fits together in <a href='/article/how-nextblock-works'>How NextBlock Works</a>, add a storefront with the <a href='/article/nextblock-commerce-guide'>Commerce guide</a>, or meet your AI copilot in the <a href='/article/nextblock-cortex-ai-guide'>Cortex AI guide</a>.</p>
-
-<h2 id='faq'>Installation FAQ</h2>
-<h3>What do I need installed?</h3>
-<p>Nothing for the Vercel path — it runs entirely in the browser. For <code>npm create nextblock</code>: <a href='https://nodejs.org' target='_blank' rel='noopener'>Node.js 20+</a> (which includes npm). For the cloned repository: Node.js 20+ and git. For Docker: those plus Docker Desktop.</p>
-<h3>Is NextBlock free?</h3>
-<p>Yes — the core of NextBlock is a 100% free, open-source CMS (AGPL). Premium packages such as e-commerce and Cortex AI are optional and activate with a license key. Both Vercel and Supabase offer free tiers, so a starter site can run at no cost.</p>
-<h3>Do I need a Supabase account?</h3>
-<p>On Vercel, the database is created for you during the deploy. For <code>npm create nextblock</code> and the cloned repository you bring a free Supabase project. With Docker you need no cloud accounts at all.</p>
-<h3>Do I have to run migrations or SQL by hand?</h3>
-<p>No. The setup wizard, the Vercel build, and the Docker stack all apply the database schema automatically — and re-running is always safe.</p>
-<h3>Can I switch paths later?</h3>
-<p>Yes. Every path runs the same application and the same database schema, so you can prototype locally with Docker today and deploy to Vercel tomorrow. NextBlock deploys like any standard Next.js app.</p>
-<h3>How do I update NextBlock?</h3>
-<p>On Vercel, the Connect GitHub onboarding step enables a daily automatic sync with upstream. On a cloned repository, <code>git pull</code>, run <code>npm run db:migrate</code>, then restart (on production builds, pending migrations apply automatically). With Docker, pull the latest code and run <code>npm run docker:up</code>.</p>
-
-<div class='rounded-[2rem] border border-slate-200/80 bg-slate-50 p-8 my-12 text-center dark:border-white/10 dark:bg-white/5'>
-  <p class='mt-0 text-2xl font-semibold text-slate-900 dark:text-white'>Ready to launch?</p>
-  <p class='text-sm text-slate-600 dark:text-slate-300'>Pick your path above, or jump straight to the fastest one.</p>
-  <div class='mt-5 flex flex-wrap justify-center gap-3'>
-    <a href='https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&amp;project-name=nextblock&amp;repository-name=nextblock&amp;stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D' target='_blank' rel='noopener' class='inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white no-underline shadow-lg hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'>Deploy on Vercel</a>
-    <a href='https://github.com/nextblock-cms/nextblock' target='_blank' rel='noopener' class='inline-flex items-center rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 no-underline hover:border-slate-500 dark:border-white/20 dark:text-slate-200 dark:hover:border-white/50'>View on GitHub</a>
-  </div>
-</div>$$
-), 0 FROM target_posts tp WHERE tp.slug = 'how-to-setup-nextblock'
-
-UNION ALL
-
--- FR: Installer NextBlock
-SELECT tp.id, tp.language_id, 'text', jsonb_build_object('html_content',
-$$<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock est un CMS open source et natif IA, construit sur Next.js et Supabase — et son installation ne passe plus par des fichiers de configuration, des assistants en ligne de commande ou du SQL manuel. Il existe quatre façons de démarrer, et elles aboutissent toutes au même endroit : un <strong>assistant de configuration</strong> dans le navigateur qui connecte votre base de données, configure le stockage des médias et crée votre compte administrateur. Choisissez le chemin qui vous convient, suivez les étapes, et vous publierez en quelques minutes.</p>
-
-<div class='grid gap-5 md:grid-cols-2 my-10'>
-  <a href='#one-click-vercel' class='block rounded-[1.75rem] border border-blue-200 bg-blue-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-blue-500/20 dark:bg-blue-500/10'>
-    <p class='mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200'>Le plus rapide &middot; environ 3 minutes</p>
-    <h3 class='mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>Déploiement Vercel en un clic</h3>
-    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>Un site de production en ligne avec une base de données gérée. Pas de terminal, pas de variables d'environnement, rien à copier.</p>
-  </a>
-  <a href='#npm-create' class='block rounded-[1.75rem] border border-violet-200 bg-violet-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-violet-500/20 dark:bg-violet-500/10'>
-    <p class='mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Recommandé pour les nouveaux projets</p>
-    <h3 class='mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>npm create nextblock</h3>
-    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>Générez une app Next.js autonome avec NextBlock intégré, puis terminez la configuration dans votre navigateur.</p>
-  </a>
-  <a href='#git-clone' class='block rounded-[1.75rem] border border-emerald-200 bg-emerald-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-emerald-500/20 dark:bg-emerald-500/10'>
-    <p class='mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Code source complet</p>
-    <h3 class='mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>Cloner le dépôt</h3>
-    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>Faites tourner le monorepo complet — le CMS, tous les packages et la documentation. Conçu pour les contributeurs et les équipes plateforme.</p>
-  </a>
-  <a href='#docker' class='block rounded-[1.75rem] border border-amber-200 bg-amber-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-amber-500/20 dark:bg-amber-500/10'>
-    <p class='mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200'>100 % local &middot; aucun compte</p>
-    <h3 class='mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>Auto-hébergé avec Docker</h3>
-    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>Une seule commande démarre toute la pile sur votre machine — base de données, auth, stockage et le CMS. Aucun service cloud.</p>
-  </a>
-</div>
-
-<p class='text-sm text-slate-500 dark:text-slate-400'>Vous hésitez ? Pour un site en ligne avec le minimum d'effort, choisissez <a href='#one-click-vercel'>Vercel</a>. Pour un projet local à personnaliser, choisissez <a href='#npm-create'>npm create nextblock</a>.</p>
-
-<figure class='my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10'>
-  <img src='/images/included.webp' alt='Aperçu de la plateforme NextBlock : éditeur de blocs, tableau de bord CMS et intégrations incluses dans chaque installation' class='w-full h-auto object-cover' />
-  <figcaption class='border-t border-white/10 px-6 py-4 text-sm text-slate-300'>Quel que soit le chemin choisi, vous obtenez le même éditeur de blocs, le même CMS et le même schéma de base de données.</figcaption>
-</figure>
-
-<h2 id='one-click-vercel'>Option 1 : Déploiement Vercel en un clic</h2>
-<p>Le moyen le plus rapide d'obtenir un site NextBlock en production. Un seul bouton crée votre propre copie de NextBlock sur GitHub, provisionne une base de données Supabase gérée et déploie le site — sans jamais ouvrir un terminal ni copier la moindre clé.</p>
-<ol class='space-y-2'>
-  <li><strong>Cliquez sur Deploy to Vercel</strong> et connectez-vous — Vercel clone NextBlock dans un nouveau dépôt qui vous appartient.</li>
-  <li><strong>Créez la base de données Supabase</strong> quand on vous le demande : choisissez un nom et une région. Vercel la connecte au projet et injecte les clés avant le premier build.</li>
-  <li><strong>Ouvrez votre nouveau site</strong> une fois le build terminé. Toute nouvelle instance vous amène directement à l'assistant de configuration.</li>
-  <li><strong>Créez votre compte administrateur.</strong> Il est confirmé instantanément — aucun email de vérification — et vous arrivez dans le tableau de bord du CMS.</li>
-</ol>
-<div class='my-8'>
-  <a href='https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&amp;project-name=nextblock&amp;repository-name=nextblock&amp;stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D' target='_blank' rel='noopener' class='inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white no-underline shadow-lg hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'>Déployer sur Vercel &rarr;</a>
-</div>
-<div class='rounded-3xl border border-blue-200 bg-blue-50/80 p-6 my-8 dark:border-blue-500/20 dark:bg-blue-500/10'>
-  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200'>Zéro configuration</p>
-  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>Aucune variable d'environnement à remplir. Le stockage des médias utilise automatiquement votre projet Supabase connecté, les secrets de sécurité sont dérivés pour vous, et les migrations de base de données s'exécutent automatiquement à chaque build de production. Un domaine personnalisé plus tard ? Définissez <code>NEXT_PUBLIC_URL</code> dans votre projet Vercel et redéployez.</p>
-</div>
-<p>Par ailleurs, votre site reste à jour tout seul : la checklist du tableau de bord inclut une étape <strong>Connect GitHub</strong> en un clic qui installe un workflow quotidien synchronisant votre copie avec la dernière version de NextBlock.</p>
-
-<h2 id='npm-create'>Option 2 : Créer un projet avec npm create nextblock</h2>
-<p>Le meilleur point de départ pour construire votre propre site. Le CLI génère une application Next.js autonome avec NextBlock déjà intégré — sans monorepo ni outillage de workspace — et confie tout le reste à l'assistant dans le navigateur.</p>
-<p>Avant de commencer, installez <a href='https://nodejs.org' target='_blank' rel='noopener'>Node.js 20 ou plus récent</a> (npm inclus), puis créez un projet gratuit sur <a href='https://supabase.com' target='_blank' rel='noopener'>supabase.com</a> (ou choisissez le mode Docker du CLI pendant la création et passez-vous entièrement de comptes cloud).</p>
-<pre><code>npm create nextblock@latest mon-site
-cd mon-site
-npm run dev</code></pre>
-<p>Ouvrez <code>http://localhost:3000/setup</code> et laissez l'assistant faire le travail :</p>
-<ol class='space-y-2'>
-  <li><strong>Connectez Supabase</strong> — collez l'URL du projet, la clé publiable (anon), la clé secrète (service role) et un jeton d'accès personnel pour que l'assistant applique le schéma de base de données à votre place.</li>
-  <li><strong>Choisissez le stockage des médias</strong> — branchez un bucket Cloudflare R2 pour les images et les fichiers, ou laissez les champs vides pour utiliser le stockage de votre projet Supabase.</li>
-  <li><strong>Créez votre administrateur</strong> — l'assistant applique toutes les migrations, génère les secrets de l'application, écrit <code>.env.local</code>, crée votre compte admin confirmé et vous connecte. Redémarrez ensuite <code>npm run dev</code> une fois pour que le nouvel environnement soit intégré à l'application.</li>
-</ol>
-<div class='rounded-3xl border border-violet-200 bg-violet-50/80 p-6 my-8 dark:border-violet-500/20 dark:bg-violet-500/10'>
-  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Modules premium</p>
-  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>Besoin d'une boutique ? Une seule commande ajoute produits, paiement, commandes et coupons — activés par clé de licence, prêts quand vous l'êtes : <code>npx create-nextblock activate ecommerce</code></p>
-</div>
-
-<h2 id='git-clone'>Option 3 : Cloner le dépôt</h2>
-<p>Faites tourner le monorepo Nx complet : l'application CMS, tous les packages partagés, le code du CLI et la documentation. C'est le chemin des contributeurs, des auteurs de plugins et des équipes qui personnalisent la plateforme elle-même.</p>
-<pre><code>git clone https://github.com/nextblock-cms/nextblock.git
-cd nextblock
-npm install
-npx nx serve nextblock</code></pre>
-<p>Ouvrez <code>http://localhost:4200</code> — une nouvelle installation redirige chaque page vers <code>/setup</code>, où le même assistant en trois étapes connecte Supabase, configure le stockage et crée votre admin. Il valide vos clés, écrit <code>.env.local</code> avec des secrets générés, et applique toutes les migrations via l'API de management Supabase — sans CLI Supabase.</p>
-<div class='rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 my-8 dark:border-emerald-500/20 dark:bg-emerald-500/10'>
-  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Zéro configuration dans le terminal</p>
-  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>La configuration se fait entièrement dans le navigateur — il n'y a plus d'étape interactive en ligne de commande. Quand l'assistant termine, vous êtes connecté en administrateur ; redémarrez ensuite le serveur de développement une fois pour que le nouvel environnement soit intégré au bundle de l'application.</p>
-</div>
-
-<h2 id='docker'>Option 4 : Auto-hébergé avec Docker</h2>
-<p>Tout tourne sur votre machine : les moteurs Postgres et auth de Supabase, une API PostgREST derrière une passerelle Kong, un stockage MinIO compatible S3 et le CMS lui-même. Pas de compte Supabase, pas de Vercel, pas de service d'email — idéal pour les évaluations, les environnements isolés et la pleine propriété de vos données.</p>
-<p>Avec <a href='https://www.docker.com/products/docker-desktop/' target='_blank' rel='noopener'>Docker Desktop</a> installé et démarré :</p>
-<pre><code>git clone https://github.com/nextblock-cms/nextblock.git
-cd nextblock
-npm install
-npm run docker:setup</code></pre>
-<p>La commande ne pose aucune question : elle génère des clés sécurisées, construit la pile, applique toutes les migrations et démarre les services. Quand elle se termine, ouvrez <code>http://localhost:3000</code> — la base de données et le stockage MinIO sont déjà connectés dans l'assistant de configuration, il ne reste qu'à créer votre administrateur (confirmé instantanément, sans email).</p>
-<div class='rounded-3xl border border-amber-200 bg-amber-50/80 p-6 my-8 dark:border-amber-500/20 dark:bg-amber-500/10'>
-  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200'>Commandes du quotidien</p>
-  <pre class='mt-4 mb-0'><code># reconstruire et redémarrer la pile
-npm run docker:up
-
-# arrêter la pile (vos données persistent dans les volumes Docker)
-npm run docker:down
-
-# suivre les logs de l'application
-npm run docker:logs</code></pre>
-</div>
-
-<h2 id='after-install'>Après l'installation : vos 10 premières minutes</h2>
-<p>Chaque chemin vous dépose sur <code>/cms/dashboard</code>, connecté en tant que premier administrateur. Une checklist de démarrage intégrée vous guide pour la suite :</p>
-<ul class='space-y-2'>
-  <li><strong>Ajoutez votre identité visuelle</strong> — téléversez votre logo et définissez le titre du site.</li>
-  <li><strong>Réglez votre pied de page</strong> — mention de copyright et navigation du pied de page.</li>
-  <li><strong>Configurez l'email (SMTP)</strong> — dans les réglages, pour que les réinitialisations de mot de passe et les invitations partent bien.</li>
-  <li><strong>Extras optionnels</strong> — connectez vos outils d'analytics, activez la protection anti-bots et (sur Vercel) les mises à jour automatiques.</li>
-</ul>
-<p>Ensuite, découvrez comment la plateforme s'articule dans <a href='/article/comment-nextblock-fonctionne'>Comment NextBlock fonctionne</a>, ou ajoutez une boutique avec le <a href='/article/guide-commerce-nextblock'>guide Commerce</a>.</p>
-
-<h2 id='faq'>FAQ d'installation</h2>
-<h3>Que dois-je installer ?</h3>
-<p>Rien pour le chemin Vercel — tout se passe dans le navigateur. Pour <code>npm create nextblock</code> : <a href='https://nodejs.org' target='_blank' rel='noopener'>Node.js 20+</a> (npm inclus). Pour le dépôt cloné : Node.js 20+ et git. Pour Docker : ajoutez Docker Desktop.</p>
-<h3>NextBlock est-il gratuit ?</h3>
-<p>Oui — le cœur du CMS est 100 % gratuit et open source (AGPL). Les packages premium comme l'e-commerce et Cortex AI sont optionnels et s'activent avec une clé de licence. Vercel et Supabase proposent chacun une offre gratuite : un site de départ peut donc tourner sans frais.</p>
-<h3>Ai-je besoin d'un compte Supabase ?</h3>
-<p>Sur Vercel, la base de données est créée pour vous pendant le déploiement. Pour <code>npm create nextblock</code> et le dépôt cloné, il vous faut un projet Supabase gratuit. Avec Docker, aucun compte cloud n'est nécessaire.</p>
-<h3>Dois-je exécuter des migrations ou du SQL à la main ?</h3>
-<p>Non. L'assistant de configuration, le build Vercel et la pile Docker appliquent tous le schéma de base de données automatiquement — et relancer l'opération est toujours sans risque.</p>
-<h3>Puis-je changer de chemin plus tard ?</h3>
-<p>Oui. Chaque chemin exécute la même application et le même schéma de base de données : vous pouvez prototyper en local avec Docker aujourd'hui et déployer sur Vercel demain. NextBlock se déploie comme n'importe quelle app Next.js.</p>
-<h3>Comment mettre à jour NextBlock ?</h3>
-<p>Sur Vercel, l'étape Connect GitHub de la checklist active une synchronisation quotidienne automatique. Sur un dépôt cloné, <code>git pull</code>, lancez <code>npm run db:migrate</code>, puis redémarrez (lors des builds de production, les migrations en attente s'appliquent automatiquement). Avec Docker, récupérez le dernier code et lancez <code>npm run docker:up</code>.</p>
-
-<div class='rounded-[2rem] border border-slate-200/80 bg-slate-50 p-8 my-12 text-center dark:border-white/10 dark:bg-white/5'>
-  <p class='mt-0 text-2xl font-semibold text-slate-900 dark:text-white'>Prêt à vous lancer ?</p>
-  <p class='text-sm text-slate-600 dark:text-slate-300'>Choisissez votre chemin ci-dessus, ou passez directement au plus rapide.</p>
-  <div class='mt-5 flex flex-wrap justify-center gap-3'>
-    <a href='https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&amp;project-name=nextblock&amp;repository-name=nextblock&amp;stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D' target='_blank' rel='noopener' class='inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white no-underline shadow-lg hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'>Déployer sur Vercel</a>
-    <a href='https://github.com/nextblock-cms/nextblock' target='_blank' rel='noopener' class='inline-flex items-center rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 no-underline hover:border-slate-500 dark:border-white/20 dark:text-slate-200 dark:hover:border-white/50'>Voir sur GitHub</a>
-  </div>
-</div>$$
-), 0 FROM target_posts tp WHERE tp.slug = 'comment-configurer-nextblock';
-
-
--- >>> FROM: 00000000000038_seed_consent_banner_translations.sql <<<
--- 00000000000038_seed_consent_banner_translations.sql
--- Consent banner UI copy (EN + FR). Forward-only and idempotent.
-
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'privacy.consent.aria_label',
-    jsonb_build_object(
-      'en', 'Privacy consent',
-      'fr', 'Consentement à la confidentialité'
-    )
-  ),
-  (
-    'privacy.consent.title',
-    jsonb_build_object(
-      'en', 'We value your privacy',
-      'fr', 'Nous respectons votre vie privée'
-    )
-  ),
-  (
-    'privacy.consent.description_before_policy_link',
-    jsonb_build_object(
-      'en', 'We use only essential cookies by default. With your consent we also use analytics to improve the site. See our',
-      'fr', 'Nous utilisons seulement les témoins essentiels par défaut. Avec votre consentement, nous utilisons aussi l''analytique pour améliorer le site. Consultez notre'
-    )
-  ),
-  (
-    'privacy.consent.privacy_policy_link',
-    jsonb_build_object(
-      'en', 'Privacy Policy',
-      'fr', 'politique de confidentialité'
-    )
-  ),
-  (
-    'privacy.consent.description_after_policy_link',
-    jsonb_build_object(
-      'en', '.',
-      'fr', '.'
-    )
-  ),
-  (
-    'privacy.consent.privacy_policy_href',
-    jsonb_build_object(
-      'en', '/privacy-policy',
-      'fr', '/politique-de-confidentialite'
-    )
-  ),
-  (
-    'privacy.consent.necessary_label',
-    jsonb_build_object(
-      'en', 'Necessary',
-      'fr', 'Nécessaires'
-    )
-  ),
-  (
-    'privacy.consent.necessary_help',
-    jsonb_build_object(
-      'en', 'Always on',
-      'fr', 'Toujours actifs'
-    )
-  ),
-  (
-    'privacy.consent.analytics_label',
-    jsonb_build_object(
-      'en', 'Analytics',
-      'fr', 'Analytique'
-    )
-  ),
-  (
-    'privacy.consent.analytics_help',
-    jsonb_build_object(
-      'en', 'Usage insights',
-      'fr', 'Statistiques d''utilisation'
-    )
-  ),
-  (
-    'privacy.consent.marketing_label',
-    jsonb_build_object(
-      'en', 'Marketing',
-      'fr', 'Marketing'
-    )
-  ),
-  (
-    'privacy.consent.marketing_help',
-    jsonb_build_object(
-      'en', 'Personalized content',
-      'fr', 'Contenu personnalisé'
-    )
-  ),
-  (
-    'privacy.consent.save_choices',
-    jsonb_build_object(
-      'en', 'Save choices',
-      'fr', 'Enregistrer mes choix'
-    )
-  ),
-  (
-    'privacy.consent.accept_all',
-    jsonb_build_object(
-      'en', 'Accept all',
-      'fr', 'Tout accepter'
-    )
-  ),
-  (
-    'privacy.consent.reject_all',
-    jsonb_build_object(
-      'en', 'Reject all',
-      'fr', 'Tout refuser'
-    )
-  ),
-  (
-    'privacy.consent.hide_options',
-    jsonb_build_object(
-      'en', 'Hide options',
-      'fr', 'Masquer les options'
-    )
-  ),
-  (
-    'privacy.consent.manage_options',
-    jsonb_build_object(
-      'en', 'Manage options',
-      'fr', 'Gérer les options'
-    )
-  )
-ON CONFLICT (key) DO UPDATE
-SET translations = public.translations.translations || EXCLUDED.translations;
-
-
--- >>> FROM: 00000000000039_setup_interactions.sql <<<
--- 00000000000039_setup_interactions.sql
--- Migration establishing Product Reviews and Post Comments schema.
-
--- 1. Create Enums
-CREATE TYPE public.interaction_type AS ENUM ('review', 'comment');
-CREATE TYPE public.approval_status AS ENUM ('pending', 'approved', 'denied');
-
--- 2. Alter Products Table to support aggregations
-ALTER TABLE public.products 
-  ADD COLUMN average_rating numeric(3,2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN total_reviews integer NOT NULL DEFAULT 0;
-
-COMMENT ON COLUMN public.products.average_rating IS 'Aggregated average 1-5 rating of approved reviews.';
-COMMENT ON COLUMN public.products.total_reviews IS 'Total count of approved reviews for this product.';
-
--- 3. Create Interactions Table
-CREATE TABLE public.cms_interactions (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  type public.interaction_type NOT NULL,
-  status public.approval_status NOT NULL DEFAULT 'pending',
-  content text NOT NULL,
-  rating integer,
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  product_id uuid REFERENCES public.products(id) ON DELETE CASCADE,
-  post_id bigint REFERENCES public.posts(id) ON DELETE CASCADE,
-  reactions jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-
-  -- Ensure polymorphism is respected (either product or post)
-  CONSTRAINT check_product_or_post CHECK (
-    (product_id IS NOT NULL AND post_id IS NULL)
-    OR (post_id IS NOT NULL AND product_id IS NULL)
-  ),
-
-  -- Ensure rating matches business rules
-  CONSTRAINT check_rating_only_for_review CHECK (
-    (type = 'review' AND rating IS NOT NULL AND rating >= 1 AND rating <= 5)
-    OR (type = 'comment' AND rating IS NULL)
-  )
+COMMENT ON TABLE public.categories IS 'Product categories for organizing catalog items.';
+
+COMMENT ON COLUMN public.categories.name_translations IS 'Translated category names (e.g. {"fr": "Numérique"}).';
+
+COMMENT ON COLUMN public.categories.description_translations IS 'Translated category descriptions.';
+
+CREATE TABLE IF NOT EXISTS public.cms_interactions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    type public.interaction_type NOT NULL,
+    status public.approval_status DEFAULT 'pending'::public.approval_status NOT NULL,
+    content text NOT NULL,
+    rating integer,
+    user_id uuid NOT NULL,
+    product_id uuid,
+    post_id bigint,
+    reactions jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT check_product_or_post CHECK ((((product_id IS NOT NULL) AND (post_id IS NULL)) OR ((post_id IS NOT NULL) AND (product_id IS NULL)))),
+    CONSTRAINT check_rating_only_for_review CHECK ((((type = 'review'::public.interaction_type) AND (rating IS NOT NULL) AND (rating >= 1) AND (rating <= 5)) OR ((type = 'comment'::public.interaction_type) AND (rating IS NULL))))
 );
 
 COMMENT ON TABLE public.cms_interactions IS 'Stores user-submitted product reviews and blog post comments.';
+
 COMMENT ON COLUMN public.cms_interactions.rating IS 'Star rating 1-5, only populated for product reviews.';
-COMMENT ON COLUMN public.cms_interactions.reactions IS 'JSONB structure tracking counts of reactions (likes, etc.).';
-
--- 4. Create rating aggregation trigger function
-CREATE OR REPLACE FUNCTION public.update_product_ratings()
-RETURNS TRIGGER AS $$
-DECLARE
-  v_product_id uuid;
-  v_avg numeric(3,2);
-  v_count integer;
-BEGIN
-  -- Determine which product_id we need to update
-  IF TG_OP = 'DELETE' THEN
-    v_product_id := OLD.product_id;
-  ELSE
-    v_product_id := NEW.product_id;
-  END IF;
-
-  IF v_product_id IS NOT NULL THEN
-    -- Calculate average and count of approved reviews for this product
-    SELECT COALESCE(avg(rating), 0.00), count(*)
-    INTO v_avg, v_count
-    FROM public.cms_interactions
-    WHERE product_id = v_product_id
-      AND type = 'review'
-      AND status = 'approved';
-
-    -- Update products table
-    UPDATE public.products
-    SET average_rating = ROUND(COALESCE(v_avg, 0.00), 2),
-        total_reviews = v_count
-    WHERE id = v_product_id;
-  END IF;
-
-  -- Handle old product_id if it changed on UPDATE (e.g. transfer of reviews)
-  IF TG_OP = 'UPDATE' AND OLD.product_id IS NOT NULL AND OLD.product_id <> NEW.product_id THEN
-    SELECT COALESCE(avg(rating), 0.00), count(*)
-    INTO v_avg, v_count
-    FROM public.cms_interactions
-    WHERE product_id = OLD.product_id
-      AND type = 'review'
-      AND status = 'approved';
-
-    UPDATE public.products
-    SET average_rating = ROUND(COALESCE(v_avg, 0.00), 2),
-        total_reviews = v_count
-    WHERE id = OLD.product_id;
-  END IF;
-
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
-
--- 5. Attach trigger to interactions table
-CREATE TRIGGER trigger_update_product_ratings
-AFTER INSERT OR UPDATE OR DELETE
-ON public.cms_interactions
-FOR EACH ROW
-EXECUTE FUNCTION public.update_product_ratings();
-
--- 6. Attach update_at timestamp trigger
-CREATE TRIGGER set_updated_at
-  BEFORE UPDATE ON public.cms_interactions
-  FOR EACH ROW
-  EXECUTE FUNCTION public.set_current_timestamp_updated_at();
-
--- 7. Enable RLS and define policies
-ALTER TABLE public.cms_interactions ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY cms_interactions_read_policy
-  ON public.cms_interactions
-  FOR SELECT
-  TO public
-  USING (
-    status = 'approved'
-    OR ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  );
-
-CREATE POLICY cms_interactions_insert_policy
-  ON public.cms_interactions
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    auth.uid() = user_id
-    AND (status = 'pending' OR (SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  );
-
-CREATE POLICY cms_interactions_update_policy
-  ON public.cms_interactions
-  FOR UPDATE
-  TO authenticated
-  USING (
-    ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  )
-  WITH CHECK (
-    ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  );
-
-CREATE POLICY cms_interactions_delete_policy
-  ON public.cms_interactions
-  FOR DELETE
-  TO authenticated
-  USING (
-    ((SELECT public.get_current_user_role()) IN ('ADMIN', 'WRITER'))
-  );
-
--- 8. Grant Table Permissions
-GRANT SELECT ON public.cms_interactions TO anon;
-GRANT ALL ON public.cms_interactions TO authenticated;
-GRANT ALL ON public.cms_interactions TO service_role;
-
-
--- >>> FROM: 00000000000040_add_profiles_fk_to_interactions.sql <<<
--- 00000000000040_add_profiles_fk_to_interactions.sql
--- Alter cms_interactions.user_id to reference public.profiles directly for PostgREST joins.
-
-ALTER TABLE public.cms_interactions
-  DROP CONSTRAINT IF EXISTS cms_interactions_user_id_fkey,
-  ADD CONSTRAINT cms_interactions_user_id_profiles_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 COMMENT ON COLUMN public.cms_interactions.user_id IS 'References public.profiles.id';
 
+COMMENT ON COLUMN public.cms_interactions.reactions IS 'JSONB structure tracking counts of reactions (likes, etc.).';
 
--- >>> FROM: 00000000000041_seed_interactions_translations.sql <<<
--- 00000000000041_seed_interactions_translations.sql
--- Adds translation strings for Product Reviews and Post Comments storefront modules.
+CREATE TABLE IF NOT EXISTS public.content_drafts (
+    id bigint NOT NULL,
+    parent_type text NOT NULL,
+    parent_id bigint NOT NULL,
+    author_id uuid,
+    base_version integer DEFAULT 1 NOT NULL,
+    meta jsonb DEFAULT '{}'::jsonb NOT NULL,
+    blocks jsonb DEFAULT '[]'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT content_drafts_blocks_array CHECK ((jsonb_typeof(blocks) = 'array'::text)),
+    CONSTRAINT content_drafts_meta_object CHECK ((jsonb_typeof(meta) = 'object'::text)),
+    CONSTRAINT content_drafts_parent_type_check CHECK ((parent_type = ANY (ARRAY['page'::text, 'post'::text])))
+);
+
+COMMENT ON TABLE public.content_drafts IS 'Draft snapshots used by Draft Mode and front-end visual editing before publishing to live page/post rows.';
+
+COMMENT ON COLUMN public.content_drafts.parent_type IS 'The content table this draft belongs to: page or post.';
+
+COMMENT ON COLUMN public.content_drafts.parent_id IS 'ID of the page or post being drafted.';
+
+COMMENT ON COLUMN public.content_drafts.base_version IS 'Published page/post version the draft was created from.';
+
+COMMENT ON COLUMN public.content_drafts.meta IS 'Draft page/post metadata snapshot.';
+
+COMMENT ON COLUMN public.content_drafts.blocks IS 'Ordered draft block snapshot, including block ids, block types, content, language ids, and order values.';
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'public.content_drafts'::regclass AND attname = 'id' AND attidentity <> '') THEN
+    ALTER TABLE public.content_drafts ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+        SEQUENCE NAME public.content_drafts_id_seq
+        START WITH 1
+        INCREMENT BY 1
+        NO MINVALUE
+        NO MAXVALUE
+        CACHE 1
+    );
+  END IF;
+END $rb$;
+
+CREATE TABLE IF NOT EXISTS public.cortex_ai_db_mutation_audit (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    actor_user_id uuid,
+    tool_name text NOT NULL,
+    action_name text NOT NULL,
+    target_tables text[] DEFAULT '{}'::text[] NOT NULL,
+    operation_summary text NOT NULL,
+    payload_hash text NOT NULL,
+    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
+    preview jsonb DEFAULT '{}'::jsonb NOT NULL,
+    status text NOT NULL,
+    error_message text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT cortex_ai_db_mutation_audit_status_check CHECK ((status = ANY (ARRAY['success'::text, 'failure'::text])))
+);
+
+COMMENT ON TABLE public.cortex_ai_db_mutation_audit IS 'Audit trail for confirmed Cortex AI database mutation attempts.';
+
+COMMENT ON COLUMN public.cortex_ai_db_mutation_audit.payload IS 'Redacted tool input payload for the confirmed mutation attempt.';
+
+COMMENT ON COLUMN public.cortex_ai_db_mutation_audit.preview IS 'Redacted confirmation preview shown before the mutation was confirmed.';
+
+CREATE TABLE IF NOT EXISTS public.coupon_freemius_mappings (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    coupon_id uuid NOT NULL,
+    product_id uuid,
+    freemius_product_id text NOT NULL,
+    freemius_coupon_id text,
+    freemius_coupon_code text NOT NULL,
+    sync_status text DEFAULT 'pending'::text NOT NULL,
+    sync_error text,
+    remote_payload jsonb,
+    last_synced_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT coupon_freemius_mappings_code_not_blank CHECK ((char_length(btrim(freemius_coupon_code)) > 0)),
+    CONSTRAINT coupon_freemius_mappings_product_not_blank CHECK ((char_length(btrim(freemius_product_id)) > 0)),
+    CONSTRAINT coupon_freemius_mappings_sync_status_valid CHECK ((sync_status = ANY (ARRAY['pending'::text, 'synced'::text, 'failed'::text, 'deleted'::text])))
+);
+
+CREATE TABLE IF NOT EXISTS public.coupon_products (
+    coupon_id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON TABLE public.coupon_products IS 'Optional product allow-list for coupons. No rows means all products in the provider scope are eligible.';
+
+CREATE TABLE IF NOT EXISTS public.coupon_redemptions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    coupon_id uuid,
+    order_id uuid,
+    coupon_code text NOT NULL,
+    provider text NOT NULL,
+    discount_total integer DEFAULT 0 NOT NULL,
+    user_id uuid,
+    customer_email text,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    redeemed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT coupon_redemptions_code_not_blank CHECK ((char_length(btrim(coupon_code)) > 0)),
+    CONSTRAINT coupon_redemptions_discount_total_check CHECK ((discount_total >= 0)),
+    CONSTRAINT coupon_redemptions_provider_check CHECK ((provider = ANY (ARRAY['stripe'::text, 'freemius'::text])))
+);
+
+CREATE TABLE IF NOT EXISTS public.coupons (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    code text NOT NULL,
+    name text NOT NULL,
+    internal_note text,
+    provider_scope text DEFAULT 'all'::text NOT NULL,
+    discount_type text NOT NULL,
+    discount_amount integer NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    starts_at timestamp with time zone,
+    ends_at timestamp with time zone,
+    redemption_limit integer,
+    redemptions_count integer DEFAULT 0 NOT NULL,
+    freemius_sync_status text DEFAULT 'not_synced'::text NOT NULL,
+    freemius_sync_error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT coupons_code_not_blank CHECK ((char_length(btrim(code)) > 0)),
+    CONSTRAINT coupons_date_window_valid CHECK (((starts_at IS NULL) OR (ends_at IS NULL) OR (starts_at < ends_at))),
+    CONSTRAINT coupons_discount_amount_positive CHECK ((discount_amount > 0)),
+    CONSTRAINT coupons_discount_type_valid CHECK ((discount_type = ANY (ARRAY['percent'::text, 'fixed'::text]))),
+    CONSTRAINT coupons_freemius_sync_status_valid CHECK ((freemius_sync_status = ANY (ARRAY['not_synced'::text, 'pending'::text, 'synced'::text, 'failed'::text, 'not_required'::text]))),
+    CONSTRAINT coupons_name_not_blank CHECK ((char_length(btrim(name)) > 0)),
+    CONSTRAINT coupons_percent_amount_valid CHECK (((discount_type <> 'percent'::text) OR (discount_amount <= 100))),
+    CONSTRAINT coupons_provider_scope_valid CHECK ((provider_scope = ANY (ARRAY['all'::text, 'stripe'::text, 'freemius'::text]))),
+    CONSTRAINT coupons_redemption_limit_positive CHECK (((redemption_limit IS NULL) OR (redemption_limit > 0))),
+    CONSTRAINT coupons_redemptions_count_nonnegative CHECK ((redemptions_count >= 0))
+);
+
+COMMENT ON TABLE public.coupons IS 'Unified commerce coupons managed by NextBlock CMS and applied through provider-aware checkout.';
+
+COMMENT ON COLUMN public.coupons.provider_scope IS 'Provider eligibility: all, stripe, or freemius.';
+
+COMMENT ON COLUMN public.coupons.discount_amount IS 'Percent value for percent coupons, or fixed minor-unit amount for fixed coupons.';
+
+COMMENT ON COLUMN public.coupons.freemius_sync_status IS 'Aggregate status for syncing this coupon to Freemius product coupon records.';
+
+CREATE TABLE IF NOT EXISTS public.currencies (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    code text NOT NULL,
+    symbol text NOT NULL,
+    exchange_rate numeric(20,10) NOT NULL,
+    is_default boolean DEFAULT false NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    rounding_mode text DEFAULT 'none'::text NOT NULL,
+    rounding_increment integer DEFAULT 1 NOT NULL,
+    rounding_charm_amount integer,
+    auto_update_exchange_rate boolean DEFAULT true NOT NULL,
+    exchange_rate_updated_at timestamp with time zone,
+    exchange_rate_source text,
+    auto_sync_product_prices boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT currencies_charm_requires_amount CHECK (((rounding_mode <> 'charm'::text) OR (rounding_charm_amount IS NOT NULL))),
+    CONSTRAINT currencies_code_check CHECK ((code ~ '^[A-Z]{3}$'::text)),
+    CONSTRAINT currencies_default_auto_update_disabled CHECK (((NOT is_default) OR (auto_update_exchange_rate = false))),
+    CONSTRAINT currencies_default_exchange_rate_is_one CHECK (((NOT is_default) OR (exchange_rate = (1)::numeric))),
+    CONSTRAINT currencies_default_must_be_active CHECK (((NOT is_default) OR is_active)),
+    CONSTRAINT currencies_default_product_price_sync_disabled CHECK (((NOT is_default) OR (auto_sync_product_prices = false))),
+    CONSTRAINT currencies_exchange_rate_check CHECK ((exchange_rate > (0)::numeric)),
+    CONSTRAINT currencies_rounding_charm_nonnegative CHECK (((rounding_charm_amount IS NULL) OR (rounding_charm_amount >= 0))),
+    CONSTRAINT currencies_rounding_increment_positive CHECK ((rounding_increment > 0)),
+    CONSTRAINT currencies_rounding_mode_valid CHECK ((rounding_mode = ANY (ARRAY['none'::text, 'nearest'::text, 'up'::text, 'down'::text, 'charm'::text])))
+);
+
+COMMENT ON TABLE public.currencies IS 'Store currencies available for storefront display and conversion.';
+
+COMMENT ON COLUMN public.currencies.exchange_rate IS 'Relative to the current store default currency. The default currency should have exchange_rate = 1.';
+
+COMMENT ON COLUMN public.currencies.rounding_mode IS 'Rounding strategy applied when prices are auto-converted into this currency.';
+
+COMMENT ON COLUMN public.currencies.rounding_increment IS 'Rounding step in the currency smallest unit. Example: 5 means 0.05 for USD/CAD.';
+
+COMMENT ON COLUMN public.currencies.rounding_charm_amount IS 'Charm ending in the currency smallest unit. Example: 90 means prices like 29.90.';
+
+COMMENT ON COLUMN public.currencies.auto_update_exchange_rate IS 'Whether scheduled FX sync jobs should refresh this currency.';
+
+COMMENT ON COLUMN public.currencies.exchange_rate_updated_at IS 'When this currency exchange rate was last refreshed or manually set.';
+
+COMMENT ON COLUMN public.currencies.exchange_rate_source IS 'Human-readable source for the current exchange rate, such as a provider host or manual override.';
+
+COMMENT ON COLUMN public.currencies.auto_sync_product_prices IS 'Whether storefront product and variant prices in this currency are derived automatically from the store default currency using FX and rounding rules.';
+
+CREATE TABLE IF NOT EXISTS public.email_2fa_challenges (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    token_hash text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    consumed_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON TABLE public.email_2fa_challenges IS 'Short-lived SHA-256 hashes of 6-digit email verification codes. Readable/writable only by the service role.';
+
+CREATE TABLE IF NOT EXISTS public.freemius_plans (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    product_id uuid NOT NULL,
+    name text NOT NULL,
+    title text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.freemius_pricing (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    plan_id uuid NOT NULL,
+    api_monthly_price numeric,
+    api_annual_price numeric,
+    api_lifetime_price numeric,
+    override_monthly_price numeric,
+    override_annual_price numeric,
+    override_lifetime_price numeric,
+    license_quota integer,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.inventory_items (
+    sku text NOT NULL,
+    quantity integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT inventory_items_quantity_check CHECK ((quantity >= 0))
+);
+
+COMMENT ON TABLE public.inventory_items IS 'Source-of-truth inventory records keyed by sellable SKU.';
+
+COMMENT ON COLUMN public.inventory_items.sku IS 'Global sellable SKU. Matching products or variants share inventory.';
+
+COMMENT ON COLUMN public.inventory_items.quantity IS 'Available quantity for this SKU.';
+
+CREATE TABLE IF NOT EXISTS public.languages (
+    id bigint NOT NULL,
+    code text NOT NULL,
+    name text NOT NULL,
+    is_default boolean DEFAULT false NOT NULL,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON TABLE public.languages IS 'Stores supported languages for the CMS.';
+
+COMMENT ON COLUMN public.languages.code IS 'BCP 47 language code.';
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'public.languages'::regclass AND attname = 'id' AND attidentity <> '') THEN
+    ALTER TABLE public.languages ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+        SEQUENCE NAME public.languages_id_seq
+        START WITH 1
+        INCREMENT BY 1
+        NO MINVALUE
+        NO MAXVALUE
+        CACHE 1
+    );
+  END IF;
+END $rb$;
+
+CREATE TABLE IF NOT EXISTS public.logos (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    media_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON TABLE public.logos IS 'Stores company and brand logos.';
+
+COMMENT ON COLUMN public.logos.name IS 'The name of the brand or company for the logo.';
+
+COMMENT ON COLUMN public.logos.media_id IS 'Foreign key to the media table for the logo image.';
+
+CREATE TABLE IF NOT EXISTS public.media (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    uploader_id uuid,
+    file_name text NOT NULL,
+    object_key text NOT NULL,
+    file_type text,
+    size_bytes bigint,
+    description text,
+    width integer,
+    height integer,
+    blur_data_url text,
+    variants jsonb,
+    file_path text,
+    folder text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON TABLE public.media IS 'Stores information about uploaded media assets.';
+
+COMMENT ON COLUMN public.media.object_key IS 'Unique key (path) in Cloudflare R2.';
+
+COMMENT ON COLUMN public.media.width IS 'Width of the image in pixels.';
+
+COMMENT ON COLUMN public.media.height IS 'Height of the image in pixels.';
+
+COMMENT ON COLUMN public.media.blur_data_url IS 'Base64 encoded string for image blur placeholders.';
+
+COMMENT ON COLUMN public.media.variants IS 'Array of image variant objects.';
+
+COMMENT ON COLUMN public.media.file_path IS 'Full path to the file in the storage bucket.';
+
+COMMENT ON COLUMN public.media.folder IS 'Folder path prefix for the R2 object.';
+
+CREATE TABLE IF NOT EXISTS public.navigation_items (
+    id bigint NOT NULL,
+    language_id bigint NOT NULL,
+    menu_key public.menu_location NOT NULL,
+    label text NOT NULL,
+    url text NOT NULL,
+    parent_id bigint,
+    "order" integer DEFAULT 0 NOT NULL,
+    page_id bigint,
+    translation_group_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON TABLE public.navigation_items IS 'Stores navigation menu items.';
+
+COMMENT ON COLUMN public.navigation_items.menu_key IS 'Identifies the menu this item belongs to.';
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'public.navigation_items'::regclass AND attname = 'id' AND attidentity <> '') THEN
+    ALTER TABLE public.navigation_items ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+        SEQUENCE NAME public.navigation_items_id_seq
+        START WITH 1
+        INCREMENT BY 1
+        NO MINVALUE
+        NO MAXVALUE
+        CACHE 1
+    );
+  END IF;
+END $rb$;
+
+CREATE SEQUENCE IF NOT EXISTS public.order_invoice_number_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+CREATE TABLE IF NOT EXISTS public.order_items (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    order_id uuid NOT NULL,
+    product_id uuid,
+    variant_id uuid,
+    quantity integer NOT NULL,
+    price_at_purchase integer NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.orders (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid,
+    status text DEFAULT 'pending'::text NOT NULL,
+    total integer NOT NULL,
+    stripe_session_id text,
+    payment_intent_id text,
+    customer_details jsonb,
+    provider text DEFAULT 'stripe'::text,
+    freemius_product_id text,
+    freemius_plan_id text,
+    freemius_license_id text,
+    freemius_subscription_id text,
+    freemius_trial_id text,
+    freemius_user_id text,
+    freemius_trial_ends_at timestamp with time zone,
+    freemius_last_event_type text,
+    freemius_last_synced_at timestamp with time zone,
+    currency text DEFAULT 'USD'::text NOT NULL,
+    subtotal integer,
+    shipping_total integer,
+    tax_total integer DEFAULT 0 NOT NULL,
+    tax_details jsonb,
+    exchange_rate_at_purchase numeric(20,10) DEFAULT 1 NOT NULL,
+    inventory_deducted_at timestamp with time zone,
+    invoice_number text,
+    paid_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now(),
+    coupon_id uuid,
+    coupon_code text,
+    discount_total integer DEFAULT 0 NOT NULL,
+    discount_details jsonb,
+    CONSTRAINT orders_discount_total_check CHECK ((discount_total >= 0)),
+    CONSTRAINT orders_exchange_rate_at_purchase_positive CHECK ((exchange_rate_at_purchase > (0)::numeric)),
+    CONSTRAINT orders_provider_check CHECK ((provider = ANY (ARRAY['stripe'::text, 'freemius'::text]))),
+    CONSTRAINT orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'trial'::text, 'paid'::text, 'shipped'::text, 'cancelled'::text, 'refunded'::text])))
+);
+
+COMMENT ON COLUMN public.orders.freemius_license_id IS 'Freemius license ID used to reconcile checkout callbacks and webhooks.';
+
+COMMENT ON COLUMN public.orders.freemius_subscription_id IS 'Freemius subscription ID when the order is associated with recurring billing.';
+
+COMMENT ON COLUMN public.orders.freemius_trial_id IS 'Freemius trial ID when checkout starts in trial mode.';
+
+COMMENT ON COLUMN public.orders.freemius_trial_ends_at IS 'Freemius trial expiration timestamp when supplied by checkout or webhook data.';
+
+COMMENT ON COLUMN public.orders.freemius_last_event_type IS 'Last Freemius checkout callback or webhook event applied to the order.';
+
+COMMENT ON COLUMN public.orders.freemius_last_synced_at IS 'Timestamp when Freemius metadata was last reconciled locally.';
+
+COMMENT ON COLUMN public.orders.currency IS 'ISO currency code used for the order totals.';
+
+COMMENT ON COLUMN public.orders.subtotal IS 'Subtotal before shipping and tax, in the smallest currency unit.';
+
+COMMENT ON COLUMN public.orders.shipping_total IS 'Shipping amount before tax, in the smallest currency unit.';
+
+COMMENT ON COLUMN public.orders.tax_total IS 'Total tax amount collected for the order, in the smallest currency unit.';
+
+COMMENT ON COLUMN public.orders.tax_details IS 'Normalized tax breakdown payload sourced from manual rates or finalized Stripe tax data.';
+
+COMMENT ON COLUMN public.orders.exchange_rate_at_purchase IS 'Exchange rate locked at purchase time relative to the store default currency.';
+
+COMMENT ON COLUMN public.orders.invoice_number IS 'Stable printable invoice number assigned once when the order first becomes paid.';
+
+COMMENT ON COLUMN public.orders.paid_at IS 'Timestamp when the order was first marked as paid.';
+
+COMMENT ON COLUMN public.orders.coupon_code IS 'Coupon code applied to the order at checkout time.';
+
+COMMENT ON COLUMN public.orders.discount_total IS 'Total discount applied to this order in the smallest currency unit.';
+
+COMMENT ON COLUMN public.orders.discount_details IS 'Provider-aware coupon quote details captured at checkout.';
+
+CREATE TABLE IF NOT EXISTS public.package_activations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    license_key text NOT NULL,
+    instance_name text NOT NULL,
+    package_id text NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    meta jsonb DEFAULT '{}'::jsonb,
+    last_validated_at timestamp with time zone DEFAULT now(),
+    created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.page_revisions (
+    id bigint NOT NULL,
+    page_id bigint NOT NULL,
+    author_id uuid,
+    version integer NOT NULL,
+    revision_type public.revision_type NOT NULL,
+    content jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON TABLE public.page_revisions IS 'Hybrid (snapshot/diff) revisions for pages.';
+
+COMMENT ON COLUMN public.page_revisions.content IS 'If snapshot: full content; if diff: JSON Patch array.';
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'public.page_revisions'::regclass AND attname = 'id' AND attidentity <> '') THEN
+    ALTER TABLE public.page_revisions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+        SEQUENCE NAME public.page_revisions_id_seq
+        START WITH 1
+        INCREMENT BY 1
+        NO MINVALUE
+        NO MAXVALUE
+        CACHE 1
+    );
+  END IF;
+END $rb$;
+
+CREATE TABLE IF NOT EXISTS public.pages (
+    id bigint NOT NULL,
+    language_id bigint NOT NULL,
+    author_id uuid,
+    title text NOT NULL,
+    slug text NOT NULL,
+    status public.page_status DEFAULT 'draft'::public.page_status NOT NULL,
+    meta_title text,
+    meta_description text,
+    version integer DEFAULT 1 NOT NULL,
+    translation_group_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    feature_image_id uuid
+);
+
+COMMENT ON TABLE public.pages IS 'Stores static pages for the website.';
+
+COMMENT ON COLUMN public.pages.slug IS 'URL-friendly identifier, unique per language.';
+
+COMMENT ON COLUMN public.pages.version IS 'Monotonic version number for hybrid revisions.';
+
+COMMENT ON COLUMN public.pages.translation_group_id IS 'Groups different language versions of the same conceptual page.';
+
+COMMENT ON COLUMN public.pages.feature_image_id IS 'ID of the media item to be used as the page feature image.';
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'public.pages'::regclass AND attname = 'id' AND attidentity <> '') THEN
+    ALTER TABLE public.pages ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+        SEQUENCE NAME public.pages_id_seq
+        START WITH 1
+        INCREMENT BY 1
+        NO MINVALUE
+        NO MAXVALUE
+        CACHE 1
+    );
+  END IF;
+END $rb$;
+
+CREATE TABLE IF NOT EXISTS public.post_revisions (
+    id bigint NOT NULL,
+    post_id bigint NOT NULL,
+    author_id uuid,
+    version integer NOT NULL,
+    revision_type public.revision_type NOT NULL,
+    content jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON TABLE public.post_revisions IS 'Hybrid (snapshot/diff) revisions for posts.';
+
+COMMENT ON COLUMN public.post_revisions.content IS 'If snapshot: full content; if diff: JSON Patch array.';
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'public.post_revisions'::regclass AND attname = 'id' AND attidentity <> '') THEN
+    ALTER TABLE public.post_revisions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+        SEQUENCE NAME public.post_revisions_id_seq
+        START WITH 1
+        INCREMENT BY 1
+        NO MINVALUE
+        NO MAXVALUE
+        CACHE 1
+    );
+  END IF;
+END $rb$;
+
+CREATE TABLE IF NOT EXISTS public.posts (
+    id bigint NOT NULL,
+    language_id bigint NOT NULL,
+    author_id uuid,
+    title text NOT NULL,
+    slug text NOT NULL,
+    label text,
+    excerpt text,
+    subtitle text,
+    status public.page_status DEFAULT 'draft'::public.page_status NOT NULL,
+    published_at timestamp with time zone,
+    meta_title text,
+    meta_description text,
+    feature_image_id uuid,
+    version integer DEFAULT 1 NOT NULL,
+    translation_group_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON TABLE public.posts IS 'Stores blog posts or news articles.';
+
+COMMENT ON COLUMN public.posts.slug IS 'URL-friendly identifier, unique per language.';
+
+COMMENT ON COLUMN public.posts.label IS 'Short editorial label rendered as a pill on post hero and article cards.';
+
+COMMENT ON COLUMN public.posts.excerpt IS 'Short editorial summary used in post metadata rows and post cards.';
+
+COMMENT ON COLUMN public.posts.subtitle IS 'Longer deck shown under the post title.';
+
+COMMENT ON COLUMN public.posts.feature_image_id IS 'ID of the media item to be used as the feature image.';
+
+COMMENT ON COLUMN public.posts.version IS 'Monotonic version number for hybrid revisions.';
+
+COMMENT ON COLUMN public.posts.translation_group_id IS 'Groups different language versions of the same conceptual post.';
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'public.posts'::regclass AND attname = 'id' AND attidentity <> '') THEN
+    ALTER TABLE public.posts ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+        SEQUENCE NAME public.posts_id_seq
+        START WITH 1
+        INCREMENT BY 1
+        NO MINVALUE
+        NO MAXVALUE
+        CACHE 1
+    );
+  END IF;
+END $rb$;
+
+CREATE TABLE IF NOT EXISTS public.privacy_consent_logs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    consent_token text NOT NULL,
+    categories jsonb DEFAULT '{"analytics": false, "marketing": false, "necessary": true}'::jsonb NOT NULL,
+    ip_masked text,
+    user_agent text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT privacy_consent_logs_categories_check CHECK ((jsonb_typeof(categories) = 'object'::text))
+);
+
+COMMENT ON TABLE public.privacy_consent_logs IS 'Immutable audit log of visitor consent decisions for Quebec Law 25 / PIPEDA accountability.';
+
+COMMENT ON COLUMN public.privacy_consent_logs.consent_token IS 'Opaque token also stored in the nb_consent_preference cookie to correlate a decision with its record.';
+
+COMMENT ON COLUMN public.privacy_consent_logs.ip_masked IS 'Partially masked IP (e.g. 203.0.113.x) - never store a full address for an analytics/marketing consent log.';
+
+CREATE TABLE IF NOT EXISTS public.product_attribute_terms (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    attribute_id uuid NOT NULL,
+    value text NOT NULL,
+    slug text NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    value_translations jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.product_attributes (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    slug text NOT NULL,
+    name_translations jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.product_categories (
+    product_id uuid NOT NULL,
+    category_id uuid NOT NULL
+);
+
+COMMENT ON TABLE public.product_categories IS 'Junction table mapping products to multiple categories.';
+
+CREATE TABLE IF NOT EXISTS public.product_drafts (
+    id bigint NOT NULL,
+    product_id uuid NOT NULL,
+    author_id uuid,
+    meta jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    blocks jsonb DEFAULT '[]'::jsonb NOT NULL,
+    CONSTRAINT product_drafts_blocks_array CHECK ((jsonb_typeof(blocks) = 'array'::text)),
+    CONSTRAINT product_drafts_meta_object CHECK ((jsonb_typeof(meta) = 'object'::text))
+);
+
+COMMENT ON TABLE public.product_drafts IS 'Draft product metadata snapshots used by Draft Mode and front-end visual editing before publishing to live product rows.';
+
+COMMENT ON COLUMN public.product_drafts.product_id IS 'ID of the product being drafted.';
+
+COMMENT ON COLUMN public.product_drafts.meta IS 'Draft product metadata snapshot. Front-end visual editing currently mutates visible title, short_description, and description_json fields.';
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'public.product_drafts'::regclass AND attname = 'id' AND attidentity <> '') THEN
+    ALTER TABLE public.product_drafts ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+        SEQUENCE NAME public.product_drafts_id_seq
+        START WITH 1
+        INCREMENT BY 1
+        NO MINVALUE
+        NO MAXVALUE
+        CACHE 1
+    );
+  END IF;
+END $rb$;
+
+CREATE TABLE IF NOT EXISTS public.product_freemius_sale_coupons (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    product_id uuid NOT NULL,
+    freemius_product_id text NOT NULL,
+    freemius_plan_id text,
+    freemius_coupon_id text,
+    freemius_coupon_code text NOT NULL,
+    discount_percent integer,
+    starts_at timestamp with time zone,
+    ends_at timestamp with time zone,
+    is_active boolean DEFAULT false NOT NULL,
+    sync_status text DEFAULT 'pending'::text NOT NULL,
+    sync_error text,
+    remote_payload jsonb,
+    last_synced_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT product_freemius_sale_coupons_code_not_blank CHECK ((char_length(btrim(freemius_coupon_code)) > 0)),
+    CONSTRAINT product_freemius_sale_coupons_discount_valid CHECK (((discount_percent IS NULL) OR ((discount_percent > 0) AND (discount_percent <= 100)))),
+    CONSTRAINT product_freemius_sale_coupons_fm_product_not_blank CHECK ((char_length(btrim(freemius_product_id)) > 0)),
+    CONSTRAINT product_freemius_sale_coupons_sync_status_valid CHECK ((sync_status = ANY (ARRAY['pending'::text, 'synced'::text, 'failed'::text, 'deleted'::text]))),
+    CONSTRAINT product_freemius_sale_coupons_window_valid CHECK (((starts_at IS NULL) OR (ends_at IS NULL) OR (starts_at < ends_at)))
+);
+
+COMMENT ON TABLE public.product_freemius_sale_coupons IS 'Auto-generated, time-bounded Freemius coupons that enforce a scheduled sale on a Freemius product at Freemius-hosted checkout.';
+
+CREATE TABLE IF NOT EXISTS public.product_media (
+    product_id uuid NOT NULL,
+    media_id uuid NOT NULL,
+    sort_order integer DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS public.product_variants (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    product_id uuid NOT NULL,
+    sku text NOT NULL,
+    price_adjustment integer DEFAULT 0 NOT NULL,
+    price integer DEFAULT 0 NOT NULL,
+    prices jsonb DEFAULT '{}'::jsonb NOT NULL,
+    sale_price integer,
+    sale_prices jsonb,
+    stock_quantity integer DEFAULT 0 NOT NULL,
+    upc text,
+    main_media_id uuid,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    sale_start_at timestamp with time zone,
+    sale_end_at timestamp with time zone,
+    scheduled_price integer,
+    scheduled_prices jsonb,
+    scheduled_price_at timestamp with time zone,
+    CONSTRAINT product_variants_prices_is_valid CHECK (public.is_valid_currency_amount_map(prices)),
+    CONSTRAINT product_variants_sale_prices_are_valid CHECK (public.is_valid_sale_price_map(prices, sale_prices)),
+    CONSTRAINT product_variants_sale_window_valid CHECK (((sale_start_at IS NULL) OR (sale_end_at IS NULL) OR (sale_start_at < sale_end_at)))
+);
+
+COMMENT ON COLUMN public.product_variants.prices IS 'Variant regular prices by ISO 4217 code in the smallest currency unit.';
+
+COMMENT ON COLUMN public.product_variants.sale_prices IS 'Variant sale prices by ISO 4217 code in the smallest currency unit.';
+
+COMMENT ON COLUMN public.product_variants.sale_start_at IS 'Inclusive start of the scheduled sale window (UTC) for this variant. NULL means no lower bound.';
+
+COMMENT ON COLUMN public.product_variants.sale_end_at IS 'Exclusive end of the scheduled sale window (UTC) for this variant. NULL means no upper bound.';
+
+COMMENT ON COLUMN public.product_variants.scheduled_price IS 'Pending regular price (smallest currency unit) applied once scheduled_price_at has passed.';
+
+COMMENT ON COLUMN public.product_variants.scheduled_prices IS 'Pending multi-currency regular prices by ISO 4217 code, applied once scheduled_price_at has passed.';
+
+COMMENT ON COLUMN public.product_variants.scheduled_price_at IS 'Effective timestamp (UTC) for the pending regular-price change.';
+
+CREATE TABLE IF NOT EXISTS public.products (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    language_id bigint NOT NULL,
+    translation_group_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    sku text NOT NULL,
+    title text NOT NULL,
+    slug text NOT NULL,
+    product_type text NOT NULL,
+    payment_provider text NOT NULL,
+    price integer NOT NULL,
+    prices jsonb DEFAULT '{}'::jsonb NOT NULL,
+    sale_price integer,
+    sale_prices jsonb,
+    stock integer DEFAULT 0,
+    status text DEFAULT 'draft'::text NOT NULL,
+    meta_title text,
+    meta_description text,
+    short_description text,
+    description_json jsonb,
+    metadata jsonb,
+    freemius_plan_id text,
+    freemius_product_id text,
+    trial_period_days integer DEFAULT 0 NOT NULL,
+    trial_requires_payment_method boolean DEFAULT false NOT NULL,
+    upc text,
+    is_taxable boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    sale_start_at timestamp with time zone,
+    sale_end_at timestamp with time zone,
+    scheduled_price integer,
+    scheduled_prices jsonb,
+    scheduled_price_at timestamp with time zone,
+    average_rating numeric(3,2) DEFAULT 0.00 NOT NULL,
+    total_reviews integer DEFAULT 0 NOT NULL,
+    CONSTRAINT products_payment_provider_check CHECK ((payment_provider = ANY (ARRAY['stripe'::text, 'freemius'::text]))),
+    CONSTRAINT products_prices_is_valid CHECK (public.is_valid_currency_amount_map(prices)),
+    CONSTRAINT products_product_type_check CHECK ((product_type = ANY (ARRAY['physical'::text, 'digital'::text]))),
+    CONSTRAINT products_sale_prices_are_valid CHECK (public.is_valid_sale_price_map(prices, sale_prices)),
+    CONSTRAINT products_sale_window_valid CHECK (((sale_start_at IS NULL) OR (sale_end_at IS NULL) OR (sale_start_at < sale_end_at))),
+    CONSTRAINT products_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'archived'::text]))),
+    CONSTRAINT products_trial_period_days_check CHECK ((trial_period_days >= 0)),
+    CONSTRAINT products_type_provider_consistency_check CHECK ((((product_type = 'physical'::text) AND (payment_provider = 'stripe'::text)) OR ((product_type = 'digital'::text) AND (payment_provider = 'freemius'::text))))
+);
+
+COMMENT ON COLUMN public.products.prices IS 'Regular prices by ISO 4217 code in the smallest currency unit.';
+
+COMMENT ON COLUMN public.products.sale_prices IS 'Sale prices by ISO 4217 code in the smallest currency unit.';
+
+COMMENT ON COLUMN public.products.is_taxable IS 'When true, this product participates in Stripe tax calculation.';
+
+COMMENT ON COLUMN public.products.sale_start_at IS 'Inclusive start of the scheduled sale window (UTC). NULL means no lower bound.';
+
+COMMENT ON COLUMN public.products.sale_end_at IS 'Exclusive end of the scheduled sale window (UTC). NULL means no upper bound. Both NULL = always-on sale.';
+
+COMMENT ON COLUMN public.products.scheduled_price IS 'Pending regular price (smallest currency unit) applied once scheduled_price_at has passed.';
+
+COMMENT ON COLUMN public.products.scheduled_prices IS 'Pending multi-currency regular prices by ISO 4217 code, applied once scheduled_price_at has passed.';
+
+COMMENT ON COLUMN public.products.scheduled_price_at IS 'Effective timestamp (UTC) for the pending regular-price change.';
+
+COMMENT ON COLUMN public.products.average_rating IS 'Aggregated average 1-5 rating of approved reviews.';
+
+COMMENT ON COLUMN public.products.total_reviews IS 'Total count of approved reviews for this product.';
+
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id uuid NOT NULL,
+    updated_at timestamp with time zone,
+    full_name text,
+    avatar_url text,
+    website text,
+    github_username text,
+    phone text,
+    role public.user_role DEFAULT 'USER'::public.user_role NOT NULL
+);
+
+COMMENT ON TABLE public.profiles IS 'Profile information for each user, extending auth.users.';
+
+COMMENT ON COLUMN public.profiles.id IS 'References auth.users.id';
+
+COMMENT ON COLUMN public.profiles.role IS 'User role for RBAC.';
+
+CREATE TABLE IF NOT EXISTS public.shipping_zone_locations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    zone_id uuid NOT NULL,
+    country_code text NOT NULL,
+    state_code text,
+    postal_code text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+COMMENT ON COLUMN public.shipping_zone_locations.country_code IS 'ISO 3166-1 alpha-2 country code.';
+
+COMMENT ON COLUMN public.shipping_zone_locations.state_code IS 'Optional state/province code within the selected country (for example CA, NY, ON, QC). NULL means the whole country.';
+
+COMMENT ON COLUMN public.shipping_zone_locations.postal_code IS 'Optional exact postal code or wildcard pattern. NULL means all postal codes in the matched country/state.';
+
+CREATE TABLE IF NOT EXISTS public.shipping_zone_methods (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    zone_id uuid NOT NULL,
+    method_type text NOT NULL,
+    cost_amount integer DEFAULT 0 NOT NULL,
+    cost_currency text DEFAULT 'USD'::text NOT NULL,
+    min_order_amount integer DEFAULT 0 NOT NULL,
+    name text NOT NULL,
+    name_translations jsonb DEFAULT '{}'::jsonb NOT NULL,
+    currency_pricing_mode text DEFAULT 'auto'::text NOT NULL,
+    cost_amounts jsonb DEFAULT '{}'::jsonb NOT NULL,
+    min_order_amounts jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT shipping_zone_methods_cost_amounts_include_source CHECK ((cost_amounts ? upper(cost_currency))),
+    CONSTRAINT shipping_zone_methods_cost_amounts_valid CHECK (public.is_valid_currency_amount_map(cost_amounts)),
+    CONSTRAINT shipping_zone_methods_cost_currency_format CHECK ((cost_currency ~ '^[A-Z]{3}$'::text)),
+    CONSTRAINT shipping_zone_methods_currency_pricing_mode_valid CHECK ((currency_pricing_mode = ANY (ARRAY['auto'::text, 'manual'::text]))),
+    CONSTRAINT shipping_zone_methods_method_type_check CHECK ((method_type = ANY (ARRAY['flat_rate'::text, 'free_shipping'::text]))),
+    CONSTRAINT shipping_zone_methods_min_order_amounts_include_source CHECK ((min_order_amounts ? upper(cost_currency))),
+    CONSTRAINT shipping_zone_methods_min_order_amounts_valid CHECK (public.is_valid_currency_amount_map(min_order_amounts))
+);
+
+COMMENT ON COLUMN public.shipping_zone_methods.name_translations IS 'Localized shipping method labels keyed by language code. Example: {"fr": "Livraison standard"}.';
+
+COMMENT ON COLUMN public.shipping_zone_methods.currency_pricing_mode IS 'Whether this rate uses auto FX conversion from a single source currency or exact manual amounts per currency.';
+
+COMMENT ON COLUMN public.shipping_zone_methods.cost_amounts IS 'Shipping costs by ISO 4217 code in the smallest currency unit.';
+
+COMMENT ON COLUMN public.shipping_zone_methods.min_order_amounts IS 'Minimum order thresholds by ISO 4217 code in the smallest currency unit.';
+
+CREATE TABLE IF NOT EXISTS public.shipping_zones (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    priority_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.site_settings (
+    key text NOT NULL,
+    value jsonb
+);
+
+COMMENT ON TABLE public.site_settings IS 'Key-value store for global site settings. Sensitive keys (Cortex AI BYOK, Bot Protection Secret, Email secret, Payment secret) hold encrypted envelopes and are restricted to ADMIN via row-level policies.';
+
+CREATE TABLE IF NOT EXISTS public.system_alerts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    alert_type text NOT NULL,
+    title text NOT NULL,
+    message text NOT NULL,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    is_resolved boolean DEFAULT false NOT NULL,
+    resolved_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT system_alerts_alert_type_check CHECK ((alert_type = ANY (ARRAY['merge_conflict'::text, 'runtime_update_available'::text])))
+);
+
+COMMENT ON TABLE public.system_alerts IS 'System notifications for the automated upstream-update architecture (merge conflicts, runtime updates available). Written by service-role; read by ADMINs.';
+
+COMMENT ON COLUMN public.system_alerts.alert_type IS 'One of: merge_conflict, runtime_update_available.';
+
+COMMENT ON COLUMN public.system_alerts.metadata IS 'Structured deep-link context for the dashboard banner CTA (repo/branch/action_url or latest_version/download_url).';
+
+COMMENT ON COLUMN public.system_alerts.is_resolved IS 'When true the alert is hidden from the dashboard banner.';
+
+CREATE TABLE IF NOT EXISTS public.system_configuration (
+    id integer DEFAULT 1 NOT NULL,
+    auto_accept_signups boolean DEFAULT false NOT NULL,
+    settings jsonb DEFAULT '{}'::jsonb NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT system_configuration_singleton CHECK ((id = 1))
+);
+
+COMMENT ON TABLE public.system_configuration IS 'Singleton (id = 1) of global setup-wizard configuration. ADMIN-only via RLS; never store secrets in settings.';
+
+CREATE TABLE IF NOT EXISTS public.tax_rates (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    country_code text NOT NULL,
+    state_code text,
+    tax_name text NOT NULL,
+    tax_rate numeric(7,4) NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT tax_rates_tax_name_check CHECK ((char_length(btrim(tax_name)) > 0)),
+    CONSTRAINT tax_rates_tax_rate_check CHECK (((tax_rate >= (0)::numeric) AND (tax_rate <= (100)::numeric)))
+);
+
+COMMENT ON TABLE public.tax_rates IS 'Manual tax rates used for Stripe storefront orders. Multiple rows can exist per jurisdiction to support combined taxes such as GST + PST.';
+
+COMMENT ON COLUMN public.tax_rates.country_code IS 'ISO 3166-1 alpha-2 country code.';
+
+COMMENT ON COLUMN public.tax_rates.state_code IS 'Optional state/province code within country_code. NULL represents a country-wide or federal tax.';
+
+COMMENT ON COLUMN public.tax_rates.tax_name IS 'Display name for the tax component, for example GST, PST, HST, or State Sales Tax.';
+
+COMMENT ON COLUMN public.tax_rates.tax_rate IS 'Percent value, not decimal fraction. Example: 5.0000 means 5%.';
+
+CREATE TABLE IF NOT EXISTS public.translations (
+    key text NOT NULL,
+    translations jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON COLUMN public.translations.key IS 'A unique, slugified identifier (e.g., "sign_in_button_text").';
+
+COMMENT ON COLUMN public.translations.translations IS 'Stores translations as key-value pairs (e.g., {"en": "Sign In", "fr": "S''inscrire"}).';
+
+CREATE TABLE IF NOT EXISTS public.ucp_cart_sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    currency text DEFAULT 'USD'::text NOT NULL,
+    locale text,
+    buyer_identity jsonb DEFAULT '{}'::jsonb NOT NULL,
+    context jsonb DEFAULT '{}'::jsonb NOT NULL,
+    signals jsonb DEFAULT '{}'::jsonb NOT NULL,
+    attribution jsonb DEFAULT '{}'::jsonb NOT NULL,
+    line_items jsonb DEFAULT '[]'::jsonb NOT NULL,
+    totals jsonb DEFAULT '[]'::jsonb NOT NULL,
+    checkout_url text,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone DEFAULT (now() + '7 days'::interval) NOT NULL,
+    CONSTRAINT ucp_cart_sessions_attribution_object CHECK ((jsonb_typeof(attribution) = 'object'::text)),
+    CONSTRAINT ucp_cart_sessions_buyer_identity_object CHECK ((jsonb_typeof(buyer_identity) = 'object'::text)),
+    CONSTRAINT ucp_cart_sessions_context_object CHECK ((jsonb_typeof(context) = 'object'::text)),
+    CONSTRAINT ucp_cart_sessions_line_items_array CHECK ((jsonb_typeof(line_items) = 'array'::text)),
+    CONSTRAINT ucp_cart_sessions_metadata_object CHECK ((jsonb_typeof(metadata) = 'object'::text)),
+    CONSTRAINT ucp_cart_sessions_signals_object CHECK ((jsonb_typeof(signals) = 'object'::text)),
+    CONSTRAINT ucp_cart_sessions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'cancelled'::text, 'completed'::text]))),
+    CONSTRAINT ucp_cart_sessions_totals_array CHECK ((jsonb_typeof(totals) = 'array'::text))
+);
+
+CREATE TABLE IF NOT EXISTS public.user_addresses (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    address_type text NOT NULL,
+    is_default boolean DEFAULT false NOT NULL,
+    recipient_name text,
+    company_name text,
+    line1 text,
+    line2 text,
+    city text,
+    state text,
+    postal_code text,
+    country_code text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_addresses_address_type_check CHECK ((address_type = ANY (ARRAY['billing'::text, 'shipping'::text])))
+);
+
+COMMENT ON COLUMN public.user_addresses.company_name IS 'Optional company or organization name for the address.';
+
+CREATE TABLE IF NOT EXISTS public.user_security_settings (
+    user_id uuid NOT NULL,
+    mfa_enabled boolean DEFAULT false NOT NULL,
+    mfa_type text,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_security_settings_mfa_type_check CHECK ((mfa_type = ANY (ARRAY['totp'::text, 'email'::text])))
+);
+
+COMMENT ON TABLE public.user_security_settings IS 'Per-user multi-factor configuration. mfa_type is NULL until a factor is enrolled.';
+
+CREATE TABLE IF NOT EXISTS public.user_trusted_devices (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    device_hash text NOT NULL,
+    browser_metadata text,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON TABLE public.user_trusted_devices IS 'SHA-256 hashes of trusted-device tokens. A 2FA bypass is only honoured when a non-expired row matches the cookie token, so deleting a row instantly revokes trust.';
+
+COMMENT ON COLUMN public.user_trusted_devices.device_hash IS 'SHA-256 of the raw token held in the nb_trusted_device cookie. The raw token is never stored.';
+
+CREATE TABLE IF NOT EXISTS public.variant_attribute_mapping (
+    variant_id uuid NOT NULL,
+    attribute_term_id uuid NOT NULL
+);
 
 
-INSERT INTO public.translations (key, translations)
-VALUES
-  (
-    'reviews.customer_reviews',
-    '{"en": "Customer Reviews", "fr": "Avis clients"}'::jsonb
-  ),
-  (
-    'reviews.share_thoughts',
-    '{"en": "Share your thoughts and experience with this product.", "fr": "Partagez vos impressions et votre expérience avec ce produit."}'::jsonb
-  ),
-  (
-    'reviews.write_review',
-    '{"en": "Write a Review", "fr": "Rédiger un avis"}'::jsonb
-  ),
-  (
-    'reviews.cancel_review',
-    '{"en": "Cancel Review", "fr": "Annuler l''avis"}'::jsonb
-  ),
-  (
-    'reviews.login_to_write',
-    '{"en": "Please log in to write a review.", "fr": "Veuillez vous connecter pour rédiger un avis."}'::jsonb
-  ),
-  (
-    'reviews.write_your_review',
-    '{"en": "Write your review", "fr": "Rédigez votre avis"}'::jsonb
-  ),
-  (
-    'reviews.rating',
-    '{"en": "Rating", "fr": "Note"}'::jsonb
-  ),
-  (
-    'reviews.description',
-    '{"en": "Review Description", "fr": "Description de l''avis"}'::jsonb
-  ),
-  (
-    'reviews.description_placeholder',
-    '{"en": "What did you like or dislike? How does it perform?", "fr": "Qu''avez-vous aimé ou déploré ? Comment se comporte-t-il ?"}'::jsonb
-  ),
-  (
-    'reviews.submit_review',
-    '{"en": "Submit Review", "fr": "Soumettre l''avis"}'::jsonb
-  ),
-  (
-    'reviews.submitting',
-    '{"en": "Submitting...", "fr": "Envoi en cours..."}'::jsonb
-  ),
-  (
-    'reviews.success_pending',
-    '{"en": "Your review has been submitted successfully and is pending moderation.", "fr": "Votre avis a été soumis avec succès et est en attente de modération."}'::jsonb
-  ),
-  (
-    'reviews.cancel',
-    '{"en": "Cancel", "fr": "Annuler"}'::jsonb
-  ),
-  (
-    'reviews.helpful',
-    '{"en": "Helpful", "fr": "Utile"}'::jsonb
-  ),
-  (
-    'reviews.no_reviews',
-    '{"en": "No reviews yet", "fr": "Aucun avis pour le moment"}'::jsonb
-  ),
-  (
-    'reviews.be_the_first',
-    '{"en": "There are no reviews for this product yet. Be the first to write one!", "fr": "Il n''y a pas encore d''avis sur ce produit. Soyez le premier à en rédiger un !"}'::jsonb
-  ),
-  (
-    'reviews.load_more',
-    '{"en": "Load More Reviews", "fr": "Charger plus d''avis"}'::jsonb
-  ),
-  (
-    'reviews.review_count_one',
-    '{"en": "{count} review", "fr": "{count} avis"}'::jsonb
-  ),
-  (
-    'reviews.review_count_other',
-    '{"en": "{count} reviews", "fr": "{count} avis"}'::jsonb
-  ),
-  (
-    'comments.discussion',
-    '{"en": "Discussion & Comments", "fr": "Discussion & Commentaires"}'::jsonb
-  ),
-  (
-    'comments.join_conversation',
-    '{"en": "Join the conversation and express your thoughts.", "fr": "Rejoignez la conversation et exprimez vos pensées."}'::jsonb
-  ),
-  (
-    'comments.write_comment',
-    '{"en": "Write a Comment", "fr": "Écrire un commentaire"}'::jsonb
-  ),
-  (
-    'comments.cancel_comment',
-    '{"en": "Cancel Comment", "fr": "Annuler le commentaire"}'::jsonb
-  ),
-  (
-    'comments.login_to_write',
-    '{"en": "Please log in to write a comment.", "fr": "Veuillez vous connecter pour écrire un commentaire."}'::jsonb
-  ),
-  (
-    'comments.join_discussion',
-    '{"en": "Join the Discussion", "fr": "Rejoindre la discussion"}'::jsonb
-  ),
-  (
-    'comments.your_message',
-    '{"en": "Your Message", "fr": "Votre message"}'::jsonb
-  ),
-  (
-    'comments.message_placeholder',
-    '{"en": "What are your thoughts on this article?", "fr": "Quelles sont vos pensées sur cet article ?"}'::jsonb
-  ),
-  (
-    'comments.post_comment',
-    '{"en": "Post Comment", "fr": "Publier le commentaire"}'::jsonb
-  ),
-  (
-    'comments.success_pending',
-    '{"en": "Your comment has been submitted successfully and is pending moderation.", "fr": "Votre commentaire a été soumis avec succès et est en attente de modération."}'::jsonb
-  ),
-  (
-    'comments.like',
-    '{"en": "Like", "fr": "J''aime"}'::jsonb
-  ),
-  (
-    'comments.no_comments',
-    '{"en": "No comments yet", "fr": "Aucun commentaire pour le moment"}'::jsonb
-  ),
-  (
-    'comments.be_the_first',
-    '{"en": "Be the first to share your thoughts!", "fr": "Soyez le premier à partager vos pensées !"}'::jsonb
-  ),
-  (
-    'comments.load_more',
-    '{"en": "Load More Comments", "fr": "Charger plus de commentaires"}'::jsonb
-  )
-ON CONFLICT (key) DO UPDATE
-SET 
-  translations = EXCLUDED.translations,
-  updated_at = now();
+-- >>> FROM: 00000000000001_baseline_constraints_and_indexes.sql <<<
+-- AUTO-GENERATED baseline (re-baseline of migrations 000..044). Idempotent; safe to replay.
+-- 01 · constraints (PK / unique / check / FK) + indexes
+-- Regenerate via tools/scripts/rebaseline-transform.mjs. Do not hand-edit.
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'blocks_pkey' AND conrelid = 'public.blocks'::regclass) THEN
+    ALTER TABLE ONLY public.blocks
+        ADD CONSTRAINT blocks_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'categories_pkey' AND conrelid = 'public.categories'::regclass) THEN
+    ALTER TABLE ONLY public.categories
+        ADD CONSTRAINT categories_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'categories_slug_key' AND conrelid = 'public.categories'::regclass) THEN
+    ALTER TABLE ONLY public.categories
+        ADD CONSTRAINT categories_slug_key UNIQUE (slug);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cms_interactions_pkey' AND conrelid = 'public.cms_interactions'::regclass) THEN
+    ALTER TABLE ONLY public.cms_interactions
+        ADD CONSTRAINT cms_interactions_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'content_drafts_parent_unique' AND conrelid = 'public.content_drafts'::regclass) THEN
+    ALTER TABLE ONLY public.content_drafts
+        ADD CONSTRAINT content_drafts_parent_unique UNIQUE (parent_type, parent_id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'content_drafts_pkey' AND conrelid = 'public.content_drafts'::regclass) THEN
+    ALTER TABLE ONLY public.content_drafts
+        ADD CONSTRAINT content_drafts_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cortex_ai_db_mutation_audit_pkey' AND conrelid = 'public.cortex_ai_db_mutation_audit'::regclass) THEN
+    ALTER TABLE ONLY public.cortex_ai_db_mutation_audit
+        ADD CONSTRAINT cortex_ai_db_mutation_audit_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'coupon_freemius_mappings_pkey' AND conrelid = 'public.coupon_freemius_mappings'::regclass) THEN
+    ALTER TABLE ONLY public.coupon_freemius_mappings
+        ADD CONSTRAINT coupon_freemius_mappings_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'coupon_products_pkey' AND conrelid = 'public.coupon_products'::regclass) THEN
+    ALTER TABLE ONLY public.coupon_products
+        ADD CONSTRAINT coupon_products_pkey PRIMARY KEY (coupon_id, product_id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'coupon_redemptions_pkey' AND conrelid = 'public.coupon_redemptions'::regclass) THEN
+    ALTER TABLE ONLY public.coupon_redemptions
+        ADD CONSTRAINT coupon_redemptions_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'coupons_pkey' AND conrelid = 'public.coupons'::regclass) THEN
+    ALTER TABLE ONLY public.coupons
+        ADD CONSTRAINT coupons_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'currencies_code_key' AND conrelid = 'public.currencies'::regclass) THEN
+    ALTER TABLE ONLY public.currencies
+        ADD CONSTRAINT currencies_code_key UNIQUE (code);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'currencies_pkey' AND conrelid = 'public.currencies'::regclass) THEN
+    ALTER TABLE ONLY public.currencies
+        ADD CONSTRAINT currencies_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'custom_block_definitions_pkey' AND conrelid = 'public.custom_block_definitions'::regclass) THEN
+    ALTER TABLE ONLY public.custom_block_definitions
+        ADD CONSTRAINT custom_block_definitions_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'custom_block_definitions_slug_key' AND conrelid = 'public.custom_block_definitions'::regclass) THEN
+    ALTER TABLE ONLY public.custom_block_definitions
+        ADD CONSTRAINT custom_block_definitions_slug_key UNIQUE (slug);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'email_2fa_challenges_pkey' AND conrelid = 'public.email_2fa_challenges'::regclass) THEN
+    ALTER TABLE ONLY public.email_2fa_challenges
+        ADD CONSTRAINT email_2fa_challenges_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'freemius_plans_pkey' AND conrelid = 'public.freemius_plans'::regclass) THEN
+    ALTER TABLE ONLY public.freemius_plans
+        ADD CONSTRAINT freemius_plans_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'freemius_pricing_pkey' AND conrelid = 'public.freemius_pricing'::regclass) THEN
+    ALTER TABLE ONLY public.freemius_pricing
+        ADD CONSTRAINT freemius_pricing_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'inventory_items_pkey' AND conrelid = 'public.inventory_items'::regclass) THEN
+    ALTER TABLE ONLY public.inventory_items
+        ADD CONSTRAINT inventory_items_pkey PRIMARY KEY (sku);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'languages_code_key' AND conrelid = 'public.languages'::regclass) THEN
+    ALTER TABLE ONLY public.languages
+        ADD CONSTRAINT languages_code_key UNIQUE (code);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'languages_pkey' AND conrelid = 'public.languages'::regclass) THEN
+    ALTER TABLE ONLY public.languages
+        ADD CONSTRAINT languages_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'logos_pkey' AND conrelid = 'public.logos'::regclass) THEN
+    ALTER TABLE ONLY public.logos
+        ADD CONSTRAINT logos_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_object_key_key' AND conrelid = 'public.media'::regclass) THEN
+    ALTER TABLE ONLY public.media
+        ADD CONSTRAINT media_object_key_key UNIQUE (object_key);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_pkey' AND conrelid = 'public.media'::regclass) THEN
+    ALTER TABLE ONLY public.media
+        ADD CONSTRAINT media_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'navigation_items_pkey' AND conrelid = 'public.navigation_items'::regclass) THEN
+    ALTER TABLE ONLY public.navigation_items
+        ADD CONSTRAINT navigation_items_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'order_items_pkey' AND conrelid = 'public.order_items'::regclass) THEN
+    ALTER TABLE ONLY public.order_items
+        ADD CONSTRAINT order_items_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'orders_pkey' AND conrelid = 'public.orders'::regclass) THEN
+    ALTER TABLE ONLY public.orders
+        ADD CONSTRAINT orders_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'orders_stripe_session_id_key' AND conrelid = 'public.orders'::regclass) THEN
+    ALTER TABLE ONLY public.orders
+        ADD CONSTRAINT orders_stripe_session_id_key UNIQUE (stripe_session_id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'package_activations_license_key_package_id_key' AND conrelid = 'public.package_activations'::regclass) THEN
+    ALTER TABLE ONLY public.package_activations
+        ADD CONSTRAINT package_activations_license_key_package_id_key UNIQUE (license_key, package_id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'package_activations_pkey' AND conrelid = 'public.package_activations'::regclass) THEN
+    ALTER TABLE ONLY public.package_activations
+        ADD CONSTRAINT package_activations_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'page_revisions_page_version_key' AND conrelid = 'public.page_revisions'::regclass) THEN
+    ALTER TABLE ONLY public.page_revisions
+        ADD CONSTRAINT page_revisions_page_version_key UNIQUE (page_id, version);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'page_revisions_pkey' AND conrelid = 'public.page_revisions'::regclass) THEN
+    ALTER TABLE ONLY public.page_revisions
+        ADD CONSTRAINT page_revisions_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pages_language_id_slug_key' AND conrelid = 'public.pages'::regclass) THEN
+    ALTER TABLE ONLY public.pages
+        ADD CONSTRAINT pages_language_id_slug_key UNIQUE (language_id, slug);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pages_pkey' AND conrelid = 'public.pages'::regclass) THEN
+    ALTER TABLE ONLY public.pages
+        ADD CONSTRAINT pages_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'post_revisions_pkey' AND conrelid = 'public.post_revisions'::regclass) THEN
+    ALTER TABLE ONLY public.post_revisions
+        ADD CONSTRAINT post_revisions_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'post_revisions_post_version_key' AND conrelid = 'public.post_revisions'::regclass) THEN
+    ALTER TABLE ONLY public.post_revisions
+        ADD CONSTRAINT post_revisions_post_version_key UNIQUE (post_id, version);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_language_id_slug_key' AND conrelid = 'public.posts'::regclass) THEN
+    ALTER TABLE ONLY public.posts
+        ADD CONSTRAINT posts_language_id_slug_key UNIQUE (language_id, slug);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_pkey' AND conrelid = 'public.posts'::regclass) THEN
+    ALTER TABLE ONLY public.posts
+        ADD CONSTRAINT posts_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'privacy_consent_logs_consent_token_key' AND conrelid = 'public.privacy_consent_logs'::regclass) THEN
+    ALTER TABLE ONLY public.privacy_consent_logs
+        ADD CONSTRAINT privacy_consent_logs_consent_token_key UNIQUE (consent_token);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'privacy_consent_logs_pkey' AND conrelid = 'public.privacy_consent_logs'::regclass) THEN
+    ALTER TABLE ONLY public.privacy_consent_logs
+        ADD CONSTRAINT privacy_consent_logs_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_attribute_terms_attribute_id_slug_key' AND conrelid = 'public.product_attribute_terms'::regclass) THEN
+    ALTER TABLE ONLY public.product_attribute_terms
+        ADD CONSTRAINT product_attribute_terms_attribute_id_slug_key UNIQUE (attribute_id, slug);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_attribute_terms_pkey' AND conrelid = 'public.product_attribute_terms'::regclass) THEN
+    ALTER TABLE ONLY public.product_attribute_terms
+        ADD CONSTRAINT product_attribute_terms_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_attributes_pkey' AND conrelid = 'public.product_attributes'::regclass) THEN
+    ALTER TABLE ONLY public.product_attributes
+        ADD CONSTRAINT product_attributes_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_attributes_slug_key' AND conrelid = 'public.product_attributes'::regclass) THEN
+    ALTER TABLE ONLY public.product_attributes
+        ADD CONSTRAINT product_attributes_slug_key UNIQUE (slug);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_categories_pkey' AND conrelid = 'public.product_categories'::regclass) THEN
+    ALTER TABLE ONLY public.product_categories
+        ADD CONSTRAINT product_categories_pkey PRIMARY KEY (product_id, category_id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_drafts_pkey' AND conrelid = 'public.product_drafts'::regclass) THEN
+    ALTER TABLE ONLY public.product_drafts
+        ADD CONSTRAINT product_drafts_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_drafts_product_unique' AND conrelid = 'public.product_drafts'::regclass) THEN
+    ALTER TABLE ONLY public.product_drafts
+        ADD CONSTRAINT product_drafts_product_unique UNIQUE (product_id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_freemius_sale_coupons_pkey' AND conrelid = 'public.product_freemius_sale_coupons'::regclass) THEN
+    ALTER TABLE ONLY public.product_freemius_sale_coupons
+        ADD CONSTRAINT product_freemius_sale_coupons_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_freemius_sale_coupons_product_unique' AND conrelid = 'public.product_freemius_sale_coupons'::regclass) THEN
+    ALTER TABLE ONLY public.product_freemius_sale_coupons
+        ADD CONSTRAINT product_freemius_sale_coupons_product_unique UNIQUE (product_id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_media_pkey' AND conrelid = 'public.product_media'::regclass) THEN
+    ALTER TABLE ONLY public.product_media
+        ADD CONSTRAINT product_media_pkey PRIMARY KEY (product_id, media_id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_variants_pkey' AND conrelid = 'public.product_variants'::regclass) THEN
+    ALTER TABLE ONLY public.product_variants
+        ADD CONSTRAINT product_variants_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_variants_product_id_sku_key' AND conrelid = 'public.product_variants'::regclass) THEN
+    ALTER TABLE ONLY public.product_variants
+        ADD CONSTRAINT product_variants_product_id_sku_key UNIQUE (product_id, sku);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_language_id_sku_key' AND conrelid = 'public.products'::regclass) THEN
+    ALTER TABLE ONLY public.products
+        ADD CONSTRAINT products_language_id_sku_key UNIQUE (language_id, sku);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_language_id_slug_key' AND conrelid = 'public.products'::regclass) THEN
+    ALTER TABLE ONLY public.products
+        ADD CONSTRAINT products_language_id_slug_key UNIQUE (language_id, slug);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_pkey' AND conrelid = 'public.products'::regclass) THEN
+    ALTER TABLE ONLY public.products
+        ADD CONSTRAINT products_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profiles_pkey' AND conrelid = 'public.profiles'::regclass) THEN
+    ALTER TABLE ONLY public.profiles
+        ADD CONSTRAINT profiles_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'shipping_zone_locations_pkey' AND conrelid = 'public.shipping_zone_locations'::regclass) THEN
+    ALTER TABLE ONLY public.shipping_zone_locations
+        ADD CONSTRAINT shipping_zone_locations_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'shipping_zone_methods_pkey' AND conrelid = 'public.shipping_zone_methods'::regclass) THEN
+    ALTER TABLE ONLY public.shipping_zone_methods
+        ADD CONSTRAINT shipping_zone_methods_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'shipping_zones_pkey' AND conrelid = 'public.shipping_zones'::regclass) THEN
+    ALTER TABLE ONLY public.shipping_zones
+        ADD CONSTRAINT shipping_zones_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'site_settings_pkey' AND conrelid = 'public.site_settings'::regclass) THEN
+    ALTER TABLE ONLY public.site_settings
+        ADD CONSTRAINT site_settings_pkey PRIMARY KEY (key);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'system_alerts_pkey' AND conrelid = 'public.system_alerts'::regclass) THEN
+    ALTER TABLE ONLY public.system_alerts
+        ADD CONSTRAINT system_alerts_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'system_configuration_pkey' AND conrelid = 'public.system_configuration'::regclass) THEN
+    ALTER TABLE ONLY public.system_configuration
+        ADD CONSTRAINT system_configuration_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tax_rates_pkey' AND conrelid = 'public.tax_rates'::regclass) THEN
+    ALTER TABLE ONLY public.tax_rates
+        ADD CONSTRAINT tax_rates_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'translations_pkey' AND conrelid = 'public.translations'::regclass) THEN
+    ALTER TABLE ONLY public.translations
+        ADD CONSTRAINT translations_pkey PRIMARY KEY (key);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ucp_cart_sessions_pkey' AND conrelid = 'public.ucp_cart_sessions'::regclass) THEN
+    ALTER TABLE ONLY public.ucp_cart_sessions
+        ADD CONSTRAINT ucp_cart_sessions_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_addresses_pkey' AND conrelid = 'public.user_addresses'::regclass) THEN
+    ALTER TABLE ONLY public.user_addresses
+        ADD CONSTRAINT user_addresses_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_security_settings_pkey' AND conrelid = 'public.user_security_settings'::regclass) THEN
+    ALTER TABLE ONLY public.user_security_settings
+        ADD CONSTRAINT user_security_settings_pkey PRIMARY KEY (user_id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_trusted_devices_device_hash_key' AND conrelid = 'public.user_trusted_devices'::regclass) THEN
+    ALTER TABLE ONLY public.user_trusted_devices
+        ADD CONSTRAINT user_trusted_devices_device_hash_key UNIQUE (device_hash);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_trusted_devices_pkey' AND conrelid = 'public.user_trusted_devices'::regclass) THEN
+    ALTER TABLE ONLY public.user_trusted_devices
+        ADD CONSTRAINT user_trusted_devices_pkey PRIMARY KEY (id);
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'variant_attribute_mapping_pkey' AND conrelid = 'public.variant_attribute_mapping'::regclass) THEN
+    ALTER TABLE ONLY public.variant_attribute_mapping
+        ADD CONSTRAINT variant_attribute_mapping_pkey PRIMARY KEY (variant_id, attribute_term_id);
+  END IF;
+END $rb$;
+
+CREATE INDEX IF NOT EXISTS content_drafts_author_id_idx ON public.content_drafts USING btree (author_id);
+
+CREATE INDEX IF NOT EXISTS content_drafts_parent_idx ON public.content_drafts USING btree (parent_type, parent_id);
+
+CREATE INDEX IF NOT EXISTS content_drafts_updated_at_idx ON public.content_drafts USING btree (updated_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS coupon_freemius_mappings_coupon_product_unique ON public.coupon_freemius_mappings USING btree (coupon_id, freemius_product_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS coupon_redemptions_order_unique ON public.coupon_redemptions USING btree (order_id) WHERE (order_id IS NOT NULL);
+
+CREATE UNIQUE INDEX IF NOT EXISTS coupons_code_unique ON public.coupons USING btree (upper(code));
+
+CREATE UNIQUE INDEX IF NOT EXISTS ensure_single_default_language_idx ON public.languages USING btree (is_default) WHERE (is_default = true);
+
+CREATE INDEX IF NOT EXISTS idx_blocks_language_id ON public.blocks USING btree (language_id);
+
+CREATE INDEX IF NOT EXISTS idx_blocks_page_id ON public.blocks USING btree (page_id);
+
+CREATE INDEX IF NOT EXISTS idx_blocks_post_id ON public.blocks USING btree (post_id);
+
+CREATE INDEX IF NOT EXISTS idx_coupon_freemius_mappings_freemius_product_id ON public.coupon_freemius_mappings USING btree (freemius_product_id);
+
+CREATE INDEX IF NOT EXISTS idx_coupon_freemius_mappings_product_id ON public.coupon_freemius_mappings USING btree (product_id) WHERE (product_id IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS idx_coupon_products_product_id ON public.coupon_products USING btree (product_id);
+
+CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_coupon_id ON public.coupon_redemptions USING btree (coupon_id);
+
+CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_user_id ON public.coupon_redemptions USING btree (user_id) WHERE (user_id IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS idx_coupons_active_dates ON public.coupons USING btree (is_active, starts_at, ends_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_currencies_single_default ON public.currencies USING btree (is_default) WHERE (is_default = true);
+
+CREATE INDEX IF NOT EXISTS idx_custom_block_definitions_is_original ON public.custom_block_definitions USING btree (is_original);
+
+CREATE INDEX IF NOT EXISTS idx_email_2fa_challenges_expires_at ON public.email_2fa_challenges USING btree (expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_email_2fa_challenges_user_id ON public.email_2fa_challenges USING btree (user_id);
+
+CREATE INDEX IF NOT EXISTS idx_freemius_plans_product_id ON public.freemius_plans USING btree (product_id);
+
+CREATE INDEX IF NOT EXISTS idx_freemius_pricing_plan_id ON public.freemius_pricing USING btree (plan_id);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_items_updated_at ON public.inventory_items USING btree (updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_logos_media_id ON public.logos USING btree (media_id);
+
+CREATE INDEX IF NOT EXISTS idx_media_uploader_id ON public.media USING btree (uploader_id);
+
+CREATE INDEX IF NOT EXISTS idx_navigation_items_language_id ON public.navigation_items USING btree (language_id);
+
+CREATE INDEX IF NOT EXISTS idx_navigation_items_menu_lang_order ON public.navigation_items USING btree (menu_key, language_id, "order");
+
+CREATE INDEX IF NOT EXISTS idx_navigation_items_page_id ON public.navigation_items USING btree (page_id);
+
+CREATE INDEX IF NOT EXISTS idx_navigation_items_parent_id ON public.navigation_items USING btree (parent_id);
+
+CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON public.order_items USING btree (order_id);
+
+CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON public.order_items USING btree (product_id);
+
+CREATE INDEX IF NOT EXISTS idx_order_items_variant_id ON public.order_items USING btree (variant_id);
+
+CREATE INDEX IF NOT EXISTS idx_orders_coupon_id ON public.orders USING btree (coupon_id) WHERE (coupon_id IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS idx_orders_freemius_license_id ON public.orders USING btree (freemius_license_id) WHERE (freemius_license_id IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS idx_orders_freemius_subscription_id ON public.orders USING btree (freemius_subscription_id) WHERE (freemius_subscription_id IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS idx_orders_freemius_trial_id ON public.orders USING btree (freemius_trial_id) WHERE (freemius_trial_id IS NOT NULL);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_invoice_number_unique ON public.orders USING btree (invoice_number) WHERE (invoice_number IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS idx_orders_user_id ON public.orders USING btree (user_id);
+
+CREATE INDEX IF NOT EXISTS idx_package_activations_license_key ON public.package_activations USING btree (license_key);
+
+CREATE INDEX IF NOT EXISTS idx_package_activations_package_id ON public.package_activations USING btree (package_id);
+
+CREATE INDEX IF NOT EXISTS idx_page_revisions_author_id ON public.page_revisions USING btree (author_id);
+
+CREATE INDEX IF NOT EXISTS idx_page_revisions_page_id_version ON public.page_revisions USING btree (page_id, version);
+
+CREATE INDEX IF NOT EXISTS idx_pages_author_id ON public.pages USING btree (author_id);
+
+CREATE INDEX IF NOT EXISTS idx_pages_feature_image_id ON public.pages USING btree (feature_image_id);
+
+CREATE INDEX IF NOT EXISTS idx_pages_translation_group_id ON public.pages USING btree (translation_group_id);
+
+CREATE INDEX IF NOT EXISTS idx_post_revisions_author_id ON public.post_revisions USING btree (author_id);
+
+CREATE INDEX IF NOT EXISTS idx_post_revisions_post_id_version ON public.post_revisions USING btree (post_id, version);
+
+CREATE INDEX IF NOT EXISTS idx_posts_author_id ON public.posts USING btree (author_id);
+
+CREATE INDEX IF NOT EXISTS idx_posts_feature_image_id ON public.posts USING btree (feature_image_id);
+
+CREATE INDEX IF NOT EXISTS idx_posts_translation_group_id ON public.posts USING btree (translation_group_id);
+
+CREATE INDEX IF NOT EXISTS idx_privacy_consent_logs_created_at ON public.privacy_consent_logs USING btree (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_product_attribute_terms_attribute_id ON public.product_attribute_terms USING btree (attribute_id);
+
+CREATE INDEX IF NOT EXISTS idx_product_categories_category_id ON public.product_categories USING btree (category_id);
+
+CREATE INDEX IF NOT EXISTS idx_product_categories_product_id ON public.product_categories USING btree (product_id);
+
+CREATE INDEX IF NOT EXISTS idx_product_freemius_sale_coupons_freemius_product_id ON public.product_freemius_sale_coupons USING btree (freemius_product_id);
+
+CREATE INDEX IF NOT EXISTS idx_product_media_media_id ON public.product_media USING btree (media_id);
+
+CREATE INDEX IF NOT EXISTS idx_product_media_product_id ON public.product_media USING btree (product_id);
+
+CREATE INDEX IF NOT EXISTS idx_product_variants_main_media_id ON public.product_variants USING btree (main_media_id);
+
+CREATE INDEX IF NOT EXISTS idx_product_variants_prices_gin ON public.product_variants USING gin (prices jsonb_path_ops);
+
+CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON public.product_variants USING btree (product_id);
+
+CREATE INDEX IF NOT EXISTS idx_products_prices_gin ON public.products USING gin (prices jsonb_path_ops);
+
+CREATE INDEX IF NOT EXISTS idx_products_slug ON public.products USING btree (slug);
+
+CREATE INDEX IF NOT EXISTS idx_products_translation_group_id ON public.products USING btree (translation_group_id);
+
+CREATE INDEX IF NOT EXISTS idx_shipping_zone_locations_country_state_postal ON public.shipping_zone_locations USING btree (country_code, state_code, postal_code);
+
+CREATE INDEX IF NOT EXISTS idx_shipping_zone_locations_zone_id ON public.shipping_zone_locations USING btree (zone_id);
+
+CREATE INDEX IF NOT EXISTS idx_shipping_zone_methods_name_translations ON public.shipping_zone_methods USING gin (name_translations);
+
+CREATE INDEX IF NOT EXISTS idx_shipping_zone_methods_zone_id ON public.shipping_zone_methods USING btree (zone_id);
+
+CREATE INDEX IF NOT EXISTS idx_system_alerts_unresolved ON public.system_alerts USING btree (is_resolved, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_tax_rates_country_state ON public.tax_rates USING btree (country_code, state_code);
+
+CREATE INDEX IF NOT EXISTS idx_ucp_cart_sessions_created_at ON public.ucp_cart_sessions USING btree (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ucp_cart_sessions_status_expires_at ON public.ucp_cart_sessions USING btree (status, expires_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_addresses_one_default_per_type ON public.user_addresses USING btree (user_id, address_type) WHERE (is_default = true);
+
+CREATE INDEX IF NOT EXISTS idx_user_addresses_type ON public.user_addresses USING btree (address_type);
+
+CREATE INDEX IF NOT EXISTS idx_user_addresses_user_id ON public.user_addresses USING btree (user_id);
+
+CREATE INDEX IF NOT EXISTS idx_user_trusted_devices_expires_at ON public.user_trusted_devices USING btree (expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_user_trusted_devices_user_id ON public.user_trusted_devices USING btree (user_id);
+
+CREATE INDEX IF NOT EXISTS idx_variant_attribute_mapping_attribute_term_id ON public.variant_attribute_mapping USING btree (attribute_term_id);
+
+CREATE INDEX IF NOT EXISTS media_folder_idx ON public.media USING btree (folder);
+
+CREATE INDEX IF NOT EXISTS product_drafts_author_id_idx ON public.product_drafts USING btree (author_id);
+
+CREATE INDEX IF NOT EXISTS product_drafts_product_id_idx ON public.product_drafts USING btree (product_id);
+
+CREATE INDEX IF NOT EXISTS product_drafts_updated_at_idx ON public.product_drafts USING btree (updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS product_variants_sale_window_idx ON public.product_variants USING btree (sale_start_at, sale_end_at) WHERE ((sale_start_at IS NOT NULL) OR (sale_end_at IS NOT NULL));
+
+CREATE INDEX IF NOT EXISTS product_variants_scheduled_price_idx ON public.product_variants USING btree (scheduled_price_at) WHERE (scheduled_price_at IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS products_sale_window_idx ON public.products USING btree (sale_start_at, sale_end_at) WHERE ((sale_start_at IS NOT NULL) OR (sale_end_at IS NOT NULL));
+
+CREATE INDEX IF NOT EXISTS products_scheduled_price_idx ON public.products USING btree (scheduled_price_at) WHERE (scheduled_price_at IS NOT NULL);
+
+CREATE UNIQUE INDEX IF NOT EXISTS tax_rates_country_state_name_key ON public.tax_rates USING btree (country_code, COALESCE(state_code, ''::text), lower(tax_name));
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'blocks_language_id_fkey' AND conrelid = 'public.blocks'::regclass) THEN
+    ALTER TABLE ONLY public.blocks
+        ADD CONSTRAINT blocks_language_id_fkey FOREIGN KEY (language_id) REFERENCES public.languages(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'blocks_page_id_fkey' AND conrelid = 'public.blocks'::regclass) THEN
+    ALTER TABLE ONLY public.blocks
+        ADD CONSTRAINT blocks_page_id_fkey FOREIGN KEY (page_id) REFERENCES public.pages(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'blocks_post_id_fkey' AND conrelid = 'public.blocks'::regclass) THEN
+    ALTER TABLE ONLY public.blocks
+        ADD CONSTRAINT blocks_post_id_fkey FOREIGN KEY (post_id) REFERENCES public.posts(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'blocks_product_id_fkey' AND conrelid = 'public.blocks'::regclass) THEN
+    ALTER TABLE ONLY public.blocks
+        ADD CONSTRAINT blocks_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cms_interactions_post_id_fkey' AND conrelid = 'public.cms_interactions'::regclass) THEN
+    ALTER TABLE ONLY public.cms_interactions
+        ADD CONSTRAINT cms_interactions_post_id_fkey FOREIGN KEY (post_id) REFERENCES public.posts(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cms_interactions_product_id_fkey' AND conrelid = 'public.cms_interactions'::regclass) THEN
+    ALTER TABLE ONLY public.cms_interactions
+        ADD CONSTRAINT cms_interactions_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cms_interactions_user_id_profiles_fkey' AND conrelid = 'public.cms_interactions'::regclass) THEN
+    ALTER TABLE ONLY public.cms_interactions
+        ADD CONSTRAINT cms_interactions_user_id_profiles_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'content_drafts_author_id_fkey' AND conrelid = 'public.content_drafts'::regclass) THEN
+    ALTER TABLE ONLY public.content_drafts
+        ADD CONSTRAINT content_drafts_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cortex_ai_db_mutation_audit_actor_user_id_fkey' AND conrelid = 'public.cortex_ai_db_mutation_audit'::regclass) THEN
+    ALTER TABLE ONLY public.cortex_ai_db_mutation_audit
+        ADD CONSTRAINT cortex_ai_db_mutation_audit_actor_user_id_fkey FOREIGN KEY (actor_user_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'coupon_freemius_mappings_coupon_id_fkey' AND conrelid = 'public.coupon_freemius_mappings'::regclass) THEN
+    ALTER TABLE ONLY public.coupon_freemius_mappings
+        ADD CONSTRAINT coupon_freemius_mappings_coupon_id_fkey FOREIGN KEY (coupon_id) REFERENCES public.coupons(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'coupon_freemius_mappings_product_id_fkey' AND conrelid = 'public.coupon_freemius_mappings'::regclass) THEN
+    ALTER TABLE ONLY public.coupon_freemius_mappings
+        ADD CONSTRAINT coupon_freemius_mappings_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'coupon_products_coupon_id_fkey' AND conrelid = 'public.coupon_products'::regclass) THEN
+    ALTER TABLE ONLY public.coupon_products
+        ADD CONSTRAINT coupon_products_coupon_id_fkey FOREIGN KEY (coupon_id) REFERENCES public.coupons(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'coupon_products_product_id_fkey' AND conrelid = 'public.coupon_products'::regclass) THEN
+    ALTER TABLE ONLY public.coupon_products
+        ADD CONSTRAINT coupon_products_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'coupon_redemptions_coupon_id_fkey' AND conrelid = 'public.coupon_redemptions'::regclass) THEN
+    ALTER TABLE ONLY public.coupon_redemptions
+        ADD CONSTRAINT coupon_redemptions_coupon_id_fkey FOREIGN KEY (coupon_id) REFERENCES public.coupons(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'coupon_redemptions_order_id_fkey' AND conrelid = 'public.coupon_redemptions'::regclass) THEN
+    ALTER TABLE ONLY public.coupon_redemptions
+        ADD CONSTRAINT coupon_redemptions_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'coupon_redemptions_user_id_fkey' AND conrelid = 'public.coupon_redemptions'::regclass) THEN
+    ALTER TABLE ONLY public.coupon_redemptions
+        ADD CONSTRAINT coupon_redemptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'email_2fa_challenges_user_id_fkey' AND conrelid = 'public.email_2fa_challenges'::regclass) THEN
+    ALTER TABLE ONLY public.email_2fa_challenges
+        ADD CONSTRAINT email_2fa_challenges_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'freemius_plans_product_id_fkey' AND conrelid = 'public.freemius_plans'::regclass) THEN
+    ALTER TABLE ONLY public.freemius_plans
+        ADD CONSTRAINT freemius_plans_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'freemius_pricing_plan_id_fkey' AND conrelid = 'public.freemius_pricing'::regclass) THEN
+    ALTER TABLE ONLY public.freemius_pricing
+        ADD CONSTRAINT freemius_pricing_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.freemius_plans(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'logos_media_id_fkey' AND conrelid = 'public.logos'::regclass) THEN
+    ALTER TABLE ONLY public.logos
+        ADD CONSTRAINT logos_media_id_fkey FOREIGN KEY (media_id) REFERENCES public.media(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_uploader_id_fkey' AND conrelid = 'public.media'::regclass) THEN
+    ALTER TABLE ONLY public.media
+        ADD CONSTRAINT media_uploader_id_fkey FOREIGN KEY (uploader_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'navigation_items_language_id_fkey' AND conrelid = 'public.navigation_items'::regclass) THEN
+    ALTER TABLE ONLY public.navigation_items
+        ADD CONSTRAINT navigation_items_language_id_fkey FOREIGN KEY (language_id) REFERENCES public.languages(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'navigation_items_page_id_fkey' AND conrelid = 'public.navigation_items'::regclass) THEN
+    ALTER TABLE ONLY public.navigation_items
+        ADD CONSTRAINT navigation_items_page_id_fkey FOREIGN KEY (page_id) REFERENCES public.pages(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'navigation_items_parent_id_fkey' AND conrelid = 'public.navigation_items'::regclass) THEN
+    ALTER TABLE ONLY public.navigation_items
+        ADD CONSTRAINT navigation_items_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.navigation_items(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'order_items_order_id_fkey' AND conrelid = 'public.order_items'::regclass) THEN
+    ALTER TABLE ONLY public.order_items
+        ADD CONSTRAINT order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'order_items_product_id_fkey' AND conrelid = 'public.order_items'::regclass) THEN
+    ALTER TABLE ONLY public.order_items
+        ADD CONSTRAINT order_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'order_items_variant_id_fkey' AND conrelid = 'public.order_items'::regclass) THEN
+    ALTER TABLE ONLY public.order_items
+        ADD CONSTRAINT order_items_variant_id_fkey FOREIGN KEY (variant_id) REFERENCES public.product_variants(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'orders_coupon_id_fkey' AND conrelid = 'public.orders'::regclass) THEN
+    ALTER TABLE ONLY public.orders
+        ADD CONSTRAINT orders_coupon_id_fkey FOREIGN KEY (coupon_id) REFERENCES public.coupons(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'orders_user_id_fkey' AND conrelid = 'public.orders'::regclass) THEN
+    ALTER TABLE ONLY public.orders
+        ADD CONSTRAINT orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'page_revisions_author_id_fkey' AND conrelid = 'public.page_revisions'::regclass) THEN
+    ALTER TABLE ONLY public.page_revisions
+        ADD CONSTRAINT page_revisions_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'page_revisions_page_id_fkey' AND conrelid = 'public.page_revisions'::regclass) THEN
+    ALTER TABLE ONLY public.page_revisions
+        ADD CONSTRAINT page_revisions_page_id_fkey FOREIGN KEY (page_id) REFERENCES public.pages(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pages_author_id_fkey' AND conrelid = 'public.pages'::regclass) THEN
+    ALTER TABLE ONLY public.pages
+        ADD CONSTRAINT pages_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pages_feature_image_id_fkey' AND conrelid = 'public.pages'::regclass) THEN
+    ALTER TABLE ONLY public.pages
+        ADD CONSTRAINT pages_feature_image_id_fkey FOREIGN KEY (feature_image_id) REFERENCES public.media(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pages_language_id_fkey' AND conrelid = 'public.pages'::regclass) THEN
+    ALTER TABLE ONLY public.pages
+        ADD CONSTRAINT pages_language_id_fkey FOREIGN KEY (language_id) REFERENCES public.languages(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'post_revisions_author_id_fkey' AND conrelid = 'public.post_revisions'::regclass) THEN
+    ALTER TABLE ONLY public.post_revisions
+        ADD CONSTRAINT post_revisions_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'post_revisions_post_id_fkey' AND conrelid = 'public.post_revisions'::regclass) THEN
+    ALTER TABLE ONLY public.post_revisions
+        ADD CONSTRAINT post_revisions_post_id_fkey FOREIGN KEY (post_id) REFERENCES public.posts(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_author_id_fkey' AND conrelid = 'public.posts'::regclass) THEN
+    ALTER TABLE ONLY public.posts
+        ADD CONSTRAINT posts_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_feature_image_id_fkey' AND conrelid = 'public.posts'::regclass) THEN
+    ALTER TABLE ONLY public.posts
+        ADD CONSTRAINT posts_feature_image_id_fkey FOREIGN KEY (feature_image_id) REFERENCES public.media(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_language_id_fkey' AND conrelid = 'public.posts'::regclass) THEN
+    ALTER TABLE ONLY public.posts
+        ADD CONSTRAINT posts_language_id_fkey FOREIGN KEY (language_id) REFERENCES public.languages(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_attribute_terms_attribute_id_fkey' AND conrelid = 'public.product_attribute_terms'::regclass) THEN
+    ALTER TABLE ONLY public.product_attribute_terms
+        ADD CONSTRAINT product_attribute_terms_attribute_id_fkey FOREIGN KEY (attribute_id) REFERENCES public.product_attributes(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_categories_category_id_fkey' AND conrelid = 'public.product_categories'::regclass) THEN
+    ALTER TABLE ONLY public.product_categories
+        ADD CONSTRAINT product_categories_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_categories_product_id_fkey' AND conrelid = 'public.product_categories'::regclass) THEN
+    ALTER TABLE ONLY public.product_categories
+        ADD CONSTRAINT product_categories_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_drafts_author_id_fkey' AND conrelid = 'public.product_drafts'::regclass) THEN
+    ALTER TABLE ONLY public.product_drafts
+        ADD CONSTRAINT product_drafts_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_drafts_product_id_fkey' AND conrelid = 'public.product_drafts'::regclass) THEN
+    ALTER TABLE ONLY public.product_drafts
+        ADD CONSTRAINT product_drafts_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_freemius_sale_coupons_product_id_fkey' AND conrelid = 'public.product_freemius_sale_coupons'::regclass) THEN
+    ALTER TABLE ONLY public.product_freemius_sale_coupons
+        ADD CONSTRAINT product_freemius_sale_coupons_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_media_media_id_fkey' AND conrelid = 'public.product_media'::regclass) THEN
+    ALTER TABLE ONLY public.product_media
+        ADD CONSTRAINT product_media_media_id_fkey FOREIGN KEY (media_id) REFERENCES public.media(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_media_product_id_fkey' AND conrelid = 'public.product_media'::regclass) THEN
+    ALTER TABLE ONLY public.product_media
+        ADD CONSTRAINT product_media_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_variants_main_media_id_fkey' AND conrelid = 'public.product_variants'::regclass) THEN
+    ALTER TABLE ONLY public.product_variants
+        ADD CONSTRAINT product_variants_main_media_id_fkey FOREIGN KEY (main_media_id) REFERENCES public.media(id) ON DELETE SET NULL;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_variants_product_id_fkey' AND conrelid = 'public.product_variants'::regclass) THEN
+    ALTER TABLE ONLY public.product_variants
+        ADD CONSTRAINT product_variants_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_language_id_fkey' AND conrelid = 'public.products'::regclass) THEN
+    ALTER TABLE ONLY public.products
+        ADD CONSTRAINT products_language_id_fkey FOREIGN KEY (language_id) REFERENCES public.languages(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profiles_id_fkey' AND conrelid = 'public.profiles'::regclass) THEN
+    ALTER TABLE ONLY public.profiles
+        ADD CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'shipping_zone_locations_zone_id_fkey' AND conrelid = 'public.shipping_zone_locations'::regclass) THEN
+    ALTER TABLE ONLY public.shipping_zone_locations
+        ADD CONSTRAINT shipping_zone_locations_zone_id_fkey FOREIGN KEY (zone_id) REFERENCES public.shipping_zones(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'shipping_zone_methods_zone_id_fkey' AND conrelid = 'public.shipping_zone_methods'::regclass) THEN
+    ALTER TABLE ONLY public.shipping_zone_methods
+        ADD CONSTRAINT shipping_zone_methods_zone_id_fkey FOREIGN KEY (zone_id) REFERENCES public.shipping_zones(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_addresses_user_id_fkey' AND conrelid = 'public.user_addresses'::regclass) THEN
+    ALTER TABLE ONLY public.user_addresses
+        ADD CONSTRAINT user_addresses_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_security_settings_user_id_fkey' AND conrelid = 'public.user_security_settings'::regclass) THEN
+    ALTER TABLE ONLY public.user_security_settings
+        ADD CONSTRAINT user_security_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_trusted_devices_user_id_fkey' AND conrelid = 'public.user_trusted_devices'::regclass) THEN
+    ALTER TABLE ONLY public.user_trusted_devices
+        ADD CONSTRAINT user_trusted_devices_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'variant_attribute_mapping_attribute_term_id_fkey' AND conrelid = 'public.variant_attribute_mapping'::regclass) THEN
+    ALTER TABLE ONLY public.variant_attribute_mapping
+        ADD CONSTRAINT variant_attribute_mapping_attribute_term_id_fkey FOREIGN KEY (attribute_term_id) REFERENCES public.product_attribute_terms(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
+
+DO $rb$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'variant_attribute_mapping_variant_id_fkey' AND conrelid = 'public.variant_attribute_mapping'::regclass) THEN
+    ALTER TABLE ONLY public.variant_attribute_mapping
+        ADD CONSTRAINT variant_attribute_mapping_variant_id_fkey FOREIGN KEY (variant_id) REFERENCES public.product_variants(id) ON DELETE CASCADE;
+  END IF;
+END $rb$;
 
 
+-- >>> FROM: 00000000000002_baseline_security_and_grants.sql <<<
+-- AUTO-GENERATED baseline (re-baseline of migrations 000..044). Idempotent; safe to replay.
+-- 02 · row-level security, policies, triggers, grants
+-- Regenerate via tools/scripts/rebaseline-transform.mjs. Do not hand-edit.
 
--- >>> FROM: 00000000000042_seed_deploy_to_vercel_ctas.sql <<<
--- Promote the one-click "Deploy to Vercel" button as a CTA in the seeded homepage.
---
--- Two placements per language, both rendered through the normal 'button' block
--- (ButtonBlockRenderer), so external URLs open in a new tab with rel=noopener:
---   1. Home HERO  — replace the secondary "View on GitHub" / "Voir sur GitHub"
---      outline button with a "Deploy on Vercel" / "Déployer sur Vercel" button
---      (same variant/size/position; the primary "Get Started" button is untouched,
---      and GitHub is still linked from the hero social row + the community section).
---   2. Home CLOSING CTA band ("Have Questions?" / "Des questions ?") — append a
---      secondary (outline) "Deploy on Vercel" button after the contact button so
---      the page also ends on the deploy action, styled to match the hero's Deploy
---      button and keep the filled "Get in Touch" button as the band's primary.
---
--- The canonical deploy URL is the exact href from the README's Deploy button
--- (native Supabase Marketplace \`stores\` flow). It is stored as a raw button \`url\`
--- value (literal '&', not '&amp;') because the renderer uses it directly as an href.
---
--- Forward-only and idempotent:
---   * The hero swap matches the old button label, so a second run is a no-op
---     (the label no longer exists) and it silently skips any install where the
---     button was already customized or removed.
---   * The closing-band append is guarded by NOT LIKE '%Deploy on Vercel%' /
---     '%Déployer sur Vercel%', so it never appends twice.
--- Scoping is by unique block text, so exactly the home hero / closing band match.
+DROP TRIGGER IF EXISTS on_blocks_update ON public.blocks;
+CREATE TRIGGER on_blocks_update BEFORE UPDATE ON public.blocks FOR EACH ROW EXECUTE FUNCTION public.handle_blocks_update();
 
--- ---------------------------------------------------------------------------
--- 1a. EN home hero: "View on GitHub" -> "Deploy on Vercel"
--- ---------------------------------------------------------------------------
-UPDATE public.blocks
-SET content = replace(
-                replace(content::text, '"View on GitHub"', '"Deploy on Vercel"'),
-                '"https://github.com/nextblock-cms/nextblock"',
-                '"https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D"'
-              )::jsonb
-WHERE content::text LIKE '%"View on GitHub"%';
+DROP TRIGGER IF EXISTS on_content_drafts_update ON public.content_drafts;
+CREATE TRIGGER on_content_drafts_update BEFORE UPDATE ON public.content_drafts FOR EACH ROW EXECUTE FUNCTION public.set_current_timestamp_updated_at();
 
--- ---------------------------------------------------------------------------
--- 1b. FR home hero: "Voir sur GitHub" -> "Déployer sur Vercel"
--- ---------------------------------------------------------------------------
-UPDATE public.blocks
-SET content = replace(
-                replace(content::text, '"Voir sur GitHub"', '"Déployer sur Vercel"'),
-                '"https://github.com/nextblock-cms/nextblock"',
-                '"https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D"'
-              )::jsonb
-WHERE content::text LIKE '%"Voir sur GitHub"%';
+DROP TRIGGER IF EXISTS on_coupon_freemius_mappings_write ON public.coupon_freemius_mappings;
+CREATE TRIGGER on_coupon_freemius_mappings_write BEFORE INSERT OR UPDATE ON public.coupon_freemius_mappings FOR EACH ROW EXECUTE FUNCTION public.handle_coupon_freemius_mappings_write();
 
--- ---------------------------------------------------------------------------
--- 2a. EN home closing band ("Have Questions?"): append a Deploy on Vercel button
--- ---------------------------------------------------------------------------
-UPDATE public.blocks
-SET content = jsonb_set(
-                content,
-                '{column_blocks,0}',
-                (content #> '{column_blocks,0}') ||
-                '[{"block_type":"button","content":{"text":"Deploy on Vercel","url":"https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D","variant":"outline","size":"lg","position":"center"}}]'::jsonb
-              )
-WHERE content::text LIKE '%Have Questions?%'
-  AND content::text NOT LIKE '%Deploy on Vercel%';
+DROP TRIGGER IF EXISTS on_coupons_write ON public.coupons;
+CREATE TRIGGER on_coupons_write BEFORE INSERT OR UPDATE ON public.coupons FOR EACH ROW EXECUTE FUNCTION public.handle_coupons_write();
 
--- ---------------------------------------------------------------------------
--- 2b. FR home closing band ("Des questions ?"): append a Déployer sur Vercel button
--- ---------------------------------------------------------------------------
-UPDATE public.blocks
-SET content = jsonb_set(
-                content,
-                '{column_blocks,0}',
-                (content #> '{column_blocks,0}') ||
-                '[{"block_type":"button","content":{"text":"Déployer sur Vercel","url":"https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D","variant":"outline","size":"lg","position":"center"}}]'::jsonb
-              )
-WHERE content::text LIKE '%Des questions ?%'
-  AND content::text NOT LIKE '%Déployer sur Vercel%';
+DROP TRIGGER IF EXISTS on_inventory_item_change ON public.inventory_items;
+CREATE TRIGGER on_inventory_item_change AFTER INSERT OR DELETE OR UPDATE OF quantity ON public.inventory_items FOR EACH ROW EXECUTE FUNCTION public.handle_inventory_item_change();
+
+DROP TRIGGER IF EXISTS on_inventory_items_update ON public.inventory_items;
+CREATE TRIGGER on_inventory_items_update BEFORE UPDATE ON public.inventory_items FOR EACH ROW EXECUTE FUNCTION public.handle_inventory_items_update();
+
+DROP TRIGGER IF EXISTS on_languages_update ON public.languages;
+CREATE TRIGGER on_languages_update BEFORE UPDATE ON public.languages FOR EACH ROW EXECUTE FUNCTION public.handle_languages_update();
+
+DROP TRIGGER IF EXISTS on_media_update ON public.media;
+CREATE TRIGGER on_media_update BEFORE UPDATE ON public.media FOR EACH ROW EXECUTE FUNCTION public.handle_media_update();
+
+DROP TRIGGER IF EXISTS on_navigation_items_update ON public.navigation_items;
+CREATE TRIGGER on_navigation_items_update BEFORE UPDATE ON public.navigation_items FOR EACH ROW EXECUTE FUNCTION public.handle_navigation_items_update();
+
+DROP TRIGGER IF EXISTS on_pages_update ON public.pages;
+CREATE TRIGGER on_pages_update BEFORE UPDATE ON public.pages FOR EACH ROW EXECUTE FUNCTION public.handle_pages_update();
+
+DROP TRIGGER IF EXISTS on_posts_update ON public.posts;
+CREATE TRIGGER on_posts_update BEFORE UPDATE ON public.posts FOR EACH ROW EXECUTE FUNCTION public.handle_posts_update();
+
+DROP TRIGGER IF EXISTS on_product_drafts_update ON public.product_drafts;
+CREATE TRIGGER on_product_drafts_update BEFORE UPDATE ON public.product_drafts FOR EACH ROW EXECUTE FUNCTION public.set_current_timestamp_updated_at();
+
+DROP TRIGGER IF EXISTS on_product_freemius_sale_coupons_write ON public.product_freemius_sale_coupons;
+CREATE TRIGGER on_product_freemius_sale_coupons_write BEFORE INSERT OR UPDATE ON public.product_freemius_sale_coupons FOR EACH ROW EXECUTE FUNCTION public.handle_product_freemius_sale_coupons_write();
+
+DROP TRIGGER IF EXISTS on_shipping_zone_locations_write ON public.shipping_zone_locations;
+CREATE TRIGGER on_shipping_zone_locations_write BEFORE INSERT OR UPDATE ON public.shipping_zone_locations FOR EACH ROW EXECUTE FUNCTION public.handle_shipping_zone_locations_write();
+
+DROP TRIGGER IF EXISTS on_tax_rates_write ON public.tax_rates;
+CREATE TRIGGER on_tax_rates_write BEFORE INSERT OR UPDATE ON public.tax_rates FOR EACH ROW EXECUTE FUNCTION public.handle_tax_rates_write();
+
+DROP TRIGGER IF EXISTS set_updated_at ON public.cms_interactions;
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.cms_interactions FOR EACH ROW EXECUTE FUNCTION public.set_current_timestamp_updated_at();
+
+DROP TRIGGER IF EXISTS set_updated_at ON public.translations;
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.translations FOR EACH ROW EXECUTE FUNCTION public.set_current_timestamp_updated_at();
+
+DROP TRIGGER IF EXISTS trg_handle_default_currency_change ON public.currencies;
+CREATE TRIGGER trg_handle_default_currency_change AFTER INSERT OR UPDATE ON public.currencies FOR EACH ROW EXECUTE FUNCTION public.handle_default_currency_change();
+
+DROP TRIGGER IF EXISTS trg_handle_ucp_cart_sessions_update ON public.ucp_cart_sessions;
+CREATE TRIGGER trg_handle_ucp_cart_sessions_update BEFORE UPDATE ON public.ucp_cart_sessions FOR EACH ROW EXECUTE FUNCTION public.handle_ucp_cart_sessions_update();
+
+DROP TRIGGER IF EXISTS trg_set_currency_defaults ON public.currencies;
+CREATE TRIGGER trg_set_currency_defaults BEFORE INSERT OR UPDATE ON public.currencies FOR EACH ROW EXECUTE FUNCTION public.set_currency_defaults();
+
+DROP TRIGGER IF EXISTS trg_sync_product_variants_currency_prices ON public.product_variants;
+CREATE TRIGGER trg_sync_product_variants_currency_prices BEFORE INSERT OR UPDATE OF price, sale_price, prices, sale_prices ON public.product_variants FOR EACH ROW EXECUTE FUNCTION public.sync_currency_price_maps();
+
+DROP TRIGGER IF EXISTS trg_sync_products_currency_prices ON public.products;
+CREATE TRIGGER trg_sync_products_currency_prices BEFORE INSERT OR UPDATE OF price, sale_price, prices, sale_prices ON public.products FOR EACH ROW EXECUTE FUNCTION public.sync_currency_price_maps();
+
+DROP TRIGGER IF EXISTS trg_sync_shipping_method_currency_maps ON public.shipping_zone_methods;
+CREATE TRIGGER trg_sync_shipping_method_currency_maps BEFORE INSERT OR UPDATE OF cost_amount, cost_currency, min_order_amount, currency_pricing_mode, cost_amounts, min_order_amounts ON public.shipping_zone_methods FOR EACH ROW EXECUTE FUNCTION public.sync_shipping_method_currency_maps();
+
+DROP TRIGGER IF EXISTS trg_system_alerts_updated_at ON public.system_alerts;
+CREATE TRIGGER trg_system_alerts_updated_at BEFORE UPDATE ON public.system_alerts FOR EACH ROW EXECUTE FUNCTION public.set_current_timestamp_updated_at();
+
+DROP TRIGGER IF EXISTS trigger_update_product_ratings ON public.cms_interactions;
+CREATE TRIGGER trigger_update_product_ratings AFTER INSERT OR DELETE OR UPDATE ON public.cms_interactions FOR EACH ROW EXECUTE FUNCTION public.update_product_ratings();
+
+DROP POLICY IF EXISTS "Admin can delete categories" ON public.categories;
+CREATE POLICY "Admin can delete categories" ON public.categories FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS "Admin can delete product_categories" ON public.product_categories;
+CREATE POLICY "Admin can delete product_categories" ON public.product_categories FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS "Admin can insert categories" ON public.categories;
+CREATE POLICY "Admin can insert categories" ON public.categories FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS "Admin can insert product_categories" ON public.product_categories;
+CREATE POLICY "Admin can insert product_categories" ON public.product_categories FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS "Admin can update categories" ON public.categories;
+CREATE POLICY "Admin can update categories" ON public.categories FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS "Admin can update product_categories" ON public.product_categories;
+CREATE POLICY "Admin can update product_categories" ON public.product_categories FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS "Allow authenticated read access" ON public.package_activations;
+CREATE POLICY "Allow authenticated read access" ON public.package_activations FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Allow service role full access" ON public.package_activations;
+CREATE POLICY "Allow service role full access" ON public.package_activations TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public can view categories" ON public.categories;
+CREATE POLICY "Public can view categories" ON public.categories FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public can view inventory items" ON public.inventory_items;
+CREATE POLICY "Public can view inventory items" ON public.inventory_items FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public can view product media" ON public.product_media;
+CREATE POLICY "Public can view product media" ON public.product_media FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public can view product_categories" ON public.product_categories;
+CREATE POLICY "Public can view product_categories" ON public.product_categories FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public can view products" ON public.products;
+CREATE POLICY "Public can view products" ON public.products FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public read access for freemius_plans" ON public.freemius_plans;
+CREATE POLICY "Public read access for freemius_plans" ON public.freemius_plans FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public read access for freemius_pricing" ON public.freemius_pricing;
+CREATE POLICY "Public read access for freemius_pricing" ON public.freemius_pricing FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public read active currencies" ON public.currencies;
+CREATE POLICY "Public read active currencies" ON public.currencies FOR SELECT TO authenticated, anon USING ((is_active = true));
+
+DROP POLICY IF EXISTS "Public read product_attribute_terms" ON public.product_attribute_terms;
+CREATE POLICY "Public read product_attribute_terms" ON public.product_attribute_terms FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public read product_attributes" ON public.product_attributes;
+CREATE POLICY "Public read product_attributes" ON public.product_attributes FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public read product_variants" ON public.product_variants;
+CREATE POLICY "Public read product_variants" ON public.product_variants FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public read shipping_zone_locations" ON public.shipping_zone_locations;
+CREATE POLICY "Public read shipping_zone_locations" ON public.shipping_zone_locations FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public read shipping_zone_methods" ON public.shipping_zone_methods;
+CREATE POLICY "Public read shipping_zone_methods" ON public.shipping_zone_methods FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public read shipping_zones" ON public.shipping_zones;
+CREATE POLICY "Public read shipping_zones" ON public.shipping_zones FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public read tax_rates" ON public.tax_rates;
+CREATE POLICY "Public read tax_rates" ON public.tax_rates FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public read variant_attribute_mapping" ON public.variant_attribute_mapping;
+CREATE POLICY "Public read variant_attribute_mapping" ON public.variant_attribute_mapping FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Service Role manages inventory items" ON public.inventory_items;
+CREATE POLICY "Service Role manages inventory items" ON public.inventory_items TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Service Role manages order items" ON public.order_items;
+CREATE POLICY "Service Role manages order items" ON public.order_items TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Service Role manages orders" ON public.orders;
+CREATE POLICY "Service Role manages orders" ON public.orders TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Service Role manages tax_rates" ON public.tax_rates;
+CREATE POLICY "Service Role manages tax_rates" ON public.tax_rates TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Service role manages all addresses" ON public.user_addresses;
+CREATE POLICY "Service role manages all addresses" ON public.user_addresses TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Service role manages currencies" ON public.currencies;
+CREATE POLICY "Service role manages currencies" ON public.currencies TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users can manage own addresses" ON public.user_addresses;
+CREATE POLICY "Users can manage own addresses" ON public.user_addresses TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK ((user_id = ( SELECT auth.uid() AS uid)));
+
+DROP POLICY IF EXISTS "Users can view own order items" ON public.order_items;
+CREATE POLICY "Users can view own order items" ON public.order_items FOR SELECT TO authenticated USING (((( SELECT public.is_admin() AS is_admin) IS TRUE) OR (EXISTS ( SELECT 1
+   FROM public.orders
+  WHERE ((orders.id = order_items.order_id) AND (orders.user_id = ( SELECT auth.uid() AS uid)))))));
+
+DROP POLICY IF EXISTS "Users can view own orders" ON public.orders;
+CREATE POLICY "Users can view own orders" ON public.orders FOR SELECT TO authenticated USING (((( SELECT public.is_admin() AS is_admin) IS TRUE) OR (user_id = ( SELECT auth.uid() AS uid))));
+
+ALTER TABLE public.blocks ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS blocks_anon_read_policy ON public.blocks;
+CREATE POLICY blocks_anon_read_policy ON public.blocks FOR SELECT TO anon USING ((((page_id IS NOT NULL) AND (EXISTS ( SELECT 1
+   FROM public.pages p
+  WHERE ((p.id = blocks.page_id) AND (p.status = 'published'::public.page_status))))) OR ((post_id IS NOT NULL) AND (EXISTS ( SELECT 1
+   FROM public.posts pt
+  WHERE ((pt.id = blocks.post_id) AND (pt.status = 'published'::public.page_status) AND ((pt.published_at IS NULL) OR (pt.published_at <= now())))))) OR ((product_id IS NOT NULL) AND (EXISTS ( SELECT 1
+   FROM public.products pr
+  WHERE ((pr.id = blocks.product_id) AND (pr.status = 'active'::text)))))));
+
+DROP POLICY IF EXISTS blocks_delete_policy ON public.blocks;
+CREATE POLICY blocks_delete_policy ON public.blocks FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS blocks_insert_policy ON public.blocks;
+CREATE POLICY blocks_insert_policy ON public.blocks FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS blocks_read_policy ON public.blocks;
+CREATE POLICY blocks_read_policy ON public.blocks FOR SELECT TO authenticated USING (((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])) OR (((page_id IS NOT NULL) AND (EXISTS ( SELECT 1
+   FROM public.pages p
+  WHERE ((p.id = blocks.page_id) AND (p.status = 'published'::public.page_status))))) OR ((post_id IS NOT NULL) AND (EXISTS ( SELECT 1
+   FROM public.posts pt
+  WHERE ((pt.id = blocks.post_id) AND (pt.status = 'published'::public.page_status) AND ((pt.published_at IS NULL) OR (pt.published_at <= now())))))) OR ((product_id IS NOT NULL) AND (EXISTS ( SELECT 1
+   FROM public.products pr
+  WHERE ((pr.id = blocks.product_id) AND (pr.status = 'active'::text))))))));
+
+DROP POLICY IF EXISTS blocks_update_policy ON public.blocks;
+CREATE POLICY blocks_update_policy ON public.blocks FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE public.cms_interactions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS cms_interactions_delete_policy ON public.cms_interactions;
+CREATE POLICY cms_interactions_delete_policy ON public.cms_interactions FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS cms_interactions_insert_policy ON public.cms_interactions;
+CREATE POLICY cms_interactions_insert_policy ON public.cms_interactions FOR INSERT TO authenticated WITH CHECK (((auth.uid() = user_id) AND ((status = 'pending'::public.approval_status) OR (( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])))));
+
+DROP POLICY IF EXISTS cms_interactions_read_policy ON public.cms_interactions;
+CREATE POLICY cms_interactions_read_policy ON public.cms_interactions FOR SELECT USING (((status = 'approved'::public.approval_status) OR (( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))));
+
+DROP POLICY IF EXISTS cms_interactions_update_policy ON public.cms_interactions;
+CREATE POLICY cms_interactions_update_policy ON public.cms_interactions FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+ALTER TABLE public.content_drafts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS content_drafts_delete_policy ON public.content_drafts;
+CREATE POLICY content_drafts_delete_policy ON public.content_drafts FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS content_drafts_insert_policy ON public.content_drafts;
+CREATE POLICY content_drafts_insert_policy ON public.content_drafts FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS content_drafts_select_policy ON public.content_drafts;
+CREATE POLICY content_drafts_select_policy ON public.content_drafts FOR SELECT TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS content_drafts_update_policy ON public.content_drafts;
+CREATE POLICY content_drafts_update_policy ON public.content_drafts FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+ALTER TABLE public.cortex_ai_db_mutation_audit ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS cortex_ai_db_mutation_audit_admin_read_policy ON public.cortex_ai_db_mutation_audit;
+CREATE POLICY cortex_ai_db_mutation_audit_admin_read_policy ON public.cortex_ai_db_mutation_audit FOR SELECT TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS cortex_ai_db_mutation_audit_service_role_policy ON public.cortex_ai_db_mutation_audit;
+CREATE POLICY cortex_ai_db_mutation_audit_service_role_policy ON public.cortex_ai_db_mutation_audit TO service_role USING (true) WITH CHECK (true);
+
+ALTER TABLE public.coupon_freemius_mappings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS coupon_freemius_mappings_admin_policy ON public.coupon_freemius_mappings;
+CREATE POLICY coupon_freemius_mappings_admin_policy ON public.coupon_freemius_mappings TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS coupon_freemius_mappings_service_role_policy ON public.coupon_freemius_mappings;
+CREATE POLICY coupon_freemius_mappings_service_role_policy ON public.coupon_freemius_mappings TO service_role USING (true) WITH CHECK (true);
+
+ALTER TABLE public.coupon_products ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS coupon_products_admin_policy ON public.coupon_products;
+CREATE POLICY coupon_products_admin_policy ON public.coupon_products TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS coupon_products_service_role_policy ON public.coupon_products;
+CREATE POLICY coupon_products_service_role_policy ON public.coupon_products TO service_role USING (true) WITH CHECK (true);
+
+ALTER TABLE public.coupon_redemptions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS coupon_redemptions_admin_select_policy ON public.coupon_redemptions;
+CREATE POLICY coupon_redemptions_admin_select_policy ON public.coupon_redemptions FOR SELECT TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS coupon_redemptions_service_role_policy ON public.coupon_redemptions;
+CREATE POLICY coupon_redemptions_service_role_policy ON public.coupon_redemptions TO service_role USING (true) WITH CHECK (true);
+
+ALTER TABLE public.coupons ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS coupons_admin_delete_policy ON public.coupons;
+CREATE POLICY coupons_admin_delete_policy ON public.coupons FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS coupons_admin_insert_policy ON public.coupons;
+CREATE POLICY coupons_admin_insert_policy ON public.coupons FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS coupons_admin_select_policy ON public.coupons;
+CREATE POLICY coupons_admin_select_policy ON public.coupons FOR SELECT TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS coupons_admin_update_policy ON public.coupons;
+CREATE POLICY coupons_admin_update_policy ON public.coupons FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS coupons_service_role_policy ON public.coupons;
+CREATE POLICY coupons_service_role_policy ON public.coupons TO service_role USING (true) WITH CHECK (true);
+
+ALTER TABLE public.currencies ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS currencies_delete_policy ON public.currencies;
+CREATE POLICY currencies_delete_policy ON public.currencies FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS currencies_insert_policy ON public.currencies;
+CREATE POLICY currencies_insert_policy ON public.currencies FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS currencies_update_policy ON public.currencies;
+CREATE POLICY currencies_update_policy ON public.currencies FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+ALTER TABLE public.custom_block_definitions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS custom_block_definitions_delete_policy ON public.custom_block_definitions;
+CREATE POLICY custom_block_definitions_delete_policy ON public.custom_block_definitions FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS custom_block_definitions_insert_policy ON public.custom_block_definitions;
+CREATE POLICY custom_block_definitions_insert_policy ON public.custom_block_definitions FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS custom_block_definitions_public_read_policy ON public.custom_block_definitions;
+CREATE POLICY custom_block_definitions_public_read_policy ON public.custom_block_definitions FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS custom_block_definitions_service_role_policy ON public.custom_block_definitions;
+CREATE POLICY custom_block_definitions_service_role_policy ON public.custom_block_definitions TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS custom_block_definitions_update_policy ON public.custom_block_definitions;
+CREATE POLICY custom_block_definitions_update_policy ON public.custom_block_definitions FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+ALTER TABLE public.email_2fa_challenges ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS email_2fa_challenges_service_role_policy ON public.email_2fa_challenges;
+CREATE POLICY email_2fa_challenges_service_role_policy ON public.email_2fa_challenges TO service_role USING (true) WITH CHECK (true);
+
+ALTER TABLE public.freemius_plans ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE public.freemius_pricing ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS inventory_items_delete_policy ON public.inventory_items;
+CREATE POLICY inventory_items_delete_policy ON public.inventory_items FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS inventory_items_insert_policy ON public.inventory_items;
+CREATE POLICY inventory_items_insert_policy ON public.inventory_items FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS inventory_items_update_policy ON public.inventory_items;
+CREATE POLICY inventory_items_update_policy ON public.inventory_items FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+ALTER TABLE public.languages ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS languages_delete_policy ON public.languages;
+CREATE POLICY languages_delete_policy ON public.languages FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS languages_insert_policy ON public.languages;
+CREATE POLICY languages_insert_policy ON public.languages FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS languages_read_policy ON public.languages;
+CREATE POLICY languages_read_policy ON public.languages FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS languages_update_policy ON public.languages;
+CREATE POLICY languages_update_policy ON public.languages FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role)) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+ALTER TABLE public.logos ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS logos_delete_policy ON public.logos;
+CREATE POLICY logos_delete_policy ON public.logos FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS logos_insert_policy ON public.logos;
+CREATE POLICY logos_insert_policy ON public.logos FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS logos_read_policy ON public.logos;
+CREATE POLICY logos_read_policy ON public.logos FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS logos_update_policy ON public.logos;
+CREATE POLICY logos_update_policy ON public.logos FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role)) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+ALTER TABLE public.media ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS media_delete_policy ON public.media;
+CREATE POLICY media_delete_policy ON public.media FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS media_insert_policy ON public.media;
+CREATE POLICY media_insert_policy ON public.media FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS media_read_policy ON public.media;
+CREATE POLICY media_read_policy ON public.media FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS media_service_role_policy ON public.media;
+CREATE POLICY media_service_role_policy ON public.media TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS media_update_policy ON public.media;
+CREATE POLICY media_update_policy ON public.media FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+ALTER TABLE public.navigation_items ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS navigation_items_delete_policy ON public.navigation_items;
+CREATE POLICY navigation_items_delete_policy ON public.navigation_items FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS navigation_items_insert_policy ON public.navigation_items;
+CREATE POLICY navigation_items_insert_policy ON public.navigation_items FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS navigation_items_update_policy ON public.navigation_items;
+CREATE POLICY navigation_items_update_policy ON public.navigation_items FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role)) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS navigation_read_policy ON public.navigation_items;
+CREATE POLICY navigation_read_policy ON public.navigation_items FOR SELECT USING (true);
+
+ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS order_items_delete_policy ON public.order_items;
+CREATE POLICY order_items_delete_policy ON public.order_items FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS order_items_insert_policy ON public.order_items;
+CREATE POLICY order_items_insert_policy ON public.order_items FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS order_items_update_policy ON public.order_items;
+CREATE POLICY order_items_update_policy ON public.order_items FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS orders_delete_policy ON public.orders;
+CREATE POLICY orders_delete_policy ON public.orders FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS orders_insert_policy ON public.orders;
+CREATE POLICY orders_insert_policy ON public.orders FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS orders_update_policy ON public.orders;
+CREATE POLICY orders_update_policy ON public.orders FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+ALTER TABLE public.package_activations ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE public.page_revisions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS page_revisions_delete_policy ON public.page_revisions;
+CREATE POLICY page_revisions_delete_policy ON public.page_revisions FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS page_revisions_insert_policy ON public.page_revisions;
+CREATE POLICY page_revisions_insert_policy ON public.page_revisions FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS page_revisions_read_policy ON public.page_revisions;
+CREATE POLICY page_revisions_read_policy ON public.page_revisions FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS page_revisions_update_policy ON public.page_revisions;
+CREATE POLICY page_revisions_update_policy ON public.page_revisions FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+ALTER TABLE public.pages ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS pages_anon_read_policy ON public.pages;
+CREATE POLICY pages_anon_read_policy ON public.pages FOR SELECT TO anon USING ((status = 'published'::public.page_status));
+
+DROP POLICY IF EXISTS pages_delete_policy ON public.pages;
+CREATE POLICY pages_delete_policy ON public.pages FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS pages_insert_policy ON public.pages;
+CREATE POLICY pages_insert_policy ON public.pages FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS pages_read_policy ON public.pages;
+CREATE POLICY pages_read_policy ON public.pages FOR SELECT TO authenticated USING (((status = 'published'::public.page_status) OR ((author_id = ( SELECT auth.uid() AS uid)) AND (status <> 'published'::public.page_status)) OR (( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))));
+
+DROP POLICY IF EXISTS pages_update_policy ON public.pages;
+CREATE POLICY pages_update_policy ON public.pages FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+ALTER TABLE public.post_revisions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS post_revisions_delete_policy ON public.post_revisions;
+CREATE POLICY post_revisions_delete_policy ON public.post_revisions FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS post_revisions_insert_policy ON public.post_revisions;
+CREATE POLICY post_revisions_insert_policy ON public.post_revisions FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS post_revisions_read_policy ON public.post_revisions;
+CREATE POLICY post_revisions_read_policy ON public.post_revisions FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS post_revisions_update_policy ON public.post_revisions;
+CREATE POLICY post_revisions_update_policy ON public.post_revisions FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS posts_anon_read_policy ON public.posts;
+CREATE POLICY posts_anon_read_policy ON public.posts FOR SELECT TO anon USING (((status = 'published'::public.page_status) AND ((published_at IS NULL) OR (published_at <= now()))));
+
+DROP POLICY IF EXISTS posts_delete_policy ON public.posts;
+CREATE POLICY posts_delete_policy ON public.posts FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS posts_insert_policy ON public.posts;
+CREATE POLICY posts_insert_policy ON public.posts FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS posts_read_policy ON public.posts;
+CREATE POLICY posts_read_policy ON public.posts FOR SELECT TO authenticated USING ((((status = 'published'::public.page_status) AND ((published_at IS NULL) OR (published_at <= now()))) OR ((author_id = ( SELECT auth.uid() AS uid)) AND (status <> 'published'::public.page_status)) OR (( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))));
+
+DROP POLICY IF EXISTS posts_update_policy ON public.posts;
+CREATE POLICY posts_update_policy ON public.posts FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+ALTER TABLE public.privacy_consent_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS privacy_consent_logs_admin_read_policy ON public.privacy_consent_logs;
+CREATE POLICY privacy_consent_logs_admin_read_policy ON public.privacy_consent_logs FOR SELECT TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS privacy_consent_logs_service_role_policy ON public.privacy_consent_logs;
+CREATE POLICY privacy_consent_logs_service_role_policy ON public.privacy_consent_logs TO service_role USING (true) WITH CHECK (true);
+
+ALTER TABLE public.product_attribute_terms ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS product_attribute_terms_delete_policy ON public.product_attribute_terms;
+CREATE POLICY product_attribute_terms_delete_policy ON public.product_attribute_terms FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS product_attribute_terms_insert_policy ON public.product_attribute_terms;
+CREATE POLICY product_attribute_terms_insert_policy ON public.product_attribute_terms FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS product_attribute_terms_update_policy ON public.product_attribute_terms;
+CREATE POLICY product_attribute_terms_update_policy ON public.product_attribute_terms FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+ALTER TABLE public.product_attributes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS product_attributes_delete_policy ON public.product_attributes;
+CREATE POLICY product_attributes_delete_policy ON public.product_attributes FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS product_attributes_insert_policy ON public.product_attributes;
+CREATE POLICY product_attributes_insert_policy ON public.product_attributes FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS product_attributes_update_policy ON public.product_attributes;
+CREATE POLICY product_attributes_update_policy ON public.product_attributes FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+ALTER TABLE public.product_categories ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE public.product_drafts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS product_drafts_delete_policy ON public.product_drafts;
+CREATE POLICY product_drafts_delete_policy ON public.product_drafts FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS product_drafts_insert_policy ON public.product_drafts;
+CREATE POLICY product_drafts_insert_policy ON public.product_drafts FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS product_drafts_select_policy ON public.product_drafts;
+CREATE POLICY product_drafts_select_policy ON public.product_drafts FOR SELECT TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS product_drafts_update_policy ON public.product_drafts;
+CREATE POLICY product_drafts_update_policy ON public.product_drafts FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+ALTER TABLE public.product_freemius_sale_coupons ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS product_freemius_sale_coupons_admin_policy ON public.product_freemius_sale_coupons;
+CREATE POLICY product_freemius_sale_coupons_admin_policy ON public.product_freemius_sale_coupons TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS product_freemius_sale_coupons_service_role_policy ON public.product_freemius_sale_coupons;
+CREATE POLICY product_freemius_sale_coupons_service_role_policy ON public.product_freemius_sale_coupons TO service_role USING (true) WITH CHECK (true);
+
+ALTER TABLE public.product_media ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS product_media_delete_policy ON public.product_media;
+CREATE POLICY product_media_delete_policy ON public.product_media FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS product_media_insert_policy ON public.product_media;
+CREATE POLICY product_media_insert_policy ON public.product_media FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS product_media_update_policy ON public.product_media;
+CREATE POLICY product_media_update_policy ON public.product_media FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+ALTER TABLE public.product_variants ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS product_variants_delete_policy ON public.product_variants;
+CREATE POLICY product_variants_delete_policy ON public.product_variants FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS product_variants_insert_policy ON public.product_variants;
+CREATE POLICY product_variants_insert_policy ON public.product_variants FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS product_variants_update_policy ON public.product_variants;
+CREATE POLICY product_variants_update_policy ON public.product_variants FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS products_delete_policy ON public.products;
+CREATE POLICY products_delete_policy ON public.products FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS products_insert_policy ON public.products;
+CREATE POLICY products_insert_policy ON public.products FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS products_update_policy ON public.products;
+CREATE POLICY products_update_policy ON public.products FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS profiles_insert_policy ON public.profiles;
+CREATE POLICY profiles_insert_policy ON public.profiles FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS profiles_read_policy ON public.profiles;
+CREATE POLICY profiles_read_policy ON public.profiles FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS profiles_service_role_policy ON public.profiles;
+CREATE POLICY profiles_service_role_policy ON public.profiles TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS profiles_update_policy ON public.profiles;
+CREATE POLICY profiles_update_policy ON public.profiles FOR UPDATE TO authenticated USING (((id = ( SELECT auth.uid() AS uid)) OR (( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role))) WITH CHECK (((id = ( SELECT auth.uid() AS uid)) OR (( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role)));
+
+ALTER TABLE public.shipping_zone_locations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS shipping_zone_locations_delete_policy ON public.shipping_zone_locations;
+CREATE POLICY shipping_zone_locations_delete_policy ON public.shipping_zone_locations FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS shipping_zone_locations_insert_policy ON public.shipping_zone_locations;
+CREATE POLICY shipping_zone_locations_insert_policy ON public.shipping_zone_locations FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS shipping_zone_locations_update_policy ON public.shipping_zone_locations;
+CREATE POLICY shipping_zone_locations_update_policy ON public.shipping_zone_locations FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+ALTER TABLE public.shipping_zone_methods ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS shipping_zone_methods_delete_policy ON public.shipping_zone_methods;
+CREATE POLICY shipping_zone_methods_delete_policy ON public.shipping_zone_methods FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS shipping_zone_methods_insert_policy ON public.shipping_zone_methods;
+CREATE POLICY shipping_zone_methods_insert_policy ON public.shipping_zone_methods FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS shipping_zone_methods_update_policy ON public.shipping_zone_methods;
+CREATE POLICY shipping_zone_methods_update_policy ON public.shipping_zone_methods FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+ALTER TABLE public.shipping_zones ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS shipping_zones_delete_policy ON public.shipping_zones;
+CREATE POLICY shipping_zones_delete_policy ON public.shipping_zones FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS shipping_zones_insert_policy ON public.shipping_zones;
+CREATE POLICY shipping_zones_insert_policy ON public.shipping_zones FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS shipping_zones_update_policy ON public.shipping_zones;
+CREATE POLICY shipping_zones_update_policy ON public.shipping_zones FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS site_settings_delete_policy ON public.site_settings;
+CREATE POLICY site_settings_delete_policy ON public.site_settings FOR DELETE TO authenticated USING ((((key <> ALL (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) OR ((key = ANY (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role))));
+
+DROP POLICY IF EXISTS site_settings_insert_policy ON public.site_settings;
+CREATE POLICY site_settings_insert_policy ON public.site_settings FOR INSERT TO authenticated WITH CHECK ((((key <> ALL (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) OR ((key = ANY (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role))));
+
+DROP POLICY IF EXISTS site_settings_read_policy ON public.site_settings;
+CREATE POLICY site_settings_read_policy ON public.site_settings FOR SELECT USING (((key <> ALL (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text])) OR ((key = ANY (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text])) AND (( SELECT auth.role() AS role) = 'authenticated'::text) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role))));
+
+DROP POLICY IF EXISTS site_settings_update_policy ON public.site_settings;
+CREATE POLICY site_settings_update_policy ON public.site_settings FOR UPDATE TO authenticated USING ((((key <> ALL (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) OR ((key = ANY (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role)))) WITH CHECK ((((key <> ALL (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) OR ((key = ANY (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role))));
+
+ALTER TABLE public.system_alerts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS system_alerts_select_admin ON public.system_alerts;
+CREATE POLICY system_alerts_select_admin ON public.system_alerts FOR SELECT TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS system_alerts_update_admin ON public.system_alerts;
+CREATE POLICY system_alerts_update_admin ON public.system_alerts FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role)) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+ALTER TABLE public.system_configuration ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS system_configuration_admin_delete ON public.system_configuration;
+CREATE POLICY system_configuration_admin_delete ON public.system_configuration FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS system_configuration_admin_insert ON public.system_configuration;
+CREATE POLICY system_configuration_admin_insert ON public.system_configuration FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS system_configuration_admin_select ON public.system_configuration;
+CREATE POLICY system_configuration_admin_select ON public.system_configuration FOR SELECT TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS system_configuration_admin_update ON public.system_configuration;
+CREATE POLICY system_configuration_admin_update ON public.system_configuration FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role)) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS system_configuration_service_role_all ON public.system_configuration;
+CREATE POLICY system_configuration_service_role_all ON public.system_configuration TO service_role USING (true) WITH CHECK (true);
+
+ALTER TABLE public.tax_rates ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS tax_rates_delete_policy ON public.tax_rates;
+CREATE POLICY tax_rates_delete_policy ON public.tax_rates FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS tax_rates_insert_policy ON public.tax_rates;
+CREATE POLICY tax_rates_insert_policy ON public.tax_rates FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS tax_rates_update_policy ON public.tax_rates;
+CREATE POLICY tax_rates_update_policy ON public.tax_rates FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+ALTER TABLE public.translations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS translations_delete_policy ON public.translations;
+CREATE POLICY translations_delete_policy ON public.translations FOR DELETE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS translations_insert_policy ON public.translations;
+CREATE POLICY translations_insert_policy ON public.translations FOR INSERT TO authenticated WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+DROP POLICY IF EXISTS translations_read_policy ON public.translations;
+CREATE POLICY translations_read_policy ON public.translations FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS translations_update_policy ON public.translations;
+CREATE POLICY translations_update_policy ON public.translations FOR UPDATE TO authenticated USING ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) WITH CHECK ((( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role])));
+
+ALTER TABLE public.ucp_cart_sessions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS ucp_cart_sessions_service_role_policy ON public.ucp_cart_sessions;
+CREATE POLICY ucp_cart_sessions_service_role_policy ON public.ucp_cart_sessions TO service_role USING (true) WITH CHECK (true);
+
+ALTER TABLE public.user_addresses ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE public.user_security_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS user_security_settings_insert_own_policy ON public.user_security_settings;
+CREATE POLICY user_security_settings_insert_own_policy ON public.user_security_settings FOR INSERT TO authenticated WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
+
+DROP POLICY IF EXISTS user_security_settings_select_own_policy ON public.user_security_settings;
+CREATE POLICY user_security_settings_select_own_policy ON public.user_security_settings FOR SELECT TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
+
+DROP POLICY IF EXISTS user_security_settings_service_role_policy ON public.user_security_settings;
+CREATE POLICY user_security_settings_service_role_policy ON public.user_security_settings TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS user_security_settings_update_own_policy ON public.user_security_settings;
+CREATE POLICY user_security_settings_update_own_policy ON public.user_security_settings FOR UPDATE TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id)) WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
+
+ALTER TABLE public.user_trusted_devices ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS user_trusted_devices_delete_own_policy ON public.user_trusted_devices;
+CREATE POLICY user_trusted_devices_delete_own_policy ON public.user_trusted_devices FOR DELETE TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
+
+DROP POLICY IF EXISTS user_trusted_devices_select_own_policy ON public.user_trusted_devices;
+CREATE POLICY user_trusted_devices_select_own_policy ON public.user_trusted_devices FOR SELECT TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
+
+DROP POLICY IF EXISTS user_trusted_devices_service_role_policy ON public.user_trusted_devices;
+CREATE POLICY user_trusted_devices_service_role_policy ON public.user_trusted_devices TO service_role USING (true) WITH CHECK (true);
+
+ALTER TABLE public.variant_attribute_mapping ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS variant_attribute_mapping_delete_policy ON public.variant_attribute_mapping;
+CREATE POLICY variant_attribute_mapping_delete_policy ON public.variant_attribute_mapping FOR DELETE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS variant_attribute_mapping_insert_policy ON public.variant_attribute_mapping;
+CREATE POLICY variant_attribute_mapping_insert_policy ON public.variant_attribute_mapping FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+DROP POLICY IF EXISTS variant_attribute_mapping_update_policy ON public.variant_attribute_mapping;
+CREATE POLICY variant_attribute_mapping_update_policy ON public.variant_attribute_mapping FOR UPDATE TO authenticated USING ((( SELECT public.is_admin() AS is_admin) IS TRUE)) WITH CHECK ((( SELECT public.is_admin() AS is_admin) IS TRUE));
+
+GRANT USAGE ON SCHEMA public TO postgres;
+
+GRANT USAGE ON SCHEMA public TO anon;
+
+GRANT USAGE ON SCHEMA public TO authenticated;
+
+GRANT USAGE ON SCHEMA public TO service_role;
+
+GRANT ALL ON FUNCTION public.apply_order_inventory_deduction(p_order_id uuid) TO anon;
+
+GRANT ALL ON FUNCTION public.apply_order_inventory_deduction(p_order_id uuid) TO authenticated;
+
+GRANT ALL ON FUNCTION public.apply_order_inventory_deduction(p_order_id uuid) TO service_role;
+
+GRANT ALL ON FUNCTION public.assign_order_invoice_metadata(p_order_id uuid, p_paid_at timestamp with time zone) TO anon;
+
+GRANT ALL ON FUNCTION public.assign_order_invoice_metadata(p_order_id uuid, p_paid_at timestamp with time zone) TO authenticated;
+
+GRANT ALL ON FUNCTION public.assign_order_invoice_metadata(p_order_id uuid, p_paid_at timestamp with time zone) TO service_role;
+
+GRANT ALL ON FUNCTION public.clear_currency_price_overrides(target_currency text) TO anon;
+
+GRANT ALL ON FUNCTION public.clear_currency_price_overrides(target_currency text) TO authenticated;
+
+GRANT ALL ON FUNCTION public.clear_currency_price_overrides(target_currency text) TO service_role;
+
+GRANT ALL ON FUNCTION public.is_valid_custom_block_fields(candidate jsonb) TO anon;
+
+GRANT ALL ON FUNCTION public.is_valid_custom_block_fields(candidate jsonb) TO authenticated;
+
+GRANT ALL ON FUNCTION public.is_valid_custom_block_fields(candidate jsonb) TO service_role;
+
+GRANT ALL ON FUNCTION public.is_valid_custom_block_layout_schema(candidate jsonb) TO anon;
+
+GRANT ALL ON FUNCTION public.is_valid_custom_block_layout_schema(candidate jsonb) TO authenticated;
+
+GRANT ALL ON FUNCTION public.is_valid_custom_block_layout_schema(candidate jsonb) TO service_role;
+
+GRANT ALL ON TABLE public.custom_block_definitions TO anon;
+
+GRANT ALL ON TABLE public.custom_block_definitions TO authenticated;
+
+GRANT ALL ON TABLE public.custom_block_definitions TO service_role;
+
+REVOKE ALL ON FUNCTION public.duplicate_block_definition(target_id uuid) FROM PUBLIC;
+
+GRANT ALL ON FUNCTION public.duplicate_block_definition(target_id uuid) TO authenticated;
+
+GRANT ALL ON FUNCTION public.duplicate_block_definition(target_id uuid) TO service_role;
+
+GRANT ALL ON FUNCTION public.duplicate_block_definition(target_id uuid) TO anon;
+
+GRANT ALL ON FUNCTION public.format_order_invoice_number(p_value bigint) TO anon;
+
+GRANT ALL ON FUNCTION public.format_order_invoice_number(p_value bigint) TO authenticated;
+
+GRANT ALL ON FUNCTION public.format_order_invoice_number(p_value bigint) TO service_role;
+
+GRANT ALL ON FUNCTION public.generate_order_invoice_number() TO anon;
+
+GRANT ALL ON FUNCTION public.generate_order_invoice_number() TO authenticated;
+
+GRANT ALL ON FUNCTION public.generate_order_invoice_number() TO service_role;
+
+GRANT ALL ON FUNCTION public.get_current_user_role() TO anon;
+
+GRANT ALL ON FUNCTION public.get_current_user_role() TO authenticated;
+
+GRANT ALL ON FUNCTION public.get_current_user_role() TO service_role;
+
+GRANT ALL ON FUNCTION public.get_default_currency_code() TO anon;
+
+GRANT ALL ON FUNCTION public.get_default_currency_code() TO authenticated;
+
+GRANT ALL ON FUNCTION public.get_default_currency_code() TO service_role;
+
+GRANT ALL ON FUNCTION public.get_ecommerce_track_quantities() TO anon;
+
+GRANT ALL ON FUNCTION public.get_ecommerce_track_quantities() TO authenticated;
+
+GRANT ALL ON FUNCTION public.get_ecommerce_track_quantities() TO service_role;
+
+GRANT ALL ON FUNCTION public.get_my_claim(claim text) TO anon;
+
+GRANT ALL ON FUNCTION public.get_my_claim(claim text) TO authenticated;
+
+GRANT ALL ON FUNCTION public.get_my_claim(claim text) TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_blocks_update() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_blocks_update() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_blocks_update() TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_coupon_freemius_mappings_write() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_coupon_freemius_mappings_write() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_coupon_freemius_mappings_write() TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_coupons_write() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_coupons_write() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_coupons_write() TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_default_currency_change() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_default_currency_change() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_default_currency_change() TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_inventory_item_change() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_inventory_item_change() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_inventory_item_change() TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_inventory_items_update() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_inventory_items_update() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_inventory_items_update() TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_languages_update() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_languages_update() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_languages_update() TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_media_update() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_media_update() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_media_update() TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_navigation_items_update() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_navigation_items_update() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_navigation_items_update() TO service_role;
+
+REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC;
+
+GRANT ALL ON FUNCTION public.handle_new_user() TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_new_user() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_new_user() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_pages_update() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_pages_update() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_pages_update() TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_posts_update() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_posts_update() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_posts_update() TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_product_freemius_sale_coupons_write() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_product_freemius_sale_coupons_write() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_product_freemius_sale_coupons_write() TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_shipping_zone_locations_write() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_shipping_zone_locations_write() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_shipping_zone_locations_write() TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_tax_rates_write() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_tax_rates_write() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_tax_rates_write() TO service_role;
+
+GRANT ALL ON FUNCTION public.handle_ucp_cart_sessions_update() TO anon;
+
+GRANT ALL ON FUNCTION public.handle_ucp_cart_sessions_update() TO authenticated;
+
+GRANT ALL ON FUNCTION public.handle_ucp_cart_sessions_update() TO service_role;
+
+GRANT ALL ON FUNCTION public.is_admin() TO anon;
+
+GRANT ALL ON FUNCTION public.is_admin() TO authenticated;
+
+GRANT ALL ON FUNCTION public.is_admin() TO service_role;
+
+GRANT ALL ON FUNCTION public.is_valid_currency_amount_map(amounts jsonb) TO anon;
+
+GRANT ALL ON FUNCTION public.is_valid_currency_amount_map(amounts jsonb) TO authenticated;
+
+GRANT ALL ON FUNCTION public.is_valid_currency_amount_map(amounts jsonb) TO service_role;
+
+GRANT ALL ON FUNCTION public.is_valid_sale_price_map(prices jsonb, sale_prices jsonb) TO anon;
+
+GRANT ALL ON FUNCTION public.is_valid_sale_price_map(prices jsonb, sale_prices jsonb) TO authenticated;
+
+GRANT ALL ON FUNCTION public.is_valid_sale_price_map(prices jsonb, sale_prices jsonb) TO service_role;
+
+GRANT ALL ON FUNCTION public.normalize_currency_amount_map(amounts jsonb) TO anon;
+
+GRANT ALL ON FUNCTION public.normalize_currency_amount_map(amounts jsonb) TO authenticated;
+
+GRANT ALL ON FUNCTION public.normalize_currency_amount_map(amounts jsonb) TO service_role;
+
+GRANT ALL ON FUNCTION public.set_currency_defaults() TO anon;
+
+GRANT ALL ON FUNCTION public.set_currency_defaults() TO authenticated;
+
+GRANT ALL ON FUNCTION public.set_currency_defaults() TO service_role;
+
+GRANT ALL ON FUNCTION public.set_current_timestamp_updated_at() TO anon;
+
+GRANT ALL ON FUNCTION public.set_current_timestamp_updated_at() TO authenticated;
+
+GRANT ALL ON FUNCTION public.set_current_timestamp_updated_at() TO service_role;
+
+GRANT ALL ON FUNCTION public.sync_currency_price_maps() TO anon;
+
+GRANT ALL ON FUNCTION public.sync_currency_price_maps() TO authenticated;
+
+GRANT ALL ON FUNCTION public.sync_currency_price_maps() TO service_role;
+
+GRANT ALL ON FUNCTION public.sync_inventory_cache_for_sku(p_sku text) TO anon;
+
+GRANT ALL ON FUNCTION public.sync_inventory_cache_for_sku(p_sku text) TO authenticated;
+
+GRANT ALL ON FUNCTION public.sync_inventory_cache_for_sku(p_sku text) TO service_role;
+
+GRANT ALL ON FUNCTION public.sync_legacy_price_columns_for_currency(target_currency text) TO anon;
+
+GRANT ALL ON FUNCTION public.sync_legacy_price_columns_for_currency(target_currency text) TO authenticated;
+
+GRANT ALL ON FUNCTION public.sync_legacy_price_columns_for_currency(target_currency text) TO service_role;
+
+GRANT ALL ON FUNCTION public.sync_shipping_method_currency_maps() TO anon;
+
+GRANT ALL ON FUNCTION public.sync_shipping_method_currency_maps() TO authenticated;
+
+GRANT ALL ON FUNCTION public.sync_shipping_method_currency_maps() TO service_role;
+
+GRANT ALL ON FUNCTION public.update_product_ratings() TO anon;
+
+GRANT ALL ON FUNCTION public.update_product_ratings() TO authenticated;
+
+GRANT ALL ON FUNCTION public.update_product_ratings() TO service_role;
+
+GRANT ALL ON FUNCTION public.upsert_product_with_variants(product_payload jsonb) TO anon;
+
+GRANT ALL ON FUNCTION public.upsert_product_with_variants(product_payload jsonb) TO authenticated;
+
+GRANT ALL ON FUNCTION public.upsert_product_with_variants(product_payload jsonb) TO service_role;
+
+GRANT ALL ON TABLE public.blocks TO anon;
+
+GRANT ALL ON TABLE public.blocks TO authenticated;
+
+GRANT ALL ON TABLE public.blocks TO service_role;
+
+GRANT ALL ON SEQUENCE public.blocks_id_seq TO anon;
+
+GRANT ALL ON SEQUENCE public.blocks_id_seq TO authenticated;
+
+GRANT ALL ON SEQUENCE public.blocks_id_seq TO service_role;
+
+GRANT ALL ON TABLE public.categories TO anon;
+
+GRANT ALL ON TABLE public.categories TO authenticated;
+
+GRANT ALL ON TABLE public.categories TO service_role;
+
+GRANT ALL ON TABLE public.cms_interactions TO anon;
+
+GRANT ALL ON TABLE public.cms_interactions TO authenticated;
+
+GRANT ALL ON TABLE public.cms_interactions TO service_role;
+
+GRANT ALL ON TABLE public.content_drafts TO anon;
+
+GRANT ALL ON TABLE public.content_drafts TO authenticated;
+
+GRANT ALL ON TABLE public.content_drafts TO service_role;
+
+GRANT ALL ON SEQUENCE public.content_drafts_id_seq TO anon;
+
+GRANT ALL ON SEQUENCE public.content_drafts_id_seq TO authenticated;
+
+GRANT ALL ON SEQUENCE public.content_drafts_id_seq TO service_role;
+
+GRANT ALL ON TABLE public.cortex_ai_db_mutation_audit TO anon;
+
+GRANT ALL ON TABLE public.cortex_ai_db_mutation_audit TO authenticated;
+
+GRANT ALL ON TABLE public.cortex_ai_db_mutation_audit TO service_role;
+
+GRANT ALL ON TABLE public.coupon_freemius_mappings TO anon;
+
+GRANT ALL ON TABLE public.coupon_freemius_mappings TO authenticated;
+
+GRANT ALL ON TABLE public.coupon_freemius_mappings TO service_role;
+
+GRANT ALL ON TABLE public.coupon_products TO anon;
+
+GRANT ALL ON TABLE public.coupon_products TO authenticated;
+
+GRANT ALL ON TABLE public.coupon_products TO service_role;
+
+GRANT ALL ON TABLE public.coupon_redemptions TO anon;
+
+GRANT ALL ON TABLE public.coupon_redemptions TO authenticated;
+
+GRANT ALL ON TABLE public.coupon_redemptions TO service_role;
+
+GRANT ALL ON TABLE public.coupons TO anon;
+
+GRANT ALL ON TABLE public.coupons TO authenticated;
+
+GRANT ALL ON TABLE public.coupons TO service_role;
+
+GRANT ALL ON TABLE public.currencies TO anon;
+
+GRANT ALL ON TABLE public.currencies TO authenticated;
+
+GRANT ALL ON TABLE public.currencies TO service_role;
+
+GRANT ALL ON TABLE public.email_2fa_challenges TO anon;
+
+GRANT ALL ON TABLE public.email_2fa_challenges TO authenticated;
+
+GRANT ALL ON TABLE public.email_2fa_challenges TO service_role;
+
+GRANT ALL ON TABLE public.freemius_plans TO anon;
+
+GRANT ALL ON TABLE public.freemius_plans TO authenticated;
+
+GRANT ALL ON TABLE public.freemius_plans TO service_role;
+
+GRANT ALL ON TABLE public.freemius_pricing TO anon;
+
+GRANT ALL ON TABLE public.freemius_pricing TO authenticated;
+
+GRANT ALL ON TABLE public.freemius_pricing TO service_role;
+
+GRANT ALL ON TABLE public.inventory_items TO anon;
+
+GRANT ALL ON TABLE public.inventory_items TO authenticated;
+
+GRANT ALL ON TABLE public.inventory_items TO service_role;
+
+GRANT ALL ON TABLE public.languages TO anon;
+
+GRANT ALL ON TABLE public.languages TO authenticated;
+
+GRANT ALL ON TABLE public.languages TO service_role;
+
+GRANT ALL ON SEQUENCE public.languages_id_seq TO anon;
+
+GRANT ALL ON SEQUENCE public.languages_id_seq TO authenticated;
+
+GRANT ALL ON SEQUENCE public.languages_id_seq TO service_role;
+
+GRANT ALL ON TABLE public.logos TO anon;
+
+GRANT ALL ON TABLE public.logos TO authenticated;
+
+GRANT ALL ON TABLE public.logos TO service_role;
+
+GRANT ALL ON TABLE public.media TO anon;
+
+GRANT ALL ON TABLE public.media TO authenticated;
+
+GRANT ALL ON TABLE public.media TO service_role;
+
+GRANT ALL ON TABLE public.navigation_items TO anon;
+
+GRANT ALL ON TABLE public.navigation_items TO authenticated;
+
+GRANT ALL ON TABLE public.navigation_items TO service_role;
+
+GRANT ALL ON SEQUENCE public.navigation_items_id_seq TO anon;
+
+GRANT ALL ON SEQUENCE public.navigation_items_id_seq TO authenticated;
+
+GRANT ALL ON SEQUENCE public.navigation_items_id_seq TO service_role;
+
+GRANT ALL ON SEQUENCE public.order_invoice_number_seq TO anon;
+
+GRANT ALL ON SEQUENCE public.order_invoice_number_seq TO authenticated;
+
+GRANT ALL ON SEQUENCE public.order_invoice_number_seq TO service_role;
+
+GRANT ALL ON TABLE public.order_items TO anon;
+
+GRANT ALL ON TABLE public.order_items TO authenticated;
+
+GRANT ALL ON TABLE public.order_items TO service_role;
+
+GRANT ALL ON TABLE public.orders TO anon;
+
+GRANT ALL ON TABLE public.orders TO authenticated;
+
+GRANT ALL ON TABLE public.orders TO service_role;
+
+GRANT ALL ON TABLE public.package_activations TO anon;
+
+GRANT ALL ON TABLE public.package_activations TO authenticated;
+
+GRANT ALL ON TABLE public.package_activations TO service_role;
+
+GRANT ALL ON TABLE public.page_revisions TO anon;
+
+GRANT ALL ON TABLE public.page_revisions TO authenticated;
+
+GRANT ALL ON TABLE public.page_revisions TO service_role;
+
+GRANT ALL ON SEQUENCE public.page_revisions_id_seq TO anon;
+
+GRANT ALL ON SEQUENCE public.page_revisions_id_seq TO authenticated;
+
+GRANT ALL ON SEQUENCE public.page_revisions_id_seq TO service_role;
+
+GRANT ALL ON TABLE public.pages TO anon;
+
+GRANT ALL ON TABLE public.pages TO authenticated;
+
+GRANT ALL ON TABLE public.pages TO service_role;
+
+GRANT ALL ON SEQUENCE public.pages_id_seq TO anon;
+
+GRANT ALL ON SEQUENCE public.pages_id_seq TO authenticated;
+
+GRANT ALL ON SEQUENCE public.pages_id_seq TO service_role;
+
+GRANT ALL ON TABLE public.post_revisions TO anon;
+
+GRANT ALL ON TABLE public.post_revisions TO authenticated;
+
+GRANT ALL ON TABLE public.post_revisions TO service_role;
+
+GRANT ALL ON SEQUENCE public.post_revisions_id_seq TO anon;
+
+GRANT ALL ON SEQUENCE public.post_revisions_id_seq TO authenticated;
+
+GRANT ALL ON SEQUENCE public.post_revisions_id_seq TO service_role;
+
+GRANT ALL ON TABLE public.posts TO anon;
+
+GRANT ALL ON TABLE public.posts TO authenticated;
+
+GRANT ALL ON TABLE public.posts TO service_role;
+
+GRANT ALL ON SEQUENCE public.posts_id_seq TO anon;
+
+GRANT ALL ON SEQUENCE public.posts_id_seq TO authenticated;
+
+GRANT ALL ON SEQUENCE public.posts_id_seq TO service_role;
+
+GRANT ALL ON TABLE public.privacy_consent_logs TO anon;
+
+GRANT ALL ON TABLE public.privacy_consent_logs TO authenticated;
+
+GRANT ALL ON TABLE public.privacy_consent_logs TO service_role;
+
+GRANT ALL ON TABLE public.product_attribute_terms TO anon;
+
+GRANT ALL ON TABLE public.product_attribute_terms TO authenticated;
+
+GRANT ALL ON TABLE public.product_attribute_terms TO service_role;
+
+GRANT ALL ON TABLE public.product_attributes TO anon;
+
+GRANT ALL ON TABLE public.product_attributes TO authenticated;
+
+GRANT ALL ON TABLE public.product_attributes TO service_role;
+
+GRANT ALL ON TABLE public.product_categories TO anon;
+
+GRANT ALL ON TABLE public.product_categories TO authenticated;
+
+GRANT ALL ON TABLE public.product_categories TO service_role;
+
+GRANT ALL ON TABLE public.product_drafts TO anon;
+
+GRANT ALL ON TABLE public.product_drafts TO authenticated;
+
+GRANT ALL ON TABLE public.product_drafts TO service_role;
+
+GRANT ALL ON SEQUENCE public.product_drafts_id_seq TO anon;
+
+GRANT ALL ON SEQUENCE public.product_drafts_id_seq TO authenticated;
+
+GRANT ALL ON SEQUENCE public.product_drafts_id_seq TO service_role;
+
+GRANT ALL ON TABLE public.product_freemius_sale_coupons TO anon;
+
+GRANT ALL ON TABLE public.product_freemius_sale_coupons TO authenticated;
+
+GRANT ALL ON TABLE public.product_freemius_sale_coupons TO service_role;
+
+GRANT ALL ON TABLE public.product_media TO anon;
+
+GRANT ALL ON TABLE public.product_media TO authenticated;
+
+GRANT ALL ON TABLE public.product_media TO service_role;
+
+GRANT ALL ON TABLE public.product_variants TO anon;
+
+GRANT ALL ON TABLE public.product_variants TO authenticated;
+
+GRANT ALL ON TABLE public.product_variants TO service_role;
+
+GRANT ALL ON TABLE public.products TO anon;
+
+GRANT ALL ON TABLE public.products TO authenticated;
+
+GRANT ALL ON TABLE public.products TO service_role;
+
+GRANT ALL ON TABLE public.profiles TO anon;
+
+GRANT ALL ON TABLE public.profiles TO authenticated;
+
+GRANT ALL ON TABLE public.profiles TO service_role;
+
+GRANT ALL ON TABLE public.shipping_zone_locations TO anon;
+
+GRANT ALL ON TABLE public.shipping_zone_locations TO authenticated;
+
+GRANT ALL ON TABLE public.shipping_zone_locations TO service_role;
+
+GRANT ALL ON TABLE public.shipping_zone_methods TO anon;
+
+GRANT ALL ON TABLE public.shipping_zone_methods TO authenticated;
+
+GRANT ALL ON TABLE public.shipping_zone_methods TO service_role;
+
+GRANT ALL ON TABLE public.shipping_zones TO anon;
+
+GRANT ALL ON TABLE public.shipping_zones TO authenticated;
+
+GRANT ALL ON TABLE public.shipping_zones TO service_role;
+
+GRANT ALL ON TABLE public.site_settings TO anon;
+
+GRANT ALL ON TABLE public.site_settings TO authenticated;
+
+GRANT ALL ON TABLE public.site_settings TO service_role;
+
+GRANT ALL ON TABLE public.system_alerts TO anon;
+
+GRANT ALL ON TABLE public.system_alerts TO authenticated;
+
+GRANT ALL ON TABLE public.system_alerts TO service_role;
+
+GRANT ALL ON TABLE public.system_configuration TO anon;
+
+GRANT ALL ON TABLE public.system_configuration TO authenticated;
+
+GRANT ALL ON TABLE public.system_configuration TO service_role;
+
+GRANT ALL ON TABLE public.tax_rates TO anon;
+
+GRANT ALL ON TABLE public.tax_rates TO authenticated;
+
+GRANT ALL ON TABLE public.tax_rates TO service_role;
+
+GRANT ALL ON TABLE public.translations TO anon;
+
+GRANT ALL ON TABLE public.translations TO authenticated;
+
+GRANT ALL ON TABLE public.translations TO service_role;
+
+GRANT ALL ON TABLE public.ucp_cart_sessions TO anon;
+
+GRANT ALL ON TABLE public.ucp_cart_sessions TO authenticated;
+
+GRANT ALL ON TABLE public.ucp_cart_sessions TO service_role;
+
+GRANT ALL ON TABLE public.user_addresses TO anon;
+
+GRANT ALL ON TABLE public.user_addresses TO authenticated;
+
+GRANT ALL ON TABLE public.user_addresses TO service_role;
+
+GRANT ALL ON TABLE public.user_security_settings TO anon;
+
+GRANT ALL ON TABLE public.user_security_settings TO authenticated;
+
+GRANT ALL ON TABLE public.user_security_settings TO service_role;
+
+GRANT ALL ON TABLE public.user_trusted_devices TO anon;
+
+GRANT ALL ON TABLE public.user_trusted_devices TO authenticated;
+
+GRANT ALL ON TABLE public.user_trusted_devices TO service_role;
+
+GRANT ALL ON TABLE public.variant_attribute_mapping TO anon;
+
+GRANT ALL ON TABLE public.variant_attribute_mapping TO authenticated;
+
+GRANT ALL ON TABLE public.variant_attribute_mapping TO service_role;
+
+-- Re-attached: trigger lives on auth.users, which a public-only pg_dump omits (see migration 005).
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user();
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
 
 
--- >>> FROM: 00000000000043_swap_home_hero_media_to_youtube.sql <<<
--- Swap the home HERO media from the static NBcover image to an embedded YouTube video.
---
--- The seeded home hero (migration 010) renders a "Why teams switch / 100% Lighthouse"
--- card in its right column whose last element is an <img src="/images/NBcover.webp" />.
--- This replaces just that <img> with a responsive 16:9 YouTube <iframe>, keeping the
--- surrounding card, its rounded/border/shadow wrapper, and every other block intact.
---
--- Rendering path: the hero right column is a 'text' block; TextBlockRenderer feeds the
--- html_content through html-react-parser, which preserves <iframe> (it only strips on*
--- handlers and swaps known CMS <img> for next/image). The proxy.ts CSP frame-src already
--- allows https://www.youtube.com, so the embed is not blocked.
---
--- Forward-only and idempotent:
---   * Each UPDATE matches the language-specific <img> alt text, so a second run finds no
---     match and is a no-op (the alt text no longer exists once swapped).
---   * String replace on content::text mirrors migration 042; the img markup is unique to
---     the home hero, so exactly the EN and FR home hero blocks are touched.
---
--- The NBcover.webp media row is left untouched — it is still the feature image for the
--- "how-nextblock-works" post; only the inline hero usage changes.
+-- >>> FROM: 00000000000003_baseline_seed.sql <<<
+-- AUTO-GENERATED baseline (re-baseline of migrations 000..044). Idempotent; safe to replay.
+-- 03 · seed: canonical NextBlock demo content (no users, no secrets)
+-- Regenerate via tools/scripts/rebaseline-transform.mjs. Do not hand-edit.
 
--- ---------------------------------------------------------------------------
--- 1. EN home hero: replace NBcover <img> with a YouTube <iframe>
--- ---------------------------------------------------------------------------
-UPDATE public.blocks
-SET content = replace(
-                content::text,
-                '<img src=''/images/NBcover.webp'' alt=''Nextblock cover showcasing dashboards and blocks'' class=''w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700'' fetchpriority=''high'' />',
-                '<div class=''relative w-full aspect-video''><iframe class=''absolute inset-0 h-full w-full border-0'' src=''https://www.youtube.com/embed/71MyfoL4YVM?si=jtlDXV6cSC8rDgz0'' title=''NextBlock demo video'' allow=''accelerated-motion; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'' referrerpolicy=''strict-origin-when-cross-origin'' loading=''lazy'' allowfullscreen></iframe></div>'
-              )::jsonb
-WHERE content::text LIKE '%Nextblock cover showcasing dashboards and blocks%';
+INSERT INTO public.languages (id, code, name, is_default, is_active, created_at, updated_at) VALUES (1, 'en', 'English', true, true, '2026-07-03 17:52:15.444652+00', '2026-07-03 17:52:15.444652+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.languages (id, code, name, is_default, is_active, created_at, updated_at) VALUES (2, 'fr', 'Français', false, true, '2026-07-03 17:52:15.444652+00', '2026-07-03 17:52:15.444652+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.media (id, uploader_id, file_name, object_key, file_type, size_bytes, description, width, height, blur_data_url, variants, file_path, folder, created_at, updated_at) VALUES ('ea6fdaf5-f8de-416c-9f2b-b689b7a4ed38', NULL, 'nextblock-logo-small.webp', 'images/nextblock-logo-small.webp', 'image/webp', 10000, 'NextBlock™ Site Logo', NULL, NULL, NULL, NULL, NULL, NULL, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.media (id, uploader_id, file_name, object_key, file_type, size_bytes, description, width, height, blur_data_url, variants, file_path, folder, created_at, updated_at) VALUES ('5bb07d4c-ca14-49ab-96bb-febbed31aded', NULL, 'NBcover.webp', 'images/NBcover.webp', 'image/webp', 180000, 'NextBlock™ architecture overview cover image', 1024, 572, NULL, NULL, NULL, NULL, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.media (id, uploader_id, file_name, object_key, file_type, size_bytes, description, width, height, blur_data_url, variants, file_path, folder, created_at, updated_at) VALUES ('641ddf75-5c90-41df-8b83-e7c298f30a6a', NULL, 'extensibility.webp', 'images/extensibility.webp', 'image/webp', 246808, 'NextBlock™ extensibility editorial artwork', 1024, 559, NULL, NULL, NULL, NULL, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.media (id, uploader_id, file_name, object_key, file_type, size_bytes, description, width, height, blur_data_url, variants, file_path, folder, created_at, updated_at) VALUES ('e6ed9c34-6ef6-47a8-b836-e6dbf73511fa', NULL, 'included.webp', 'images/included.webp', 'image/webp', 237478, 'NextBlock™ getting-started platform artwork', 1024, 559, NULL, NULL, NULL, NULL, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.media (id, uploader_id, file_name, object_key, file_type, size_bytes, description, width, height, blur_data_url, variants, file_path, folder, created_at, updated_at) VALUES ('77b9da47-4182-470f-9070-fa6cd11c6aea', NULL, 'programmer-upscaled.webp', 'images/programmer-upscaled.webp', 'image/webp', 780000, 'NextBlock™ setup guide cover image', 8192, 2632, NULL, NULL, NULL, NULL, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.media (id, uploader_id, file_name, object_key, file_type, size_bytes, description, width, height, blur_data_url, variants, file_path, folder, created_at, updated_at) VALUES ('dfa0e881-70b6-4767-b9b0-7a6293db5009', NULL, 'commerce-plan.webp', 'images/commerce-plan.webp', 'image/webp', 269854, 'NextBlock™ commerce roadmap artwork', 1024, 559, NULL, NULL, NULL, NULL, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.media (id, uploader_id, file_name, object_key, file_type, size_bytes, description, width, height, blur_data_url, variants, file_path, folder, created_at, updated_at) VALUES ('5f5a0d6d-aed4-4b6f-b966-ea5d5b17b7a6', NULL, 'commerce-wide.webp', 'images/commerce-wide.webp', 'image/webp', 250584, 'NextBlock™ Commerce editorial feature image', 1024, 434, NULL, NULL, NULL, NULL, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.media (id, uploader_id, file_name, object_key, file_type, size_bytes, description, width, height, blur_data_url, variants, file_path, folder, created_at, updated_at) VALUES ('38ec38c2-899f-47b0-8364-56a574527078', NULL, 'cortex-ai.webp', 'images/cortex-ai.webp', 'image/webp', 298588, 'NextBlock Cortex AI editorial feature image', 1024, 571, NULL, NULL, 'images/cortex-ai.webp', 'images', '2026-07-03 17:52:15.643901+00', '2026-07-03 17:52:15.643901+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.pages (id, language_id, author_id, title, slug, status, meta_title, meta_description, version, translation_group_id, created_at, updated_at, feature_image_id) VALUES (1, 1, NULL, 'Home', 'home', 'published', NULL, NULL, 1, '0098e4f0-e5f3-4e28-acfc-bb9fdb3a4a6b', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.pages (id, language_id, author_id, title, slug, status, meta_title, meta_description, version, translation_group_id, created_at, updated_at, feature_image_id) VALUES (2, 2, NULL, 'Accueil', 'accueil', 'published', NULL, NULL, 1, '0098e4f0-e5f3-4e28-acfc-bb9fdb3a4a6b', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.pages (id, language_id, author_id, title, slug, status, meta_title, meta_description, version, translation_group_id, created_at, updated_at, feature_image_id) VALUES (3, 1, NULL, 'Articles', 'articles', 'published', NULL, NULL, 1, '50adeea5-5040-4ae7-bacd-992647920982', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.pages (id, language_id, author_id, title, slug, status, meta_title, meta_description, version, translation_group_id, created_at, updated_at, feature_image_id) VALUES (4, 2, NULL, 'Articles', 'articles', 'published', NULL, NULL, 1, '50adeea5-5040-4ae7-bacd-992647920982', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.pages (id, language_id, author_id, title, slug, status, meta_title, meta_description, version, translation_group_id, created_at, updated_at, feature_image_id) VALUES (5, 1, NULL, 'Contact Us', 'contact', 'published', NULL, NULL, 1, 'e3b28669-7e38-47bd-9189-7db2353b52dc', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.pages (id, language_id, author_id, title, slug, status, meta_title, meta_description, version, translation_group_id, created_at, updated_at, feature_image_id) VALUES (6, 2, NULL, 'Contactez-nous', 'contact', 'published', NULL, NULL, 1, 'e3b28669-7e38-47bd-9189-7db2353b52dc', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.pages (id, language_id, author_id, title, slug, status, meta_title, meta_description, version, translation_group_id, created_at, updated_at, feature_image_id) VALUES (7, 1, NULL, 'Privacy Policy', 'privacy-policy', 'published', 'Privacy Policy', 'How we collect, use, disclose, and protect your personal information under Quebec Law 25, PIPEDA, and CASL.', 1, '8cd91839-518d-4b57-87db-441e59a71a95', '2026-07-03 17:52:15.699946+00', '2026-07-03 17:52:15.699946+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.pages (id, language_id, author_id, title, slug, status, meta_title, meta_description, version, translation_group_id, created_at, updated_at, feature_image_id) VALUES (8, 2, NULL, 'Politique de confidentialité', 'politique-de-confidentialite', 'published', 'Politique de confidentialité', 'Comment nous recueillons, utilisons, communiquons et protégeons vos renseignements personnels en vertu de la Loi 25, de la LPRPDE et de la LCAP.', 1, '8cd91839-518d-4b57-87db-441e59a71a95', '2026-07-03 17:52:15.699946+00', '2026-07-03 17:52:15.699946+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.pages (id, language_id, author_id, title, slug, status, meta_title, meta_description, version, translation_group_id, created_at, updated_at, feature_image_id) VALUES (9, 1, NULL, 'Terms of Service', 'terms-of-service', 'published', 'Terms of Service', 'The terms governing your use of NextBlock™ CMS, free and open-source software licensed under the AGPL-3.0.', 1, 'b5eb82c7-95d6-4308-82d8-3ac2816f5d46', '2026-07-03 17:52:15.699946+00', '2026-07-03 17:52:15.699946+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.pages (id, language_id, author_id, title, slug, status, meta_title, meta_description, version, translation_group_id, created_at, updated_at, feature_image_id) VALUES (10, 2, NULL, 'Conditions d''utilisation', 'conditions-utilisation', 'published', 'Conditions d''utilisation', 'Les conditions régissant votre utilisation de NextBlock™ CMS, un logiciel libre sous licence AGPL-3.0.', 1, 'b5eb82c7-95d6-4308-82d8-3ac2816f5d46', '2026-07-03 17:52:15.699946+00', '2026-07-03 17:52:15.699946+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.posts (id, language_id, author_id, title, slug, label, excerpt, subtitle, status, published_at, meta_title, meta_description, feature_image_id, version, translation_group_id, created_at, updated_at) VALUES (1, 1, NULL, 'How NextBlock™ Works: A Look Under the Hood', 'how-nextblock-works', 'Architecture', 'Under the hood of the monorepo, block registry, and editor stack that power NextBlock.', 'A guided tour of the monorepo, block registry, editor stack, and open-core architecture behind NextBlock.', 'published', NULL, NULL, NULL, '5bb07d4c-ca14-49ab-96bb-febbed31aded', 1, 'de8b8593-1ef6-4e66-8d1f-8b3e7ffb811d', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.posts (id, language_id, author_id, title, slug, label, excerpt, subtitle, status, published_at, meta_title, meta_description, feature_image_id, version, translation_group_id, created_at, updated_at) VALUES (2, 2, NULL, 'Comment NextBlock™ Fonctionne : Regard Sous le Capot', 'comment-nextblock-fonctionne', 'Architecture', 'Sous le capot du monorepo, du registre de blocs et de l editeur qui propulsent NextBlock.', 'Une visite guidee du monorepo, du registre de blocs, de l editeur et de l architecture open-core de NextBlock.', 'published', NULL, NULL, NULL, '5bb07d4c-ca14-49ab-96bb-febbed31aded', 1, 'de8b8593-1ef6-4e66-8d1f-8b3e7ffb811d', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.posts (id, language_id, author_id, title, slug, label, excerpt, subtitle, status, published_at, meta_title, meta_description, feature_image_id, version, translation_group_id, created_at, updated_at) VALUES (5, 1, NULL, 'NextBlock™ Commerce: Multi-Currency, Tax Sync & Beyond', 'nextblock-commerce-guide', 'Commerce', 'Storefront architecture, checkout flows, and premium commerce capabilities inside NextBlock.', 'A closer look at the commerce module, from multi-currency and tax sync to shipping, inventory, and provider-aware checkout.', 'published', NULL, NULL, NULL, '5f5a0d6d-aed4-4b6f-b966-ea5d5b17b7a6', 1, '23773a34-e54b-40c6-89b5-b09ead17ae60', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.posts (id, language_id, author_id, title, slug, label, excerpt, subtitle, status, published_at, meta_title, meta_description, feature_image_id, version, translation_group_id, created_at, updated_at) VALUES (6, 2, NULL, 'NextBlock™ Commerce : Multi-Devises, Taxes Automatiques et Plus', 'guide-commerce-nextblock', 'Commerce', 'Architecture boutique, parcours de paiement et fonctions commerce premium au coeur de NextBlock.', 'Un apercu du module commerce : multi-devises, sync taxes, expedition, inventaire et paiements connectes.', 'published', NULL, NULL, NULL, '5f5a0d6d-aed4-4b6f-b966-ea5d5b17b7a6', 1, '23773a34-e54b-40c6-89b5-b09ead17ae60', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.posts (id, language_id, author_id, title, slug, label, excerpt, subtitle, status, published_at, meta_title, meta_description, feature_image_id, version, translation_group_id, created_at, updated_at) VALUES (7, 1, NULL, 'NextBlock Cortex AI Guide', 'nextblock-cortex-ai-guide', 'AI Copilot', 'A practical guide to Cortex AI, the block-aware assistant for model routing, BYOK controls, and faster editorial production inside NextBlock.', 'See how Cortex AI brings structured generation, provider choice, and safer content workflows directly into the NextBlock editor.', 'published', '2026-07-03 17:52:15.643901+00', 'NextBlock Cortex AI Guide', 'Learn how NextBlock Cortex AI helps teams generate, refine, and translate structured block content with model routing and BYOK controls.', '38ec38c2-899f-47b0-8364-56a574527078', 1, '669489e7-5900-496e-8b73-2aba7514a71b', '2026-07-03 17:52:15.643901+00', '2026-07-03 17:52:15.643901+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.posts (id, language_id, author_id, title, slug, label, excerpt, subtitle, status, published_at, meta_title, meta_description, feature_image_id, version, translation_group_id, created_at, updated_at) VALUES (3, 1, NULL, 'How to Install NextBlock: Every Setup Option Explained', 'how-to-setup-nextblock', 'Getting Started', 'Every way to install NextBlock — one-click cloud deploy, CLI scaffold, git clone, or self-hosted Docker — with copy-paste steps for each.', 'Four ways to launch NextBlock: a one-click Vercel deploy, npm create nextblock, git clone with the browser setup wizard, or a fully local Docker stack.', 'published', NULL, 'How to Install NextBlock CMS — Vercel, CLI, Git or Docker', 'Install NextBlock in minutes — one-click Vercel deploy, npm create nextblock, git clone, or self-hosted Docker. No config files, no manual SQL.', '77b9da47-4182-470f-9070-fa6cd11c6aea', 1, '461cde55-74cb-4112-8c3d-a25882eeedce', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.799297+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.posts (id, language_id, author_id, title, slug, label, excerpt, subtitle, status, published_at, meta_title, meta_description, feature_image_id, version, translation_group_id, created_at, updated_at) VALUES (4, 2, NULL, 'Installer NextBlock : toutes les options expliquées', 'comment-configurer-nextblock', 'Mise En Route', 'Toutes les façons d''installer NextBlock — cloud en un clic, CLI, git clone ou Docker auto-hébergé — avec les étapes à copier-coller.', 'Quatre façons de lancer NextBlock : déploiement Vercel en un clic, npm create nextblock, git clone avec l''assistant dans le navigateur, ou une pile Docker 100 % locale.', 'published', NULL, 'Installer NextBlock — Vercel, CLI, Git ou Docker', 'Installez NextBlock en quelques minutes : déploiement Vercel en un clic, npm create nextblock, git clone ou Docker auto-hébergé. Sans config ni SQL.', '77b9da47-4182-470f-9070-fa6cd11c6aea', 1, '461cde55-74cb-4112-8c3d-a25882eeedce', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.799297+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (2, 1, NULL, 1, 'section', '{"padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "none"}, "column_gap": "lg", "column_blocks": [[{"content": {"level": 2, "textAlign": "center", "text_content": "Key Features: The Three Pillars of NextBlock™"}, "block_type": "heading"}, {"content": {"html_content": "<p class=''text-lg text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ is a holistic platform that unites performance, editorial experience, and developer control so every stakeholder delivers their best work.</p>"}, "block_type": "text"}, {"content": {"html_content": "<div class=''grid gap-8 md:grid-cols-3 mt-12''><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 backdrop-blur-sm hover:bg-slate-100 dark:hover:bg-white/10 transition-colors duration-300''><div class=''w-12 h-12 rounded-xl flex items-center justify-center text-black dark:text-white mb-6''><svg class=''w-6 h-6'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M13 10V3L4 14h7v7l9-11h-7z''></path></svg></div><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Built for Speed.</h3><p class=''text-sm text-slate-600 dark:text-slate-400 leading-relaxed''>Architected for 100% Lighthouse scores with global delivery and near-instant FCP.</p><ul class=''mt-6 space-y-3 text-sm text-slate-600 dark:text-slate-400''><li><strong class=''text-slate-800 dark:text-slate-200''>Edge Caching &amp; ISR:</strong> Serve pages worldwide.</li><li><strong class=''text-slate-800 dark:text-slate-200''>Critical CSS:</strong> Inline styles to eliminate blocking.</li><li><strong class=''text-slate-800 dark:text-slate-200''>Image Opt:</strong> AVIF &amp; blurred placeholders.</li></ul></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 backdrop-blur-sm hover:bg-slate-100 dark:hover:bg-white/10 transition-colors duration-300''><div class=''w-12 h-12 rounded-xl flex items-center justify-center text-black dark:text-white mb-6''><svg class=''w-6 h-6'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z''></path></svg></div><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Editor-First Experience.</h3><p class=''text-sm text-slate-600 dark:text-slate-400 leading-relaxed''>A low-code, Notion-style block editor empowers teams to ship pages without engineering help.</p><ul class=''mt-6 space-y-3 text-sm text-slate-600 dark:text-slate-400''><li><strong class=''text-slate-800 dark:text-slate-200''>Notion-Style:</strong> Slash commands &amp; drag-and-drop.</li><li><strong class=''text-slate-800 dark:text-slate-200''>Bilingual:</strong> Manage locales from one interface.</li><li><strong class=''text-slate-800 dark:text-slate-200''>History:</strong> Restore any version with a click.</li></ul></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 backdrop-blur-sm hover:bg-slate-100 dark:hover:bg-white/10 transition-colors duration-300''><div class=''w-12 h-12 bg-white/50 dark:bg-white/10 rounded-xl flex items-center justify-center mb-6''><svg class=''w-6 h-6 text-slate-900 dark:text-white'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10''></path></svg></div><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Infinitely Extensible.</h3><p class=''text-sm text-slate-700 dark:text-slate-200 leading-relaxed''>Open-source control with a clean Nx monorepo and a typed SDK for limitless customization.</p><ul class=''mt-6 space-y-3 text-sm text-slate-700 dark:text-slate-200''><li><strong class=''text-slate-900 dark:text-white''>Open Source:</strong> Own the code &amp; data forever.</li><li><strong class=''text-slate-900 dark:text-white''>Nx Monorepo:</strong> Scale confidently.</li><li><strong class=''text-slate-900 dark:text-white''>Developer SDK:</strong> Scaffold blocks in minutes.</li></ul></div></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 1}}', 1, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (3, 1, NULL, 1, 'section', '{"padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "gradient", "gradient": {"type": "linear", "stops": [{"color": "#0f172a", "position": 0}, {"color": "#020817", "position": 100}], "direction": "180deg"}}, "column_gap": "lg", "column_blocks": [[{"content": {"html_content": "<h2 class=''text-3xl md:text-4xl font-bold text-white text-center mb-6''>Built with the Best.</h2>"}, "block_type": "text"}, {"content": {"html_content": "<p class=''text-slate-400 text-center max-w-2xl mx-auto''>Every layer of NextBlock™ leans on proven developer-first technology so the platform feels familiar, performant, and trustworthy from day one.</p><div class=''grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 mt-10 text-sm font-semibold text-center text-white''><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Next.js</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>React</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Supabase</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Stripe</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Tailwind</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Tiptap</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Vercel</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Nx</div></div>"}, "block_type": "text"}, {"content": {"html_content": "<h2 class=''text-3xl md:text-4xl font-bold text-white text-center mb-6 mt-16''>Powerful for Developers. Intuitive for Editors.</h2>"}, "block_type": "text"}, {"content": {"html_content": "<div class=''grid md:grid-cols-2 gap-8 mt-10 text-white''><div class=''p-8 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm''><h3 class=''text-xl font-bold mb-6 text-blue-400''>For Content Creators</h3><ul class=''space-y-4 text-sm text-slate-300''><li><strong class=''text-white block mb-1''>Intuitive Block Editor</strong>Drag-and-drop layouts with a Notion-like interface.</li><li><strong class=''text-white block mb-1''>Rich Content Blocks</strong>Deploy heroes, galleries, testimonials, and more in one click.</li><li><strong class=''text-white block mb-1''>Effortless Media Management</strong>Organize assets with folders, tags, and bulk actions.</li><li><strong class=''text-white block mb-1''>Worry-Free Revisions</strong>Automatic version history with instant restore.</li></ul></div><div class=''p-8 rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-sm''><h3 class=''text-xl font-bold mb-6 text-purple-400''>For Developers</h3><ul class=''space-y-4 text-sm text-slate-300''><li><strong class=''text-white block mb-1''>Next.js 16 Core</strong>Server Components, ISR, and Edge Functions ready out of the box.</li><li><strong class=''text-white block mb-1''>Supabase Integration</strong>Postgres, auth, storage, and real-time APIs without glue code.</li><li><strong class=''text-white block mb-1''>Monorepo Ready</strong>Nx-powered dev experience for scalable architectures.</li><li><strong class=''text-white block mb-1''>Extensible Block SDK</strong>Ship fully typed custom blocks and widgets.</li></ul></div></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 1}}', 2, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (4, 1, NULL, 1, 'section', '{"padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "gradient", "gradient": {"type": "linear", "stops": [{"color": "#022c22", "position": 0}, {"color": "#0f172a", "position": 50}, {"color": "#020817", "position": 100}], "direction": "135deg"}}, "column_gap": "xl", "column_blocks": [[{"content": {"html_content": "<p class=''text-xs uppercase tracking-[0.25em] text-emerald-400 font-bold mb-4''>Now Available — Premium Module</p><h2 class=''text-4xl md:text-5xl font-bold text-white mb-6 leading-tight''>Turn Your CMS Into<br/>a Full Storefront.</h2><p class=''text-lg text-slate-300 max-w-2xl leading-relaxed mb-8''>NextBlock™ Commerce transforms your content platform into a complete e-commerce engine. Products, checkout, multi-currency, taxes, shipping, invoices — all natively integrated into the block editor you already know.</p>"}, "block_type": "text"}, {"content": {"url": "/article/nextblock-commerce-guide", "size": "lg", "text": "Explore Commerce Features →", "variant": "default"}, "block_type": "button"}, {"content": {"url": "https://nextblock.dev/product/nextblock-commerce-pro-commerce-license", "size": "lg", "text": "Get a License", "variant": "outline"}, "block_type": "button"}], [{"content": {"html_content": "<div class=''rounded-3xl overflow-hidden border border-emerald-500/20 bg-gradient-to-br from-white/5 to-emerald-500/5 shadow-2xl p-6 backdrop-blur-sm''><img src=''/images/commerce-square.webp'' alt=''NextBlock™ Commerce dashboard showing product management'' class=''w-full h-auto rounded-2xl shadow-lg'' /><div class=''mt-4 grid grid-cols-3 gap-3 text-center''><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>∞</p><p class=''text-xs text-slate-400''>Currencies</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>2</p><p class=''text-xs text-slate-400''>Providers</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>Auto</p><p class=''text-xs text-slate-400''>Tax Sync</p></div></div></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 2}, "vertical_alignment": "center"}', 3, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (5, 1, NULL, 1, 'section', '{"padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "none"}, "column_gap": "lg", "column_blocks": [[{"content": {"level": 2, "textAlign": "center", "text_content": "Everything You Need to Sell Online"}, "block_type": "heading"}, {"content": {"html_content": "<p class=''text-lg text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto mb-12''>NextBlock™ Commerce ships a complete e-commerce toolkit so you can go from catalog to checkout without third-party plugins.</p><div class=''grid gap-6 md:grid-cols-2 lg:grid-cols-3''><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Multi-Currency</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Real-time FX rates, rounding modes, charm pricing, and automatic product price sync across unlimited currencies.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Tax Automation</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Manual stacked tax rates (GST + PST) or fully automatic calculation via Stripe Tax — you choose.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Shipping Zones</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Zone-based rate resolution with country and state matching, per-currency pricing, and free-shipping thresholds.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Stripe &amp; Freemius Checkout</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Stripe for physical products, Freemius for digital licensing — provider-aware checkout with inventory validation.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Inventory Tracking</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Automatic quantity deduction on payment with resilient fallback paths and variant-level stock management.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><div class=''w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mb-4''><svg class=''w-5 h-5 text-emerald-600 dark:text-emerald-400'' fill=''none'' stroke=''currentColor'' viewBox=''0 0 24 24''><path stroke-linecap=''round'' stroke-linejoin=''round'' stroke-width=''2'' d=''M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z''></path></svg></div><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Orders &amp; Invoices</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Full order lifecycle management, stable invoice numbering, printable documents, and exportable order reports.</p></div></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 1}}', 4, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (6, 1, NULL, 1, 'section', '{"padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "gradient", "gradient": {"type": "linear", "stops": [{"color": "#1e1b4b", "position": 0}, {"color": "#0f172a", "position": 50}, {"color": "#020817", "position": 100}], "direction": "135deg"}}, "column_gap": "xl", "column_blocks": [[{"content": {"html_content": "<div class=''rounded-3xl overflow-hidden border border-violet-500/20 bg-gradient-to-br from-white/5 to-violet-500/5 shadow-2xl p-6 backdrop-blur-sm''><img src=''/images/cortex-ai-square.webp'' alt=''NextBlock™ Cortex AI dashboard showing block generator'' class=''w-full h-auto rounded-2xl shadow-lg'' /><div class=''mt-4 grid grid-cols-3 gap-3 text-center''><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>OpenRouter</p><p class=''text-xs text-slate-400''>AI Gateway</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>BYOK</p><p class=''text-xs text-slate-400''>Cost Control</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>Zod</p><p class=''text-xs text-slate-400''>Typed Blocks</p></div></div></div>"}, "block_type": "text"}], [{"content": {"html_content": "<p class=''text-xs uppercase tracking-[0.25em] text-violet-400 font-bold mb-4''>Now Available — AI Copilot</p><h2 class=''text-4xl md:text-5xl font-bold text-white mb-6 leading-tight''>Supercharge Your<br/>Content with AI.</h2><p class=''text-lg text-slate-300 max-w-2xl leading-relaxed mb-8''>NextBlock™ Cortex AI brings native block-level intelligence directly to your editor. Generate copy, refactor structures, and automate translations in one click, built directly on our high-performance architecture.</p>"}, "block_type": "text"}, {"content": {"url": "/article/nextblock-cortex-ai-guide", "size": "lg", "text": "Explore AI Capabilities →", "variant": "default"}, "block_type": "button"}, {"content": {"url": "https://nextblock.dev/product/nextblock-cortex-ai-cortex-ai-license", "size": "lg", "text": "Get a License", "variant": "outline"}, "block_type": "button"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 2}, "vertical_alignment": "center"}', 5, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (7, 1, NULL, 1, 'section', '{"padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "none"}, "column_gap": "lg", "column_blocks": [[{"content": {"level": 2, "textAlign": "center", "text_content": "More Than a CMS. An Ecosystem."}, "block_type": "heading"}, {"content": {"html_content": "<p class=''text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ is building a sustainable open-core roadmap so the platform grows with your business.</p>"}, "block_type": "text"}, {"content": {"html_content": "<div class=''grid gap-6 lg:grid-cols-[0.75fr_1.25fr] mt-10 items-stretch''><div class=''overflow-hidden rounded-[2rem] border border-slate-200 dark:border-white/10 bg-slate-950 shadow-2xl''><img src=''/images/goals.webp'' alt=''Roadmap board outlining the NextBlock™ ecosystem and premium module direction'' class=''h-full w-full object-cover'' /><div class=''border-t border-white/10 bg-slate-950/95 px-6 py-5''><p class=''text-xs uppercase tracking-[0.24em] text-emerald-300 mb-2 font-bold''>Roadmap in motion</p><p class=''text-sm text-slate-300 mb-0''>Commerce ships first, then the broader ecosystem grows around plugins, blocks, and partner-built modules.</p></div></div><div class=''grid gap-6''><div class=''p-10 rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-500/5 dark:to-white/5 hover:border-emerald-500/40 transition-colors''><p class=''text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-2 font-bold''>Available now</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>NextBlock™ Commerce</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Transform your site into a composable storefront with products, checkout, multi-currency pricing, tax automation, and commerce blocks that live beside your editorial content.</p></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-violet-500/30 transition-colors''><p class=''text-xs uppercase tracking-wide text-violet-700 dark:text-violet-300 mb-2 font-bold''>Build the future</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Plugin and block marketplace</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>A community marketplace gives developers room to publish, sell, and distribute custom blocks, themes, integrations, and partner modules.</p></div></div></div>"}, "block_type": "text"}, {"content": {"level": 2, "textAlign": "center", "text_content": "Join Our Community."}, "block_type": "heading"}, {"content": {"html_content": "<p class=''text-slate-600 dark:text-slate-400 text-center mx-auto''>NextBlock™ is being built in the open. Star the repo, share feedback, and help define the future of performance-first content management.</p>"}, "block_type": "text"}, {"content": {"html_content": "<div class=''grid gap-4 md:grid-cols-3 mt-10 text-sm''><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://github.com/nextblock-cms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>GitHub</strong><span class=''text-slate-600 dark:text-slate-400''>Star the repo &amp; contribute</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://x.com/NextBlockCMS'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>X (Twitter)</strong><span class=''text-slate-600 dark:text-slate-400''>Follow updates &amp; announcements</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://dev.to/nextblockcms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>Dev.to</strong><span class=''text-slate-600 dark:text-slate-400''>Read technical deep dives</span></a></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 1}}', 6, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (1, 1, NULL, 1, 'section', '{"is_hero": true, "padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "gradient", "gradient": {"type": "linear", "stops": [{"color": "#020817", "position": 0}, {"color": "#0f172a", "position": 50}, {"color": "#1e293b", "position": 100}], "direction": "135deg"}}, "column_gap": "xl", "column_blocks": [[{"content": {"html_content": "<h1 class=''text-5xl md:text-6xl font-extrabold tracking-tight text-white text-center leading-tight''>Build <span class=''relative inline-block mx-1 group''><span class=''absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-400 translate-y-1 md:translate-y-2 transform -skew-x-12 rounded-sm shadow-lg group-hover:skew-x-0 transition-transform duration-300 ease-out''></span><span class=''relative text-white italic px-1''>Blazing-Fast</span></span><br class=''md:hidden'' /> Websites.</h1>"}, "block_type": "text"}, {"content": {"html_content": "<p class=''text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4 leading-relaxed''>NextBlock™ is the open-source, developer-first Next.js CMS that merges 100% Lighthouse scores with a powerful visual block editor.</p>"}, "block_type": "text"}, {"content": {"url": "/article/how-to-setup-nextblock", "size": "lg", "text": "Get Started", "variant": "default", "position": "center"}, "block_type": "button"}, {"content": {"url": "https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D", "size": "lg", "text": "Deploy on Vercel", "variant": "outline", "position": "center"}, "block_type": "button"}, {"content": {"html_content": "<div class=''flex flex-wrap justify-center gap-6 text-sm uppercase tracking-wide text-slate-400 mt-8''><a href=''https://github.com/nextblock-cms'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>GitHub</a><a href=''https://x.com/NextBlockCMS'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>X</a><a href=''https://www.linkedin.com/in/nextblock/'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>LinkedIn</a><a href=''https://dev.to/nextblockcms'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>Dev.to</a><a href=''https://www.npmjs.com/~nextblockcms'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>npm</a></div>"}, "block_type": "text"}], [{"content": {"html_content": "<div class=''p-10 border border-white/10 rounded-3xl bg-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden group''><div class=''absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500''></div><div class=''relative z-10''><p class=''text-xs text-white uppercase tracking-widest font-semibold mb-2''>Why teams switch</p><p class=''text-3xl font-bold text-white mb-2''>100% Lighthouse</p><p class=''text-base text-slate-300 mb-6''>Edge-rendered marketing sites, launches, and docs with uncompromising performance.</p><ul class=''space-y-3 text-sm text-slate-200''><li><span class=''text-blue-400 mr-2''>&#10003;</span> Next.js 16 with ISR and edge caching</li><li><span class=''text-blue-400 mr-2''>&#10003;</span> Supabase auth, data, and storage</li><li><span class=''text-blue-400 mr-2''>&#10003;</span> Notion-style block editor powered by Tiptap</li></ul><div class=''mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-lg''><div class=''relative w-full aspect-video''><iframe class=''absolute inset-0 h-full w-full border-0'' src=''https://www.youtube.com/embed/71MyfoL4YVM?si=jtlDXV6cSC8rDgz0'' title=''NextBlock demo video'' allow=''accelerated-motion; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'' referrerpolicy=''strict-origin-when-cross-origin'' loading=''lazy'' allowfullscreen></iframe></div></div></div></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 2}, "vertical_alignment": "center"}', 0, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.851553+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (10, 3, NULL, 1, 'posts_grid', '{"title": "Latest Deep Dives", "columns": 3, "postsPerPage": 6, "showPagination": true}', 1, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (12, 5, NULL, 1, 'section', '{"padding": {"top": "lg", "bottom": "lg"}, "background": {"type": "none"}, "column_blocks": [[{"content": {"html_content": "<div class=''max-w-2xl mx-auto text-center''><h2 class=''text-2xl font-bold mb-4''>Open Source & Community Driven</h2><p class=''text-slate-600 dark:text-slate-400 mb-6''>NextBlock™ is built in the open. We rely on developers and editors like you to help us define the roadmap. Whether it''s a bug report, a feature request, or just a shoutout, every message helps us move faster.</p></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 1}}', 1, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (15, 6, NULL, 2, 'section', '{"padding": {"top": "lg", "bottom": "lg"}, "background": {"type": "none"}, "column_blocks": [[{"content": {"html_content": "<div class=''max-w-2xl mx-auto text-center''><h2 class=''text-2xl font-bold mb-4''>Open Source & Communautaire</h2><p class=''text-slate-600 dark:text-slate-400 mb-6''>NextBlock™ est construit en public. Nous comptons sur les développeurs et éditeurs comme vous pour définir notre roadmap. Qu''il s''agisse d''un bug, d''une suggestion ou d''un simple salut, chaque message compte.</p></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 1}}', 1, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (13, 5, NULL, 1, 'form', '{"fields": [{"label": "Name", "temp_id": "name", "field_type": "text", "is_required": true, "placeholder": "Your name"}, {"label": "Email", "temp_id": "email", "field_type": "email", "is_required": true, "placeholder": "your@email.com"}, {"label": "Message", "temp_id": "message", "field_type": "textarea", "is_required": true, "placeholder": "How can we help?"}], "recipient_email": "contact@example.com", "success_message": "Thank you for your feedback! We''ll get back to you soon.", "submit_button_text": "Send Message"}', 2, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.760236+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (16, 6, NULL, 2, 'form', '{"fields": [{"label": "Nom", "temp_id": "nom", "field_type": "text", "is_required": true, "placeholder": "Votre nom"}, {"label": "Email", "temp_id": "email", "field_type": "email", "is_required": true, "placeholder": "votre@email.com"}, {"label": "Message", "temp_id": "message", "field_type": "textarea", "is_required": true, "placeholder": "Comment pouvons-nous vous aider ?"}], "recipient_email": "contact@example.com", "success_message": "Merci pour vos retours ! Nous vous répondrons bientôt.", "submit_button_text": "Envoyer le message"}', 2, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.760236+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (17, 2, NULL, 2, 'section', '{"is_hero": true, "padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "gradient", "gradient": {"type": "linear", "stops": [{"color": "#020817", "position": 0}, {"color": "#0f172a", "position": 50}, {"color": "#1e293b", "position": 100}], "direction": "135deg"}}, "column_gap": "xl", "column_blocks": [[{"content": {"html_content": "<h1 class=''text-5xl md:text-6xl font-bold tracking-tight text-white text-center drop-shadow-lg''>Créez des sites <span class=''relative inline-block mx-1 group''><span class=''absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-400 translate-y-1 md:translate-y-2 transform -skew-x-12 rounded-sm shadow-lg group-hover:skew-x-0 transition-transform duration-300 ease-out''></span><span class=''relative text-white italic px-1''>Ultra-Rapides</span></span><br class=''md:hidden'' />.</h1>"}, "block_type": "text"}, {"content": {"html_content": "<p class=''text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4 leading-relaxed''>NextBlock™ est le CMS Next.js open-source alliant scores Lighthouse parfaits et éditeur visuel puissant.</p>"}, "block_type": "text"}, {"content": {"url": "/article/comment-configurer-nextblock", "size": "lg", "text": "Commencer", "variant": "default", "position": "center"}, "block_type": "button"}, {"content": {"url": "https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D", "size": "lg", "text": "Déployer sur Vercel", "variant": "outline", "position": "center"}, "block_type": "button"}, {"content": {"html_content": "<div class=''flex flex-wrap justify-center gap-6 text-sm uppercase tracking-wide text-slate-400 mt-8''><a href=''https://github.com/nextblock-cms'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>GitHub</a><a href=''https://x.com/NextBlockCMS'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>X</a><a href=''https://www.linkedin.com/in/nextblock/'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>LinkedIn</a><a href=''https://dev.to/nextblockcms'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>Dev.to</a><a href=''https://www.npmjs.com/~nextblockcms'' target=''_blank'' rel=''noopener noreferrer'' class=''hover:text-white transition-colors''>npm</a></div>"}, "block_type": "text"}], [{"content": {"html_content": "<div class=''p-10 border border-white/10 rounded-3xl bg-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden group''><div class=''absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500''></div><div class=''relative z-10''><p class=''text-xs text-white uppercase tracking-widest font-semibold mb-2''>Pourquoi migrer</p><p class=''text-3xl font-bold text-white mb-2''>100% Lighthouse</p><p class=''text-base text-slate-300 mb-6''>Sites marketing et docs rendus à l''edge avec des performances irréprochables.</p><ul class=''space-y-3 text-sm text-slate-200''><li><span class=''text-blue-400 mr-2''>&#10003;</span> Next.js 16 avec ISR et cache edge</li><li><span class=''text-blue-400 mr-2''>&#10003;</span> Supabase pour l''auth, les données et le stockage</li><li><span class=''text-blue-400 mr-2''>&#10003;</span> Éditeur de blocs type Notion sur Tiptap</li></ul><div class=''mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-lg''><div class=''relative w-full aspect-video''><iframe class=''absolute inset-0 h-full w-full border-0'' src=''https://www.youtube.com/embed/71MyfoL4YVM?si=jtlDXV6cSC8rDgz0'' title=''Vidéo de démonstration NextBlock'' allow=''accelerated-motion; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'' referrerpolicy=''strict-origin-when-cross-origin'' loading=''lazy'' allowfullscreen></iframe></div></div></div></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 2}, "vertical_alignment": "center"}', 0, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.851553+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (18, 2, NULL, 2, 'section', '{"padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "none"}, "column_gap": "lg", "column_blocks": [[{"content": {"level": 2, "textAlign": "center", "text_content": "Fonctionnalités clés : les trois piliers de NextBlock™"}, "block_type": "heading"}, {"content": {"html_content": "<p class=''text-lg text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ unifie performances, expérience éditoriale et contrôle développeur pour que chaque équipe livre son meilleur travail.</p>"}, "block_type": "text"}, {"content": {"html_content": "<div class=''grid gap-8 md:grid-cols-3 mt-12''><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 backdrop-blur-sm hover:bg-slate-100 dark:hover:bg-white/10 transition-colors duration-300''><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Vitesse Extrême.</h3><p class=''text-sm text-slate-600 dark:text-slate-400 leading-relaxed''>Pensé pour des scores Lighthouse parfaits avec une diffusion mondiale.</p><ul class=''mt-6 space-y-3 text-sm text-slate-600 dark:text-slate-400''><li><strong class=''text-slate-800 dark:text-slate-200''>Edge Caching:</strong> Servez vos pages partout.</li><li><strong class=''text-slate-800 dark:text-slate-200''>Critical CSS:</strong> Styles en ligne pour éviter les blocages.</li><li><strong class=''text-slate-800 dark:text-slate-200''>Images Opt:</strong> AVIF et placeholders floutés.</li></ul></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 backdrop-blur-sm hover:bg-slate-100 dark:hover:bg-white/10 transition-colors duration-300''><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Expérience Éditeur.</h3><p class=''text-sm text-slate-600 dark:text-slate-400 leading-relaxed''>Un éditeur façon Notion pour publier sans dépendre des développeurs.</p><ul class=''mt-6 space-y-3 text-sm text-slate-600 dark:text-slate-400''><li><strong class=''text-slate-800 dark:text-slate-200''>Visuel:</strong> Héros, galeries, témoignages.</li><li><strong class=''text-slate-800 dark:text-slate-200''>Média:</strong> Dossiers, tags et actions groupées.</li><li><strong class=''text-slate-800 dark:text-slate-200''>Historique:</strong> Restauration complète.</li></ul></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 backdrop-blur-sm hover:bg-slate-100 dark:hover:bg-white/10 transition-colors duration-300''><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Extensible à l''Infini.</h3><p class=''text-sm text-slate-700 dark:text-slate-200 leading-relaxed''>Un socle Next.js + Supabase modulaire, extensible et auto-hébergeable.</p><ul class=''mt-6 space-y-3 text-sm text-slate-700 dark:text-slate-200''><li><strong class=''text-slate-900 dark:text-white''>SDK de blocs:</strong> Composants typés.</li><li><strong class=''text-slate-900 dark:text-white''>CLI:</strong> Générez modules en minutes.</li><li><strong class=''text-slate-900 dark:text-white''>Monorepo Nx:</strong> Dépendances maintenables.</li></ul></div></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 1}}', 1, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (19, 2, NULL, 2, 'section', '{"padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "gradient", "gradient": {"type": "linear", "stops": [{"color": "#0f172a", "position": 0}, {"color": "#020817", "position": 100}], "direction": "180deg"}}, "column_gap": "lg", "column_blocks": [[{"content": {"html_content": "<h2 class=''text-3xl md:text-4xl font-bold text-white text-center mb-6''>Conçu avec les meilleurs outils.</h2>"}, "block_type": "text"}, {"content": {"html_content": "<p class=''text-slate-400 text-center max-w-2xl mx-auto''>Chaque couche de NextBlock™ repose sur des technologies éprouvées pour une expérience familière et performante.</p><div class=''grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 mt-10 text-sm font-semibold text-center text-white''><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Next.js</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>React</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Supabase</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Stripe</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Tailwind</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Tiptap</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Vercel</div><div class=''p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors''>Nx</div></div>"}, "block_type": "text"}, {"content": {"html_content": "<h2 class=''text-3xl md:text-4xl font-bold text-white text-center mb-6 mt-16''>Puissant pour les développeurs. Intuitif pour les éditeurs.</h2>"}, "block_type": "text"}, {"content": {"html_content": "<div class=''grid md:grid-cols-2 gap-8 mt-10 text-white''><div class=''p-8 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm''><h3 class=''text-xl font-bold mb-6 text-blue-400''>Pour les créateurs</h3><ul class=''space-y-4 text-sm text-slate-300''><li><strong class=''text-white block mb-1''>Éditeur de blocs</strong>Glisser-déposer façon Notion.</li><li><strong class=''text-white block mb-1''>Blocs riches</strong>Héros, galeries, témoignages.</li><li><strong class=''text-white block mb-1''>Médiathèque</strong>Dossiers, tags et actions groupées.</li><li><strong class=''text-white block mb-1''>Versions sécurisées</strong>Historique et restauration instantanée.</li></ul></div><div class=''p-8 rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-sm''><h3 class=''text-xl font-bold mb-6 text-purple-400''>Pour les développeurs</h3><ul class=''space-y-4 text-sm text-slate-300''><li><strong class=''text-white block mb-1''>Next.js 16</strong>Server Components, ISR et Edge prêts à l''emploi.</li><li><strong class=''text-white block mb-1''>Supabase</strong>Postgres, auth, stockage, temps réel.</li><li><strong class=''text-white block mb-1''>Monorepo Nx</strong>Dépendances lisibles et centrales.</li><li><strong class=''text-white block mb-1''>SDK de blocs</strong>Widgets typés et extensibles.</li></ul></div></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 1}}', 2, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (20, 2, NULL, 2, 'section', '{"padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "gradient", "gradient": {"type": "linear", "stops": [{"color": "#022c22", "position": 0}, {"color": "#0f172a", "position": 50}, {"color": "#020817", "position": 100}], "direction": "135deg"}}, "column_gap": "xl", "column_blocks": [[{"content": {"html_content": "<p class=''text-xs uppercase tracking-[0.25em] text-emerald-400 font-bold mb-4''>Disponible — Module Premium</p><h2 class=''text-4xl md:text-5xl font-bold text-white mb-6 leading-tight''>Transformez votre CMS<br/>en vitrine complète.</h2><p class=''text-lg text-slate-300 max-w-2xl leading-relaxed mb-8''>NextBlock™ Commerce transforme votre plateforme de contenu en moteur e-commerce complet. Produits, checkout, multi-devises, taxes, expédition, factures — le tout intégré nativement dans l''éditeur de blocs que vous connaissez déjà.</p>"}, "block_type": "text"}, {"content": {"url": "/article/guide-commerce-nextblock", "size": "lg", "text": "Découvrir Commerce →", "variant": "default"}, "block_type": "button"}, {"content": {"url": "https://nextblock.dev/product/nextblock-commerce-pro-commerce-license", "size": "lg", "text": "Obtenir une licence", "variant": "outline"}, "block_type": "button"}], [{"content": {"html_content": "<div class=''rounded-3xl overflow-hidden border border-emerald-500/20 bg-gradient-to-br from-white/5 to-emerald-500/5 shadow-2xl p-6 backdrop-blur-sm''><img src=''/images/commerce-square.webp'' alt=''Tableau de bord NextBlock™ Commerce'' class=''w-full h-auto rounded-2xl shadow-lg'' /><div class=''mt-4 grid grid-cols-3 gap-3 text-center''><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>∞</p><p class=''text-xs text-slate-400''>Devises</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>2</p><p class=''text-xs text-slate-400''>Fournisseurs</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-emerald-400''>Auto</p><p class=''text-xs text-slate-400''>Taxes</p></div></div></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 2}, "vertical_alignment": "center"}', 3, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (21, 2, NULL, 2, 'section', '{"padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "none"}, "column_gap": "lg", "column_blocks": [[{"content": {"level": 2, "textAlign": "center", "text_content": "Tout pour vendre en ligne"}, "block_type": "heading"}, {"content": {"html_content": "<p class=''text-lg text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto mb-12''>NextBlock™ Commerce livre une boîte à outils e-commerce complète pour aller du catalogue au paiement sans plugins tiers.</p><div class=''grid gap-6 md:grid-cols-2 lg:grid-cols-3''><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Multi-Devises</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Taux de change en temps réel, modes d''arrondi, prix charme et synchronisation automatique sur toutes les devises.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Taxes Automatiques</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Taux manuels empilés (TPS + TVQ) ou calcul automatique via Stripe Tax — à vous de choisir.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Zones d''Expédition</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Résolution par pays et état, tarification par devise et seuils de livraison gratuite.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Stripe &amp; Freemius</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Stripe pour les produits physiques, Freemius pour les licences numériques — checkout intelligent avec validation d''inventaire.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Suivi d''Inventaire</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Déduction automatique des quantités au paiement avec gestion des stocks par variante.</p></div><div class=''p-8 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-emerald-500/30 transition-colors duration-300''><h3 class=''text-lg font-bold text-slate-900 dark:text-white mb-2''>Commandes &amp; Factures</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Gestion du cycle de vie des commandes, numérotation stable des factures et rapports de commandes exportables.</p></div></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 1}}', 4, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (22, 2, NULL, 2, 'section', '{"padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "gradient", "gradient": {"type": "linear", "stops": [{"color": "#1e1b4b", "position": 0}, {"color": "#0f172a", "position": 50}, {"color": "#020817", "position": 100}], "direction": "135deg"}}, "column_gap": "xl", "column_blocks": [[{"content": {"html_content": "<div class=''rounded-3xl overflow-hidden border border-violet-500/20 bg-gradient-to-br from-white/5 to-violet-500/5 shadow-2xl p-6 backdrop-blur-sm''><img src=''/images/cortex-ai-square.webp'' alt=''Tableau de bord NextBlock™ Cortex AI montrant le générateur de blocs'' class=''w-full h-auto rounded-2xl shadow-lg'' /><div class=''mt-4 grid grid-cols-3 gap-3 text-center''><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>OpenRouter</p><p class=''text-xs text-slate-400''>Passerelle IA</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>BYOK</p><p class=''text-xs text-slate-400''>Contrôle des coûts</p></div><div class=''p-3 rounded-xl bg-white/5 border border-white/10''><p class=''text-lg font-bold text-violet-400''>Zod</p><p class=''text-xs text-slate-400''>Blocs typés</p></div></div></div>"}, "block_type": "text"}], [{"content": {"html_content": "<p class=''text-xs uppercase tracking-[0.25em] text-violet-400 font-bold mb-4''>Disponible — Copilote IA</p><h2 class=''text-4xl md:text-5xl font-bold text-white mb-6 leading-tight''>Boostez votre<br/>contenu avec l''IA.</h2><p class=''text-lg text-slate-300 max-w-2xl leading-relaxed mb-8''>NextBlock™ Cortex AI apporte une intelligence native au niveau des blocs directement dans votre éditeur. Générez du texte, restructurez vos contenus et automatisez les traductions en un clic, le tout propulsé par notre architecture haute performance.</p>"}, "block_type": "text"}, {"content": {"url": "/article/nextblock-cortex-ai-guide", "size": "lg", "text": "Découvrir l''IA →", "variant": "default"}, "block_type": "button"}, {"content": {"url": "https://nextblock.dev/product/nextblock-cortex-ai-cortex-ai-license", "size": "lg", "text": "Obtenir une licence", "variant": "outline"}, "block_type": "button"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 2}, "vertical_alignment": "center"}', 5, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (23, 2, NULL, 2, 'section', '{"padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "none"}, "column_gap": "lg", "column_blocks": [[{"content": {"level": 2, "textAlign": "center", "text_content": "Plus qu''un CMS. Un écosystème."}, "block_type": "heading"}, {"content": {"html_content": "<p class=''text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ construit une feuille de route open-core durable qui évolue avec votre activité.</p>"}, "block_type": "text"}, {"content": {"html_content": "<div class=''grid gap-6 lg:grid-cols-[0.75fr_1.25fr] mt-10 items-stretch''><div class=''overflow-hidden rounded-[2rem] border border-slate-200 dark:border-white/10 bg-slate-950 shadow-2xl''><img src=''/images/goals.webp'' alt=''Tableau de roadmap montrant la direction de l''ecosysteme NextBlock™ et des modules premium'' class=''h-full w-full object-cover'' /><div class=''border-t border-white/10 bg-slate-950/95 px-6 py-5''><p class=''text-xs uppercase tracking-[0.24em] text-emerald-300 mb-2 font-bold''>Roadmap en mouvement</p><p class=''text-sm text-slate-300 mb-0''>Le commerce arrive en premier, puis l''ecosysteme s''etend avec des plugins, des blocs et des modules construits par les partenaires.</p></div></div><div class=''grid gap-6''><div class=''p-10 rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-500/5 dark:to-white/5 hover:border-emerald-500/40 transition-colors''><p class=''text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-2 font-bold''>Disponible maintenant</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>NextBlock™ Commerce</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Transformez votre site en vitrine composable avec produits, checkout, tarification multi-devise, taxes automatiques et blocs commerce relies a votre contenu editorial.</p></div><div class=''p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-violet-500/30 transition-colors''><p class=''text-xs uppercase tracking-wide text-violet-700 dark:text-violet-300 mb-2 font-bold''>Construire la suite</p><h3 class=''text-xl font-bold text-slate-900 dark:text-white mb-3''>Marketplace de plugins et blocs</h3><p class=''text-sm text-slate-600 dark:text-slate-400''>Une marketplace communautaire ouvrira la voie a la publication, la vente et la distribution de blocs, themes, integrations et modules partenaires.</p></div></div></div>"}, "block_type": "text"}, {"content": {"level": 2, "textAlign": "center", "text_content": "Rejoignez la communauté."}, "block_type": "heading"}, {"content": {"html_content": "<p class=''text-slate-600 dark:text-slate-400 text-center max-w-3xl mx-auto''>NextBlock™ se construit en public. Ajoutez une étoile, partagez vos retours et façonnez l''avenir du CMS orienté performance.</p>"}, "block_type": "text"}, {"content": {"html_content": "<div class=''grid gap-4 md:grid-cols-3 mt-10 text-sm''><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://github.com/nextblock-cms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>GitHub</strong><span class=''text-slate-600 dark:text-slate-400''>Ajoutez une étoile &amp; contribuez</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://x.com/NextBlockCMS'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>X (Twitter)</strong><span class=''text-slate-600 dark:text-slate-400''>Suivez les annonces</span></a><a class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all hover:scale-[1.02]'' href=''https://dev.to/nextblockcms'' target=''_blank'' rel=''noopener noreferrer''><strong class=''block text-base text-slate-900 dark:text-white mb-1''>Dev.to</strong><span class=''text-slate-600 dark:text-slate-400''>Lisez nos articles techniques</span></a></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 1}}', 6, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (26, 4, NULL, 2, 'posts_grid', '{"title": "Derniers articles", "columns": 3, "postsPerPage": 6, "showPagination": true}', 1, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (9, 3, NULL, 1, 'section', '{"is_hero": true, "padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "gradient", "gradient": {"type": "linear", "stops": [{"color": "#020817", "position": 0}, {"color": "#1e293b", "position": 100}], "direction": "135deg"}}, "column_gap": "lg", "column_blocks": [[{"content": {"html_content": "<p class=''text-sm uppercase tracking-[0.3em] text-blue-400 font-bold text-center md:text-left mb-4''>The Nextblock Journal</p>"}, "block_type": "text"}, {"content": {"html_content": "<h2 class=''text-4xl md:text-5xl font-bold text-white text-center md:text-left mb-6''>Deep dives into performance, DX, and visual editing.</h2>"}, "block_type": "text"}, {"content": {"html_content": "<p class=''text-slate-300 text-lg max-w-xl mx-auto md:mx-0 text-center md:text-left leading-relaxed''>Explore architectural walkthroughs, Supabase recipes, and block editor experiments written by the Nextblock core team.</p>"}, "block_type": "text"}, {"content": {"url": "/articles#latest", "size": "lg", "text": "Explore Articles", "variant": "default"}, "block_type": "button"}, {"content": {"url": "https://github.com/nextblock-cms/nextblock/discussions", "size": "lg", "text": "Subscribe for Updates", "variant": "outline"}, "block_type": "button"}], [{"content": {"html_content": "<div class=''h-full flex items-center justify-center rounded-3xl overflow-hidden border border-white/10 bg-white/5 shadow-2xl p-4 backdrop-blur-sm''><img src=''/images/developer.webp'' alt=''Developer working with the Nextblock stack'' class=''w-full object-cover rounded-2xl shadow-lg'' style=''max-width: 400px;'' /></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 2}}', 0, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (11, 5, NULL, 1, 'section', '{"is_hero": true, "padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "gradient", "gradient": {"type": "linear", "stops": [{"color": "#020817", "position": 0}, {"color": "#0f172a", "position": 100}], "direction": "135deg"}}, "column_blocks": [[{"content": {"level": 1, "textAlign": "center", "textColor": "white", "text_content": "Let''s Build the Future Together"}, "block_type": "heading"}, {"content": {"html_content": "<p class=''text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4''>NextBlock™ is an open-source project driven by community feedback. We''d love to hear your thoughts, ideas, or questions.</p>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 1}}', 0, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (14, 6, NULL, 2, 'section', '{"is_hero": true, "padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "gradient", "gradient": {"type": "linear", "stops": [{"color": "#020817", "position": 0}, {"color": "#0f172a", "position": 100}], "direction": "135deg"}}, "column_blocks": [[{"content": {"level": 1, "textAlign": "center", "textColor": "white", "text_content": "Bâtissons le futur ensemble"}, "block_type": "heading"}, {"content": {"html_content": "<p class=''text-xl text-slate-300 text-center max-w-3xl mx-auto mt-4''>NextBlock™ est un projet open-source propulsé par vos retours. Nous serions ravis d''entendre vos idées ou vos questions.</p>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 1}}', 0, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (24, 2, NULL, 2, 'section', '{"padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "gradient", "gradient": {"type": "linear", "stops": [{"color": "#020817", "position": 0}, {"color": "#0f172a", "position": 100}], "direction": "180deg"}}, "column_gap": "lg", "column_blocks": [[{"content": {"html_content": "<h2 class=''text-3xl md:text-4xl font-bold text-center text-white mb-4''>Des questions ?</h2>"}, "block_type": "text"}, {"content": {"html_content": "<p class=''text-center text-base text-slate-300 max-w-2xl mx-auto''>NextBlock™ co-construit avec des partenaires : fonctionnalités, modules sponsorisés et direction produit.</p>"}, "block_type": "text"}, {"content": {"url": "/contact", "size": "lg", "text": "Nous contacter", "variant": "default", "position": "center"}, "block_type": "button"}, {"content": {"url": "https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D", "size": "lg", "text": "Déployer sur Vercel", "variant": "outline", "position": "center"}, "block_type": "button"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 1}}', 7, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.840619+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (25, 4, NULL, 2, 'section', '{"is_hero": true, "padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "gradient", "gradient": {"type": "linear", "stops": [{"color": "#020817", "position": 0}, {"color": "#1e293b", "position": 100}], "direction": "135deg"}}, "column_gap": "lg", "column_blocks": [[{"content": {"html_content": "<p class=''text-sm uppercase tracking-[0.3em] text-blue-400 font-bold text-center md:text-left mb-4''>Le journal Nextblock</p>"}, "block_type": "text"}, {"content": {"html_content": "<h2 class=''text-4xl md:text-5xl font-bold text-white text-center md:text-left mb-6''>Plongées dans la performance, l''expérience dev et l''édition visuelle.</h2>"}, "block_type": "text"}, {"content": {"html_content": "<p class=''text-lg max-w-xl mx-auto md:mx-0 text-center md:text-left text-slate-300 leading-relaxed''>Walkthroughs d''architecture, recettes Supabase et expérimentations éditeur écrits par l''équipe Nextblock.</p>"}, "block_type": "text"}, {"content": {"url": "/articles#latest", "size": "lg", "text": "Explorer les articles", "variant": "default"}, "block_type": "button"}, {"content": {"url": "https://github.com/nextblock-cms/nextblock/discussions", "size": "lg", "text": "S''abonner aux mises à jour", "variant": "outline"}, "block_type": "button"}], [{"content": {"html_content": "<div class=''rounded-3xl overflow-hidden border border-white/10 bg-white/5 shadow-2xl p-4 backdrop-blur-sm''><img src=''/images/developer.webp'' alt=''Développeur travaillant avec la stack Nextblock'' class=''w-full object-cover rounded-2xl shadow-lg'' style=''max-width: 400px;'' /></div>"}, "block_type": "text"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 2}}', 0, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (31, NULL, 5, 1, 'text', '{"html_content": "<p class=''text-lg leading-8 text-slate-700 dark:text-slate-300''>NextBlock™ Commerce is the first premium module in the ecosystem: a source-available storefront layer that plugs directly into the same editorial system as the CMS. It is built for teams that want content, catalog, and checkout to live inside one product surface instead of three disconnected tools.</p>\\n\\n<div class=''grid gap-4 md:grid-cols-3 my-10''>\\n  <div class=''rounded-3xl border border-emerald-200/70 bg-emerald-50/70 p-6 dark:border-emerald-500/20 dark:bg-emerald-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200''>Commerce core</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Catalog + checkout</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>Products, variants, orders, shipping, and invoices all plug into the existing CMS shell.</p>\\n  </div>\\n  <div class=''rounded-3xl border border-sky-200/70 bg-sky-50/70 p-6 dark:border-sky-500/20 dark:bg-sky-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-200''>Global selling</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Multi-currency ready</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>Automatic FX sync, rounding strategies, and per-product overrides keep international pricing practical.</p>\\n  </div>\\n  <div class=''rounded-3xl border border-indigo-200/70 bg-indigo-50/70 p-6 dark:border-indigo-500/20 dark:bg-indigo-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-indigo-700 dark:text-indigo-200''>Operator workflow</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Provider-aware flow</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>Stripe and Freemius are handled differently so the storefront can stay clean without hiding complexity.</p>\\n  </div>\\n</div>\\n\\n<h2>Product Catalog</h2>\\n<p>Commerce supports physical and digital products with variants, attributes, localized product media, independent pricing, SKUs, and stock levels. Product assets stay in the same media library editors already use for marketing pages, so content and commerce teams are not working in separate silos.</p>\\n\\n<h2>Multi-Currency Engine</h2>\\n<p>The pricing engine is built for real-world stores, not just a demo checkout:</p>\\n<ul>\\n  <li><strong>Unlimited currencies</strong> with ISO codes, symbols, and stored exchange rates</li>\\n  <li><strong>Automatic FX sync</strong> from Frankfurter or a custom provider via <code>FX_API_BASE_URL</code></li>\\n  <li><strong>Rounding modes</strong> including nearest, up, down, and charm pricing like <code>9.99</code></li>\\n  <li><strong>Store-managed auto-sync</strong> so product prices convert when rates refresh</li>\\n  <li><strong>Rebasing</strong> when the default currency changes</li>\\n  <li><strong>Per-product overrides</strong> when a catalog item needs explicit pricing in specific markets</li>\\n</ul>\\n\\n<h2>Tax Automation</h2>\\n<p>Teams can stay manual when they need control, or delegate tax math to Stripe Tax when they want automation:</p>\\n<div class=''grid md:grid-cols-2 gap-6 my-6''>\\n  <div class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5''>\\n    <h4 class=''font-bold text-slate-900 dark:text-white mb-2''>Manual mode</h4>\\n    <p class=''text-sm text-slate-600 dark:text-slate-400''>Define rates by country and optional state or province. Stacked taxes such as GST + PST are supported, and tax lines are stored in <code>orders.tax_details</code>.</p>\\n  </div>\\n  <div class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5''>\\n    <h4 class=''font-bold text-slate-900 dark:text-white mb-2''>Automatic mode</h4>\\n    <p class=''text-sm text-slate-600 dark:text-slate-400''>Stripe Tax calculates the final amounts. Product and shipping tax codes travel with the line items, and the webhook resync replaces provisional values with final totals.</p>\\n  </div>\\n</div>\\n\\n<h2>Shipping and Checkout</h2>\\n<p>Shipping zones match by country and state or province, support localized method names, per-currency pricing, free-shipping thresholds, and priority-based fallbacks when an exact match is not found.</p>\\n<p>The checkout layer is provider-aware:</p>\\n<ul>\\n  <li><strong>Stripe</strong> handles physical goods, inventory checks, shipping calculation, tax, customer upserts, and Checkout Sessions</li>\\n  <li><strong>Freemius</strong> handles digital licensing, plan resolution, and checkout URLs with sandbox support</li>\\n  <li>Mixed-provider carts are rejected so the buyer journey stays understandable</li>\\n</ul>\\n\\n<figure class=''my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10''>\\n  <img src=''/images/commerce-plan.webp'' alt=''Commerce roadmap board outlining premium module goals and future storefront capabilities for NextBlock™'' class=''w-full h-auto object-cover'' />\\n  <figcaption class=''border-t border-white/10 px-6 py-4 text-sm text-slate-300''>Commerce is positioned as the first premium module in a larger roadmap, which makes it feel like part of a growing platform instead of a bolt-on add-on.</figcaption>\\n</figure>\\n\\n<h2>Inventory, Orders, and Invoices</h2>\\n<p>When quantity tracking is enabled, checkout validates requested quantities against <code>inventory_items</code>. On payment confirmation, <code>apply_order_inventory_deduction()</code> reduces stock with a resilient fallback path that can use direct SQL if the RPC layer fails.</p>\\n<ul>\\n  <li>Order statuses move from <code>pending</code> to <code>paid</code> to <code>shipped</code>, with cancellation and refund states available too</li>\\n  <li>Invoice numbering is generated through database functions for consistency</li>\\n  <li>Printable invoice documents pull from <code>invoice_settings</code></li>\\n  <li>Customers can review order history and invoice access from the storefront side</li>\\n  <li><strong>Coming soon:</strong> exportable order reporting and analytics dashboards</li>\\n</ul>\\n\\n<h2>Commerce Surfaces Inside the CMS</h2>\\n<p>When the ecommerce package is active, the CMS exposes product list, create, and edit views with media and variants, inventory management, order detail screens, shipping configuration, payment provider settings, tax setup, and currency management. The important part is not only that those screens exist, but that they feel native inside the same shell your content team is already using.</p>"}', 0, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (32, NULL, 6, 2, 'text', '{"html_content": "<p class=''text-lg leading-8 text-slate-700 dark:text-slate-300''>NextBlock™ Commerce est le premier module premium de l''ecosysteme : une couche storefront source-available qui se branche directement sur le meme systeme editorial que le CMS. L''objectif est de rapprocher contenu, catalogue et checkout dans une seule surface produit.</p>\\n\\n<div class=''grid gap-4 md:grid-cols-3 my-10''>\\n  <div class=''rounded-3xl border border-emerald-200/70 bg-emerald-50/70 p-6 dark:border-emerald-500/20 dark:bg-emerald-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200''>Base commerce</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Catalogue + checkout</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>Produits, variantes, commandes, livraison et factures vivent dans le meme shell CMS.</p>\\n  </div>\\n  <div class=''rounded-3xl border border-sky-200/70 bg-sky-50/70 p-6 dark:border-sky-500/20 dark:bg-sky-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-200''>Vente globale</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Multi-devise</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>Sync FX automatique, strategies d''arrondi et overrides par produit rendent les prix internationaux realistes.</p>\\n  </div>\\n  <div class=''rounded-3xl border border-indigo-200/70 bg-indigo-50/70 p-6 dark:border-indigo-500/20 dark:bg-indigo-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-indigo-700 dark:text-indigo-200''>Workflow operateur</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Par fournisseur</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>Stripe et Freemius sont traites differemment pour garder un parcours d''achat propre sans cacher la complexite.</p>\\n  </div>\\n</div>\\n\\n<h2>Catalogue produits</h2>\\n<p>Le module gere produits physiques et numeriques avec variantes, attributs, medias localises, prix independants, SKU et niveaux de stock. Les assets produits restent dans la meme bibliotheque media que les pages marketing, ce qui evite de separer equipes contenu et equipes commerce.</p>\\n\\n<h2>Moteur multi-devise</h2>\\n<p>Le moteur tarifaire vise un vrai usage boutique, pas seulement une demo :</p>\\n<ul>\\n  <li><strong>Devises illimitees</strong> avec codes ISO, symboles et taux stockes</li>\\n  <li><strong>Synchronisation FX automatique</strong> depuis Frankfurter ou un provider custom via <code>FX_API_BASE_URL</code></li>\\n  <li><strong>Modes d''arrondi</strong> dont nearest, up, down et prix charme comme <code>9.99</code></li>\\n  <li><strong>Auto-sync magasin</strong> pour convertir les prix quand les taux changent</li>\\n  <li><strong>Rebasement</strong> lorsqu''on change la devise par defaut</li>\\n  <li><strong>Overrides par produit</strong> quand un article demande un prix fixe sur certains marches</li>\\n</ul>\\n\\n<h2>Taxes automatiques</h2>\\n<p>Les equipes peuvent rester en mode manuel ou confier le calcul a Stripe Tax :</p>\\n<div class=''grid md:grid-cols-2 gap-6 my-6''>\\n  <div class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5''>\\n    <h4 class=''font-bold text-slate-900 dark:text-white mb-2''>Mode manuel</h4>\\n    <p class=''text-sm text-slate-600 dark:text-slate-400''>Definition des taux par pays et eventuellement par province. Les taxes empilees comme TPS + TVQ sont supportees, avec stockage dans <code>orders.tax_details</code>.</p>\\n  </div>\\n  <div class=''p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5''>\\n    <h4 class=''font-bold text-slate-900 dark:text-white mb-2''>Mode automatique</h4>\\n    <p class=''text-sm text-slate-600 dark:text-slate-400''>Stripe Tax calcule les montants finaux. Les codes fiscaux voyagent avec les line items et le webhook remplace les valeurs provisoires par les montants definitifs.</p>\\n  </div>\\n</div>\\n\\n<h2>Livraison et checkout</h2>\\n<p>Les zones de livraison correspondent par pays et etat ou province, gerent des noms localises, des prix par devise, des seuils de livraison gratuite, et des fallbacks par priorite quand aucune correspondance exacte n''est trouvee.</p>\\n<p>Le checkout est conscient du fournisseur :</p>\\n<ul>\\n  <li><strong>Stripe</strong> gere les biens physiques, les verifications d''inventaire, la livraison, les taxes, les clients et les Checkout Sessions</li>\\n  <li><strong>Freemius</strong> gere les licences numeriques, la resolution des plans et les URLs de checkout avec support sandbox</li>\\n  <li>Les paniers melangeant plusieurs fournisseurs sont refuses pour garder un parcours plus clair</li>\\n</ul>\\n\\n<figure class=''my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10''>\\n  <img src=''/images/commerce-plan.webp'' alt=''Tableau de roadmap commerce montrant les objectifs premium et les futures capacites storefront de NextBlock™'' class=''w-full h-auto object-cover'' />\\n  <figcaption class=''border-t border-white/10 px-6 py-4 text-sm text-slate-300''>Le commerce est presente comme le premier module premium d''une feuille de route plus large, ce qui renforce l''idee d''une vraie plateforme en croissance.</figcaption>\\n</figure>\\n\\n<h2>Inventaire, commandes et factures</h2>\\n<p>Quand le suivi des quantites est actif, le checkout valide les demandes contre <code>inventory_items</code>. A la confirmation du paiement, <code>apply_order_inventory_deduction()</code> retire le stock avec un chemin de repli resilient si la couche RPC echoue.</p>\\n<ul>\\n  <li>Les statuts de commande passent de <code>pending</code> a <code>paid</code> puis <code>shipped</code>, avec annulation et remboursement si besoin</li>\\n  <li>La numerotation des factures est geree par des fonctions SQL pour rester coherente</li>\\n  <li>Les documents facture tirent leurs informations de <code>invoice_settings</code></li>\\n  <li>Les clients peuvent consulter leur historique et leurs factures</li>\\n  <li><strong>Bientot :</strong> exports de commandes et tableaux de bord analytiques</li>\\n</ul>\\n\\n<h2>Surfaces commerce dans le CMS</h2>\\n<p>Quand le package ecommerce est actif, le CMS expose les vues produit, edition avec medias et variantes, gestion d''inventaire, detail des commandes, configuration livraison, parametres de paiement, taxes et devises. L''enjeu principal est que tout cela paraisse natif dans le meme shell que l''equipe contenu utilise deja.</p>"}', 0, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (33, NULL, 7, 1, 'text', '{"html_content": "\\n<p class=''text-lg leading-8 text-slate-700 dark:text-slate-300''>NextBlock Cortex AI is the AI layer built for the way NextBlock pages are actually composed. Instead of treating your site like a blank document, it understands blocks, sections, editor constraints, and the model choices your team wants to use.</p>\\n\\n<div class=''grid gap-4 md:grid-cols-3 my-10''>\\n  <div class=''rounded-3xl border border-violet-200/70 bg-violet-50/80 p-6 dark:border-violet-500/20 dark:bg-violet-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200''>Model routing</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Pick the right model</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>Route generation through OpenRouter or your configured provider strategy so each task can balance speed, quality, and cost.</p>\\n  </div>\\n  <div class=''rounded-3xl border border-sky-200/70 bg-sky-50/80 p-6 dark:border-sky-500/20 dark:bg-sky-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-200''>BYOK control</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Use your own keys</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>Keep provider credentials under your control while still giving editors a clean, guided AI workflow in the CMS.</p>\\n  </div>\\n  <div class=''rounded-3xl border border-emerald-200/70 bg-emerald-50/80 p-6 dark:border-emerald-500/20 dark:bg-emerald-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200''>Typed output</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Generate valid blocks</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>Schema-aware generation helps AI output land as usable page structure instead of loose copy that needs a rebuild.</p>\\n  </div>\\n</div>\\n\\n<h2>Why Cortex AI Belongs Inside the Editor</h2>\\n<p>Generic chat tools can draft copy, but they do not know the difference between a hero, a card grid, a product description, and a localized article. Cortex AI lives closer to the editing surface, so generation can respect the same block contracts that render on the public site.</p>\\n<p>That makes AI useful for practical production work: drafting a landing section, tightening an excerpt, expanding a product story, translating a post, or reshaping a rough idea into a block layout that already fits the system.</p>\\n\\n<div class=''rounded-[2rem] border border-slate-200/80 bg-slate-50/90 p-6 my-10 dark:border-white/10 dark:bg-slate-900/70''>\\n  <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200''>Editorial workflow</p>\\n  <div class=''grid gap-5 md:grid-cols-2 mt-5''>\\n    <div class=''rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-slate-950/50''>\\n      <h3 class=''mt-0 text-xl text-slate-900 dark:text-white''>Faster first drafts</h3>\\n      <p class=''text-sm text-slate-600 dark:text-slate-300''>Start with a structured prompt and get a section, article outline, or product narrative that already matches the site voice.</p>\\n    </div>\\n    <div class=''rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-slate-950/50''>\\n      <h3 class=''mt-0 text-xl text-slate-900 dark:text-white''>Cleaner revisions</h3>\\n      <p class=''text-sm text-slate-600 dark:text-slate-300''>Ask for shorter, clearer, more technical, more polished, or locale-ready output without leaving the content screen.</p>\\n    </div>\\n  </div>\\n</div>\\n\\n<h2>Model Routing and Cost Control</h2>\\n<p>Cortex AI is designed around provider choice. Teams can route requests through the configured AI gateway, choose task-appropriate models, and keep bring-your-own-key setups separate from the editor experience. Editors get a simple control surface while developers keep the operational knobs.</p>\\n<ul>\\n  <li>Use fast, inexpensive models for drafts, variations, and rewrites</li>\\n  <li>Reserve stronger models for long-form strategy, technical copy, or difficult transformations</li>\\n  <li>Keep provider keys and routing defaults in the server-side configuration layer</li>\\n  <li>Make cost and quality decisions without changing the public rendering system</li>\\n</ul>\\n\\n<h2>Block-Aware Generation</h2>\\n<p>The important shift is that Cortex AI is not just writing text. It is meant to produce content that can map back to NextBlock surfaces: section copy, article bodies, product descriptions, headings, calls to action, and localized variants. That reduces the cleanup step that usually happens after copying AI text from a separate tool.</p>\\n<p>Because the output is shaped around existing block contracts, the generated content feels native in the editor and predictable on the frontend.</p>\\n\\n<h2>Safer Team Workflows</h2>\\n<p>AI works best when it is helpful without becoming invisible infrastructure. Cortex AI keeps humans in the loop: editors review the output, developers control the available providers, and the CMS keeps the generated content inside the same revision and publishing flow as everything else.</p>\\n\\n<h2>A Practical Launch Flow</h2>\\n<ol>\\n  <li>Draft the article, landing section, or product story from a focused prompt.</li>\\n  <li>Refine the result against the brand voice and target audience.</li>\\n  <li>Generate a localized version or shorter excerpt for cards and metadata.</li>\\n  <li>Review the content in the NextBlock editor, publish, and keep iterating through normal revisions.</li>\\n</ol>\\n\\n<p>Cortex AI turns the CMS into a more capable production surface: not a replacement for editorial judgment, but a faster way to shape good ideas into structured pages that are ready to ship.</p>\\n"}', 0, '2026-07-03 17:52:15.643901+00', '2026-07-03 17:52:15.643901+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (34, 7, NULL, 1, 'text', '{"html_content": "\\n<h1>Privacy Policy</h1>\\n<p><em>Last updated: June 4, 2026</em></p>\\n<p>NextBlock™ CMS (\\"we\\", \\"us\\", or \\"our\\") respects your privacy and is committed to protecting your personal information in accordance with Quebec''s <em>Act respecting the protection of personal information in the private sector</em> (Law 25), the federal <em>Personal Information Protection and Electronic Documents Act</em> (PIPEDA), and Canada''s Anti-Spam Legislation (CASL).</p>\\n\\n<h2>1. Person responsible for personal information</h2>\\n<p>Our Privacy Officer is responsible for our compliance with applicable privacy laws. You may reach them at <a href=\\"mailto:{{privacy_email}}\\">{{privacy_email}}</a>.</p>\\n\\n<h2>2. What we collect</h2>\\n<ul>\\n  <li><strong>Account information</strong> &mdash; name, email address, and credentials when you register.</li>\\n  <li><strong>Usage and device data</strong> &mdash; collected only with your consent through analytics technologies.</li>\\n  <li><strong>Communications</strong> &mdash; messages you send us and your marketing preferences.</li>\\n</ul>\\n\\n<h2>3. Why we collect it and your consent</h2>\\n<p>We collect personal information for clearly identified purposes: to provide and secure our services, to communicate with you, and &mdash; only with your express, opt-in consent &mdash; for analytics and marketing. Consistent with Law 25, non-essential cookies and trackers remain disabled until you actively accept them, and you may withdraw your consent at any time.</p>\\n\\n<h2>4. Cookies and tracking technologies</h2>\\n<p>Strictly necessary cookies keep the site working and require no consent. Analytics and marketing technologies are loaded <strong>only after</strong> you opt in through our consent banner. Your choice is recorded so we can honour it and demonstrate accountability.</p>\\n\\n<h2>5. Disclosure and sharing</h2>\\n<p>We do not sell your personal information. We share it only with service providers who help us operate the platform under contractual confidentiality obligations, or where required by law.</p>\\n\\n<h2>6. Retention</h2>\\n<p>We keep personal information only for as long as necessary to fulfil the purposes described above or as required by law, after which it is securely destroyed or anonymized.</p>\\n\\n<h2>7. Your rights</h2>\\n<p>Subject to applicable law, you have the right to access, rectify, and delete your personal information, to withdraw consent, to data portability, and to be informed about automated processing. To exercise these rights, contact our Privacy Officer at <a href=\\"mailto:{{privacy_email}}\\">{{privacy_email}}</a>.</p>\\n\\n<h2>8. Commercial electronic messages (CASL)</h2>\\n<p>We send commercial electronic messages only with your consent. Every message identifies us and includes a working unsubscribe mechanism that we honour promptly.</p>\\n\\n<h2>9. Safeguards</h2>\\n<p>We use appropriate physical, organizational, and technological measures &mdash; including encryption in transit and access controls &mdash; to protect personal information against loss, theft, and unauthorized access.</p>\\n\\n<h2>10. Open-source software</h2>\\n<p>NextBlock™ CMS is free, open-source software distributed under the GNU Affero General Public License v3. When you self-host NextBlock, you are the operator responsible for the personal information processed by your own deployment, and this policy serves as a starting point you may adapt to your organization.</p>\\n\\n<h2>11. Changes to this policy</h2>\\n<p>We may update this policy from time to time. Material changes will be communicated through the site, and the \\"last updated\\" date will be revised.</p>\\n\\n<h2>12. Contact us</h2>\\n<p>Questions or complaints? Contact NextBlock™ CMS at <a href=\\"mailto:{{privacy_email}}\\">{{privacy_email}}</a>. You may also contact the Commission d''accès à l''information du Québec or the Office of the Privacy Commissioner of Canada.</p>\\n"}', 0, '2026-07-03 17:52:15.699946+00', '2026-07-03 17:52:15.760236+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (35, 8, NULL, 2, 'text', '{"html_content": "\\n<h1>Politique de confidentialité</h1>\\n<p><em>Dernière mise à jour : 4 juin 2026</em></p>\\n<p>NextBlock™ CMS (« nous ») respecte votre vie privée et s''engage à protéger vos renseignements personnels conformément à la <em>Loi sur la protection des renseignements personnels dans le secteur privé</em> du Québec (Loi 25), à la <em>Loi sur la protection des renseignements personnels et les documents électroniques</em> (LPRPDE) et à la Loi canadienne anti-pourriel (LCAP).</p>\\n\\n<h2>1. Responsable de la protection des renseignements personnels</h2>\\n<p>Notre responsable de la protection des renseignements personnels veille au respect des lois applicables. Vous pouvez le joindre à <a href=\\"mailto:{{privacy_email}}\\">{{privacy_email}}</a>.</p>\\n\\n<h2>2. Renseignements que nous recueillons</h2>\\n<ul>\\n  <li><strong>Renseignements de compte</strong> &mdash; nom, adresse courriel et identifiants lors de l''inscription.</li>\\n  <li><strong>Données d''utilisation et d''appareil</strong> &mdash; recueillies uniquement avec votre consentement au moyen de technologies d''analyse.</li>\\n  <li><strong>Communications</strong> &mdash; les messages que vous nous envoyez et vos préférences marketing.</li>\\n</ul>\\n\\n<h2>3. Finalités et consentement</h2>\\n<p>Nous recueillons des renseignements personnels à des fins clairement déterminées : fournir et sécuriser nos services, communiquer avec vous et &mdash; uniquement avec votre consentement exprès &mdash; à des fins d''analyse et de marketing. Conformément à la Loi 25, les témoins et traceurs non essentiels demeurent désactivés tant que vous ne les avez pas acceptés, et vous pouvez retirer votre consentement en tout temps.</p>\\n\\n<h2>4. Témoins et technologies de suivi</h2>\\n<p>Les témoins strictement nécessaires assurent le fonctionnement du site et ne requièrent aucun consentement. Les technologies d''analyse et de marketing ne sont chargées qu''<strong>après</strong> votre consentement explicite. Votre choix est enregistré afin de le respecter.</p>\\n\\n<h2>5. Communication à des tiers</h2>\\n<p>Nous ne vendons pas vos renseignements personnels. Nous ne les communiquons qu''à des fournisseurs qui nous aident à exploiter la plateforme, sous obligation de confidentialité, ou lorsque la loi l''exige.</p>\\n\\n<h2>6. Conservation</h2>\\n<p>Nous ne conservons les renseignements personnels que le temps nécessaire aux fins décrites ou exigé par la loi, après quoi ils sont détruits ou anonymisés de façon sécuritaire.</p>\\n\\n<h2>7. Vos droits</h2>\\n<p>Sous réserve de la loi applicable, vous avez le droit d''accéder à vos renseignements, de les rectifier et de les supprimer, de retirer votre consentement, à la portabilité de vos données et d''être informé du traitement automatisé. Pour exercer ces droits, écrivez à <a href=\\"mailto:{{privacy_email}}\\">{{privacy_email}}</a>.</p>\\n\\n<h2>8. Messages électroniques commerciaux (LCAP)</h2>\\n<p>Nous n''envoyons des messages électroniques commerciaux qu''avec votre consentement. Chaque message nous identifie et comporte un mécanisme de désabonnement fonctionnel que nous respectons rapidement.</p>\\n\\n<h2>9. Mesures de sécurité</h2>\\n<p>Nous employons des mesures physiques, organisationnelles et technologiques appropriées &mdash; dont le chiffrement en transit et le contrôle des accès &mdash; pour protéger vos renseignements.</p>\\n\\n<h2>10. Logiciel libre</h2>\\n<p>NextBlock™ CMS est un logiciel libre et à code source ouvert distribué sous la licence publique générale GNU Affero v3. Lorsque vous hébergez NextBlock vous-même, vous êtes l''exploitant responsable des renseignements personnels traités par votre propre instance, et la présente politique vous sert de point de départ adaptable à votre organisation.</p>\\n\\n<h2>11. Modifications</h2>\\n<p>Nous pouvons mettre à jour cette politique. Les changements importants seront communiqués sur le site et la date de mise à jour sera révisée.</p>\\n\\n<h2>12. Nous joindre</h2>\\n<p>Des questions ou des plaintes ? Contactez NextBlock™ CMS à <a href=\\"mailto:{{privacy_email}}\\">{{privacy_email}}</a>. Vous pouvez aussi vous adresser à la Commission d''accès à l''information du Québec.</p>\\n"}', 0, '2026-07-03 17:52:15.699946+00', '2026-07-03 17:52:15.760236+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (36, 9, NULL, 1, 'text', '{"html_content": "\\n<h1>Terms of Service</h1>\\n<p><em>Last updated: June 4, 2026</em></p>\\n\\n<h2>1. Acceptance of terms</h2>\\n<p>By accessing or using NextBlock™ CMS and the services we provide (the \\"Services\\"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Services.</p>\\n\\n<h2>2. Free and open-source software</h2>\\n<p>NextBlock™ CMS is free, open-source software licensed under the <strong>GNU Affero General Public License, version 3 (AGPL-3.0)</strong> or, at your option, any later version. You are free to run, study, share, and modify the software under the terms of that license. A copy of the license is distributed with the software and is also available at <a href=\\"https://www.gnu.org/licenses/agpl-3.0.html\\">gnu.org/licenses/agpl-3.0.html</a>.</p>\\n<p>Copyright © 2025 NextBlock™ CMS.</p>\\n\\n<h2>3. Source code availability</h2>\\n<p>In accordance with section 13 of the AGPL-3.0, if you run a modified version of NextBlock™ CMS and make it available to users over a network, you must prominently offer those users access to the Corresponding Source of your modified version, free of charge, through a standard or customary means of facilitating copying of software.</p>\\n\\n<h2>4. Trademarks</h2>\\n<p>The AGPL-3.0 grants broad rights to the software''s source code but does <strong>not</strong> grant any rights to our trade names, trademarks, or service marks. \\"NextBlock™\\", the NextBlock™ CMS name, and associated logos remain our property and may not be used in a way that suggests endorsement or affiliation without our prior written permission.</p>\\n\\n<h2>5. Accounts and acceptable use</h2>\\n<p>If you create an account, you are responsible for safeguarding your credentials and for all activity under your account, and you agree to notify us promptly of any unauthorized use. You agree not to misuse the Services, including by attempting to disrupt them, access them without authorization, or use them for unlawful purposes.</p>\\n\\n<h2>6. No warranty</h2>\\n<p>As stated in section 15 of the AGPL-3.0, the software is provided \\"as is\\", without warranty of any kind, either expressed or implied, including, without limitation, the implied warranties of merchantability and fitness for a particular purpose. The entire risk as to the quality and performance of the software is with you.</p>\\n\\n<h2>7. Limitation of liability</h2>\\n<p>As stated in section 16 of the AGPL-3.0, and to the fullest extent permitted by applicable law, in no event will any copyright holder, or any other party who modifies or conveys the software, be liable to you for damages, including any general, special, incidental, or consequential damages arising out of the use or inability to use the software.</p>\\n\\n<h2>8. Governing law</h2>\\n<p>These Terms are governed by the laws of the Province of Quebec and the federal laws of Canada applicable therein, without regard to conflict-of-law principles. Nothing in these Terms limits any mandatory consumer-protection rights you may have under those laws.</p>\\n\\n<h2>9. Changes</h2>\\n<p>We may revise these Terms from time to time. Material changes will be communicated through the Services, and continued use of the Services after changes take effect constitutes acceptance of the revised Terms.</p>\\n\\n<h2>10. Contact</h2>\\n<p>Questions about these Terms? Contact NextBlock™ CMS at <a href=\\"mailto:{{privacy_email}}\\">{{privacy_email}}</a>.</p>\\n"}', 0, '2026-07-03 17:52:15.699946+00', '2026-07-03 17:52:15.760236+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (37, 10, NULL, 2, 'text', '{"html_content": "\\n<h1>Conditions d''utilisation</h1>\\n<p><em>Dernière mise à jour : 4 juin 2026</em></p>\\n\\n<h2>1. Acceptation des conditions</h2>\\n<p>En accédant à NextBlock™ CMS et aux services que nous fournissons (les « Services ») ou en les utilisant, vous acceptez d''être lié par les présentes conditions d''utilisation. Si vous n''êtes pas d''accord, n''utilisez pas les Services.</p>\\n\\n<h2>2. Logiciel libre et à code source ouvert</h2>\\n<p>NextBlock™ CMS est un logiciel libre et à code source ouvert distribué sous la <strong>licence publique générale GNU Affero, version 3 (AGPL-3.0)</strong> ou, à votre choix, toute version ultérieure. Vous êtes libre d''exécuter, d''étudier, de partager et de modifier le logiciel selon les termes de cette licence. Une copie de la licence est fournie avec le logiciel et est aussi disponible à <a href=\\"https://www.gnu.org/licenses/agpl-3.0.html\\">gnu.org/licenses/agpl-3.0.html</a>.</p>\\n<p>Droit d''auteur © 2025 NextBlock™ CMS.</p>\\n\\n<h2>3. Disponibilité du code source</h2>\\n<p>Conformément à l''article 13 de l''AGPL-3.0, si vous exploitez une version modifiée de NextBlock™ CMS et la rendez accessible à des utilisateurs sur un réseau, vous devez offrir clairement à ces utilisateurs l''accès au code source correspondant de votre version modifiée, gratuitement, par un moyen usuel de copie de logiciels.</p>\\n\\n<h2>4. Marques de commerce</h2>\\n<p>L''AGPL-3.0 accorde de larges droits sur le code source du logiciel, mais <strong>n''accorde aucun droit</strong> sur nos noms commerciaux, marques de commerce ou marques de service. « NextBlock™ », le nom NextBlock™ CMS et les logos associés demeurent notre propriété et ne peuvent être utilisés d''une manière laissant entendre une approbation ou une affiliation sans notre autorisation écrite préalable.</p>\\n\\n<h2>5. Comptes et utilisation acceptable</h2>\\n<p>Si vous créez un compte, vous êtes responsable de la protection de vos identifiants et de toute activité effectuée à partir de votre compte, et vous vous engagez à nous aviser rapidement de toute utilisation non autorisée. Vous vous engagez à ne pas détourner les Services, notamment en tentant de les perturber, d''y accéder sans autorisation ou de les utiliser à des fins illégales.</p>\\n\\n<h2>6. Absence de garantie</h2>\\n<p>Comme l''énonce l''article 15 de l''AGPL-3.0, le logiciel est fourni « tel quel », sans garantie d''aucune sorte, expresse ou implicite, y compris, sans s''y limiter, les garanties implicites de qualité marchande et d''adéquation à un usage particulier. Vous assumez l''entièreté du risque quant à la qualité et au rendement du logiciel.</p>\\n\\n<h2>7. Limitation de responsabilité</h2>\\n<p>Comme l''énonce l''article 16 de l''AGPL-3.0, et dans toute la mesure permise par la loi applicable, en aucun cas un titulaire de droits d''auteur ou toute autre partie qui modifie ou transmet le logiciel ne saurait être tenu responsable envers vous de dommages, y compris tout dommage général, spécial, accessoire ou consécutif découlant de l''utilisation ou de l''impossibilité d''utiliser le logiciel.</p>\\n\\n<h2>8. Droit applicable</h2>\\n<p>Les présentes conditions sont régies par les lois de la province de Québec et les lois fédérales du Canada qui y sont applicables, sans égard aux règles de conflit de lois. Rien dans les présentes conditions ne limite les droits impératifs de protection du consommateur dont vous pourriez bénéficier en vertu de ces lois.</p>\\n\\n<h2>9. Modifications</h2>\\n<p>Nous pouvons réviser ces conditions de temps à autre. Les changements importants seront communiqués au moyen des Services, et l''utilisation continue des Services après leur entrée en vigueur vaut acceptation.</p>\\n\\n<h2>10. Nous joindre</h2>\\n<p>Des questions sur ces conditions ? Contactez NextBlock™ CMS à <a href=\\"mailto:{{privacy_email}}\\">{{privacy_email}}</a>.</p>\\n"}', 0, '2026-07-03 17:52:15.699946+00', '2026-07-03 17:52:15.760236+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (40, NULL, 3, 1, 'text', '{"html_content": "<p class=''text-lg leading-8 text-slate-700 dark:text-slate-300''>NextBlock is an open-source, AI-native Next.js CMS built on Supabase — and installing it no longer involves config files, terminal wizards, or manual SQL. There are four ways to get running, and they all end in the same place: a browser <strong>setup wizard</strong> that connects your database, configures media storage, and creates your admin account for you. Pick the path that fits, follow the steps, and you will be publishing in minutes.</p>\\n\\n<div class=''grid gap-5 md:grid-cols-2 my-10''>\\n  <a href=''#one-click-vercel'' class=''block rounded-[1.75rem] border border-blue-200 bg-blue-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-blue-500/20 dark:bg-blue-500/10''>\\n    <p class=''mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200''>Fastest &middot; about 3 minutes</p>\\n    <h3 class=''mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white''>One-click deploy on Vercel</h3>\\n    <p class=''mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300''>A live production site with a managed database. No terminal, no environment variables, nothing to copy.</p>\\n  </a>\\n  <a href=''#npm-create'' class=''block rounded-[1.75rem] border border-violet-200 bg-violet-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-violet-500/20 dark:bg-violet-500/10''>\\n    <p class=''mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200''>Recommended for new projects</p>\\n    <h3 class=''mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white''>npm create nextblock</h3>\\n    <p class=''mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300''>Scaffold a standalone Next.js app with NextBlock built in, then finish setup in your browser.</p>\\n  </a>\\n  <a href=''#git-clone'' class=''block rounded-[1.75rem] border border-emerald-200 bg-emerald-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-emerald-500/20 dark:bg-emerald-500/10''>\\n    <p class=''mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200''>Full source code</p>\\n    <h3 class=''mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white''>Clone the repository</h3>\\n    <p class=''mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300''>Run the complete monorepo — the CMS, every package, and the docs. Made for contributors and platform teams.</p>\\n  </a>\\n  <a href=''#docker'' class=''block rounded-[1.75rem] border border-amber-200 bg-amber-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-amber-500/20 dark:bg-amber-500/10''>\\n    <p class=''mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200''>100% local &middot; no accounts</p>\\n    <h3 class=''mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white''>Self-hosted with Docker</h3>\\n    <p class=''mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300''>One command boots the entire stack on your machine — database, auth, storage, and the CMS. No cloud services at all.</p>\\n  </a>\\n</div>\\n\\n<p class=''text-sm text-slate-500 dark:text-slate-400''>Not sure which to pick? If you want a live website with the least effort, choose <a href=''#one-click-vercel''>Vercel</a>. If you want a local project to build on, choose <a href=''#npm-create''>npm create nextblock</a>.</p>\\n\\n<figure class=''my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10''>\\n  <img src=''/images/included.webp'' alt=''NextBlock CMS platform overview showing the block editor, CMS dashboard, and integrations included with every installation'' class=''w-full h-auto object-cover'' />\\n  <figcaption class=''border-t border-white/10 px-6 py-4 text-sm text-slate-300''>Whichever path you choose, you get the same block editor, the same CMS, and the same database schema.</figcaption>\\n</figure>\\n\\n<h2 id=''one-click-vercel''>Option 1: One-Click Deploy on Vercel</h2>\\n<p>The fastest way to get a production NextBlock site. One button creates your own copy of NextBlock on GitHub, provisions a managed Supabase database, and deploys the site — you never open a terminal or copy a single key.</p>\\n<ol class=''space-y-2''>\\n  <li><strong>Click Deploy to Vercel</strong> and sign in — Vercel clones NextBlock into a new repository you own.</li>\\n  <li><strong>Create the Supabase database</strong> when prompted: pick a name and a region. Vercel connects it to the project and injects the keys before the first build.</li>\\n  <li><strong>Open your new site</strong> once the build finishes. Every fresh instance takes you straight to the setup wizard.</li>\\n  <li><strong>Create your administrator account.</strong> It is confirmed instantly — no verification email — and you land in the CMS dashboard.</li>\\n</ol>\\n<div class=''my-8''>\\n  <a href=''https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&amp;project-name=nextblock&amp;repository-name=nextblock&amp;stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D'' target=''_blank'' rel=''noopener'' class=''inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white no-underline shadow-lg hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200''>Deploy to Vercel &rarr;</a>\\n</div>\\n<div class=''rounded-3xl border border-blue-200 bg-blue-50/80 p-6 my-8 dark:border-blue-500/20 dark:bg-blue-500/10''>\\n  <p class=''mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200''>Zero configuration</p>\\n  <p class=''mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200''>There are no environment variables to fill in. Media storage automatically uses your connected Supabase project, security secrets are derived for you, and database migrations run automatically on every production build. Adding a custom domain later? Set <code>NEXT_PUBLIC_URL</code> in your Vercel project and redeploy.</p>\\n</div>\\n<p>Your site also keeps itself current: the dashboard checklist includes a one-click <strong>Connect GitHub</strong> step that installs a daily workflow syncing your copy with the latest NextBlock release.</p>\\n\\n<h2 id=''npm-create''>Option 2: Scaffold a Project with npm create nextblock</h2>\\n<p>The best starting point for building your own site. The CLI scaffolds a standalone Next.js application with NextBlock already wired in — no monorepo, no workspace tooling — and hands everything else to the browser wizard.</p>\\n<p>Before you start, install <a href=''https://nodejs.org'' target=''_blank'' rel=''noopener''>Node.js 20 or newer</a> (it includes npm), then create a free project at <a href=''https://supabase.com'' target=''_blank'' rel=''noopener''>supabase.com</a> (or pick the CLI''s Docker mode during creation and skip cloud accounts entirely).</p>\\n<pre><code>npm create nextblock@latest my-site\\ncd my-site\\nnpm run dev</code></pre>\\n<p>Open <code>http://localhost:3000/setup</code> and let the wizard take over:</p>\\n<ol class=''space-y-2''>\\n  <li><strong>Connect Supabase</strong> — paste your project URL, publishable (anon) key, secret (service role) key, and a personal access token so the wizard can apply the database schema for you.</li>\\n  <li><strong>Choose media storage</strong> — plug in a Cloudflare R2 bucket for images and files, or leave it blank to use your connected Supabase project''s storage.</li>\\n  <li><strong>Create your administrator</strong> — the wizard applies every migration, generates the app secrets, writes <code>.env.local</code>, creates your confirmed admin account, and signs you in. Restart <code>npm run dev</code> once afterwards so the fresh environment is baked into the app.</li>\\n</ol>\\n<div class=''rounded-3xl border border-violet-200 bg-violet-50/80 p-6 my-8 dark:border-violet-500/20 dark:bg-violet-500/10''>\\n  <p class=''mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200''>Premium modules</p>\\n  <p class=''mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200''>Need a store? One command adds products, checkout, orders, and coupons — license-gated and ready when you are: <code>npx create-nextblock activate ecommerce</code></p>\\n</div>\\n\\n<h2 id=''git-clone''>Option 3: Clone the Repository</h2>\\n<p>Run the full Nx monorepo: the CMS application, every shared package, the CLI source, and the documentation. This is the path for contributors, plugin authors, and teams that customize the platform itself.</p>\\n<pre><code>git clone https://github.com/nextblock-cms/nextblock.git\\ncd nextblock\\nnpm install\\nnpx nx serve nextblock</code></pre>\\n<p>Open <code>http://localhost:4200</code> — a fresh install redirects every page to <code>/setup</code>, where the same three-step wizard connects Supabase, configures storage, and creates your admin. It validates your keys, writes <code>.env.local</code> with generated secrets, and applies all migrations over the Supabase Management API — no Supabase CLI required.</p>\\n<div class=''rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 my-8 dark:border-emerald-500/20 dark:bg-emerald-500/10''>\\n  <p class=''mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200''>No terminal setup</p>\\n  <p class=''mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200''>Configuration moved entirely to the browser — there is no interactive terminal step anymore. When the wizard finishes you are signed in as the administrator; restart the dev server once afterwards so the fresh environment is baked into the app bundle.</p>\\n</div>\\n\\n<h2 id=''docker''>Option 4: Self-Hosted with Docker</h2>\\n<p>Everything runs on your machine: Supabase''s Postgres and auth engines, a PostgREST API behind a Kong gateway, S3-compatible MinIO storage, and the CMS itself. No Supabase account, no Vercel, no email service — ideal for evaluations, air-gapped environments, and anyone who wants a fully self-hosted CMS with complete data ownership.</p>\\n<p>With <a href=''https://www.docker.com/products/docker-desktop/'' target=''_blank'' rel=''noopener''>Docker Desktop</a> installed and running:</p>\\n<pre><code>git clone https://github.com/nextblock-cms/nextblock.git\\ncd nextblock\\nnpm install\\nnpm run docker:setup</code></pre>\\n<p>The command asks nothing: it generates secure keys, builds the stack, applies every migration, and starts the services. When it finishes, open <code>http://localhost:3000</code> — the setup wizard already has the database and MinIO storage wired up, so the only step left is creating your administrator (confirmed instantly, no email required).</p>\\n<div class=''rounded-3xl border border-amber-200 bg-amber-50/80 p-6 my-8 dark:border-amber-500/20 dark:bg-amber-500/10''>\\n  <p class=''mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200''>Day-2 commands</p>\\n  <pre class=''mt-4 mb-0''><code># rebuild and restart the stack\\nnpm run docker:up\\n\\n# stop the stack (your data persists in Docker volumes)\\nnpm run docker:down\\n\\n# follow the application logs\\nnpm run docker:logs</code></pre>\\n</div>\\n\\n<h2 id=''after-install''>After You Install: Your First 10 Minutes</h2>\\n<p>Every path drops you at <code>/cms/dashboard</code>, signed in as the first administrator. A built-in onboarding checklist walks you through the rest:</p>\\n<ul class=''space-y-2''>\\n  <li><strong>Add your branding</strong> — upload your logo and set the site title.</li>\\n  <li><strong>Set your footer</strong> — copyright line and footer navigation.</li>\\n  <li><strong>Configure email (SMTP)</strong> — under Settings, so password resets and invitations can send.</li>\\n  <li><strong>Optional extras</strong> — connect analytics, enable bot protection, and (on Vercel) turn on automatic updates.</li>\\n</ul>\\n<p>From there, see how the platform fits together in <a href=''/article/how-nextblock-works''>How NextBlock Works</a>, add a storefront with the <a href=''/article/nextblock-commerce-guide''>Commerce guide</a>, or meet your AI copilot in the <a href=''/article/nextblock-cortex-ai-guide''>Cortex AI guide</a>.</p>\\n\\n<h2 id=''faq''>Installation FAQ</h2>\\n<h3>What do I need installed?</h3>\\n<p>Nothing for the Vercel path — it runs entirely in the browser. For <code>npm create nextblock</code>: <a href=''https://nodejs.org'' target=''_blank'' rel=''noopener''>Node.js 20+</a> (which includes npm). For the cloned repository: Node.js 20+ and git. For Docker: those plus Docker Desktop.</p>\\n<h3>Is NextBlock free?</h3>\\n<p>Yes — the core of NextBlock is a 100% free, open-source CMS (AGPL). Premium packages such as e-commerce and Cortex AI are optional and activate with a license key. Both Vercel and Supabase offer free tiers, so a starter site can run at no cost.</p>\\n<h3>Do I need a Supabase account?</h3>\\n<p>On Vercel, the database is created for you during the deploy. For <code>npm create nextblock</code> and the cloned repository you bring a free Supabase project. With Docker you need no cloud accounts at all.</p>\\n<h3>Do I have to run migrations or SQL by hand?</h3>\\n<p>No. The setup wizard, the Vercel build, and the Docker stack all apply the database schema automatically — and re-running is always safe.</p>\\n<h3>Can I switch paths later?</h3>\\n<p>Yes. Every path runs the same application and the same database schema, so you can prototype locally with Docker today and deploy to Vercel tomorrow. NextBlock deploys like any standard Next.js app.</p>\\n<h3>How do I update NextBlock?</h3>\\n<p>On Vercel, the Connect GitHub onboarding step enables a daily automatic sync with upstream. On a cloned repository, <code>git pull</code>, run <code>npm run db:migrate</code>, then restart (on production builds, pending migrations apply automatically). With Docker, pull the latest code and run <code>npm run docker:up</code>.</p>\\n\\n<div class=''rounded-[2rem] border border-slate-200/80 bg-slate-50 p-8 my-12 text-center dark:border-white/10 dark:bg-white/5''>\\n  <p class=''mt-0 text-2xl font-semibold text-slate-900 dark:text-white''>Ready to launch?</p>\\n  <p class=''text-sm text-slate-600 dark:text-slate-300''>Pick your path above, or jump straight to the fastest one.</p>\\n  <div class=''mt-5 flex flex-wrap justify-center gap-3''>\\n    <a href=''https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&amp;project-name=nextblock&amp;repository-name=nextblock&amp;stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D'' target=''_blank'' rel=''noopener'' class=''inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white no-underline shadow-lg hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200''>Deploy on Vercel</a>\\n    <a href=''https://github.com/nextblock-cms/nextblock'' target=''_blank'' rel=''noopener'' class=''inline-flex items-center rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 no-underline hover:border-slate-500 dark:border-white/20 dark:text-slate-200 dark:hover:border-white/50''>View on GitHub</a>\\n  </div>\\n</div>"}', 0, '2026-07-03 17:52:15.799297+00', '2026-07-03 17:52:15.799297+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (41, NULL, 4, 2, 'text', '{"html_content": "<p class=''text-lg leading-8 text-slate-700 dark:text-slate-300''>NextBlock est un CMS open source et natif IA, construit sur Next.js et Supabase — et son installation ne passe plus par des fichiers de configuration, des assistants en ligne de commande ou du SQL manuel. Il existe quatre façons de démarrer, et elles aboutissent toutes au même endroit : un <strong>assistant de configuration</strong> dans le navigateur qui connecte votre base de données, configure le stockage des médias et crée votre compte administrateur. Choisissez le chemin qui vous convient, suivez les étapes, et vous publierez en quelques minutes.</p>\\n\\n<div class=''grid gap-5 md:grid-cols-2 my-10''>\\n  <a href=''#one-click-vercel'' class=''block rounded-[1.75rem] border border-blue-200 bg-blue-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-blue-500/20 dark:bg-blue-500/10''>\\n    <p class=''mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200''>Le plus rapide &middot; environ 3 minutes</p>\\n    <h3 class=''mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white''>Déploiement Vercel en un clic</h3>\\n    <p class=''mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300''>Un site de production en ligne avec une base de données gérée. Pas de terminal, pas de variables d''environnement, rien à copier.</p>\\n  </a>\\n  <a href=''#npm-create'' class=''block rounded-[1.75rem] border border-violet-200 bg-violet-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-violet-500/20 dark:bg-violet-500/10''>\\n    <p class=''mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200''>Recommandé pour les nouveaux projets</p>\\n    <h3 class=''mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white''>npm create nextblock</h3>\\n    <p class=''mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300''>Générez une app Next.js autonome avec NextBlock intégré, puis terminez la configuration dans votre navigateur.</p>\\n  </a>\\n  <a href=''#git-clone'' class=''block rounded-[1.75rem] border border-emerald-200 bg-emerald-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-emerald-500/20 dark:bg-emerald-500/10''>\\n    <p class=''mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200''>Code source complet</p>\\n    <h3 class=''mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white''>Cloner le dépôt</h3>\\n    <p class=''mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300''>Faites tourner le monorepo complet — le CMS, tous les packages et la documentation. Conçu pour les contributeurs et les équipes plateforme.</p>\\n  </a>\\n  <a href=''#docker'' class=''block rounded-[1.75rem] border border-amber-200 bg-amber-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-amber-500/20 dark:bg-amber-500/10''>\\n    <p class=''mt-0 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200''>100 % local &middot; aucun compte</p>\\n    <h3 class=''mt-3 mb-2 text-xl font-semibold text-slate-900 dark:text-white''>Auto-hébergé avec Docker</h3>\\n    <p class=''mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300''>Une seule commande démarre toute la pile sur votre machine — base de données, auth, stockage et le CMS. Aucun service cloud.</p>\\n  </a>\\n</div>\\n\\n<p class=''text-sm text-slate-500 dark:text-slate-400''>Vous hésitez ? Pour un site en ligne avec le minimum d''effort, choisissez <a href=''#one-click-vercel''>Vercel</a>. Pour un projet local à personnaliser, choisissez <a href=''#npm-create''>npm create nextblock</a>.</p>\\n\\n<figure class=''my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10''>\\n  <img src=''/images/included.webp'' alt=''Aperçu de la plateforme NextBlock : éditeur de blocs, tableau de bord CMS et intégrations incluses dans chaque installation'' class=''w-full h-auto object-cover'' />\\n  <figcaption class=''border-t border-white/10 px-6 py-4 text-sm text-slate-300''>Quel que soit le chemin choisi, vous obtenez le même éditeur de blocs, le même CMS et le même schéma de base de données.</figcaption>\\n</figure>\\n\\n<h2 id=''one-click-vercel''>Option 1 : Déploiement Vercel en un clic</h2>\\n<p>Le moyen le plus rapide d''obtenir un site NextBlock en production. Un seul bouton crée votre propre copie de NextBlock sur GitHub, provisionne une base de données Supabase gérée et déploie le site — sans jamais ouvrir un terminal ni copier la moindre clé.</p>\\n<ol class=''space-y-2''>\\n  <li><strong>Cliquez sur Deploy to Vercel</strong> et connectez-vous — Vercel clone NextBlock dans un nouveau dépôt qui vous appartient.</li>\\n  <li><strong>Créez la base de données Supabase</strong> quand on vous le demande : choisissez un nom et une région. Vercel la connecte au projet et injecte les clés avant le premier build.</li>\\n  <li><strong>Ouvrez votre nouveau site</strong> une fois le build terminé. Toute nouvelle instance vous amène directement à l''assistant de configuration.</li>\\n  <li><strong>Créez votre compte administrateur.</strong> Il est confirmé instantanément — aucun email de vérification — et vous arrivez dans le tableau de bord du CMS.</li>\\n</ol>\\n<div class=''my-8''>\\n  <a href=''https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&amp;project-name=nextblock&amp;repository-name=nextblock&amp;stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D'' target=''_blank'' rel=''noopener'' class=''inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white no-underline shadow-lg hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200''>Déployer sur Vercel &rarr;</a>\\n</div>\\n<div class=''rounded-3xl border border-blue-200 bg-blue-50/80 p-6 my-8 dark:border-blue-500/20 dark:bg-blue-500/10''>\\n  <p class=''mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200''>Zéro configuration</p>\\n  <p class=''mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200''>Aucune variable d''environnement à remplir. Le stockage des médias utilise automatiquement votre projet Supabase connecté, les secrets de sécurité sont dérivés pour vous, et les migrations de base de données s''exécutent automatiquement à chaque build de production. Un domaine personnalisé plus tard ? Définissez <code>NEXT_PUBLIC_URL</code> dans votre projet Vercel et redéployez.</p>\\n</div>\\n<p>Par ailleurs, votre site reste à jour tout seul : la checklist du tableau de bord inclut une étape <strong>Connect GitHub</strong> en un clic qui installe un workflow quotidien synchronisant votre copie avec la dernière version de NextBlock.</p>\\n\\n<h2 id=''npm-create''>Option 2 : Créer un projet avec npm create nextblock</h2>\\n<p>Le meilleur point de départ pour construire votre propre site. Le CLI génère une application Next.js autonome avec NextBlock déjà intégré — sans monorepo ni outillage de workspace — et confie tout le reste à l''assistant dans le navigateur.</p>\\n<p>Avant de commencer, installez <a href=''https://nodejs.org'' target=''_blank'' rel=''noopener''>Node.js 20 ou plus récent</a> (npm inclus), puis créez un projet gratuit sur <a href=''https://supabase.com'' target=''_blank'' rel=''noopener''>supabase.com</a> (ou choisissez le mode Docker du CLI pendant la création et passez-vous entièrement de comptes cloud).</p>\\n<pre><code>npm create nextblock@latest mon-site\\ncd mon-site\\nnpm run dev</code></pre>\\n<p>Ouvrez <code>http://localhost:3000/setup</code> et laissez l''assistant faire le travail :</p>\\n<ol class=''space-y-2''>\\n  <li><strong>Connectez Supabase</strong> — collez l''URL du projet, la clé publiable (anon), la clé secrète (service role) et un jeton d''accès personnel pour que l''assistant applique le schéma de base de données à votre place.</li>\\n  <li><strong>Choisissez le stockage des médias</strong> — branchez un bucket Cloudflare R2 pour les images et les fichiers, ou laissez les champs vides pour utiliser le stockage de votre projet Supabase.</li>\\n  <li><strong>Créez votre administrateur</strong> — l''assistant applique toutes les migrations, génère les secrets de l''application, écrit <code>.env.local</code>, crée votre compte admin confirmé et vous connecte. Redémarrez ensuite <code>npm run dev</code> une fois pour que le nouvel environnement soit intégré à l''application.</li>\\n</ol>\\n<div class=''rounded-3xl border border-violet-200 bg-violet-50/80 p-6 my-8 dark:border-violet-500/20 dark:bg-violet-500/10''>\\n  <p class=''mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200''>Modules premium</p>\\n  <p class=''mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200''>Besoin d''une boutique ? Une seule commande ajoute produits, paiement, commandes et coupons — activés par clé de licence, prêts quand vous l''êtes : <code>npx create-nextblock activate ecommerce</code></p>\\n</div>\\n\\n<h2 id=''git-clone''>Option 3 : Cloner le dépôt</h2>\\n<p>Faites tourner le monorepo Nx complet : l''application CMS, tous les packages partagés, le code du CLI et la documentation. C''est le chemin des contributeurs, des auteurs de plugins et des équipes qui personnalisent la plateforme elle-même.</p>\\n<pre><code>git clone https://github.com/nextblock-cms/nextblock.git\\ncd nextblock\\nnpm install\\nnpx nx serve nextblock</code></pre>\\n<p>Ouvrez <code>http://localhost:4200</code> — une nouvelle installation redirige chaque page vers <code>/setup</code>, où le même assistant en trois étapes connecte Supabase, configure le stockage et crée votre admin. Il valide vos clés, écrit <code>.env.local</code> avec des secrets générés, et applique toutes les migrations via l''API de management Supabase — sans CLI Supabase.</p>\\n<div class=''rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 my-8 dark:border-emerald-500/20 dark:bg-emerald-500/10''>\\n  <p class=''mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200''>Zéro configuration dans le terminal</p>\\n  <p class=''mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200''>La configuration se fait entièrement dans le navigateur — il n''y a plus d''étape interactive en ligne de commande. Quand l''assistant termine, vous êtes connecté en administrateur ; redémarrez ensuite le serveur de développement une fois pour que le nouvel environnement soit intégré au bundle de l''application.</p>\\n</div>\\n\\n<h2 id=''docker''>Option 4 : Auto-hébergé avec Docker</h2>\\n<p>Tout tourne sur votre machine : les moteurs Postgres et auth de Supabase, une API PostgREST derrière une passerelle Kong, un stockage MinIO compatible S3 et le CMS lui-même. Pas de compte Supabase, pas de Vercel, pas de service d''email — idéal pour les évaluations, les environnements isolés et la pleine propriété de vos données.</p>\\n<p>Avec <a href=''https://www.docker.com/products/docker-desktop/'' target=''_blank'' rel=''noopener''>Docker Desktop</a> installé et démarré :</p>\\n<pre><code>git clone https://github.com/nextblock-cms/nextblock.git\\ncd nextblock\\nnpm install\\nnpm run docker:setup</code></pre>\\n<p>La commande ne pose aucune question : elle génère des clés sécurisées, construit la pile, applique toutes les migrations et démarre les services. Quand elle se termine, ouvrez <code>http://localhost:3000</code> — la base de données et le stockage MinIO sont déjà connectés dans l''assistant de configuration, il ne reste qu''à créer votre administrateur (confirmé instantanément, sans email).</p>\\n<div class=''rounded-3xl border border-amber-200 bg-amber-50/80 p-6 my-8 dark:border-amber-500/20 dark:bg-amber-500/10''>\\n  <p class=''mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200''>Commandes du quotidien</p>\\n  <pre class=''mt-4 mb-0''><code># reconstruire et redémarrer la pile\\nnpm run docker:up\\n\\n# arrêter la pile (vos données persistent dans les volumes Docker)\\nnpm run docker:down\\n\\n# suivre les logs de l''application\\nnpm run docker:logs</code></pre>\\n</div>\\n\\n<h2 id=''after-install''>Après l''installation : vos 10 premières minutes</h2>\\n<p>Chaque chemin vous dépose sur <code>/cms/dashboard</code>, connecté en tant que premier administrateur. Une checklist de démarrage intégrée vous guide pour la suite :</p>\\n<ul class=''space-y-2''>\\n  <li><strong>Ajoutez votre identité visuelle</strong> — téléversez votre logo et définissez le titre du site.</li>\\n  <li><strong>Réglez votre pied de page</strong> — mention de copyright et navigation du pied de page.</li>\\n  <li><strong>Configurez l''email (SMTP)</strong> — dans les réglages, pour que les réinitialisations de mot de passe et les invitations partent bien.</li>\\n  <li><strong>Extras optionnels</strong> — connectez vos outils d''analytics, activez la protection anti-bots et (sur Vercel) les mises à jour automatiques.</li>\\n</ul>\\n<p>Ensuite, découvrez comment la plateforme s''articule dans <a href=''/article/comment-nextblock-fonctionne''>Comment NextBlock fonctionne</a>, ou ajoutez une boutique avec le <a href=''/article/guide-commerce-nextblock''>guide Commerce</a>.</p>\\n\\n<h2 id=''faq''>FAQ d''installation</h2>\\n<h3>Que dois-je installer ?</h3>\\n<p>Rien pour le chemin Vercel — tout se passe dans le navigateur. Pour <code>npm create nextblock</code> : <a href=''https://nodejs.org'' target=''_blank'' rel=''noopener''>Node.js 20+</a> (npm inclus). Pour le dépôt cloné : Node.js 20+ et git. Pour Docker : ajoutez Docker Desktop.</p>\\n<h3>NextBlock est-il gratuit ?</h3>\\n<p>Oui — le cœur du CMS est 100 % gratuit et open source (AGPL). Les packages premium comme l''e-commerce et Cortex AI sont optionnels et s''activent avec une clé de licence. Vercel et Supabase proposent chacun une offre gratuite : un site de départ peut donc tourner sans frais.</p>\\n<h3>Ai-je besoin d''un compte Supabase ?</h3>\\n<p>Sur Vercel, la base de données est créée pour vous pendant le déploiement. Pour <code>npm create nextblock</code> et le dépôt cloné, il vous faut un projet Supabase gratuit. Avec Docker, aucun compte cloud n''est nécessaire.</p>\\n<h3>Dois-je exécuter des migrations ou du SQL à la main ?</h3>\\n<p>Non. L''assistant de configuration, le build Vercel et la pile Docker appliquent tous le schéma de base de données automatiquement — et relancer l''opération est toujours sans risque.</p>\\n<h3>Puis-je changer de chemin plus tard ?</h3>\\n<p>Oui. Chaque chemin exécute la même application et le même schéma de base de données : vous pouvez prototyper en local avec Docker aujourd''hui et déployer sur Vercel demain. NextBlock se déploie comme n''importe quelle app Next.js.</p>\\n<h3>Comment mettre à jour NextBlock ?</h3>\\n<p>Sur Vercel, l''étape Connect GitHub de la checklist active une synchronisation quotidienne automatique. Sur un dépôt cloné, <code>git pull</code>, lancez <code>npm run db:migrate</code>, puis redémarrez (lors des builds de production, les migrations en attente s''appliquent automatiquement). Avec Docker, récupérez le dernier code et lancez <code>npm run docker:up</code>.</p>\\n\\n<div class=''rounded-[2rem] border border-slate-200/80 bg-slate-50 p-8 my-12 text-center dark:border-white/10 dark:bg-white/5''>\\n  <p class=''mt-0 text-2xl font-semibold text-slate-900 dark:text-white''>Prêt à vous lancer ?</p>\\n  <p class=''text-sm text-slate-600 dark:text-slate-300''>Choisissez votre chemin ci-dessus, ou passez directement au plus rapide.</p>\\n  <div class=''mt-5 flex flex-wrap justify-center gap-3''>\\n    <a href=''https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&amp;project-name=nextblock&amp;repository-name=nextblock&amp;stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D'' target=''_blank'' rel=''noopener'' class=''inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white no-underline shadow-lg hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200''>Déployer sur Vercel</a>\\n    <a href=''https://github.com/nextblock-cms/nextblock'' target=''_blank'' rel=''noopener'' class=''inline-flex items-center rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 no-underline hover:border-slate-500 dark:border-white/20 dark:text-slate-200 dark:hover:border-white/50''>Voir sur GitHub</a>\\n  </div>\\n</div>"}', 0, '2026-07-03 17:52:15.799297+00', '2026-07-03 17:52:15.799297+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (8, 1, NULL, 1, 'section', '{"padding": {"top": "xl", "bottom": "xl"}, "background": {"type": "gradient", "gradient": {"type": "linear", "stops": [{"color": "#020817", "position": 0}, {"color": "#0f172a", "position": 100}], "direction": "180deg"}}, "column_gap": "lg", "column_blocks": [[{"content": {"html_content": "<h2 class=''text-3xl md:text-4xl font-bold text-center text-white mb-4''>Have Questions?</h2>"}, "block_type": "text"}, {"content": {"html_content": "<p class=''text-center text-lg text-slate-300 mx-auto mb-8''>NextBlock™ partners with early adopters to co-build features, sponsor modules, and shape the product direction.</p>"}, "block_type": "text"}, {"content": {"url": "/contact", "size": "lg", "text": "Get in Touch", "variant": "default", "position": "center"}, "block_type": "button"}, {"content": {"url": "https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D", "size": "lg", "text": "Deploy on Vercel", "variant": "outline", "position": "center"}, "block_type": "button"}]], "container_type": "container", "responsive_columns": {"mobile": 1, "tablet": 1, "desktop": 1}}', 6, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.840619+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (27, NULL, 1, 1, 'text', '{"html_content": "<p class=''text-lg leading-8 text-slate-700 dark:text-slate-300''>NextBlock™ is designed so the hosted CMS, the open-source starter, and the developer tooling all feel like the same product. The shared Nx workspace, typed block contracts, and reusable editor package keep product polish and developer velocity moving together.</p>\\n\\n<div class=''grid gap-4 md:grid-cols-3 my-10''>\\n  <div class=''rounded-3xl border border-sky-200/70 bg-sky-50/70 p-6 dark:border-sky-500/20 dark:bg-sky-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-200''>One codebase</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Shared foundation</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>Marketing pages, CMS screens, and the starter template evolve together instead of drifting apart.</p>\\n  </div>\\n  <div class=''rounded-3xl border border-indigo-200/70 bg-indigo-50/70 p-6 dark:border-indigo-500/20 dark:bg-indigo-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-indigo-700 dark:text-indigo-200''>Typed content</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Blocks with guardrails</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>Zod schemas, defaults, and renderer contracts make every custom block safer to ship.</p>\\n  </div>\\n  <div class=''rounded-3xl border border-emerald-200/70 bg-emerald-50/70 p-6 dark:border-emerald-500/20 dark:bg-emerald-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200''>Editorial UX</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Product-grade editing</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>The Tiptap layer gives editors a richer surface without hiding the underlying HTML power.</p>\\n  </div>\\n</div>\\n\\n<div class=''flex flex-col md:flex-row gap-8 items-center my-12''>\\n  <div class=''w-full md:w-1/2 space-y-4''>\\n    <h2>Monorepo Layout and Dependency Flow</h2>\\n    <p>The <code>apps/nextblock</code> directory contains the production Next.js experience, including the public site and authenticated CMS shell. The <code>apps/create-nextblock</code> CLI mirrors that foundation so teams can start from the same product decisions instead of rebuilding them from scratch.</p>\\n    <ul class=''list-disc pl-6 space-y-2 text-sm''>\\n      <li><strong>@nextblock-cms/ui</strong> - UI components, tokens, and shared design primitives</li>\\n      <li><strong>@nextblock-cms/utils</strong> - translations, environment guards, and storage helpers</li>\\n      <li><strong>@nextblock-cms/db</strong> - migrations, typed database access, and generated types</li>\\n      <li><strong>@nextblock-cms/editor</strong> - the reusable Tiptap v3 editing surface</li>\\n      <li><strong>@nextblock-cms/sdk</strong> - typed contracts for block authorship and validation</li>\\n      <li><strong>@nextblock-cms/ecommerce</strong> - the premium commerce module when activated</li>\\n    </ul>\\n    <p>Run <code>nx graph</code> and you can see exactly how changes ripple through the workspace. Path aliases from <code>tsconfig.base.json</code> and the shared Tailwind setup help keep design parity between marketing pages, admin screens, and generated projects.</p>\\n  </div>\\n  <aside class=''w-full md:w-1/2 rounded-[2rem] border border-slate-200/80 bg-white p-4 shadow-xl dark:border-white/10 dark:bg-white/5''>\\n    <div class=''relative aspect-video overflow-hidden rounded-2xl''><iframe class=''absolute inset-0 h-full w-full border-0'' src=''https://www.youtube.com/embed/DNqU8ez9qjs?si=p2oIy0f-n7wiaBmO'' title=''How NextBlock™ Works'' allow=''accelerated-motion; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'' referrerpolicy=''strict-origin-when-cross-origin'' loading=''lazy'' allowfullscreen></iframe></div>\\n    <p class=''mt-3 text-sm text-slate-500 dark:text-slate-400''>Nx makes every workspace relationship visible, which is exactly why the starter, CMS, and packages stay aligned.</p>\\n  </aside>\\n</div>\\n\\n<figure class=''my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10''>\\n  <img src=''/images/extensibility.webp'' alt=''NextBlock™ extensibility artwork showing the CMS connected to reusable modules and integrations'' class=''w-full h-auto object-cover'' />\\n  <figcaption class=''border-t border-white/10 px-6 py-4 text-sm text-slate-300''>A single visual system spans content modeling, editing, and future premium modules like commerce.</figcaption>\\n</figure>\\n\\n<h2>Block Registry as Product Surface</h2>\\n<p>The block registry in <code>apps/nextblock/lib/blocks/blockRegistry.ts</code> is the source of truth for available block types, Zod schemas, starter content, and editor or renderer components. Today that includes everything from <code>text</code> and <code>heading</code> to <code>section</code>, <code>posts_grid</code>, <code>checkout</code>, and <code>product_details</code>.</p>\\n<p>Sections support nested column arrays, so layouts can be composed like real pages instead of flat content lists. Helpers such as <code>getBlockDefinition()</code>, <code>getInitialContent()</code>, and <code>validateBlockContent()</code> keep that flexibility strongly typed.</p>\\n\\n<h2>The Editing Layer</h2>\\n<p>The <code>@nextblock-cms/editor</code> package wraps Tiptap v3 into a reusable editorial surface with slash commands, floating and bubble menus, drag handles, tables, task lists, character counts, and syntax-highlighted code blocks. It deliberately preserves richer HTML so advanced teams are not boxed into a simplified subset.</p>\\n\\n<h2>Inside the CMS Shell</h2>\\n<p>Within <code>apps/nextblock/app/cms</code>, each feature area follows a repeatable pattern: list pages, create and edit routes, scoped client components, and server actions that wrap Supabase mutations. The result feels consistent for editors while keeping credentials and permissions on the server side.</p>\\n\\n<h2>Open Core Without Product Drift</h2>\\n<p>The core CMS is open source under AGPL. Premium modules like <code>@nextblock-cms/ecommerce</code> remain source-available but are activated through <code>package_activations</code> and <code>verifyPackageOnline()</code>. That means the same shell can stay clean for open-source users while revealing commerce surfaces only when the license is active.</p>\\n\\n<h2>Why It Holds Together</h2>\\n<p>The Nx workspace keeps libraries honest, the Next.js app enforces UI consistency, Supabase migrations codify access rules, and the Tiptap editor gives collaborators the same authoring experience regardless of deployment. When a team runs <code>npm create nextblock</code>, they inherit the full operating model, not just a pile of files.</p>"}', 0, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.859357+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.blocks (id, page_id, post_id, language_id, block_type, content, "order", created_at, updated_at, product_id) VALUES (28, NULL, 2, 2, 'text', '{"html_content": "<p class=''text-lg leading-8 text-slate-700 dark:text-slate-300''>NextBlock™ relie le CMS h&eacute;berg&eacute;, le starter open source et les outils dev dans un m&ecirc;me socle produit. Le workspace Nx, les contrats de blocs typ&eacute;s et l''&eacute;diteur partag&eacute; permettent d''avancer vite sans sacrifier la coh&eacute;rence.</p>\\n\\n<div class=''grid gap-4 md:grid-cols-3 my-10''>\\n  <div class=''rounded-3xl border border-sky-200/70 bg-sky-50/70 p-6 dark:border-sky-500/20 dark:bg-sky-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-200''>Socle unique</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Une m&ecirc;me base</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>Le site public, le shell CMS et le starter gardent les m&ecirc;mes choix produit et la m&ecirc;me direction visuelle.</p>\\n  </div>\\n  <div class=''rounded-3xl border border-indigo-200/70 bg-indigo-50/70 p-6 dark:border-indigo-500/20 dark:bg-indigo-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-indigo-700 dark:text-indigo-200''>Contenu typ&eacute;</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Blocs avec garde-fous</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>Sch&eacute;mas Zod, contenus par d&eacute;faut et contrats de rendu rendent les extensions plus s&ucirc;res &agrave; maintenir.</p>\\n  </div>\\n  <div class=''rounded-3xl border border-emerald-200/70 bg-emerald-50/70 p-6 dark:border-emerald-500/20 dark:bg-emerald-500/10''>\\n    <p class=''text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200''>Exp&eacute;rience &eacute;ditoriale</p>\\n    <h3 class=''mt-3 text-xl font-semibold text-slate-900 dark:text-white''>Edition premium</h3>\\n    <p class=''mt-3 text-sm text-slate-600 dark:text-slate-300''>La couche Tiptap donne aux &eacute;diteurs une interface riche sans masquer la puissance HTML pour les cas avanc&eacute;s.</p>\\n  </div>\\n</div>\\n\\n<div class=''flex flex-col md:flex-row gap-8 items-center my-12''>\\n  <div class=''w-full md:w-1/2 space-y-4''>\\n    <h2>Architecture monorepo et flux de d&eacute;pendances</h2>\\n    <p>Le dossier <code>apps/nextblock</code> contient l''exp&eacute;rience Next.js en production, incluant le site public et le shell CMS authentifi&eacute;. Le CLI <code>apps/create-nextblock</code> reprend cette base pour que les nouveaux projets partent des m&ecirc;mes d&eacute;cisions produit.</p>\\n    <ul class=''list-disc pl-6 space-y-2 text-sm''>\\n      <li><strong>@nextblock-cms/ui</strong> - composants UI, tokens et primitives visuelles partag&eacute;es</li>\\n      <li><strong>@nextblock-cms/utils</strong> - traductions, gardes d''environnement et helpers de stockage</li>\\n      <li><strong>@nextblock-cms/db</strong> - migrations, acc&egrave;s base typ&eacute; et types g&eacute;n&eacute;r&eacute;s</li>\\n      <li><strong>@nextblock-cms/editor</strong> - la surface d''&eacute;dition Tiptap v3 r&eacute;utilisable</li>\\n      <li><strong>@nextblock-cms/sdk</strong> - contrats typ&eacute;s pour l''auteuring et la validation des blocs</li>\\n      <li><strong>@nextblock-cms/ecommerce</strong> - le module commerce premium lorsqu''il est activ&eacute;</li>\\n    </ul>\\n    <p>Lancez <code>nx graph</code> et vous voyez imm&eacute;diatement comment un changement se propage. Les alias de <code>tsconfig.base.json</code> et la configuration Tailwind partag&eacute;e aident &agrave; garder une vraie parit&eacute; entre marketing, back-office et projets g&eacute;n&eacute;r&eacute;s.</p>\\n  </div>\\n  <aside class=''w-full md:w-1/2 rounded-[2rem] border border-slate-200/80 bg-white p-4 shadow-xl dark:border-white/10 dark:bg-white/5''>\\n    <div class=''relative aspect-video overflow-hidden rounded-2xl''><iframe class=''absolute inset-0 h-full w-full border-0'' src=''https://www.youtube.com/embed/DNqU8ez9qjs?si=p2oIy0f-n7wiaBmO'' title=''Comment NextBlock™ fonctionne'' allow=''accelerated-motion; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'' referrerpolicy=''strict-origin-when-cross-origin'' loading=''lazy'' allowfullscreen></iframe></div>\\n    <p class=''mt-3 text-sm text-slate-500 dark:text-slate-400''>Nx rend visibles les relations du workspace, ce qui aide le starter, le CMS et les packages a rester alignes.</p>\\n  </aside>\\n</div>\\n\\n<figure class=''my-12 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 shadow-2xl dark:border-white/10''>\\n  <img src=''/images/extensibility.webp'' alt=''Visuel NextBlock™ montrant le CMS relie a des modules reutilisables et des integrations'' class=''w-full h-auto object-cover'' />\\n  <figcaption class=''border-t border-white/10 px-6 py-4 text-sm text-slate-300''>Un seul langage visuel relie la modelisation de contenu, l''edition et les futurs modules premium comme le commerce.</figcaption>\\n</figure>\\n\\n<h2>Le registre de blocs comme surface produit</h2>\\n<p>Le registre dans <code>apps/nextblock/lib/blocks/blockRegistry.ts</code> d&eacute;finit les types disponibles, les sch&eacute;mas Zod, les contenus de d&eacute;part et les composants d''&eacute;dition ou de rendu. On y trouve aujourd''hui des blocs comme <code>text</code>, <code>heading</code>, <code>section</code>, <code>posts_grid</code>, <code>checkout</code> et <code>product_details</code>.</p>\\n<p>Les sections supportent des colonnes imbriqu&eacute;es, ce qui permet de composer de vraies pages plut&ocirc;t qu''une simple liste de contenu. Des helpers comme <code>getBlockDefinition()</code>, <code>getInitialContent()</code> and <code>validateBlockContent()</code> gardent cette flexibilit&eacute; bien typ&eacute;e.</p>\\n\\n<h2>La couche d''edition</h2>\\n<p>Le package <code>@nextblock-cms/editor</code> enveloppe Tiptap v3 dans une surface &eacute;ditoriale r&eacute;utilisable avec slash commands, menus contextuels, drag handles, tableaux, listes de taches, compteurs et blocs de code. Le but est de conserver un HTML riche quand une equipe en a besoin.</p>\\n\\n<h2>A l''interieur du shell CMS</h2>\\n<p>Dans <code>apps/nextblock/app/cms</code>, chaque zone suit un motif lisible : pages de liste, routes de creation et d''edition, composants clients cibles et server actions qui encapsulent les mutations Supabase. Les editeurs y gagnent une interface coherente et les identifiants restent cote serveur.</p>\\n\\n<h2>Open core sans derive produit</h2>\\n<p>Le coeur du CMS est open source sous AGPL. Les modules premium comme <code>@nextblock-cms/ecommerce</code> restent disponibles en source mais sont actives via <code>package_activations</code> et <code>verifyPackageOnline()</code>. Le meme shell peut donc rester simple pour l''open source tout en deverrouillant les surfaces commerce au bon moment.</p>\\n\\n<h2>Pourquoi l''ensemble tient</h2>\\n<p>Le workspace Nx garde les librairies honnetes, l''app Next.js maintient la coherence UI, les migrations Supabase codifient les regles d''acces, et l''editeur Tiptap donne la meme experience de contribution quel que soit le deploiement. Quand une equipe lance <code>npm create nextblock</code>, elle recupere une facon de travailler complete, pas juste des fichiers.</p>"}', 0, '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.859357+00', NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.currencies (id, code, symbol, exchange_rate, is_default, is_active, rounding_mode, rounding_increment, rounding_charm_amount, auto_update_exchange_rate, exchange_rate_updated_at, exchange_rate_source, auto_sync_product_prices, created_at, updated_at) VALUES ('f26e8339-d3cd-46f2-b11e-12569c30d4a8', 'USD', '$', 1.0000000000, true, true, 'none', 1, NULL, false, '2026-07-03 17:52:15.444652+00', 'store-default', false, '2026-07-03 17:52:15.444652+00', '2026-07-03 17:52:15.444652+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.logos (id, name, media_id, created_at) VALUES ('d45ef03d-27fc-4099-8b46-1cdf82d658d2', 'NextBlock™ Logo', 'ea6fdaf5-f8de-416c-9f2b-b689b7a4ed38', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.navigation_items (id, language_id, menu_key, label, url, parent_id, "order", page_id, translation_group_id, created_at, updated_at) VALUES (1, 1, 'HEADER', 'Home', '/', NULL, 0, 1, 'b6bd9818-a8d1-4a17-ac6b-d5b1f178a297', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.navigation_items (id, language_id, menu_key, label, url, parent_id, "order", page_id, translation_group_id, created_at, updated_at) VALUES (2, 1, 'HEADER', 'Articles', '/articles', NULL, 1, 3, '8c269d8b-db64-47ab-8ce0-29f65dbbe867', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.navigation_items (id, language_id, menu_key, label, url, parent_id, "order", page_id, translation_group_id, created_at, updated_at) VALUES (3, 1, 'HEADER', 'Contact', '/contact', NULL, 3, 5, 'cd630aed-aeb8-4acf-934b-9ccbbe8ee9bd', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.navigation_items (id, language_id, menu_key, label, url, parent_id, "order", page_id, translation_group_id, created_at, updated_at) VALUES (4, 2, 'HEADER', 'Accueil', '/accueil', NULL, 0, 2, 'aaa0c842-c996-4a07-bb3a-7562f865b6a4', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.navigation_items (id, language_id, menu_key, label, url, parent_id, "order", page_id, translation_group_id, created_at, updated_at) VALUES (5, 2, 'HEADER', 'Articles', '/articles', NULL, 1, 4, 'af69b017-3762-4c11-b709-37fb56081b99', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.navigation_items (id, language_id, menu_key, label, url, parent_id, "order", page_id, translation_group_id, created_at, updated_at) VALUES (6, 2, 'HEADER', 'Contact', '/contact', NULL, 3, 6, '21a91d4b-a494-4b3a-8d28-c21c414042cf', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.navigation_items (id, language_id, menu_key, label, url, parent_id, "order", page_id, translation_group_id, created_at, updated_at) VALUES (7, 1, 'FOOTER', 'Privacy Policy', '/privacy-policy', NULL, 0, 7, 'c8f2e6a3-7d28-4174-a8f7-0179226ae79a', '2026-07-03 17:52:15.753698+00', '2026-07-03 17:52:15.753698+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.navigation_items (id, language_id, menu_key, label, url, parent_id, "order", page_id, translation_group_id, created_at, updated_at) VALUES (8, 1, 'FOOTER', 'Terms of Service', '/terms-of-service', NULL, 1, 9, '4838ca4b-eaad-495c-ad7c-1750984bc8d9', '2026-07-03 17:52:15.753698+00', '2026-07-03 17:52:15.753698+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.navigation_items (id, language_id, menu_key, label, url, parent_id, "order", page_id, translation_group_id, created_at, updated_at) VALUES (9, 2, 'FOOTER', 'Politique de confidentialité', '/politique-de-confidentialite', NULL, 0, 8, 'c8f2e6a3-7d28-4174-a8f7-0179226ae79a', '2026-07-03 17:52:15.753698+00', '2026-07-03 17:52:15.753698+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.navigation_items (id, language_id, menu_key, label, url, parent_id, "order", page_id, translation_group_id, created_at, updated_at) VALUES (10, 2, 'FOOTER', 'Conditions d''utilisation', '/conditions-utilisation', NULL, 1, 10, '4838ca4b-eaad-495c-ad7c-1750984bc8d9', '2026-07-03 17:52:15.753698+00', '2026-07-03 17:52:15.753698+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.shipping_zones (id, name, priority_order, created_at, updated_at) VALUES ('4026af0e-5752-44fb-b7f7-ba5ac722cadc', 'North America', 10, '2026-07-03 17:52:15.25122+00', '2026-07-03 17:52:15.25122+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.shipping_zone_locations (id, zone_id, country_code, state_code, postal_code, created_at) VALUES ('c25d8fee-f0b6-43d5-8af5-5af4a47cb123', '4026af0e-5752-44fb-b7f7-ba5ac722cadc', 'US', NULL, NULL, '2026-07-03 17:52:15.25122+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.shipping_zone_locations (id, zone_id, country_code, state_code, postal_code, created_at) VALUES ('3d3d4bf6-7cb1-41b9-a5e1-1eb9098e640f', '4026af0e-5752-44fb-b7f7-ba5ac722cadc', 'CA', NULL, NULL, '2026-07-03 17:52:15.25122+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.shipping_zone_locations (id, zone_id, country_code, state_code, postal_code, created_at) VALUES ('63d47fff-7148-48ff-8cc1-5d3ba99fa022', '4026af0e-5752-44fb-b7f7-ba5ac722cadc', 'MX', NULL, NULL, '2026-07-03 17:52:15.25122+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.shipping_zone_methods (id, zone_id, method_type, cost_amount, cost_currency, min_order_amount, name, name_translations, currency_pricing_mode, cost_amounts, min_order_amounts, created_at, updated_at) VALUES ('ea112a82-e05c-46bc-a5e7-5bb62528aa5d', '4026af0e-5752-44fb-b7f7-ba5ac722cadc', 'flat_rate', 1500, 'USD', 0, 'Standard Shipping', '{"fr": "Livraison standard"}', 'auto', '{"USD": 1500}', '{"USD": 0}', '2026-07-03 17:52:15.25122+00', '2026-07-03 17:52:15.25122+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.shipping_zone_methods (id, zone_id, method_type, cost_amount, cost_currency, min_order_amount, name, name_translations, currency_pricing_mode, cost_amounts, min_order_amounts, created_at, updated_at) VALUES ('32d473d1-e3d4-4741-a7f5-63d87a387e08', '4026af0e-5752-44fb-b7f7-ba5ac722cadc', 'free_shipping', 0, 'USD', 10000, 'Free Shipping (Orders over $100)', '{"fr": "Livraison gratuite (commandes de plus de 100 $)"}', 'auto', '{"USD": 0}', '{"USD": 10000}', '2026-07-03 17:52:15.25122+00', '2026-07-03 17:52:15.25122+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.site_settings (key, value) VALUES ('footer_copyright', '{"en": "© {year} Nextblock CMS. All rights reserved.", "fr": "© {year} Nextblock CMS. Tous droits réservés."}') ON CONFLICT DO NOTHING;
+INSERT INTO public.site_settings (key, value) VALUES ('enabled_payment_providers', '{"stripe": false, "freemius": false}') ON CONFLICT DO NOTHING;
+INSERT INTO public.site_settings (key, value) VALUES ('site_title', '"NextBlock™ CMS"') ON CONFLICT DO NOTHING;
+INSERT INTO public.site_settings (key, value) VALUES ('site_description', '"NextBlock™ is an open-source CMS on Next.js + Supabase — a visual block editor, blazing-fast multilingual pages, and built-in e-commerce."') ON CONFLICT DO NOTHING;
+INSERT INTO public.site_settings (key, value) VALUES ('site_keywords', '"NextBlock, CMS, Next.js, Supabase, headless CMS, block editor, visual page builder, multilingual, e-commerce, open source"') ON CONFLICT DO NOTHING;
+INSERT INTO public.site_settings (key, value) VALUES ('ecommerce_inventory_settings', '{"enable_taxes": false, "track_quantities": true}') ON CONFLICT DO NOTHING;
+INSERT INTO public.site_settings (key, value) VALUES ('invoice_settings', '{"email": "", "phone": "", "address": {"city": "", "line1": "", "line2": "", "state": "", "postal_code": "", "country_code": "CA"}, "business_name": "", "tax_registrations": []}') ON CONFLICT DO NOTHING;
+INSERT INTO public.site_settings (key, value) VALUES ('privacy_settings', '{"gtm_id": "", "corporate": {"address": "", "legal_name": "", "support_email": ""}, "banner_enabled": true, "custom_scripts": "", "ga_measurement_id": ""}') ON CONFLICT DO NOTHING;
+INSERT INTO public.site_settings (key, value) VALUES ('email_public', '{"host": "", "port": "", "secure": true, "fromName": "", "fromEmail": ""}') ON CONFLICT DO NOTHING;
+INSERT INTO public.site_settings (key, value) VALUES ('payment_public', '{"stripe": {"publishableKey": ""}, "freemius": {"productId": "", "publicKey": "", "developerId": "", "sandboxEnabled": false}}') ON CONFLICT DO NOTHING;
+INSERT INTO public.site_settings (key, value) VALUES ('onboarding_state', '{"skipped": [], "dismissed": false}') ON CONFLICT DO NOTHING;
+INSERT INTO public.site_settings (key, value) VALUES ('security_settings', '{"enforce_staff_2fa": true, "trusted_device_days": 30}') ON CONFLICT DO NOTHING;
+INSERT INTO public.site_settings (key, value) VALUES ('is_admin_created', 'false') ON CONFLICT DO NOTHING;
+INSERT INTO public.system_configuration (id, auto_accept_signups, settings) VALUES (1, false, '{}'::jsonb) ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('continue_with_github', '{"en": "Continue with GitHub", "es": "Continuar con GitHub", "fr": "Continuer avec GitHub"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('or_continue_with', '{"en": "Or continue with", "es": "O continuar con", "fr": "Ou continuer avec"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('customer_profile', '{"en": "Customer Profile", "es": "Perfil de Cliente", "fr": "Profil Client"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('personal_information', '{"en": "Personal Information", "es": "Información Personal", "fr": "Informations Personnelles"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('full_name', '{"en": "Full Name", "es": "Nombre Completo", "fr": "Nom Complet"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('github_username', '{"en": "GitHub Username", "es": "Nombre de usuario de GitHub", "fr": "Nom d''utilisateur GitHub"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('github_username_help', '{"en": "Required only for purchasing developer licenses.", "es": "Requerido solo para comprar licencias de desarrollador.", "fr": "Requis uniquement pour l''achat de licences développeur."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('phone_number', '{"en": "Phone Number", "es": "Número de Teléfono", "fr": "Numéro de Téléphone"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('billing_address', '{"en": "Billing Address", "es": "Dirección de Facturación", "fr": "Adresse de Facturation"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('address_line_1', '{"en": "Address Line 1", "es": "Dirección Línea 1", "fr": "Adresse Ligne 1"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('address_line_2', '{"en": "Address Line 2 (Optional)", "es": "Dirección Línea 2 (Opcional)", "fr": "Adresse Ligne 2 (Optionnel)"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('city', '{"en": "City", "es": "Ciudad", "fr": "Ville"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('state_province', '{"en": "State / Province", "es": "Estado / Provincia", "fr": "État / Province"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('postal_zip_code', '{"en": "Postal / Zip Code", "es": "Código Postal", "fr": "Code Postal"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('country', '{"en": "Country", "es": "País", "fr": "Pays"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('save_profile', '{"en": "Save Profile", "es": "Guardar Perfil", "fr": "Enregistrer le Profil"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('saving', '{"en": "Saving...", "es": "Guardando...", "fr": "Enregistrement..."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_updated_success', '{"en": "Profile updated successfully", "es": "Perfil actualizado con éxito", "fr": "Profil mis à jour avec succès"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_update_failed', '{"en": "Failed to update profile", "es": "Error al actualizar el perfil", "fr": "Échec de la mise à jour du profil"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('address_required', '{"en": "Address is required", "es": "La dirección es obligatoria", "fr": "L''adresse est requise"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('city_required', '{"en": "City is required", "es": "La ciudad es obligatoria", "fr": "La ville est requise"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('zip_code_required', '{"en": "Zip Code is required", "es": "El código postal es obligatorio", "fr": "Le code postal est requis"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('country_required', '{"en": "Country is required", "es": "El país es obligatorio", "fr": "Le pays est requis"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('enter_valid_json', '{"en": "Enter valid JSON for billing address.", "es": "Ingrese JSON válido para la dirección de facturación.", "fr": "Entrez un JSON valide pour l''adresse de facturation."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('public_profile', '{"en": "Public Profile", "es": "Perfil Público", "fr": "Profil Public"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('details', '{"en": "Account Details", "es": "Detalles de la Cuenta", "fr": "Détails du Compte"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('identity', '{"en": "Identity", "es": "Identidad", "fr": "Identité"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('website', '{"en": "Website", "es": "Sitio Web", "fr": "Site Web"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('avatar_url', '{"en": "Avatar URL", "es": "URL del Avatar", "fr": "URL de l''Avatar"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('connect_github', '{"en": "Connect GitHub", "es": "Conectar GitHub", "fr": "Connecter GitHub"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('github_link_failed', '{"en": "Failed to link GitHub account", "es": "Error al vincular cuenta de GitHub", "fr": "Échec de la liaison du compte GitHub"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('save_changes', '{"en": "Save Changes", "es": "Guardar Cambios", "fr": "Enregistrer les Modifications"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('github_connected', '{"en": "GitHub Connected", "es": "GitHub Conectado", "fr": "GitHub Connecté"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('linked_to', '{"en": "Linked to", "es": "Vinculado a", "fr": "Lié à"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('optional', '{"en": "Optional", "fr": "Optionnel"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('shipping_address', '{"en": "Shipping Address", "fr": "Adresse de livraison"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_settings_title', '{"en": "Profile Settings", "fr": "Paramètres du profil"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_settings_description', '{"en": "Keep your contact details and default addresses up to date for faster checkout.", "fr": "Gardez vos coordonnées et adresses par défaut à jour pour un paiement plus rapide."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_not_found', '{"en": "Profile not found.", "fr": "Profil introuvable."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_basic_info_help', '{"en": "This information appears on your account and helps us prepare your orders.", "fr": "Ces informations apparaissent sur votre compte et nous aident à préparer vos commandes."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_address_defaults_help', '{"en": "These default addresses are prefilled during checkout and can still be edited for each order.", "fr": "Ces adresses par défaut sont préremplies au paiement et restent modifiables pour chaque commande."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('use_billing_for_shipping', '{"en": "Use billing address for shipping", "fr": "Utiliser l''adresse de facturation pour la livraison"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_use_billing_for_shipping_help', '{"en": "Keep one default address unless you regularly ship somewhere else.", "fr": "Gardez une seule adresse par défaut sauf si vous faites souvent livrer ailleurs."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('checkout_complete_billing_address', '{"en": "Please complete your billing address before continuing.", "fr": "Veuillez compléter votre adresse de facturation avant de continuer."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('checkout_complete_shipping_address', '{"en": "Please complete your shipping address before continuing.", "fr": "Veuillez compléter votre adresse de livraison avant de continuer."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('checkout_prefill_notice', '{"en": "Using your saved account details for {email}. You can still adjust them for this order.", "fr": "Nous utilisons les renseignements enregistrés pour {email}. Vous pouvez toujours les ajuster pour cette commande."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('checkout_billing_address_help', '{"en": "We use this address for payment verification and invoicing.", "fr": "Nous utilisons cette adresse pour la vérification du paiement et la facturation."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('checkout_use_billing_for_shipping_help', '{"en": "Uncheck this if you want your order delivered to a different address.", "fr": "Décochez ceci si vous souhaitez faire livrer votre commande à une autre adresse."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('checkout_shipping_address_help', '{"en": "Choose where physical items should be delivered.", "fr": "Choisissez où les articles physiques doivent être livrés."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('checkout_payment_only_notice', '{"en": "Stripe checkout is kept focused on payment because your address details are already collected here.", "fr": "Le paiement Stripe reste centré sur le paiement puisque vos coordonnées sont déjà recueillies ici."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('auth.signup_existing_account_hint', '{"en": "That email may already be registered. Try signing in or resetting your password.", "fr": "Cette adresse e-mail est peut-être déjà utilisée. Essayez de vous connecter ou de réinitialiser votre mot de passe."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('auth.signup_check_email_profile', '{"en": "Check your email to confirm your account. We''ll bring you to your profile next so you can finish setting up your details.", "fr": "Vérifiez votre e-mail pour confirmer votre compte. Nous vous amènerons ensuite à votre profil pour terminer la configuration de vos renseignements."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.add_to_cart', '{"en": "Add to Cart", "fr": "Ajouter au panier"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.added_to_cart', '{"en": "Added to cart", "fr": "Ajouté au panier"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.no_image', '{"en": "No Image", "fr": "Pas d''image"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.view_details', '{"en": "View Details", "fr": "Voir les détails"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.item_added_desc', '{"en": "The item has been added to your cart.", "fr": "L''article a été ajouté à votre panier."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout', '{"en": "Checkout", "fr": "Paiement"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.cart', '{"en": "Cart", "fr": "Panier"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.subtotal', '{"en": "Subtotal", "fr": "Sous-total"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.shipping', '{"en": "Shipping", "fr": "Livraison"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.tax', '{"en": "Tax", "fr": "Taxes"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.total', '{"en": "Total", "fr": "Total"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.order_summary', '{"en": "Order Summary", "fr": "Résumé de la commande"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.order_summary_desc', '{"en": "Review your items before proceeding to payment.", "fr": "Vérifiez vos articles avant de procéder au paiement."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.payment_details', '{"en": "Payment Details", "fr": "Détails du paiement"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.shipping_info', '{"en": "Shipping Information", "fr": "Informations de livraison"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.delivery_notice', '{"en": "Digital product - No shipping required", "fr": "Produit numérique - Aucune livraison requise"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.back_to_shop', '{"en": "Back to Shop", "fr": "Retour à la boutique"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.empty_cart', '{"en": "Your cart is empty", "fr": "Votre panier est vide"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.no_products_found', '{"en": "No products found", "fr": "Aucun produit trouvé"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.featured_products', '{"en": "Featured Products", "fr": "Produits vedettes"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.latest_products', '{"en": "Latest Products", "fr": "Derniers produits"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.search_products', '{"en": "Search products...", "fr": "Rechercher des produits..."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.price_low_to_high', '{"en": "Price: Low to High", "fr": "Prix : Croissant"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.price_high_to_low', '{"en": "Price: High to Low", "fr": "Prix : Décroissant"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.newest', '{"en": "Newest", "fr": "Nouveautés"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.filters', '{"en": "Filters", "fr": "Filtres"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.apply_filters', '{"en": "Apply Filters", "fr": "Appliquer les filtres"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.clear_all', '{"en": "Clear All", "fr": "Tout effacer"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.digital_notice', '{"en": "This is a digital product. You will receive access instructions via email after purchase.", "fr": "Ceci est un produit numérique. Vous recevrez les instructions d''accès par e-mail après l''achat."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.shopping_cart', '{"en": "Shopping Cart", "fr": "Panier d''achat"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.cart_empty', '{"en": "Your cart is empty", "fr": "Votre panier est vide"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.cart_empty_description', '{"en": "Looks like you haven''t added anything to your cart yet.", "fr": "On dirait que vous n''avez encore rien ajouté à votre panier."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.continue_shopping', '{"en": "Continue Shopping", "fr": "Continuer vos achats"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.go_to_shop', '{"en": "Go to Shop", "fr": "Aller à la boutique"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_successful', '{"en": "Checkout Successful", "fr": "Paiement Réussi"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.sandbox_notice', '{"en": "This is a Sandbox environment. The Freemius checkout is skipped here for demo purposes.", "fr": "Ceci est un environnement de bac à sable. Le paiement Freemius est sauté ici à des fins de démonstration."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.license_notice', '{"en": "To purchase a real license for your self-hosted NextBlock™ instance, visit:", "fr": "Pour acheter une vraie licence pour votre instance NextBlock™ auto-hébergée, visitez :"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.purchase_at', '{"en": "Purchase at nextblock.ca", "fr": "Acheter sur nextblock.ca"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.qty', '{"en": "Qty", "fr": "Qté"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.quantity', '{"en": "Quantity", "fr": "Quantité"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.product', '{"en": "Product", "fr": "Produit"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.price', '{"en": "Price", "fr": "Prix"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.secure_payment', '{"en": "Secure payment processing", "fr": "Traitement sécurisé du paiement"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.shipping_taxes_notice', '{"en": "* Taxes and shipping will be calculated on the next step.", "fr": "* Les taxes et les frais de livraison seront calculés à l''étape suivante."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.shipping_taxes_calculated', '{"en": "Shipping & taxes calculated at checkout.", "fr": "Livraison et taxes calculées lors du paiement."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.email_address', '{"en": "Email Address", "fr": "Adresse e-mail"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.pay_now', '{"en": "Pay Now", "fr": "Payer maintenant"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.proceed_to_checkout', '{"en": "Proceed to Checkout", "fr": "Passer à la caisse"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.processing', '{"en": "Processing...", "fr": "Traitement..."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.invalid_email', '{"en": "Please enter a valid email address.", "fr": "Veuillez entrer une adresse e-mail valide."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_failed', '{"en": "Checkout failed: ", "fr": "Le paiement a échoué : "}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.generic_error', '{"en": "An error occurred. Please try again.", "fr": "Une erreur est survenue. Veuillez réessayer."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_popup_blocked', '{"en": "Checkout popup blocked or failed to load. Falling back to direct link.", "fr": "Le popup de paiement a été bloqué ou n''a pas pu être chargé. Retour au lien direct."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.view_full_cart', '{"en": "View Full Cart", "fr": "Voir le panier complet"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.ready_to_checkout', '{"en": "Ready to Checkout?", "fr": "Prêt à passer au paiement ?"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.sale_badge', '{"en": "Sale {percent}% Off", "fr": "Solde {percent}% de rabais"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.low_stock', '{"en": "Only {count} left", "fr": "Plus que {count} en stock"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.instant_digital_delivery', '{"en": "Instant Digital Delivery", "fr": "Livraison numérique instantanée"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.free_shipping', '{"en": "Free Shipping", "fr": "Livraison gratuite"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.secure_checkout', '{"en": "Secure Checkout", "fr": "Paiement sécurisé"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.no_description', '{"en": "No description available.", "fr": "Aucune description disponible."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_overlay_title', '{"en": "Order Checkout", "fr": "Paiement de la commande"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.email_placeholder', '{"en": "you@example.com", "fr": "vous@exemple.com"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.contact_information', '{"en": "Contact Information", "fr": "Informations de contact"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.shipping_address', '{"en": "Shipping Address", "fr": "Adresse de livraison"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.shipping_method', '{"en": "Shipping Method", "fr": "Mode de livraison"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.available_rates', '{"en": "Available Rates", "fr": "Tarifs disponibles"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.calculating', '{"en": "Calculating...", "fr": "Calcul en cours..."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.select_rate', '{"en": "Select a shipping rate", "fr": "Sélectionnez un tarif de livraison"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.enter_postal_code', '{"en": "Enter postal code", "fr": "Entrez le code postal"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.free', '{"en": "Free", "fr": "Gratuit"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.first_last_name', '{"en": "First & Last Name", "fr": "Nom et prénom"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.address', '{"en": "Address", "fr": "Adresse"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.city', '{"en": "City", "fr": "Ville"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.state_province', '{"en": "State / Province", "fr": "État / Province"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.zip_postal', '{"en": "ZIP / Postal Code", "fr": "Code postal"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.postal_code', '{"en": "Postal Code", "fr": "Code postal"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.zip_postal_code', '{"en": "ZIP / Postal Code", "fr": "Code postal"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.estimate_shipping', '{"en": "Estimate Shipping", "fr": "Estimer la livraison"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.calculate', '{"en": "Calculate", "fr": "Calculer"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.no_rates_found', '{"en": "No shipping rates found for this region.", "fr": "Aucun tarif de livraison trouvé pour cette région."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.no_rates_for_region', '{"en": "No shipping rates found for this region.", "fr": "Aucun tarif de livraison trouvé pour cette région."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.enter_address_for_rates', '{"en": "Enter your address to see shipping rates.", "fr": "Entrez votre adresse pour voir les tarifs de livraison."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.secure_checkout_guarantee', '{"en": "Secure checkout guaranteed", "fr": "Paiement sécurisé garanti"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.full_name', '{"en": "Full Name", "fr": "Nom complet"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.country', '{"en": "Country", "fr": "Pays"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.freemius_trial_preference_title', '{"en": "How would you like to start your trial?", "es": "¿Cómo te gustaría comenzar tu prueba?", "fr": "Comment souhaitez-vous commencer votre essai ?"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.pricing_unavailable', '{"en": "Pricing Unavailable", "es": "Precios no disponibles", "fr": "Tarification indisponible"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.monthly', '{"en": "Monthly", "es": "Mensual", "fr": "Mensuel"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.annual', '{"en": "Annual", "es": "Anual", "fr": "Annuel"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.lifetime', '{"en": "Lifetime", "es": "De por vida", "fr": "À vie"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.year', '{"en": "year", "es": "año", "fr": "an"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.month', '{"en": "month", "es": "mes", "fr": "mois"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.freemius_trial_no_card', '{"en": "Start Free Trial (No card required)", "es": "Comenzar prueba gratuita (Sin tarjeta)", "fr": "Commencer l''essai gratuit (Sans carte requise)"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.freemius_trial_with_card', '{"en": "Enter Payment Details Now (Still get full trial length free)", "es": "Ingresar detalles de pago ahora (Aún obtienes toda la duración de la prueba gratis)", "fr": "Entrer les détails de paiement maintenant (Vous bénéficiez toujours de toute la durée de l''essai gratuitement)"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.freemius_trial_with_card_help', '{"en": "You will not be billed until the trial ends. Cancel anytime.", "es": "No se te cobrará hasta que termine la prueba. Cancela en cualquier momento.", "fr": "Vous ne serez pas facturé avant la fin de l''essai. Annulez à tout moment."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.choose_your_options', '{"en": "Choose Your Options", "fr": "Choisissez vos options"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.variant_availability_help', '{"en": "Select a combination to resolve the exact variant price and availability.", "fr": "Selectionnez une combinaison pour afficher le prix exact et la disponibilite de la variante."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.in_stock', '{"en": "{count} in stock", "fr": "{count} en stock"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.out_of_stock', '{"en": "Out of stock", "fr": "Rupture de stock"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.select_options', '{"en": "Select Options", "fr": "Choisir des options"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.variant_selection_required', '{"en": "Select one term from every dropdown to resolve a variation.", "fr": "Selectionnez une valeur dans chaque liste pour afficher la variante correspondante."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.tax_calculated_on_stripe', '{"en": "Calculated on Stripe", "es": "Calculado en Stripe", "fr": "Calculé sur Stripe"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('checkout_stripe_tax_finalized_notice', '{"en": "Tax will be finalized by Stripe Tax on the payment step.", "es": "El impuesto se finalizará con Stripe Tax en el paso de pago.", "fr": "La taxe sera finalisée par Stripe Tax à l''étape du paiement."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('branding', '{"en": "Branding", "fr": "Image de marque"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('company_name', '{"en": "Company name", "fr": "Nom de l''entreprise"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('invoice', '{"en": "Invoice", "fr": "Facture"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('invoice_number', '{"en": "Invoice #", "fr": "Facture no"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('paid_on', '{"en": "Paid on", "fr": "Paye le"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('bill_to', '{"en": "Bill to", "fr": "Facturer a"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ship_to', '{"en": "Ship to", "fr": "Livrer a"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('print_invoice', '{"en": "Print / Save as PDF", "fr": "Imprimer / Enregistrer en PDF"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('tax_registrations', '{"en": "Tax registrations", "fr": "Inscriptions fiscales"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('invoice_settings', '{"en": "Invoice settings", "fr": "Parametres de facture"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('business_name', '{"en": "Business name", "fr": "Nom de l''entreprise"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('order_number', '{"en": "Order #", "fr": "Commande no"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('print_invoice_help', '{"en": "Use your browser print dialog to save this invoice as a PDF.", "fr": "Utilisez la boite de dialogue d''impression de votre navigateur pour enregistrer cette facture en PDF."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('return_home', '{"en": "Return to Home", "fr": "Retour a l''accueil"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('receipt_finalizing', '{"en": "Finalizing your invoice and payment details...", "fr": "Finalisation de votre facture et des details du paiement..."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('receipt_not_ready', '{"en": "Your invoice will appear here once the payment sync is complete.", "fr": "Votre facture apparaitra ici une fois la synchronisation du paiement terminee."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('tax_breakdown', '{"en": "Tax breakdown", "fr": "Detail des taxes"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('amount', '{"en": "Amount", "fr": "Montant"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('price', '{"en": "Price", "fr": "Prix"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('from', '{"en": "From", "fr": "De"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('account_navigation', '{"en": "Account", "fr": "Compte"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('account_orders', '{"en": "Orders", "fr": "Commandes"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('change_my_password', '{"en": "Change my password", "fr": "Changer mon mot de passe"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_orders_title', '{"en": "My orders", "fr": "Mes commandes"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_orders_description', '{"en": "Review your recent purchases and open printable invoices.", "fr": "Consultez vos achats récents et ouvrez vos factures imprimables."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_orders_empty', '{"en": "You do not have any orders yet.", "fr": "Vous n''avez pas encore de commandes."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_order_detail_title', '{"en": "Order invoice", "fr": "Facture de commande"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_order_detail_description', '{"en": "Review and print your finalized invoice.", "fr": "Consultez et imprimez votre facture finalisée."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_order_invoice_pending', '{"en": "The printable invoice will appear here once this order has been finalized.", "fr": "La facture imprimable apparaîtra ici une fois que cette commande aura été finalisée."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_password_title', '{"en": "Change your password", "fr": "Changer votre mot de passe"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('profile_password_description', '{"en": "Update your account password without leaving your profile.", "fr": "Mettez à jour le mot de passe de votre compte sans quitter votre profil."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('new_password', '{"en": "New password", "fr": "Nouveau mot de passe"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('confirm_new_password', '{"en": "Confirm new password", "fr": "Confirmer le nouveau mot de passe"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('password_updated_success', '{"en": "Password updated successfully.", "fr": "Mot de passe mis à jour avec succès."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('password_update_failed', '{"en": "Password update failed.", "fr": "La mise à jour du mot de passe a échoué."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('passwords_do_not_match', '{"en": "Passwords do not match.", "fr": "Les mots de passe ne correspondent pas."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('order_date', '{"en": "Date", "fr": "Date"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('order_status_paid', '{"en": "Paid", "fr": "Payée"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('order_status_pending', '{"en": "Pending", "fr": "En attente"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('order_status_trial', '{"en": "Trial", "fr": "Essai"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('order_status_shipped', '{"en": "Shipped", "fr": "Expédiée"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('order_status_cancelled', '{"en": "Cancelled", "fr": "Annulée"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('order_status_refunded', '{"en": "Refunded", "fr": "Remboursée"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('back_to_orders', '{"en": "Back to orders", "fr": "Retour aux commandes"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_trial_started', '{"en": "Trial started", "fr": "Essai demarre"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_order_pending', '{"en": "Order pending", "fr": "Commande en attente"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('select_an_option', '{"en": "Select an option", "es": "Selecciona una opcion", "fr": "Selectionnez une option"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.shipping_method_required', '{"en": "Please select a shipping method before continuing.", "es": "Selecciona un metodo de envio antes de continuar.", "fr": "Veuillez selectionner un mode de livraison avant de continuer."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.waiting_on_address_info', '{"en": "Complete your shipping address to view available shipping options.", "es": "Completa tu direccion de envio para ver las opciones de envio disponibles.", "fr": "Completez votre adresse de livraison pour voir les options de livraison disponibles."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.calculating_shipping', '{"en": "Calculating shipping...", "es": "Calculando el envio...", "fr": "Calcul de la livraison..."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.sandbox_checkout_stripe_description', '{"en": "This simulated step represents the Stripe checkout for physical products.", "es": "Este paso simulado representa el pago de Stripe para productos fisicos.", "fr": "Cette etape simulee represente le paiement Stripe pour les produits physiques."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.sandbox_checkout_freemius_description', '{"en": "This simulated step represents the Freemius checkout for digital products.", "es": "Este paso simulado representa el pago de Freemius para productos digitales.", "fr": "Cette etape simulee represente le paiement Freemius pour les produits numeriques."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.digital_label', '{"en": "Digital", "es": "Digital", "fr": "Numerique"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.physical_label', '{"en": "Physical", "es": "Fisico", "fr": "Physique"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.physical_products', '{"en": "Physical products", "es": "Productos fisicos", "fr": "Produits physiques"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.digital_products', '{"en": "Digital products", "es": "Productos digitales", "fr": "Produits numeriques"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.estimated_total', '{"en": "Estimated total", "es": "Total estimado", "fr": "Total estime"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.stripe_checkout_title', '{"en": "Stripe Checkout", "es": "Pago con Stripe", "fr": "Paiement Stripe"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.stripe_checkout_description', '{"en": "Pay for physical products in one Stripe checkout session.", "es": "Paga los productos fisicos en una sola sesion de Stripe.", "fr": "Payez les produits physiques dans une seule session Stripe."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.item_count_one', '{"en": "{count} item", "es": "{count} articulo", "fr": "{count} article"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.item_count_other', '{"en": "{count} items", "es": "{count} articulos", "fr": "{count} articles"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.physical_subtotal', '{"en": "Physical subtotal", "es": "Subtotal fisico", "fr": "Sous-total physique"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.total_on_stripe', '{"en": "Total on Stripe", "es": "Total en Stripe", "fr": "Total sur Stripe"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_physical_products', '{"en": "Checkout Physical Products", "es": "Pagar productos fisicos", "fr": "Payer les produits physiques"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.shipping_taxes_collected_on_stripe', '{"en": "Shipping and taxes are only collected during the Stripe step for physical products.", "es": "El envio y los impuestos solo se cobran durante el paso de Stripe para productos fisicos.", "fr": "La livraison et les taxes sont percues uniquement a l''etape Stripe pour les produits physiques."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.freemius_checkout_title', '{"en": "Freemius Checkout", "es": "Pago con Freemius", "fr": "Paiement Freemius"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.freemius_checkout_description', '{"en": "Digital products use the Freemius checkout flow.", "es": "Los productos digitales usan el flujo de pago de Freemius.", "fr": "Les produits numeriques utilisent le flux de paiement Freemius."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.license_count_one', '{"en": "{count} license", "es": "{count} licencia", "fr": "{count} licence"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.license_count_other', '{"en": "{count} licenses", "es": "{count} licencias", "fr": "{count} licences"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_billing_cycle_monthly', '{"en": "Monthly subscription", "es": "Suscripcion mensual", "fr": "Abonnement mensuel"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_billing_cycle_annual', '{"en": "Annual subscription", "es": "Suscripcion anual", "fr": "Abonnement annuel"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_billing_cycle_lifetime', '{"en": "Lifetime subscription", "es": "Suscripcion de por vida", "fr": "Abonnement a vie"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_product', '{"en": "Checkout {title}", "es": "Pagar {title}", "fr": "Paiement de {title}"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_digital_product', '{"en": "Checkout Digital Product", "es": "Pagar producto digital", "fr": "Payer le produit numerique"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.digital_subtotal', '{"en": "Digital subtotal", "es": "Subtotal digital", "fr": "Sous-total numerique"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.freemius_multi_checkout_notice', '{"en": "Freemius licenses are completed one at a time, so each digital product gets its own checkout action.", "es": "Las licencias de Freemius se completan una por una, por lo que cada producto digital tiene su propia accion de pago.", "fr": "Les licences Freemius se finalisent une a la fois, donc chaque produit numerique a sa propre action de paiement."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.freemius_tax_notice', '{"en": "Taxes and compliance for digital products are handled inside the Freemius checkout.", "es": "Los impuestos y la conformidad para los productos digitales se gestionan dentro del pago de Freemius.", "fr": "Les taxes et la conformite pour les produits numeriques sont gerees dans le paiement Freemius."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('continue_checkout', '{"en": "Continue Checkout", "fr": "Continuer le paiement"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('checkout_success_sync_failed', '{"en": "We could not finalize your invoice yet. Please refresh shortly.", "fr": "Nous n''avons pas encore pu finaliser votre facture. Veuillez rafraichir la page sous peu."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.shipping_country_required', '{"en": "Country is required to calculate shipping.", "fr": "Le pays est requis pour calculer la livraison."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('auth.signup_success_title', '{"en": "Check your inbox", "fr": "Vérifiez votre boîte de réception"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.shipping_calculation_failed', '{"en": "We couldn''t calculate shipping right now. Please try again.", "fr": "Nous n''avons pas pu calculer la livraison pour le moment. Veuillez reessayer."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_license_inactive', '{"en": "The ecommerce module license is inactive.", "fr": "La licence du module ecommerce est inactive."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_invalid_items', '{"en": "Your checkout items could not be processed.", "fr": "Les articles de votre commande n''ont pas pu etre traites."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_provider_items_required', '{"en": "Each checkout step must include items assigned to a payment provider.", "fr": "Chaque etape de paiement doit inclure des articles associes a un fournisseur de paiement."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_mixed_provider_steps', '{"en": "Products with different payment providers must be purchased in separate checkout steps.", "fr": "Les produits utilisant differents fournisseurs de paiement doivent etre achetes en etapes separees."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_freemius_single_item', '{"en": "Freemius products must be purchased one at a time.", "fr": "Les produits Freemius doivent etre achetes un a la fois."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_billing_address_required', '{"en": "A billing address is required to continue checkout.", "fr": "Une adresse de facturation est requise pour continuer le paiement."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_internal_server_error', '{"en": "Something went wrong while preparing your checkout. Please try again.", "fr": "Une erreur s''est produite lors de la preparation de votre paiement. Veuillez reessayer."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_missing_session_id', '{"en": "We couldn''t find a checkout session to finalize.", "fr": "Nous n''avons pas trouve de session de paiement a finaliser."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_payment_pending', '{"en": "Your payment is still pending.", "fr": "Votre paiement est toujours en attente."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_success_order_not_found', '{"en": "We couldn''t find the order linked to this checkout.", "fr": "Nous n''avons pas trouve la commande liee a ce paiement."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_success_invalid_reference', '{"en": "This checkout reference can''t be finalized from this page.", "fr": "Cette reference de paiement ne peut pas etre finalisee depuis cette page."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_success_inventory_update_failed', '{"en": "We couldn''t update inventory for this order.", "fr": "Nous n''avons pas pu mettre a jour l''inventaire pour cette commande."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.checkout_success_status_update_failed', '{"en": "We couldn''t update the order status.", "fr": "Nous n''avons pas pu mettre a jour le statut de la commande."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.unknown_error', '{"en": "Unknown error", "es": "Error desconocido", "fr": "Erreur inconnue"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.get_license', '{"en": "Get License", "es": "Obtener Licencia", "fr": "Obtenir la licence"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.added_to_cart_success', '{"en": "{item} added to your cart.", "es": "{item} añadido al carrito.", "fr": "{item} ajouté à votre panier."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.added_to_cart_error', '{"en": "Could not add item to cart.", "es": "No se pudo añadir el artículo al carrito.", "fr": "Impossible d''ajouter l''article au panier."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('edit_product', '{"en": "Edit Product", "fr": "Modifier le produit"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.trigger', '{"en": "Search", "fr": "Rechercher"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.title', '{"en": "Search", "fr": "Rechercher"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.description', '{"en": "Search published pages, posts, and products.", "fr": "Rechercher dans les pages, articles et produits publies."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.placeholder', '{"en": "Search...", "fr": "Rechercher..."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.filter_all', '{"en": "All", "fr": "Tout"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.filter_pages', '{"en": "Pages", "fr": "Pages"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.filter_posts', '{"en": "Posts", "fr": "Articles"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.filter_products', '{"en": "Products", "fr": "Produits"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.result_page', '{"en": "Page", "fr": "Page"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.result_post', '{"en": "Post", "fr": "Article"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.result_product', '{"en": "Product", "fr": "Produit"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.recent', '{"en": "Recent", "fr": "Recents"}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.error_title', '{"en": "Search is unavailable.", "fr": "La recherche est indisponible."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.error_description', '{"en": "Please try again in a moment.", "fr": "Veuillez reessayer dans un instant."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.empty_title', '{"en": "No results found.", "fr": "Aucun resultat trouve."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('global_search.empty_description', '{"en": "Try another search term.", "fr": "Essayez un autre terme de recherche."}', '2026-07-03 17:52:15.459858+00', '2026-07-03 17:52:15.459858+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('sign_in', '{"en": "Sign in", "fr": "Connexion"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('sign_up', '{"en": "Sign up", "fr": "Inscription"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('sign_out', '{"en": "Sign out", "fr": "Déconnexion"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('dont_have_account', '{"en": "Don''t have an account?", "fr": "Pas encore de compte ?"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('email', '{"en": "Email", "fr": "Email"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('you_at_example_com', '{"en": "you@example.com", "fr": "vous@example.com"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('password', '{"en": "Password", "fr": "Mot de passe"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('forgot_password', '{"en": "Forgot Password?", "fr": "Mot de passe oublié ?"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('your_password', '{"en": "Your password", "fr": "Votre mot de passe"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('signing_in_pending', '{"en": "Signing In...", "fr": "Connexion en cours..."}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('already_have_account', '{"en": "Already have an account?", "fr": "Déjà un compte ?"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('signing_up_pending', '{"en": "Signing up...", "fr": "Inscription en cours..."}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reset_password', '{"en": "Reset Password", "fr": "Réinitialiser le mot de passe"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('auth.signup_form_description', '{"en": "Create your account in one quick step. We''ll email you a confirmation link before you finish your profile.", "fr": "Créez votre compte en une étape rapide. Nous vous enverrons un lien de confirmation avant de terminer votre profil."}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('auth.signup_success_badge', '{"en": "Signup received", "fr": "Inscription reçue"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('auth.signup_success_step_confirm', '{"en": "Open the email we sent and confirm your address.", "fr": "Ouvrez l''e-mail envoyé et confirmez votre adresse."}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('auth.signup_success_step_profile', '{"en": "After confirmation, we''ll bring you to your profile to finish setup.", "fr": "Après confirmation, nous vous amènerons à votre profil pour terminer la configuration."}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('auth.signup_success_step_spam', '{"en": "If it doesn''t arrive soon, check spam, junk, or promotions.", "fr": "S''il n''arrive pas bientôt, vérifiez les dossiers spam, indésirables ou promotions."}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('auth.signup_use_different_email', '{"en": "Use a different email", "fr": "Utiliser une autre adresse e-mail"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('auth.back_to_sign_in', '{"en": "Back to sign in", "fr": "Retour à la connexion"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('auth.signup_rate_limit', '{"en": "You''re trying too quickly. Please wait a moment before requesting another confirmation email.", "fr": "Vous allez trop vite. Veuillez attendre un instant avant de demander un nouvel e-mail de confirmation."}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('blog_prefix', '{"en": "article", "fr": "article"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('edit_page', '{"en": "Edit Page", "fr": "Éditer la page"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('edit_post', '{"en": "Edit Post", "fr": "Éditer l''article"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('open_main_menu', '{"en": "Open main menu", "fr": "Ouvrir le menu principal"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('mobile_navigation_menu', '{"en": "Mobile navigation menu", "fr": "Menu de navigation mobile"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('cms_dashboard', '{"en": "CMS Dashboard", "fr": "Tableau de bord CMS"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('update_env_file_warning', '{"en": "Please update .env.local file with anon key and url", "fr": "Veuillez mettre à jour .env.local avec l''anon key et l''URL"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('greeting', '{"en": "Hey, {username}!", "fr": "Salut, {username} !"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('theme_switcher', '{"en": "Theme Switcher", "fr": "Sélecteur de thème"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('theme_light', '{"en": "Light", "fr": "Clair"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('theme_dark', '{"en": "Dark", "fr": "Sombre"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('theme_system', '{"en": "System", "fr": "Système"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('theme_vibrant', '{"en": "Vibrant", "fr": "Vibrant"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('sandbox_mode_banner', '{"en": "Sandbox Mode: Data is public and resets every 15 minutes.", "fr": "Mode Sandbox : Les données sont publiques et réinitialisées toutes les 15 minutes."}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('demo_access_title', '{"en": "Demo Access", "fr": "Accès Démo"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('demo_access_desc', '{"en": "This is a demo site. You may use the following credentials to access the admin section:", "fr": "Ceci est un site de démonstration. Vous pouvez utiliser les identifiants suivants pour accéder à l''administration :"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('demo_user_label', '{"en": "User:", "fr": "Utilisateur :"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('demo_password_label', '{"en": "Password:", "fr": "Mot de passe :"}', '2026-07-03 17:52:15.479414+00', '2026-07-03 17:52:15.479414+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('ecommerce.on_sale', '{"en": "On Sale", "es": "En oferta", "fr": "En solde"}', '2026-07-03 17:52:15.69428+00', '2026-07-03 17:52:15.69428+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('remember_this_device', '{"en": "Remember this device", "fr": "Se souvenir de cet appareil"}', '2026-07-03 17:52:15.699946+00', '2026-07-03 17:52:15.699946+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.aria_label', '{"en": "Privacy consent", "fr": "Consentement à la confidentialité"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.title', '{"en": "We value your privacy", "fr": "Nous respectons votre vie privée"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.description_before_policy_link', '{"en": "We use only essential cookies by default. With your consent we also use analytics to improve the site. See our", "fr": "Nous utilisons seulement les témoins essentiels par défaut. Avec votre consentement, nous utilisons aussi l''analytique pour améliorer le site. Consultez notre"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.privacy_policy_link', '{"en": "Privacy Policy", "fr": "politique de confidentialité"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.description_after_policy_link', '{"en": ".", "fr": "."}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.privacy_policy_href', '{"en": "/privacy-policy", "fr": "/politique-de-confidentialite"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.necessary_label', '{"en": "Necessary", "fr": "Nécessaires"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.necessary_help', '{"en": "Always on", "fr": "Toujours actifs"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.analytics_label', '{"en": "Analytics", "fr": "Analytique"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.analytics_help', '{"en": "Usage insights", "fr": "Statistiques d''utilisation"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.marketing_label', '{"en": "Marketing", "fr": "Marketing"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.marketing_help', '{"en": "Personalized content", "fr": "Contenu personnalisé"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.save_choices', '{"en": "Save choices", "fr": "Enregistrer mes choix"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.accept_all', '{"en": "Accept all", "fr": "Tout accepter"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.reject_all', '{"en": "Reject all", "fr": "Tout refuser"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.hide_options', '{"en": "Hide options", "fr": "Masquer les options"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('privacy.consent.manage_options', '{"en": "Manage options", "fr": "Gérer les options"}', '2026-07-03 17:52:15.805991+00', '2026-07-03 17:52:15.805991+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.customer_reviews', '{"en": "Customer Reviews", "fr": "Avis clients"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.share_thoughts', '{"en": "Share your thoughts and experience with this product.", "fr": "Partagez vos impressions et votre expérience avec ce produit."}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.write_review', '{"en": "Write a Review", "fr": "Rédiger un avis"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.cancel_review', '{"en": "Cancel Review", "fr": "Annuler l''avis"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.login_to_write', '{"en": "Please log in to write a review.", "fr": "Veuillez vous connecter pour rédiger un avis."}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.write_your_review', '{"en": "Write your review", "fr": "Rédigez votre avis"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.rating', '{"en": "Rating", "fr": "Note"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.description', '{"en": "Review Description", "fr": "Description de l''avis"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.description_placeholder', '{"en": "What did you like or dislike? How does it perform?", "fr": "Qu''avez-vous aimé ou déploré ? Comment se comporte-t-il ?"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.submit_review', '{"en": "Submit Review", "fr": "Soumettre l''avis"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.submitting', '{"en": "Submitting...", "fr": "Envoi en cours..."}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.success_pending', '{"en": "Your review has been submitted successfully and is pending moderation.", "fr": "Votre avis a été soumis avec succès et est en attente de modération."}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.cancel', '{"en": "Cancel", "fr": "Annuler"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.helpful', '{"en": "Helpful", "fr": "Utile"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.no_reviews', '{"en": "No reviews yet", "fr": "Aucun avis pour le moment"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.be_the_first', '{"en": "There are no reviews for this product yet. Be the first to write one!", "fr": "Il n''y a pas encore d''avis sur ce produit. Soyez le premier à en rédiger un !"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.load_more', '{"en": "Load More Reviews", "fr": "Charger plus d''avis"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.review_count_one', '{"en": "{count} review", "fr": "{count} avis"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('reviews.review_count_other', '{"en": "{count} reviews", "fr": "{count} avis"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('comments.discussion', '{"en": "Discussion & Comments", "fr": "Discussion & Commentaires"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('comments.join_conversation', '{"en": "Join the conversation and express your thoughts.", "fr": "Rejoignez la conversation et exprimez vos pensées."}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('comments.write_comment', '{"en": "Write a Comment", "fr": "Écrire un commentaire"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('comments.cancel_comment', '{"en": "Cancel Comment", "fr": "Annuler le commentaire"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('comments.login_to_write', '{"en": "Please log in to write a comment.", "fr": "Veuillez vous connecter pour écrire un commentaire."}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('comments.join_discussion', '{"en": "Join the Discussion", "fr": "Rejoindre la discussion"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('comments.your_message', '{"en": "Your Message", "fr": "Votre message"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('comments.message_placeholder', '{"en": "What are your thoughts on this article?", "fr": "Quelles sont vos pensées sur cet article ?"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('comments.post_comment', '{"en": "Post Comment", "fr": "Publier le commentaire"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('comments.success_pending', '{"en": "Your comment has been submitted successfully and is pending moderation.", "fr": "Votre commentaire a été soumis avec succès et est en attente de modération."}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('comments.like', '{"en": "Like", "fr": "J''aime"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('comments.no_comments', '{"en": "No comments yet", "fr": "Aucun commentaire pour le moment"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('comments.be_the_first', '{"en": "Be the first to share your thoughts!", "fr": "Soyez le premier à partager vos pensées !"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.translations (key, translations, created_at, updated_at) VALUES ('comments.load_more', '{"en": "Load More Comments", "fr": "Charger plus de commentaires"}', '2026-07-03 17:52:15.834477+00', '2026-07-03 17:52:15.834477+00') ON CONFLICT DO NOTHING;
+SELECT pg_catalog.setval('public.blocks_id_seq', COALESCE((SELECT MAX(id) FROM public.blocks), 1), true);
+SELECT pg_catalog.setval('public.languages_id_seq', COALESCE((SELECT MAX(id) FROM public.languages), 1), true);
+SELECT pg_catalog.setval('public.navigation_items_id_seq', COALESCE((SELECT MAX(id) FROM public.navigation_items), 1), true);
+SELECT pg_catalog.setval('public.pages_id_seq', COALESCE((SELECT MAX(id) FROM public.pages), 1), true);
+SELECT pg_catalog.setval('public.posts_id_seq', COALESCE((SELECT MAX(id) FROM public.posts), 1), true);
 
--- ---------------------------------------------------------------------------
--- 2. FR home hero: replace NBcover <img> with a YouTube <iframe>
--- ---------------------------------------------------------------------------
-UPDATE public.blocks
-SET content = replace(
-                content::text,
-                '<img src=''/images/NBcover.webp'' alt=''Couverture Nextblock'' class=''w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700'' fetchpriority=''high'' />',
-                '<div class=''relative w-full aspect-video''><iframe class=''absolute inset-0 h-full w-full border-0'' src=''https://www.youtube.com/embed/71MyfoL4YVM?si=jtlDXV6cSC8rDgz0'' title=''Vidéo de démonstration NextBlock'' allow=''accelerated-motion; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'' referrerpolicy=''strict-origin-when-cross-origin'' loading=''lazy'' allowfullscreen></iframe></div>'
-              )::jsonb
-WHERE content::text LIKE '%Couverture Nextblock%';
 
+  -- Step D: Record the applied migrations in history (truncated in Step B) so
+  -- \`npm run db:migrate:check\` reports up to date instead of listing every file as pending.
+  INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES
+    ('00000000000000', 'baseline_schema'),
+    ('00000000000001', 'baseline_constraints_and_indexes'),
+    ('00000000000002', 'baseline_security_and_grants'),
+    ('00000000000003', 'baseline_seed')
+  ON CONFLICT (version) DO NOTHING;
 
--- >>> FROM: 00000000000044_swap_article_nx_graph_for_youtube.sql <<<
--- Swap the Nx-graph image in the "How NextBlock™ Works" article for an embedded
--- YouTube video, and rebalance that two-column section to an even 50/50 split.
---
--- Targets the post-body 'text' block (dollar-quoted html_content seeded in migration
--- 010) for both language variants of the same post:
---   * EN  slug how-nextblock-works           (img alt "Nx project graph preview ...")
---   * FR  slug comment-nextblock-fonctionne  (img alt "Apercu du graphe Nx ...")
---
--- Three forward-only, idempotent edits:
---   1. Column widths md:w-3/5 (text) and md:w-2/5 (media) -> md:w-1/2 each, and the
---      flex row switches items-start -> items-center so the shorter media column sits
---      centered against the taller text column. These class fragments occur only in
---      this one section (EN + FR), so a single UPDATE rebalances both languages.
---   2/3. Replace the <img src="/images/nx-graph.webp" ...> with a responsive 16:9
---      YouTube <iframe>, kept inside the existing white aside card above its caption.
---
--- Rendering/CSP identical to migration 043: TextBlockRenderer -> html-react-parser
--- preserves the <iframe>; proxy.ts CSP frame-src allows www.youtube.com; every utility
--- class used here lives in this .sql file, which Tailwind's content scanner
--- (libs/**/*.sql) compiles into the bundle. The nx-graph.webp media row is left intact.
---
--- Each UPDATE is guarded by a substring that only exists pre-swap, so a second run is a
--- no-op. Dollar-quoted string literals ($old$/$new$) avoid escaping the single-quoted
--- HTML attributes; the sandbox reset runs this via postgres db.unsafe() (no outer
--- dollar-quote wrapper), same as migration 010's dollar-quoted seed content.
-
--- ---------------------------------------------------------------------------
--- 1. Both languages: 3/5 + 2/5 columns -> 50/50, and vertical-center the row
--- ---------------------------------------------------------------------------
-UPDATE public.blocks
-SET content = replace(
-                replace(
-                  replace(
-                    content::text,
-                    'flex flex-col md:flex-row gap-8 items-start my-12',
-                    'flex flex-col md:flex-row gap-8 items-center my-12'
-                  ),
-                  'w-full md:w-3/5 space-y-4',
-                  'w-full md:w-1/2 space-y-4'
-                ),
-                'md:w-2/5 rounded-[2rem]',
-                'md:w-1/2 rounded-[2rem]'
-              )::jsonb
-WHERE content::text LIKE '%w-full md:w-3/5 space-y-4%';
-
--- ---------------------------------------------------------------------------
--- 2. EN post body: nx-graph <img> -> responsive YouTube <iframe>
--- ---------------------------------------------------------------------------
-UPDATE public.blocks
-SET content = replace(
-                content::text,
-                $old$<img src='/images/nx-graph.webp' alt='Nx project graph preview showing apps and shared libraries linked together' class='w-full h-auto rounded-2xl object-cover' />$old$,
-                $new$<div class='relative aspect-video overflow-hidden rounded-2xl'><iframe class='absolute inset-0 h-full w-full border-0' src='https://www.youtube.com/embed/DNqU8ez9qjs?si=p2oIy0f-n7wiaBmO' title='How NextBlock™ Works' allow='accelerated-motion; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share' referrerpolicy='strict-origin-when-cross-origin' loading='lazy' allowfullscreen></iframe></div>$new$
-              )::jsonb
-WHERE content::text LIKE '%Nx project graph preview showing apps and shared libraries linked together%';
-
--- ---------------------------------------------------------------------------
--- 3. FR post body: nx-graph <img> -> responsive YouTube <iframe>
--- ---------------------------------------------------------------------------
-UPDATE public.blocks
-SET content = replace(
-                content::text,
-                $old$<img src='/images/nx-graph.webp' alt='Apercu du graphe Nx montrant les applications et librairies partagees' class='w-full h-auto rounded-2xl object-cover' />$old$,
-                $new$<div class='relative aspect-video overflow-hidden rounded-2xl'><iframe class='absolute inset-0 h-full w-full border-0' src='https://www.youtube.com/embed/DNqU8ez9qjs?si=p2oIy0f-n7wiaBmO' title='Comment NextBlock™ fonctionne' allow='accelerated-motion; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share' referrerpolicy='strict-origin-when-cross-origin' loading='lazy' allowfullscreen></iframe></div>$new$
-              )::jsonb
-WHERE content::text LIKE '%Apercu du graphe Nx montrant les applications et librairies partagees%';
-
-
-  -- Step D: Anchor preserved profiles
+  -- Step E: Anchor preserved profiles
   INSERT INTO public.profiles (id, updated_at, full_name, avatar_url, website, role)
   SELECT preserved_user.id, NULL, NULL, NULL, NULL, 'ADMIN'
   FROM (

@@ -103,8 +103,13 @@ Subsystems that span many files (each has a doc):
   reorder, squash, or delete applied files. Run `npm run db:migrate:check` before
   `npm run db:migrate`. Never run `db:reset`, `sandbox:reset`, `db:push:sandbox`,
   or `db:migrate:fresh` against a shared/production database. The migration folder
-  (currently `00000000000000`–`00000000000029`) is the schema source of truth.
-  Read `AGENTS.md` and `docs/04`/`docs/05` before touching migrations.
+  was re-baselined (2026-07): migrations `00000000000000`–`00000000000044` were squashed
+  into the idempotent baseline `00000000000000`–`00000000000003` (schema / constraints+indexes
+  / security+grants / seed), which is the schema source of truth; the next new migration is
+  `00000000000004`. Existing DBs already have `000`–`003` in history, so the baseline never
+  replays on them — a one-time history trim (`DELETE FROM supabase_migrations.schema_migrations
+  WHERE version > '00000000000003'`) reconciles prod/sandbox. Read `AGENTS.md` and
+  `docs/04`/`docs/05` before touching migrations.
 
 - **After schema/seed changes**, regenerate types and the sandbox payload:
   `npm run db:types`, then `npm run generate:sandbox` (writes

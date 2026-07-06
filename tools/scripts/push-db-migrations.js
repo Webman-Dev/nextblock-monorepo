@@ -17,7 +17,9 @@ const workdir = path.join(repoRoot, 'libs/db/src');
 const npxBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const args = new Set(process.argv.slice(2));
 const baselineRepairFirstVersion = '00000000000000';
-const baselineRepairLastVersion = '00000000000012';
+// Re-baseline (2026-07): migrations 000..044 were squashed into the idempotent baseline
+// 000..003. That range is the non-replayable baseline; 004+ are normal forward migrations.
+const baselineRepairLastVersion = '00000000000003';
 
 function log(message, color = colors.reset) {
   console.log(`${color}${message}${colors.reset}`);

@@ -161,19 +161,26 @@ Commerce-specific policy highlights include:
 
 ### Current reality
 
-The current padded migration sequence in
-`libs/db/src/supabase/migrations` runs from:
+The folder was **re-baselined in 2026-07**: the previous 45 migrations
+(`00000000000000`–`00000000000044`) were squashed into a four-file idempotent
+baseline, generated from a fresh-apply `pg_dump` by
+`tools/scripts/rebaseline-transform.mjs` and verified byte-identical to the old
+tree. The current sequence is:
 
-- `00000000000000`
-- through `00000000000024`
+- `00000000000000_baseline_schema.sql` — enums, functions, tables, sequences
+  (all `IF NOT EXISTS` / `CREATE OR REPLACE`) plus the re-attached `auth.users`
+  → `handle_new_user` trigger.
+- `00000000000001_baseline_constraints_and_indexes.sql` — primary/unique/check
+  and foreign-key constraints (guarded) plus all indexes.
+- `00000000000002_baseline_security_and_grants.sql` — RLS enablement, policies
+  (`DROP … IF EXISTS` first), triggers, and grants.
+- `00000000000003_baseline_seed.sql` — canonical demo content, `ON CONFLICT DO
+  NOTHING` (no users, no secrets).
 
-The first files (`00000000000000` through `00000000000016`) are squashed,
-grouped baseline domains. Everything from `00000000000017` onward is an
-append-only forward migration added after the baseline.
-
-These files are already squashed and grouped. Several of them preserve older
-logical migration boundaries through embedded comment headers, so you will see
-historical section numbers inside a smaller set of physical files.
+Every file is fully idempotent. Existing databases already have versions
+`000`–`003` recorded, so both appliers skip the baseline — it only runs on a
+fresh/empty database. **The next new migration is `00000000000004`**, appended
+forward-only.
 
 ### Production migration policy
 
@@ -188,41 +195,28 @@ production or shared database change.
   that may include orders, users, payments, or customer records.
 - Run `npm run db:migrate:check` before `npm run db:migrate`.
 - If an existing database lists old baseline files such as
-  `00000000000000_setup_foundation_and_enums.sql` as pending, do not replay
-  them. Use `npm run db:migrate:repair-history:check`, then
-  `npm run db:migrate:repair-history`, then rerun
-  `npm run db:migrate:check`.
+  `00000000000000_baseline_schema.sql` as pending, do not replay them. Use
+  `npm run db:migrate:repair-history:check`, then
+  `npm run db:migrate:repair-history --through=00000000000003` (the baseline's
+  top file creates no tables, so auto-detection otherwise stops at `000`), then
+  rerun `npm run db:migrate:check`.
 - Use `npm run db:migrate:fresh` only for a brand-new empty database.
 
 ### Category map
 
 | Migration file | Domain | What it covers |
 | :-- | :-- | :-- |
-| `00000000000000_setup_foundation_and_enums.sql` | Core | Shared enums and schema-level foundation |
-| `00000000000001_setup_cms_core.sql` | Core, CMS | settings, profiles, languages, media, translations, logos |
-| `00000000000002_setup_content_tables.sql` | CMS | pages, posts, blocks, navigation, revisions |
-| `00000000000003_setup_catalog_and_licensing.sql` | Commerce | catalog, variants, inventory cache tables, package activations, Freemius sync tables |
-| `00000000000004_setup_fulfillment_shipping_taxes_and_currencies.sql` | Fulfillment, Commerce | orders, shipping, taxes, currencies, price-map sync functions |
-| `00000000000005_setup_functions_and_triggers.sql` | Core, CMS, Fulfillment | auth/profile bootstrap, timestamps, invoice functions, inventory deduction, product upsert helpers |
-| `00000000000006_setup_rls_and_grants.sql` | Security | grants, RLS enablement, policies |
-| `00000000000007_setup_indexes.sql` | Core, CMS, Commerce | performance indexes across authoring and commerce tables |
-| `00000000000008_seed_platform_defaults.sql` | Seeds | baseline site settings, default languages, default currencies |
-| `00000000000009_seed_translations.sql` | Seeds | translation catalog |
-| `00000000000010_seed_content_scaffold.sql` | Seeds, CMS | starter content, scaffold pages, seeded copy |
-| `00000000000011_setup_cortex_ai_settings.sql` | AI, Settings | Cortex AI settings and provider defaults |
-| `00000000000012_setup_commerce_coupons.sql` | Commerce | coupon tables and related commerce constraints |
-| `00000000000013_setup_cortex_ai_db_mutation_audit.sql` | AI, Audit | Cortex AI database mutation audit support |
-| `00000000000014_setup_content_drafts.sql` | CMS, Editor | visual-editing content draft tables |
-| `00000000000015_setup_product_drafts.sql` | Commerce, Editor | product draft workflow support |
-| `00000000000016_add_feature_image_to_pages.sql` | CMS | optional page feature image media relationship |
-| `00000000000017_add_product_blocks.sql` | Commerce, Editor | block-based product descriptions (`blocks` JSONB column and `product_id` link) |
-| `00000000000018_setup_bot_protection_settings.sql` | CMS, Security | Turnstile/reCAPTCHA bot-protection settings for forms; sensitive site-settings key protection |
-| `00000000000019_add_product_categories.sql` | Commerce | `categories` and `product_categories` junction tables |
-| `00000000000020_add_category_translations.sql` | Commerce, i18n | `name_translations` / `description_translations` on categories |
-| `00000000000021_migrate_hero_blocks_to_sections.sql` | CMS, Editor | data migration converting legacy `hero` blocks into `section` blocks (`is_hero`) |
-| `00000000000022_seed_cortex_ai_guide_post.sql` | Seeds, AI | seeds the Cortex AI guide post |
-| `00000000000023_setup_custom_block_definitions.sql` | CMS, Editor | `custom_block_definitions` registry, validation functions, `duplicate_block_definition` RPC, and RLS (see [10-CUSTOM-BLOCKS.md](./10-CUSTOM-BLOCKS.md)) |
-| `00000000000024_setup_ucp_cart_sessions.sql` | Commerce | `ucp_cart_sessions` table and update trigger for persisted carts |
+| `00000000000000_baseline_schema.sql` | Core, CMS, Commerce | all enums, 40 functions, 49 tables + sequences (idempotent), and the `auth.users` → `handle_new_user` bootstrap trigger |
+| `00000000000001_baseline_constraints_and_indexes.sql` | Core, CMS, Commerce | all primary/unique/check + foreign-key constraints (guarded) and every index |
+| `00000000000002_baseline_security_and_grants.sql` | Security | RLS enablement on every table, all policies, timestamp/business triggers, grants |
+| `00000000000003_baseline_seed.sql` | Seeds | canonical demo content — languages, currencies, site settings, translations, media, pages/posts/blocks, navigation, shipping defaults — all `ON CONFLICT DO NOTHING` |
+
+The pre-2026-07 history (foundation/enums, cms_core, content_tables, catalog,
+fulfillment, functions_and_triggers, rls_and_grants, indexes, the seed files, and
+later additions like custom block definitions, product blocks, categories, cart
+sessions, drafts, privacy/MFA, system alerts, interactions) is all folded into the
+four files above; the earlier per-file boundaries survive only as comment headers
+inside the generated SQL.
 
 ### How to read the folder
 
