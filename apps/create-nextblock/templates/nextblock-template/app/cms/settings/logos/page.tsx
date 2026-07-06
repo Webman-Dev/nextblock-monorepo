@@ -17,11 +17,12 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@nextblock-cms/ui'
-import { getLogos, getSiteSeoSettings } from './actions'
+import { getActiveLogoId, getLogos, getSiteSeoSettings } from './actions'
 import BrandingSettingsForm from './components/BrandingSettingsForm'
 import SiteSeoSettingsForm from './components/SiteSeoSettingsForm'
 import MediaImage from '../../media/components/MediaImage'
 import DeleteLogoButton from './components/DeleteLogoButton'
+import SetActiveLogoButton from './components/SetActiveLogoButton'
 import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl'
 
 function resolveLogoSrc(objectKey?: string | null) {
@@ -29,11 +30,16 @@ function resolveLogoSrc(objectKey?: string | null) {
 }
 
 export default async function CmsLogosListPage() {
-  const [logos, branding, seoSettings] = await Promise.all([
+  const [logos, branding, seoSettings, pinnedActiveLogoId] = await Promise.all([
     getLogos(),
     getInvoiceBrandingData(),
     getSiteSeoSettings(),
+    getActiveLogoId(),
   ])
+
+  // The effective active logo: the admin-pinned one, else the most recent (logos come back
+  // newest-first). This is what the storefront, invoices, and emails resolve to.
+  const activeLogoId = pinnedActiveLogoId ?? logos[0]?.id ?? null
 
   return (
     <div className="w-full space-y-8">
@@ -55,7 +61,8 @@ export default async function CmsLogosListPage() {
           <div>
             <h2 className="text-xl font-semibold">Logos</h2>
             <p className="text-sm text-muted-foreground">
-              The most recently created logo is used on the storefront and invoices.
+              Choose which logo is active on the storefront, invoices, and emails. New logos
+              become active automatically until you pick one.
             </p>
           </div>
           <Button variant="default" asChild>
@@ -92,7 +99,7 @@ export default async function CmsLogosListPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {logos.map((logo, index) => (
+                {logos.map((logo) => (
                   <TableRow key={logo.id}>
                     <TableCell>
                     {logo.media ? (
@@ -112,7 +119,7 @@ export default async function CmsLogosListPage() {
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         <span>{logo.name}</span>
-                        {index === 0 ? (
+                        {logo.id === activeLogoId ? (
                           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
                             Active
                           </span>
@@ -130,6 +137,12 @@ export default async function CmsLogosListPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          {logo.id !== activeLogoId ? (
+                            <>
+                              <SetActiveLogoButton logoId={logo.id} />
+                              <DropdownMenuSeparator />
+                            </>
+                          ) : null}
                           <DropdownMenuItem asChild>
                             <Link href={`/cms/settings/logos/${logo.id}/edit`}>
                               <Edit3 className="mr-2 h-4 w-4" />

@@ -88,10 +88,11 @@ export async function submitInteraction(input: SubmitInteractionInput) {
           const origin = `${protocol}://${host}`;
 
           const capitalizedType = input.type.charAt(0).toUpperCase() + input.type.slice(1);
-          const subject = `[NextBlock CMS] New Pending ${capitalizedType} Submitted`;
+          const subject = `New Pending ${capitalizedType} Submitted`;
 
           const html = `
             <div style="font-family: sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 8px;">
+              {{brand_header}}
               <h2 style="color: #6366f1; margin-top: 0;">New Pending ${capitalizedType} Submitted</h2>
               <p>Hello,</p>
               <p>A new content interaction has been submitted and is currently <strong>pending moderation</strong>.</p>
@@ -111,7 +112,7 @@ export async function submitInteraction(input: SubmitInteractionInput) {
                 </a>
               </p>
               <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
-              <p style="font-size: 11px; color: #888;">This is an automated notification from your NextBlock™ CMS instance.</p>
+              <p style="font-size: 11px; color: #888;">This is an automated notification from your CMS.</p>
             </div>
           `;
 

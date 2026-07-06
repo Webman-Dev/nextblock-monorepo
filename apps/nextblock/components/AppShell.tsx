@@ -47,6 +47,7 @@ type AppShellProps = {
   isDraftModeEnabled: boolean;
   isEcommerceActive: boolean;
   logo: Logo | null;
+  showFooterAttribution?: boolean;
   siteTitle: string;
 };
 
@@ -61,6 +62,7 @@ export function AppShell({
   isDraftModeEnabled,
   isEcommerceActive,
   logo,
+  showFooterAttribution = true,
   siteTitle,
 }: AppShellProps) {
   const pathname = usePathname() || '';
@@ -145,8 +147,21 @@ export function AppShell({
                       )}
                     </p>
                   )}
-                <div className="flex flex-row items-center gap-4">
+                <div className="flex flex-row flex-wrap items-center justify-center gap-x-4 gap-y-2">
                   <p className="text-muted-foreground">{copyrightText}</p>
+                  {showFooterAttribution && (
+                    <p className="text-muted-foreground">
+                      Published with{' '}
+                      <a
+                        href="https://nextblock.dev"
+                        target="_blank"
+                        rel="noopener"
+                        className="font-medium hover:underline"
+                      >
+                        NextBlock&trade; CMS
+                      </a>
+                    </p>
+                  )}
                   <ThemeSwitcher />
                 </div>
               </div>

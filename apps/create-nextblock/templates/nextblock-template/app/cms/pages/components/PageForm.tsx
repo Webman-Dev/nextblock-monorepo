@@ -81,6 +81,7 @@ export default function PageForm({
   const [metaDescription, setMetaDescription] = useState(
     page?.meta_description || ""
   );
+  const [customCanonical, setCustomCanonical] = useState(page?.custom_canonical || "");
   const [featureImageId, setFeatureImageId] = useState<string | null>(
     initialFeatureImageId || page?.feature_image_id || null
   );
@@ -120,10 +121,12 @@ export default function PageForm({
     setStatus(page.status || "draft");
     setMetaTitle(page.meta_title || "");
     setMetaDescription(page.meta_description || "");
+    setCustomCanonical(page.custom_canonical || "");
     setFeatureImageId(initialFeatureImageId || page.feature_image_id || null);
   }, [
     initialFeatureImageId,
     page?.id,
+    page?.custom_canonical,
     page?.language_id,
     page?.meta_description,
     page?.meta_title,
@@ -156,6 +159,7 @@ export default function PageForm({
       formData.append("status", status);
       formData.append("meta_title", metaTitle);
       formData.append("meta_description", metaDescription);
+      formData.append("custom_canonical", customCanonical);
       formData.append("feature_image_id", featureImageId || "");
       if (translationGroupId) {
         formData.append("translation_group_id", translationGroupId);
@@ -213,6 +217,7 @@ export default function PageForm({
       status !== (page?.status || "draft") ||
       metaTitle !== (page?.meta_title || "") ||
       metaDescription !== (page?.meta_description || "") ||
+      customCanonical !== (page?.custom_canonical || "") ||
       featureImageId !== (page?.feature_image_id || null);
 
     if (!hasChanges) return;
@@ -374,6 +379,19 @@ export default function PageForm({
             placeholder="Meta description for search engines..."
           />
         </div>
+      </div>
+
+      {/* Row 3: Canonical URL override (optional). Blank = self-referencing canonical. */}
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="custom_canonical" className="text-xs font-medium">Canonical URL (SEO, optional)</Label>
+        <Input
+          id="custom_canonical"
+          name="custom_canonical"
+          value={customCanonical}
+          onChange={(e) => setCustomCanonical(e.target.value)}
+          className="h-9"
+          placeholder="Leave blank to self-reference this page. Use an absolute https://… URL or a /relative path to override."
+        />
       </div>
 
       <FeatureImageField

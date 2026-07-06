@@ -197,6 +197,7 @@ function buildProductFormDefaults(
     stock: initialData?.stock || 0,
     meta_title: initialData?.meta_title || '',
     meta_description: initialData?.meta_description || '',
+    custom_canonical: initialData?.custom_canonical || '',
     short_description: initialData?.short_description || '',
     description_json:
       initialData?.description_json || {
@@ -928,6 +929,10 @@ export function ProductForm({
             <div className={`lg:col-span-${isEdit ? '3' : '4'} col-span-2 space-y-1`}>
               <Label htmlFor="meta_description" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Meta Description</Label>
               <Input id="meta_description" {...register('meta_description')} placeholder="SEO description (150-160 chars)" className="h-8 text-sm" />
+            </div>
+            <div className="col-span-2 lg:col-span-6 space-y-1">
+              <Label htmlFor="custom_canonical" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Canonical URL (optional)</Label>
+              <Input id="custom_canonical" {...register('custom_canonical')} placeholder="Blank = self-referencing. Absolute https://… URL or /relative path to override." className="h-8 text-sm" />
             </div>
             {isEdit && (
               <div className="lg:col-span-1 col-span-2 space-y-1">

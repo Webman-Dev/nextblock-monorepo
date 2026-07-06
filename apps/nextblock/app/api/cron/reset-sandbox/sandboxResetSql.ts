@@ -5371,13 +5371,58 @@ SELECT pg_catalog.setval('public.pages_id_seq', COALESCE((SELECT MAX(id) FROM pu
 SELECT pg_catalog.setval('public.posts_id_seq', COALESCE((SELECT MAX(id) FROM public.posts), 1), true);
 
 
+-- >>> FROM: 00000000000004_default_logo_email_safe.sql <<<
+-- Swap the seeded DEFAULT site logo from the WebP asset to a bundled PNG.
+--
+-- WebP (and AVIF) don't render in Outlook and several other email clients, so the default
+-- logo shown in transactional emails was a broken image out of the box. The PNG is a
+-- /public bundled asset (registered in resolveMediaUrl's BUNDLED_PUBLIC_MEDIA_KEYS), so it
+-- resolves to \`<site>/images/nextblock-logo-button-tiny.png\` and renders everywhere.
+--
+-- Forward-only, data-only (no schema change), idempotent, and GUARDED so it never
+-- overrides a logo an operator has since chosen: it only repoints the seeded default logo
+-- row while that row still points at the seeded WebP media.
+
+INSERT INTO public.media (
+  id, uploader_id, file_name, object_key, file_type, size_bytes, description,
+  width, height, blur_data_url, variants, file_path, folder, created_at, updated_at
+) VALUES (
+  'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', NULL, 'nextblock-logo-button-tiny.png',
+  'images/nextblock-logo-button-tiny.png', 'image/png', 10000, 'Default site logo',
+  NULL, NULL, NULL, NULL, NULL, NULL, now(), now()
+) ON CONFLICT DO NOTHING;
+
+UPDATE public.logos
+SET media_id = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
+WHERE id = 'd45ef03d-27fc-4099-8b46-1cdf82d658d2'
+  AND media_id = 'ea6fdaf5-f8de-416c-9f2b-b689b7a4ed38';
+
+
+-- >>> FROM: 00000000000005_add_custom_canonical.sql <<<
+-- Add a nullable \`custom_canonical\` column to pages, posts and products.
+--
+-- This is the per-content manual canonical override used by each route's
+-- generateMetadata(): when set, it wins over the default self-referencing
+-- \`<site_url>/<slug>\` canonical (see app/lib/seo.ts buildCanonicalUrl). NULL/empty
+-- keeps the self-referencing default, so existing rows are unaffected.
+--
+-- Forward-only and idempotent (ADD COLUMN IF NOT EXISTS). No backfill: a NULL value
+-- is the "use the default canonical" sentinel.
+
+ALTER TABLE public.pages ADD COLUMN IF NOT EXISTS custom_canonical text;
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS custom_canonical text;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS custom_canonical text;
+
+
   -- Step D: Record the applied migrations in history (truncated in Step B) so
   -- \`npm run db:migrate:check\` reports up to date instead of listing every file as pending.
   INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES
     ('00000000000000', 'baseline_schema'),
     ('00000000000001', 'baseline_constraints_and_indexes'),
     ('00000000000002', 'baseline_security_and_grants'),
-    ('00000000000003', 'baseline_seed')
+    ('00000000000003', 'baseline_seed'),
+    ('00000000000004', 'default_logo_email_safe'),
+    ('00000000000005', 'add_custom_canonical')
   ON CONFLICT (version) DO NOTHING;
 
   -- Step E: Anchor preserved profiles

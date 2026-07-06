@@ -175,6 +175,7 @@ async function publishPageDraft(draft: ContentDraftRow, authorId: string) {
   addStringMeta(pageUpdate, draft, "status");
   addNullableStringMeta(pageUpdate, draft, "meta_title");
   addNullableStringMeta(pageUpdate, draft, "meta_description");
+  addNullableStringMeta(pageUpdate, draft, "custom_canonical");
   addNullableStringMeta(pageUpdate, draft, "feature_image_id");
 
   const { error: pageError } = await supabase
@@ -219,6 +220,7 @@ async function publishPostDraft(draft: ContentDraftRow, authorId: string) {
   addStringMeta(postUpdate, draft, "status");
   addNullableStringMeta(postUpdate, draft, "meta_title");
   addNullableStringMeta(postUpdate, draft, "meta_description");
+  addNullableStringMeta(postUpdate, draft, "custom_canonical");
   addNullableStringMeta(postUpdate, draft, "label");
   addNullableStringMeta(postUpdate, draft, "excerpt");
   addNullableStringMeta(postUpdate, draft, "subtitle");

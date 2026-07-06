@@ -6,6 +6,11 @@ import { revalidatePath, updateTag } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { Logo } from './types'
 import { SITE_SETTINGS_CACHE_TAG } from '../../../lib/site-settings'
+import {
+  ACTIVE_LOGO_SETTING_KEY,
+  resolveActiveLogo,
+  resolveActiveLogoId,
+} from '../../../../lib/logos/active-logo'
 
 const PUBLIC_LAYOUT_LOGO_CACHE_TAG = 'public-layout-logo'
 
@@ -100,25 +105,35 @@ export async function getLogoById(id: string) {
 
 export async function getActiveLogo(): Promise<Logo | null> {
   const supabase = createClient()
+  return (await resolveActiveLogo(supabase)) as Logo | null
+}
 
-  const { data, error } = await supabase
-    .from('logos')
-    .select(
-      `
-      *,
-      media:media_id (*)
-    `
-    )
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+/** The admin-pinned active logo id (site_settings.active_logo_id), or null when unset. */
+export async function getActiveLogoId(): Promise<string | null> {
+  const supabase = createClient()
+  return resolveActiveLogoId(supabase)
+}
+
+/**
+ * Pin which logo is active across the storefront, invoices, and transactional emails.
+ * Persists the choice as site_settings.active_logo_id (RLS restricts writes to ADMIN/WRITER)
+ * and busts the public header + CMS caches so the change shows immediately.
+ */
+export async function setActiveLogo(
+  logoId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ key: ACTIVE_LOGO_SETTING_KEY, value: logoId })
 
   if (error) {
-    console.error('Error fetching active logo:', error.message)
-    throw new Error(`Failed to fetch active logo: ${error.message}`)
+    console.error('Error setting active logo:', error.message)
+    return { success: false, error: error.message }
   }
 
-  return data as Logo | null
+  revalidateLogoViews()
+  return { success: true }
 }
 
 export async function saveInvoiceSettings(payload: InvoiceSettings) {

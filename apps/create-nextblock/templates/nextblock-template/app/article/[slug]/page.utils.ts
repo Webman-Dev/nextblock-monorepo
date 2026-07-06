@@ -87,6 +87,7 @@ function applyDraftToPost(post: any, draft: ContentDraftRow) {
     status: draftString(draft, "status", post.status) as PostType["status"],
     meta_title: draftNullableString(draft, "meta_title", post.meta_title),
     meta_description: draftNullableString(draft, "meta_description", post.meta_description),
+    custom_canonical: draftNullableString(draft, "custom_canonical", post.custom_canonical),
     label: draftNullableString(draft, "label", post.label),
     excerpt: draftNullableString(draft, "excerpt", post.excerpt),
     subtitle: draftNullableString(draft, "subtitle", post.subtitle),

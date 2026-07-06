@@ -103,6 +103,22 @@ const getCachedCopyrightSettings = unstable_cache(
   { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
 );
 
+const getCachedFooterAttribution = unstable_cache(
+  async (): Promise<boolean> => {
+    const supabase = createStaticSupabaseClient();
+    const { data } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'footer_show_attribution')
+      .maybeSingle();
+
+    // Absent row = enabled (default); only an explicit `false` disables it.
+    return data ? data.value !== false : true;
+  },
+  ['public-layout-footer-attribution'],
+  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
+);
+
 const getCachedGlobalCss = unstable_cache(
   async (): Promise<string> => {
     const supabase = createStaticSupabaseClient();
@@ -257,6 +273,7 @@ async function loadLayoutData() {
       isEcommerceActive: false,
       globalCss: '',
       privacySettings: DEFAULT_PRIVACY_SETTINGS,
+      footerAttributionEnabled: true,
     };
   }
 
@@ -328,6 +345,7 @@ async function loadLayoutData() {
   const role = profile?.role ?? null;
   const canAccessCms = role === 'ADMIN' || role === 'WRITER';
   const { siteTitle } = await getSiteSettings();
+  const footerAttributionEnabled = await getCachedFooterAttribution().catch(() => true);
 
   return {
     user,
@@ -349,6 +367,7 @@ async function loadLayoutData() {
     isEcommerceActive,
     globalCss,
     privacySettings,
+    footerAttributionEnabled,
   };
 }
 
@@ -429,6 +448,7 @@ export default async function RootLayout({
     isEcommerceActive,
     globalCss,
     privacySettings,
+    footerAttributionEnabled,
   } = await loadLayoutData();
   const draft = await draftMode();
   // GTM container id comes solely from the privacy settings row (site_settings).
@@ -500,6 +520,7 @@ export default async function RootLayout({
             isDraftModeEnabled={draft.isEnabled}
             isEcommerceActive={isEcommerceActive}
             logo={logo}
+            showFooterAttribution={footerAttributionEnabled}
             siteTitle={siteTitle}
           >
             {children}

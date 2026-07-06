@@ -16,12 +16,14 @@ import { useHotkeys } from '../../../../../hooks/use-hotkeys';
 interface CopyrightFormProps {
   languages: Language[];
   initialSettings: CopyrightSettings;
+  initialAttributionEnabled: boolean;
 }
 
-export default function CopyrightForm({ languages, initialSettings }: CopyrightFormProps) {
+export default function CopyrightForm({ languages, initialSettings, initialAttributionEnabled }: CopyrightFormProps) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<Message | null>(null);
   const [settings, setSettings] = useState<CopyrightSettings>(initialSettings);
+  const [attributionEnabled, setAttributionEnabled] = useState(initialAttributionEnabled);
 
   const handleInputChange = (langCode: string, value: string) => {
     setSettings(prev => ({ ...prev, [langCode]: value }));
@@ -36,6 +38,8 @@ export default function CopyrightForm({ languages, initialSettings }: CopyrightF
         const value = settings[lang.code] || '';
         formData.append(`copyright_${lang.code}`, value);
     }
+    // Always submit an explicit value so unchecking is captured (not just omitted).
+    formData.append('footer_show_attribution', attributionEnabled ? 'true' : 'false');
 
     startTransition(async () => {
       try {
@@ -71,6 +75,27 @@ export default function CopyrightForm({ languages, initialSettings }: CopyrightF
             />
           </div>
         ))}
+      </div>
+
+      <div className="space-y-2 border-t pt-4">
+        <div className="flex items-start gap-3">
+          <input
+            id="footer_show_attribution"
+            name="footer_show_attribution"
+            type="checkbox"
+            checked={attributionEnabled}
+            onChange={(e) => setAttributionEnabled(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-input"
+          />
+          <div className="space-y-1">
+            <Label htmlFor="footer_show_attribution" className="cursor-pointer">
+              Show &ldquo;Published with NextBlock&trade; CMS&rdquo; link in the footer
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Adds a small credit link to nextblock.dev next to the copyright. Enabled by default.
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">

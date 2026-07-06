@@ -36,6 +36,7 @@ export async function createPost(formData: FormData) {
     published_at: formData.get("published_at") as string || null,
     meta_title: formData.get("meta_title") as string || null,
     meta_description: formData.get("meta_description") as string || null,
+    custom_canonical: formData.get("custom_canonical") as string || null,
     feature_image_id: featureImageId_create,
   };
 
@@ -99,6 +100,7 @@ export async function createPost(formData: FormData) {
           subtitle: `Placeholder for ${lang.code.toUpperCase()} translation. Original subtitle: ${newPost.subtitle || ''}`.substring(0, 500),
           meta_title: null,
           meta_description: null,
+          custom_canonical: null,
           translation_group_id: newPost.translation_group_id,
           author_id: user.id,
         };
@@ -160,6 +162,7 @@ export async function updatePost(postId: number, formData: FormData) {
     published_at: formData.get("published_at") as string || null,
     meta_title: formData.get("meta_title") as string || null,
     meta_description: formData.get("meta_description") as string || null,
+    custom_canonical: formData.get("custom_canonical") as string || null,
     feature_image_id: featureImageId_update,
   };
 
@@ -188,6 +191,7 @@ export async function updatePost(postId: number, formData: FormData) {
     published_at: publishedAtISO,
     meta_title: rawFormData.meta_title,
     meta_description: rawFormData.meta_description,
+    custom_canonical: rawFormData.custom_canonical,
     feature_image_id: rawFormData.feature_image_id,
   };
 
@@ -306,6 +310,7 @@ type UpsertPostPayload = {
   published_at?: string | null;
   meta_title?: string | null;
   meta_description?: string | null;
+  custom_canonical?: string | null;
   translation_group_id: string;
   feature_image_id?: string | null;
 };

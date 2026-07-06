@@ -132,7 +132,7 @@ describe("visual editing server actions", () => {
 
     expect(result).toEqual({
       error:
-        "Draft storage is not set up in this database. Apply the content_drafts migration: libs/db/src/supabase/migrations/00000000000014_setup_content_drafts.sql.",
+        "Draft storage is not set up in this database. Apply the schema (npm run db:migrate or the /setup wizard); content_drafts is created by the baseline schema migration.",
     });
   });
 

@@ -84,6 +84,38 @@ function buildProductRpcPayload(data: ProductFormValues, id?: string) {
   };
 }
 
+/**
+ * Persist the SEO text fields directly on the product row. The
+ * `upsert_product_with_variants` RPC intentionally does not touch these columns, so
+ * meta_title / meta_description / custom_canonical are written here (keyed by the
+ * just-saved product id). Empty strings normalise to NULL so a blank canonical falls
+ * back to the self-referencing default (see the app's app/lib/seo.ts buildCanonicalUrl).
+ */
+async function persistProductSeoMeta(
+  supabase: SupabaseClient<Database>,
+  productId: string,
+  data: ProductFormValues
+) {
+  const normalize = (value: string | null | undefined) => {
+    const trimmed = typeof value === 'string' ? value.trim() : '';
+    return trimmed ? trimmed : null;
+  };
+
+  const { error } = await supabase
+    .from('products')
+    .update({
+      meta_title: normalize(data.meta_title),
+      meta_description: normalize(data.meta_description),
+      custom_canonical: normalize(data.custom_canonical),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', productId);
+
+  if (error) {
+    throw error;
+  }
+}
+
 async function persistProductTaxability(
   supabase: SupabaseClient<Database>,
   productId: string,
@@ -506,6 +538,8 @@ export async function createProduct(supabase: SupabaseClient<Database>, data: Pr
 
   await persistProductTaxability(supabase, productId, data.is_taxable);
 
+  await persistProductSeoMeta(supabase, productId, data);
+
   await persistProductSaleSchedule(supabase, productId, data);
 
   await syncSharedInventoryForSavedProduct(productId, data);
@@ -552,6 +586,8 @@ export async function updateProduct(supabase: SupabaseClient<Database>, id: stri
   }
 
   await persistProductTaxability(supabase, productId, data.is_taxable);
+
+  await persistProductSeoMeta(supabase, productId, data);
 
   await persistProductSaleSchedule(supabase, productId, data);
 

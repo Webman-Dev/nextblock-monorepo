@@ -12,6 +12,7 @@ const BUNDLED_PUBLIC_MEDIA_KEYS = new Set([
   'images/included.webp',
   'images/metadata_image.webp',
   'images/nextblock-logo-small.webp',
+  'images/nextblock-logo-button-tiny.png',
   'images/nx-graph.webp',
   'images/pants.webp',
   'images/programmer-upscaled.webp',

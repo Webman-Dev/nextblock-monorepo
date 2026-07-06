@@ -205,6 +205,38 @@ export function composeTitleWithSite(
     : `${cleanTitle}${suffix}`;
 }
 
+/**
+ * Resolves the canonical URL for a public page/post/product.
+ *
+ * By default this is the self-referencing `<siteUrl><path>`. When the content row
+ * sets a manual `custom_canonical` override, that wins:
+ *  - absolute values (`https://…`) are used verbatim,
+ *  - root-relative (`/foo`) and bare (`foo`) values are resolved against `siteUrl`.
+ * A null/blank override falls back to the self-referencing default, so existing
+ * content is unaffected. `siteUrl` may be empty (pre-config / no NEXT_PUBLIC_URL),
+ * in which case a relative path is returned and resolved by `metadataBase`.
+ */
+export function buildCanonicalUrl(
+  customCanonical: string | null | undefined,
+  siteUrl: string,
+  path: string
+): string {
+  const base = (siteUrl || '').replace(/\/+$/, '');
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const fallback = `${base}${normalizedPath}`;
+
+  const custom = customCanonical?.trim();
+  if (!custom) {
+    return fallback;
+  }
+
+  if (/^https?:\/\//i.test(custom)) {
+    return custom;
+  }
+
+  return custom.startsWith('/') ? `${base}${custom}` : `${base}/${custom}`;
+}
+
 /** Maps a language code (e.g. `fr`, `en-US`) to an Open Graph locale (`fr_FR`). */
 export function toOpenGraphLocale(languageCode?: string | null): string {
   const code = (languageCode ?? '').toLowerCase().split('-')[0];

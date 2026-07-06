@@ -51,9 +51,13 @@ export async function sendTestEmail(formData: FormData) {
 
   await sendEmail({
     to,
-    subject: 'NextBlock test email',
-    text: 'This is a test email from your NextBlock CMS. SMTP is configured correctly.',
-    html: '<p>This is a test email from your NextBlock CMS. SMTP is configured correctly. 🎉</p>',
+    subject: 'Test email',
+    text: 'This is a test email from your CMS. SMTP is configured correctly.',
+    html:
+      '<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;">' +
+      '{{brand_header}}' +
+      '<p>This is a test email from your CMS. SMTP is configured correctly. 🎉</p>' +
+      '</div>',
   });
 
   return { success: true as const, message: `Test email sent to ${to}.` };

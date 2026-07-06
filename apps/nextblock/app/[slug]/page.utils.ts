@@ -99,6 +99,7 @@ function applyDraftToPage(page: SelectedPageType, draft: ContentDraftRow): Selec
     status: draftString(draft, "status", page.status) as PageType["status"],
     meta_title: draftNullableString(draft, "meta_title", page.meta_title),
     meta_description: draftNullableString(draft, "meta_description", page.meta_description),
+    custom_canonical: draftNullableString(draft, "custom_canonical", page.custom_canonical),
     feature_image_id: draftNullableString(draft, "feature_image_id", page.feature_image_id),
     translation_group_id: draftString(
       draft,
@@ -255,7 +256,7 @@ export async function getPageDataBySlug(
   const supabase = isDraftModeEnabled ? createClient() : getSsgSupabaseClient();
 
   const baseSelect = `
-      id, slug, title, meta_title, meta_description, feature_image_id, status, language_id, translation_group_id, author_id, created_at, updated_at,
+      id, slug, title, meta_title, meta_description, custom_canonical, feature_image_id, status, language_id, translation_group_id, author_id, created_at, updated_at,
       language_details:languages!inner(id, code),
       feature_media_object:media!pages_feature_image_id_fkey(object_key, file_path, blur_data_url, width, height),
       blocks (id, page_id, block_type, content, order)

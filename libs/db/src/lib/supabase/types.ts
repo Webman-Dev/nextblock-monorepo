@@ -1123,6 +1123,7 @@ export type Database = {
         Row: {
           author_id: string | null
           created_at: string
+          custom_canonical: string | null
           feature_image_id: string | null
           id: number
           language_id: number
@@ -1138,6 +1139,7 @@ export type Database = {
         Insert: {
           author_id?: string | null
           created_at?: string
+          custom_canonical?: string | null
           feature_image_id?: string | null
           id?: number
           language_id: number
@@ -1153,6 +1155,7 @@ export type Database = {
         Update: {
           author_id?: string | null
           created_at?: string
+          custom_canonical?: string | null
           feature_image_id?: string | null
           id?: number
           language_id?: number
@@ -1238,6 +1241,7 @@ export type Database = {
         Row: {
           author_id: string | null
           created_at: string
+          custom_canonical: string | null
           excerpt: string | null
           feature_image_id: string | null
           id: number
@@ -1257,6 +1261,7 @@ export type Database = {
         Insert: {
           author_id?: string | null
           created_at?: string
+          custom_canonical?: string | null
           excerpt?: string | null
           feature_image_id?: string | null
           id?: number
@@ -1276,6 +1281,7 @@ export type Database = {
         Update: {
           author_id?: string | null
           created_at?: string
+          custom_canonical?: string | null
           excerpt?: string | null
           feature_image_id?: string | null
           id?: number
@@ -1666,6 +1672,7 @@ export type Database = {
         Row: {
           average_rating: number
           created_at: string | null
+          custom_canonical: string | null
           description_json: Json | null
           freemius_plan_id: string | null
           freemius_product_id: string | null
@@ -1702,6 +1709,7 @@ export type Database = {
         Insert: {
           average_rating?: number
           created_at?: string | null
+          custom_canonical?: string | null
           description_json?: Json | null
           freemius_plan_id?: string | null
           freemius_product_id?: string | null
@@ -1738,6 +1746,7 @@ export type Database = {
         Update: {
           average_rating?: number
           created_at?: string | null
+          custom_canonical?: string | null
           description_json?: Json | null
           freemius_plan_id?: string | null
           freemius_product_id?: string | null

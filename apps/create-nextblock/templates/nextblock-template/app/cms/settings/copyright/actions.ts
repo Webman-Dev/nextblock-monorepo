@@ -8,6 +8,30 @@ export type CopyrightSettings = {
   [key: string]: string;
 };
 
+// site_settings key holding the "Published with NextBlock™ CMS" footer attribution
+// toggle. Absent row = enabled (the default), so fresh installs show the backlink.
+const FOOTER_ATTRIBUTION_KEY = 'footer_show_attribution';
+
+/**
+ * Whether the "Published with NextBlock™ CMS" backlink shows in the public footer.
+ * Defaults to ON when the setting has never been saved.
+ */
+export async function getFooterAttributionEnabled(): Promise<boolean> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('site_settings')
+    .select('value')
+    .eq('key', FOOTER_ATTRIBUTION_KEY)
+    .maybeSingle();
+
+  if (error || !data) {
+    return true;
+  }
+
+  // Stored as a JSON boolean; only an explicit `false` disables it.
+  return data.value !== false;
+}
+
 export async function getCopyrightSettings(): Promise<CopyrightSettings> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -59,6 +83,18 @@ export async function updateCopyrightSettings(formData: FormData) {
   if (error) {
     console.error('Error updating copyright settings:', error);
     throw new Error('Failed to update copyright settings.');
+  }
+
+  // Persist the footer attribution toggle. The client always submits an explicit
+  // 'true'/'false' so an unchecked box is captured (not just omitted).
+  const attributionEnabled = formData.get('footer_show_attribution') !== 'false';
+  const { error: attributionError } = await supabase
+    .from('site_settings')
+    .upsert({ key: FOOTER_ATTRIBUTION_KEY, value: attributionEnabled });
+
+  if (attributionError) {
+    console.error('Error updating footer attribution setting:', attributionError);
+    throw new Error('Failed to update footer attribution setting.');
   }
 
   // Revalidate the root layout to reflect changes immediately across the site.

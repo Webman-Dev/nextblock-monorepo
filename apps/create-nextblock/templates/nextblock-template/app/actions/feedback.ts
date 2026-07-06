@@ -19,6 +19,7 @@ export async function submitFeedback(data: FeedbackData) {
     const { subject, message, userEmail, userName, url } = data;
     
     const htmlContent = `
+      {{brand_header}}
       <h2>New Feedback Received</h2>
       <p><strong>From:</strong> ${userName || 'Unknown'} (${userEmail})</p>
       <p><strong>Subject:</strong> ${subject}</p>

@@ -157,6 +157,7 @@ export async function handleFormSubmission(
 
   // Create a more readable HTML body for the email
   const htmlBody = `
+    {{brand_header}}
     <h2>New Form Submission</h2>
     <p>You have received a new submission from your website form.</p>
     <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse;">

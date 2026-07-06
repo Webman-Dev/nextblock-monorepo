@@ -24,6 +24,7 @@ import {
   resolveProductMetaDescription,
   stringifyJsonLd,
   buildSocialMetadata,
+  buildCanonicalUrl,
   toOpenGraphLocale,
 } from "../../lib/seo";
 import { getSiteSettings } from "../../lib/site-settings";
@@ -163,6 +164,8 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
     productRecord.short_description
   );
   const { siteTitle } = await getSiteSettings();
+  // Self-referencing `<siteUrl>/product/<slug>` unless the product sets a manual custom_canonical override.
+  const canonicalUrl = buildCanonicalUrl(productRecord.custom_canonical, siteUrl, `/product/${slug}`);
 
   return {
     title,
@@ -170,14 +173,14 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
     ...buildSocialMetadata({
       title,
       description,
-      url: `${siteUrl}/product/${slug}`,
+      url: canonicalUrl,
       siteTitle,
       imageUrl,
       type: 'website',
       locale: toOpenGraphLocale(productRecord.language_code),
     }),
     alternates: {
-      canonical: `${siteUrl}/product/${slug}`,
+      canonical: canonicalUrl,
       languages: Object.keys(alternates).length > 0 ? alternates : undefined,
     },
   };

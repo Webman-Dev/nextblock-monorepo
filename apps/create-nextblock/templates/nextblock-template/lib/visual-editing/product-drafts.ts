@@ -62,6 +62,7 @@ const productSnapshotFields = [
   "translation_group_id",
   "meta_title",
   "meta_description",
+  "custom_canonical",
   "freemius_product_id",
   "freemius_plan_id",
   "trial_period_days",

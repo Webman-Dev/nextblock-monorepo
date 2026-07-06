@@ -1,12 +1,15 @@
 // app/cms/settings/copyright/page.tsx
 import { getActiveLanguagesServerSide } from '../languages/actions';
-import { getCopyrightSettings } from './actions';
+import { getCopyrightSettings, getFooterAttributionEnabled } from './actions';
 import CopyrightForm from './components/CopyrightForm';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@nextblock-cms/ui';
 
 export default async function CopyrightSettingsPage() {
   const languages = await getActiveLanguagesServerSide();
-  const copyrightSettings = await getCopyrightSettings();
+  const [copyrightSettings, footerAttributionEnabled] = await Promise.all([
+    getCopyrightSettings(),
+    getFooterAttributionEnabled(),
+  ]);
 
   const year = new Date().getFullYear();
 
@@ -24,6 +27,7 @@ export default async function CopyrightSettingsPage() {
                 <CopyrightForm
                     languages={languages}
                     initialSettings={copyrightSettings}
+                    initialAttributionEnabled={footerAttributionEnabled}
                 />
             </CardContent>
         </Card>

@@ -12,6 +12,7 @@ import {
   resolvePageMetaDescription,
   stringifyJsonLd,
   buildSocialMetadata,
+  buildCanonicalUrl,
   toOpenGraphLocale,
 } from "../lib/seo";
 import { getSiteSettings } from "../lib/site-settings";
@@ -118,6 +119,8 @@ export async function generateMetadata(
   const title = resolveMetaTitle(pageData.meta_title, pageData.title);
   const description = resolvePageMetaDescription(pageData.meta_description, pageData.blocks);
   const { siteTitle } = await getSiteSettings();
+  // Self-referencing `<siteUrl>/<slug>` unless the page sets a manual custom_canonical override.
+  const canonicalUrl = buildCanonicalUrl(pageData.custom_canonical, siteUrl, `/${params.slug}`);
 
   return {
     title,
@@ -125,14 +128,14 @@ export async function generateMetadata(
     ...buildSocialMetadata({
       title,
       description,
-      url: `${siteUrl}/${params.slug}`,
+      url: canonicalUrl,
       siteTitle,
       imageUrl: pageData.feature_image_url,
       type: 'website',
       locale: toOpenGraphLocale(pageData.language_code),
     }),
     alternates: {
-      canonical: `${siteUrl}/${params.slug}`,
+      canonical: canonicalUrl,
       languages: Object.keys(alternates).length > 0 ? alternates : undefined,
     },
   };

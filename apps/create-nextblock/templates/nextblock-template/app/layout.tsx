@@ -26,6 +26,7 @@ import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { unstable_cache } from 'next/cache';
 import { createStaticSupabaseClient, getSiteSettings } from './lib/site-settings';
 import { DEFAULT_OG_IMAGE } from './lib/seo';
+import { resolveActiveLogo } from '../lib/logos/active-logo';
 import {
   isSupabaseConfigured,
   resolveSupabaseAnonKey,
@@ -99,6 +100,22 @@ const getCachedCopyrightSettings = unstable_cache(
     return data.value as Record<string, string>;
   },
   ['public-layout-copyright'],
+  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
+);
+
+const getCachedFooterAttribution = unstable_cache(
+  async (): Promise<boolean> => {
+    const supabase = createStaticSupabaseClient();
+    const { data } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'footer_show_attribution')
+      .maybeSingle();
+
+    // Absent row = enabled (default); only an explicit `false` disables it.
+    return data ? data.value !== false : true;
+  },
+  ['public-layout-footer-attribution'],
   { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
 );
 
@@ -212,25 +229,15 @@ const getCachedNavigationMenu = unstable_cache(
 
 const getCachedActiveLogo = unstable_cache(
   async (): Promise<HeaderLogo | null> => {
-    const supabase = createStaticSupabaseClient();
-    const { data, error } = await supabase
-      .from('logos')
-      .select(
-        `
-        *,
-        media:media_id (*)
-      `
-      )
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      console.error('Error fetching cached active logo:', error.message);
+    try {
+      const supabase = createStaticSupabaseClient();
+      // Honor the admin-pinned active logo (site_settings.active_logo_id), else newest.
+      const logo = await resolveActiveLogo(supabase);
+      return (logo as HeaderLogo | null) ?? null;
+    } catch (error) {
+      console.error('Error fetching cached active logo:', error);
       return null;
     }
-
-    return data as HeaderLogo | null;
   },
   ['public-layout-logo'],
   { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS, tags: [PUBLIC_LAYOUT_LOGO_CACHE_TAG] }
@@ -266,6 +273,7 @@ async function loadLayoutData() {
       isEcommerceActive: false,
       globalCss: '',
       privacySettings: DEFAULT_PRIVACY_SETTINGS,
+      footerAttributionEnabled: true,
     };
   }
 
@@ -337,6 +345,7 @@ async function loadLayoutData() {
   const role = profile?.role ?? null;
   const canAccessCms = role === 'ADMIN' || role === 'WRITER';
   const { siteTitle } = await getSiteSettings();
+  const footerAttributionEnabled = await getCachedFooterAttribution().catch(() => true);
 
   return {
     user,
@@ -358,6 +367,7 @@ async function loadLayoutData() {
     isEcommerceActive,
     globalCss,
     privacySettings,
+    footerAttributionEnabled,
   };
 }
 
@@ -438,6 +448,7 @@ export default async function RootLayout({
     isEcommerceActive,
     globalCss,
     privacySettings,
+    footerAttributionEnabled,
   } = await loadLayoutData();
   const draft = await draftMode();
   // GTM container id comes solely from the privacy settings row (site_settings).
@@ -509,6 +520,7 @@ export default async function RootLayout({
             isDraftModeEnabled={draft.isEnabled}
             isEcommerceActive={isEcommerceActive}
             logo={logo}
+            showFooterAttribution={footerAttributionEnabled}
             siteTitle={siteTitle}
           >
             {children}

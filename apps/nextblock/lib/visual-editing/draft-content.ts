@@ -117,7 +117,7 @@ async function readPageSnapshot(
   const client = supabase as any;
   const { data: page, error: pageError } = await client
     .from("pages")
-    .select("id, title, slug, language_id, status, meta_title, meta_description, feature_image_id, version, translation_group_id")
+    .select("id, title, slug, language_id, status, meta_title, meta_description, custom_canonical, feature_image_id, version, translation_group_id")
     .eq("id", pageId)
     .single();
 
@@ -144,6 +144,7 @@ async function readPageSnapshot(
       status: page.status,
       meta_title: page.meta_title,
       meta_description: page.meta_description,
+      custom_canonical: page.custom_canonical,
       feature_image_id: page.feature_image_id,
       translation_group_id: page.translation_group_id,
     } as Record<string, Json>,
@@ -158,7 +159,7 @@ async function readPostSnapshot(
   const client = supabase as any;
   const { data: post, error: postError } = await client
     .from("posts")
-    .select("id, title, slug, language_id, status, meta_title, meta_description, label, excerpt, subtitle, published_at, feature_image_id, version, translation_group_id")
+    .select("id, title, slug, language_id, status, meta_title, meta_description, custom_canonical, label, excerpt, subtitle, published_at, feature_image_id, version, translation_group_id")
     .eq("id", postId)
     .single();
 
@@ -185,6 +186,7 @@ async function readPostSnapshot(
       status: post.status,
       meta_title: post.meta_title,
       meta_description: post.meta_description,
+      custom_canonical: post.custom_canonical,
       label: post.label,
       excerpt: post.excerpt,
       subtitle: post.subtitle,

@@ -87,6 +87,7 @@ export default function PostForm({
   const [metaDescription, setMetaDescription] = useState(
     post?.meta_description || ""
   );
+  const [customCanonical, setCustomCanonical] = useState(post?.custom_canonical || "");
   const [featureImageId, setFeatureImageId] = useState<string | null>(
     initialFeatureImageId || post?.feature_image_id || null
   );
@@ -129,9 +130,11 @@ export default function PostForm({
     setPublishedAt(formatDateTimeLocal(post.published_at));
     setMetaTitle(post.meta_title || "");
     setMetaDescription(post.meta_description || "");
+    setCustomCanonical(post.custom_canonical || "");
     setFeatureImageId(initialFeatureImageId || post.feature_image_id || null);
   }, [
     initialFeatureImageId,
+    post?.custom_canonical,
     post?.excerpt,
     post?.id,
     post?.label,
@@ -184,6 +187,7 @@ export default function PostForm({
       formData.append("published_at", publishedAt);
       formData.append("meta_title", metaTitle);
       formData.append("meta_description", metaDescription);
+      formData.append("custom_canonical", customCanonical);
       formData.append("feature_image_id", featureImageId || "");
     }
 
@@ -244,6 +248,7 @@ export default function PostForm({
       publishedAt !== dbPublishedAt ||
       metaTitle !== (post?.meta_title || "") ||
       metaDescription !== (post?.meta_description || "") ||
+      customCanonical !== (post?.custom_canonical || "") ||
       featureImageId !== (post?.feature_image_id || null);
 
     if (!hasChanges) return;
@@ -264,6 +269,7 @@ export default function PostForm({
     publishedAt,
     metaTitle,
     metaDescription,
+    customCanonical,
     featureImageId,
     post,
     isEditing,
@@ -409,7 +415,12 @@ export default function PostForm({
         <Label htmlFor="meta_description">Meta Description (SEO)</Label>
         <Textarea id="meta_description" name="meta_description" value={metaDescription} onChange={(e) => setMetaDescription(e.target.value)} className="mt-1" rows={3} />
       </div>
-    
+
+      <div>
+        <Label htmlFor="custom_canonical">Canonical URL (SEO, optional)</Label>
+        <Input id="custom_canonical" name="custom_canonical" value={customCanonical} onChange={(e) => setCustomCanonical(e.target.value)} className="mt-1" placeholder="Leave blank to self-reference this article. Absolute https://… URL or /relative path to override." />
+      </div>
+
       <FeatureImageField
         initialImageId={initialFeatureImageId || post?.feature_image_id || null}
         initialImageUrl={initialFeatureImageUrl || null}
