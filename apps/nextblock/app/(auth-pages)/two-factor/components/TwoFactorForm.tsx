@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { unstable_rethrow } from 'next/navigation';
 import { Alert, AlertDescription, Button, Input, Label, Spinner } from '@nextblock-cms/ui';
 import { resendEmailCode, verifyEmailCode, verifyTotpChallenge } from '../actions';
 
@@ -36,6 +37,10 @@ export default function TwoFactorForm({
         // A successful action redirects server-side; only failures return here.
         if (result?.error) setError(result.error);
       } catch (err) {
+        // A successful verify ends in redirect(), which Next signals by throwing a
+        // NEXT_REDIRECT control-flow error. Let Next handle it (perform the navigation)
+        // instead of surfacing it as a red error flash; only real errors fall through.
+        unstable_rethrow(err);
         setError(err instanceof Error ? err.message : 'Verification failed.');
       }
     });
