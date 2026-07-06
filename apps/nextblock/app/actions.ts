@@ -9,6 +9,7 @@ import { createEmailChallenge, evaluateTwoFactor } from "../lib/auth/twoFactor";
 import { REMEMBER_INTENT_COOKIE, setSecureCookie } from "../lib/auth/cookies";
 import { sendTwoFactorCodeEmail } from "./actions/twoFactorEmail";
 import { getSystemConfiguration } from "../lib/setup/system-config";
+import { verifyBotProtection } from "../lib/botProtection/verify";
 
 export const signUpAction = async (formData: FormData) => {
   const email = formData.get("email")?.toString();
@@ -28,6 +29,19 @@ export const signUpAction = async (formData: FormData) => {
       "/sign-up",
       "Email and password are required",
     );
+  }
+
+  // Bot protection: the same honeypot + Turnstile/reCAPTCHA check the public
+  // contact forms use, run BEFORE any account is created. On a honeypot hit we
+  // mimic a normal "check your email" success so the bot learns nothing; a failed
+  // captcha surfaces the reason. (The site-wide provider from CMS → Settings →
+  // Bot Protection applies; when it's "none", only the honeypot gates signup.)
+  const botCheck = await verifyBotProtection(formData);
+  if (!botCheck.ok) {
+    if (botCheck.reason === "honeypot") {
+      return encodedRedirect("success", "/sign-up", "auth.signup_check_email_profile");
+    }
+    return encodedRedirect("error", "/sign-up", botCheck.message);
   }
 
   // Auto-accept mode (system_configuration.auto_accept_signups): create an already-

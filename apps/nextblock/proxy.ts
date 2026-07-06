@@ -241,6 +241,11 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string | u
   ];
   const vercelToolbarConnectSources = ['wss://ws-us3.pusher.com'];
   const turnstileSources = ['https://challenges.cloudflare.com'];
+  // Google reCAPTCHA: api.js is served from www.google.com, the widget worker from
+  // www.gstatic.com, and the challenge/badge iframe + verification calls hit
+  // www.google.com/recaptcha. Needed by both the bot-protected contact forms and
+  // the signup page when the reCAPTCHA provider is selected.
+  const recaptchaSources = ['https://www.google.com', 'https://www.gstatic.com'];
 
   const developmentHttpSources = isDev
     ? [
@@ -272,6 +277,7 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string | u
             'data:',
             ...vercelSources,
             ...turnstileSources,
+            ...recaptchaSources,
             ...developmentHttpSources,
           ]
         : [
@@ -281,6 +287,7 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string | u
             ...googleSources,
             ...vercelSources,
             ...turnstileSources,
+            ...recaptchaSources,
           ],
     ),
     createDirective('script-src-attr', ["'none'"]),
@@ -299,6 +306,7 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string | u
       'https://checkout.freemius.com',
       ...googleSources,
       ...vercelSources,
+      ...recaptchaSources,
       ...developmentHttpSources,
     ]),
     createDirective('font-src', [
@@ -316,6 +324,7 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string | u
       ...vercelSources,
       ...vercelToolbarConnectSources,
       ...turnstileSources,
+      ...recaptchaSources,
       ...developmentConnectSources,
     ]),
     createDirective('frame-src', [
@@ -329,6 +338,7 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string | u
       'https://vercel.live',
       'https://vercel.com',
       ...turnstileSources,
+      ...recaptchaSources,
     ]),
     createDirective('media-src', ["'self'", 'data:', 'blob:', supabaseOrigin, ...assetSources]),
     createDirective('worker-src', ["'self'", 'blob:']),
