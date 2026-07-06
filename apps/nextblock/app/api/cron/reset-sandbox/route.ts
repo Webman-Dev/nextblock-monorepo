@@ -2712,6 +2712,48 @@ async function seedFakeStoreData(sql: SqlClient, supabaseAdmin: any) {
   }
 }
 
+// The home-page "Live Demo" promo (migration 00000000000006) sends visitors to this
+// very sandbox. That CTA is valuable on production (nextblock.dev) but pointless *inside*
+// the demo it points at, so we strip it after the reset replays migrations. The blocks are
+// tagged with a `nb-sandbox-promo` sentinel comment; after removing them we renumber the
+// affected home pages so their block ordering stays contiguous.
+async function removeSandboxPromoSections(sql: SqlClient) {
+  const deleted = await sql`
+    DELETE FROM public.blocks
+    WHERE block_type = 'section'
+      AND content::text LIKE '%nb-sandbox-promo%'
+    RETURNING id
+  `;
+
+  if (deleted.length === 0) {
+    return;
+  }
+
+  await sql`
+    WITH home_pages AS (
+      SELECT p.id
+      FROM public.pages p
+      JOIN public.languages l ON l.id = p.language_id
+      WHERE (l.code = 'en' AND p.slug = 'home')
+         OR (l.code = 'fr' AND p.slug = 'accueil')
+    ),
+    ranked AS (
+      SELECT b.id,
+             (ROW_NUMBER() OVER (PARTITION BY b.page_id ORDER BY b."order", b.id) - 1) AS new_order
+      FROM public.blocks b
+      WHERE b.page_id IN (SELECT id FROM home_pages)
+    )
+    UPDATE public.blocks b
+    SET "order" = r.new_order
+    FROM ranked r
+    WHERE b.id = r.id AND b."order" <> r.new_order
+  `;
+
+  console.log(
+    `[Sandbox Reset] Removed ${deleted.length} sandbox-promo section(s) from the home pages.`
+  );
+}
+
 export async function GET(request: NextRequest) {
   // 1. Guard: fail closed anywhere that is not explicitly the sandbox.
   const isSandboxResetEnabled = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
@@ -2817,6 +2859,10 @@ export async function GET(request: NextRequest) {
         console.error('[Sandbox Reset] DB Error:', dbError);
         throw dbError;
       }
+
+      // The replayed migrations re-add the "Live Demo" home-page promo that points at this
+      // sandbox — strip it here so the demo does not advertise itself to itself.
+      await removeSandboxPromoSections(db);
 
       const normalizedMediaCount = await normalizeMediaStorageKeys(db);
       if (normalizedMediaCount > 0) {
