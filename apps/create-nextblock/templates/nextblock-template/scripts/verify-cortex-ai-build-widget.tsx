@@ -7,7 +7,7 @@ import {
   buildCortexWidgetDefinitionInsertPayload,
   buildCortexProfileCardVerificationDefinition,
   validateCortexWidgetDefinitionOutput,
-} from '@nextblock/cortex';
+} from '@nextblock-cms/cortex';
 
 dotenv.config({ path: '.env.local' });
 

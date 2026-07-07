@@ -33,7 +33,7 @@ import {
   summarizeCortexAiRoutingError,
   type CortexAiPageContext,
   z,
-} from '@nextblock/cortex';
+} from '@nextblock-cms/cortex';
 import { validateBlockContent } from '../../../../lib/blocks/blockRegistry';
 
 export const dynamic = 'force-dynamic';

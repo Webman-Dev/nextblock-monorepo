@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import {
   CORTEX_AI_OPENROUTER_FREE_ROUTER_MODEL,
   generateCortexAiText,
-} from '@nextblock/cortex';
+} from '@nextblock-cms/cortex';
 
 dotenv.config({ path: '.env.local' });
 

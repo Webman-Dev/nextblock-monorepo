@@ -27,7 +27,7 @@ import {
   Trash2,
 } from 'lucide-react';
 
-import type { CortexAiStoredModelSelection } from '@nextblock/cortex/client';
+import type { CortexAiStoredModelSelection } from '@nextblock-cms/cortex/client';
 import {
   clearCortexAiModelSelectionAction,
   clearOpenRouterApiKeyAction,

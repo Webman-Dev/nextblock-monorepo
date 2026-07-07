@@ -30,7 +30,7 @@ import {
 import {
   createCortexAiStoredModelSelection,
   type CortexAiStoredModelSelection,
-} from '@nextblock/cortex/client';
+} from '@nextblock-cms/cortex/client';
 
 const CORTEX_AI_SANDBOX_KEY_LOCAL_STORAGE = 'cortex_ai_sandbox_openrouter_api_key';
 const CORTEX_AI_SANDBOX_MODEL_LOCAL_STORAGE = 'cortex_ai_sandbox_openrouter_model_selection';

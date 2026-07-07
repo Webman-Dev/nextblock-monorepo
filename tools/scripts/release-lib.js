@@ -51,7 +51,8 @@ function run(command, options = {}) {
 }
 
 // @nextblock-cms/db -> libs/db ; @nextblock-cms/ecom -> libs/ecommerce ;
-// @nextblock/cortex -> libs/cortex
+// @nextblock-cms/cortex -> libs/cortex (the legacy @nextblock/ scope is still
+// handled below as a defensive fallback for any un-migrated reference).
 function resolveSiblingVersion(depName) {
   const suffix = depName.startsWith('@nextblock-cms/')
     ? depName.replace('@nextblock-cms/', '')

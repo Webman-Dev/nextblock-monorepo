@@ -1,6 +1,6 @@
 {
   "name": "@nextblock-cms/template",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -24,13 +24,13 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@hookform/resolvers": "^5.2.2",
     "@next/third-parties": "^16.2.7",
+    "@nextblock-cms/cortex": "workspace:*",
     "@nextblock-cms/db": "workspace:*",
     "@nextblock-cms/ecommerce": "npm:@nextblock-cms/ecom@latest",
     "@nextblock-cms/editor": "workspace:*",
     "@nextblock-cms/sdk": "workspace:*",
     "@nextblock-cms/ui": "workspace:*",
     "@nextblock-cms/utils": "workspace:*",
-    "@nextblock/cortex": "workspace:*",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.1",

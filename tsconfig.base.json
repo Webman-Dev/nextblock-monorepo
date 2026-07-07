@@ -78,10 +78,10 @@
       "@nextblock-cms/utils/*": [
         "./libs/utils/src/lib/*"
       ],
-      "@nextblock/cortex": [
+      "@nextblock-cms/cortex": [
         "./libs/cortex/src/index.ts"
       ],
-      "@nextblock/cortex/client": [
+      "@nextblock-cms/cortex/client": [
         "./libs/cortex/src/client.ts"
       ]
     }

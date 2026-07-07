@@ -8,7 +8,7 @@ import {
   executeUpdateFooter,
   executeUpdateNavigationBar,
   executeUpdateSectionColumnBlock,
-} from '@nextblock/cortex';
+} from '@nextblock-cms/cortex';
 
 type MockRow = Record<string, any>;
 

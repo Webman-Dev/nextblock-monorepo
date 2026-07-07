@@ -41,7 +41,8 @@ const versionSpec = versionArg;
 const workspaceRoot = process.cwd();
 
 // Dependency-ordered: a package's @nextblock-cms/* deps must publish before it.
-const LIBS = ['utils', 'ui', 'sdk', 'db', 'editor', 'ecommerce'];
+// cortex depends on db + ecommerce + utils, so it publishes last of the libs.
+const LIBS = ['utils', 'ui', 'sdk', 'db', 'editor', 'ecommerce', 'cortex'];
 
 function pkgName(lib) {
   return `@nextblock-cms/${lib === 'ecommerce' ? 'ecom' : lib}`;

@@ -25,6 +25,9 @@ export default defineConfig({
       { find: /^@nextblock-cms\/utils\/server$/, replacement: path.resolve(__dirname, './libs/utils/src/server.ts') },
       { find: /^@nextblock-cms\/utils$/, replacement: path.resolve(__dirname, './libs/utils/src/index.ts') },
 
+      { find: /^@nextblock-cms\/cortex\/client$/, replacement: path.resolve(__dirname, './libs/cortex/src/client.ts') },
+      { find: /^@nextblock-cms\/cortex$/, replacement: path.resolve(__dirname, './libs/cortex/src/index.ts') },
+
       // Wildcard fallback mappings
       { find: /^@nextblock-cms\/ui\/styles\/(.*)$/, replacement: path.resolve(__dirname, './libs/ui/src/styles/$1') },
       { find: /^@nextblock-cms\/ui\/(.*)$/, replacement: path.resolve(__dirname, './libs/ui/src/lib/$1') },

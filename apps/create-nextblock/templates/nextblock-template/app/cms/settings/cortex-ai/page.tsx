@@ -1,4 +1,4 @@
-import { listCortexAiCompatibleOpenRouterModels } from '@nextblock/cortex';
+import { listCortexAiCompatibleOpenRouterModels } from '@nextblock-cms/cortex';
 import { getCortexAiSettingsStatus } from './actions';
 import { SandboxCortexAiSettingsClient } from './SandboxCortexAiSettingsClient';
 import { StoredCortexAiSettingsClient } from './StoredCortexAiSettingsClient';

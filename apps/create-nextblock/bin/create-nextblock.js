@@ -51,6 +51,7 @@ const PACKAGE_VERSION_SOURCES = {
   '@nextblock-cms/db': resolve(REPO_ROOT, 'libs/db/package.json'),
   '@nextblock-cms/editor': resolve(REPO_ROOT, 'libs/editor/package.json'),
   '@nextblock-cms/sdk': resolve(REPO_ROOT, 'libs/sdk/package.json'),
+  '@nextblock-cms/cortex': resolve(REPO_ROOT, 'libs/cortex/package.json'),
 };
 
 program
@@ -2023,7 +2024,7 @@ function buildNextConfigContent(editorUtilNames) {
     // server' directives). Without db/sdk/ecommerce here, db/server's `import 'server-only'`
     // throws even from a Server Component, because Next treats the prebuilt package as an
     // external and skips the server-layer processing the monorepo gets for free from source.
-    "  transpilePackages: ['@nextblock-cms/utils', '@nextblock-cms/ui', '@nextblock-cms/editor', '@nextblock-cms/db', '@nextblock-cms/sdk', '@nextblock-cms/ecommerce'],",
+    "  transpilePackages: ['@nextblock-cms/utils', '@nextblock-cms/ui', '@nextblock-cms/editor', '@nextblock-cms/db', '@nextblock-cms/sdk', '@nextblock-cms/ecommerce', '@nextblock-cms/cortex'],",
     '  webpack: (config, { isServer }) => {',
     '    config.resolve = config.resolve || {};',
     '    config.resolve.alias = {',

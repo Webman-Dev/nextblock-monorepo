@@ -17,7 +17,7 @@ import {
   listCortexAiCompatibleOpenRouterModels,
   safeParseCortexAiModelSelection,
   type CortexAiStoredModelSelection,
-} from '@nextblock/cortex';
+} from '@nextblock-cms/cortex';
 
 const CORTEX_AI_SETTINGS_PATH = '/cms/settings/cortex-ai';
 

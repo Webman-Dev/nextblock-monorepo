@@ -14,7 +14,7 @@ import {
 } from '@nextblock-cms/ecommerce/server';
 import postgres from 'postgres';
 
-import { CORTEX_AI_PACKAGE_ID } from '@nextblock/cortex';
+import { CORTEX_AI_PACKAGE_ID } from '@nextblock-cms/cortex';
 import { SANDBOX_RESET_SQL } from './sandboxResetSql';
 
 export const dynamic = 'force-dynamic';
