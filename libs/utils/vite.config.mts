@@ -43,6 +43,18 @@ export default defineConfig({
               default: './server.es.js',
             },
             './package.json': './package.json',
+            // preserveModules emits one file per source module under dist/lib/* (JS) with the
+            // .d.ts tree mirroring it (entryRoot 'src'), so every declared deep subpath —
+            // ./utils (normalizeCurrencyCode, consumed by @nextblock-cms/ecommerce) and
+            // ./custom-blocks (consumed by @nextblock-cms/cortex), plus client-utils /
+            // translations-context / etc. — resolves through this wildcard. Exact keys above
+            // win for "." and "./server". Without this, published consumers hit
+            // "Can't resolve '@nextblock-cms/utils/utils'".
+            './*': {
+              types: './lib/*.d.ts',
+              require: './lib/*.cjs.js',
+              default: './lib/*.es.js',
+            },
           },
           dependencies: {
             'clsx': '^2.1.1',

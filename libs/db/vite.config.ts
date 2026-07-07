@@ -42,6 +42,16 @@ export default defineConfig({
               require: './server.cjs.js',
               default: './server.es.js',
             },
+            // Published consumers import this at runtime: @nextblock-cms/cortex's ai-config
+            // pulls encrypt/decrypt/resolveSecretEncryptionKey from '@nextblock-cms/db/secrets'.
+            // Without this export a Cortex AI route throws "Can't resolve
+            // '@nextblock-cms/db/secrets'" in a generated project (it only resolves in-monorepo
+            // via the tsconfig path). Emitted as its own build entry below.
+            './secrets': {
+              types: './secrets.d.ts',
+              require: './secrets.cjs.js',
+              default: './secrets.es.js',
+            },
             './package.json': './package.json',
           },
           files: [
@@ -69,6 +79,9 @@ export default defineConfig({
       entry: {
         index: path.resolve(__dirname, './src/index.ts'),
         server: path.resolve(__dirname, './src/server.ts'),
+        // Dedicated entry so secrets.{es,cjs}.js + secrets.d.ts are emitted at the dist root
+        // and the './secrets' export above resolves for published consumers (see @nextblock-cms/cortex).
+        secrets: path.resolve(__dirname, './src/secrets.ts'),
       },
       formats: ['es', 'cjs'],
       fileName: (format, entryName) => {
