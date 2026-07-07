@@ -30,11 +30,20 @@ export type OnboardingStatus = {
   dismissed: boolean;
 };
 
-// Seeded defaults (libs/db migrations 008 + 010). The branding/copyright steps count as
-// "done" only when the value has been customized away from these — a fresh install ships
-// with the seeds, so a plain presence check would mark every step complete immediately.
+// Seeded defaults (libs/db baseline seed 00000000000003 + migration 00000000000004). The
+// branding/copyright steps count as "done" only when the value has been customized away from
+// these — a fresh install ships with the seeds, so a plain presence check would mark every
+// step complete immediately.
 const SEEDED_SITE_TITLE = 'NextBlock™ CMS';
-const SEEDED_LOGO_OBJECT_KEY = 'images/nextblock-logo-small.webp';
+// Every object_key a fresh install may ship as the DEFAULT logo — the original baseline WebP
+// and the migration-00000000000004 email-safe PNG (which repoints the seeded default). A logo
+// counts as customized only when it is none of these; a new default swap must be added here or
+// branding falsely reads as done out of the box. Mirrors BUNDLED_PUBLIC_MEDIA_KEYS in
+// lib/media/resolveMediaUrl.ts.
+const SEEDED_LOGO_OBJECT_KEYS = new Set<string>([
+  'images/nextblock-logo-small.webp',
+  'images/nextblock-logo-button-tiny.png',
+]);
 const SEEDED_COPYRIGHT: Record<string, string> = {
   en: '© {year} Nextblock CMS. All rights reserved.',
   fr: '© {year} Nextblock CMS. Tous droits réservés.',
@@ -88,7 +97,7 @@ export async function getOnboardingStatus(opts: {
   const siteTitle = typeof siteTitleRaw === 'string' ? siteTitleRaw.trim() : '';
   const siteTitleCustomized = siteTitle.length > 0 && siteTitle !== SEEDED_SITE_TITLE;
   const logoObjectKey = extractLogoObjectKey(logoRow);
-  const logoCustomized = Boolean(logoObjectKey) && logoObjectKey !== SEEDED_LOGO_OBJECT_KEY;
+  const logoCustomized = Boolean(logoObjectKey) && !SEEDED_LOGO_OBJECT_KEYS.has(logoObjectKey ?? '');
 
   // Branding is "done" once the user renames the site or uploads their own logo — not merely
   // because the seeded NextBlock title/logo exist.
