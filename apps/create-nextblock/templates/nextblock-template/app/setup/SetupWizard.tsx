@@ -108,14 +108,15 @@ export default function SetupWizard({
     if (!configured) {
       list.push('connection');
     }
-    // One-click Vercel deploys use the connected Supabase project for media storage with
-    // zero keys (native Supabase Storage), so there's nothing to configure — skip the step.
-    if (channel !== 'vercel') {
+    // Skip the storage step when there's nothing for the user to configure: one-click Vercel
+    // deploys use the connected Supabase project with zero keys (native Supabase Storage), and
+    // the Docker stack ships MinIO already wired up by docker-setup (a read-only prefill).
+    if (channel !== 'vercel' && !storagePrefill.readOnly) {
       list.push('storage');
     }
     list.push('admin');
     return list;
-  }, [configured, channel]);
+  }, [configured, channel, storagePrefill.readOnly]);
 
   const [stepIndex, setStepIndex] = useState(0);
   const current = steps[stepIndex];
