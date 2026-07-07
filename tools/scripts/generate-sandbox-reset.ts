@@ -92,6 +92,17 @@ ${migrationHistoryValues}
   ) AS preserved_user(id)
   WHERE EXISTS (SELECT 1 FROM auth.users WHERE id = preserved_user.id)
     AND NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = preserved_user.id);
+
+  -- Step F: Re-assert the "first admin exists" flag. The sandbox preserves its demo
+  -- ADMIN users across the wipe (Steps A & E), but the reseeded baseline resets
+  -- is_admin_created to 'false' and handle_new_user() only flips it on a NEW auth.users
+  -- INSERT -- which never fires for preserved users. Without this the proxy setup-gate
+  -- funnels ALL sandbox traffic (including this reset cron on its next run) to /setup even
+  -- though admins already exist. Guarded on an ADMIN profile actually being present.
+  UPDATE public.site_settings
+  SET value = 'true'::jsonb
+  WHERE key = 'is_admin_created'
+    AND EXISTS (SELECT 1 FROM public.profiles WHERE role = 'ADMIN'::public.user_role);
 `;
 
   if (!fs.existsSync(TARGET_API_DIR)) {
