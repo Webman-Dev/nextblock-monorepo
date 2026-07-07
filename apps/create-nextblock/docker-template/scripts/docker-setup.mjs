@@ -12,6 +12,7 @@ import { readFile, writeFile, access } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
+import { createServer } from 'node:net';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
@@ -79,6 +80,41 @@ const pathExists = async (p) => {
 
 const commandWorks = (cmd, args) => spawnSync(cmd, args, { stdio: 'ignore' }).status === 0;
 
+// Can the host PUBLISH (bind) this TCP port? Docker publishes on 0.0.0.0, and on Windows the
+// Hyper-V/WinNAT excluded port ranges (which sit in the 49152+ ephemeral band — e.g. the default
+// Postgres port 54322) or any process already holding the port make the bind fail with
+// EACCES ("access permissions") / EADDRINUSE — exactly what `docker compose up` fails on. Probing
+// here lets us pick a working host port BEFORE compose tries and aborts the whole stack.
+function canBindPort(port) {
+  return new Promise((res) => {
+    const srv = createServer();
+    srv.once('error', () => res(false));
+    srv.once('listening', () => srv.close(() => res(true)));
+    try {
+      srv.listen(port, '0.0.0.0');
+    } catch {
+      res(false);
+    }
+  });
+}
+
+// Prefer the conventional port; if it's unavailable, fall back into the registered-port band
+// (1024–49151, below the ephemeral range WinNAT reserves) rather than just incrementing — a
+// reserved/used port often sits inside a contiguous block, so +1 tends to be taken too.
+async function findAvailablePort(preferred, fallbackBase, taken) {
+  const candidates = [preferred];
+  for (let i = 0; i < 100; i++) candidates.push(fallbackBase + i);
+  for (const p of candidates) {
+    if (taken.has(p)) continue;
+    if (await canBindPort(p)) {
+      taken.add(p);
+      return p;
+    }
+  }
+  taken.add(preferred);
+  return preferred; // give up gracefully — let compose surface the real error
+}
+
 function detectCompose() {
   if (commandWorks('docker', ['compose', 'version'])) return { cmd: 'docker', args: ['compose'] };
   if (commandWorks('docker-compose', ['version'])) return { cmd: 'docker-compose', args: [] };
@@ -138,6 +174,41 @@ async function main() {
   const minioPassword = reuse('MINIO_ROOT_PASSWORD', generateSecret);
   const bucket = readEnvValue(existing, 'STORAGE_BUCKET') || 'nextblock';
 
+  // Resolve host ports up front so a port that's in use or reserved by the OS (very common on
+  // Windows for the default Postgres port 54322) never aborts `docker compose up`. Reuse a port
+  // already encoded in .env — the explicit *_PORT* var, else the port parsed from a coupled URL —
+  // so re-runs stay stable and never disturb an already-running stack; only a FRESH install probes
+  // for free ports. Coupled ports (Kong/MinIO/app) also drive the URLs + loopback proxy below.
+  const takenPorts = new Set();
+  const reusedPort = (key, urlKey) => {
+    const direct = parseInt(readEnvValue(existing, key), 10);
+    if (Number.isInteger(direct) && direct > 0) return direct;
+    if (urlKey) {
+      const m = readEnvValue(existing, urlKey).match(/:(\d{2,5})(?:\/|$)/);
+      if (m) return parseInt(m[1], 10);
+    }
+    return null;
+  };
+  const resolvePort = async (key, preferred, fallbackBase, urlKey) => {
+    const prev = reusedPort(key, urlKey);
+    if (prev) {
+      takenPorts.add(prev);
+      return prev;
+    }
+    if (existing) {
+      // An existing .env with no recorded port: keep the default rather than reshuffle a setup
+      // the user may already be running.
+      takenPorts.add(preferred);
+      return preferred;
+    }
+    return findAvailablePort(preferred, fallbackBase, takenPorts);
+  };
+  const appPort = await resolvePort('APP_PORT', 3000, 13000, 'NEXT_PUBLIC_URL');
+  const kongPort = await resolvePort('KONG_HTTP_PORT', 8000, 18000, 'NEXT_PUBLIC_SUPABASE_URL');
+  const minioS3Port = await resolvePort('MINIO_S3_PORT', 9000, 19000, 'R2_S3_PUBLIC_ENDPOINT');
+  const minioConsolePort = await resolvePort('MINIO_CONSOLE_PORT', 9001, 19001, null);
+  const dbPort = await resolvePort('POSTGRES_PORT_EXTERNAL', 54322, 15432, null);
+
   const replacements = {
     POSTGRES_PASSWORD: `POSTGRES_PASSWORD=${postgresPassword}`,
     POSTGRES_DB: 'POSTGRES_DB=postgres',
@@ -145,12 +216,22 @@ async function main() {
     JWT_EXP: 'JWT_EXP=3600',
     ANON_KEY: `ANON_KEY=${anonKey}`,
     SERVICE_ROLE_KEY: `SERVICE_ROLE_KEY=${serviceRoleKey}`,
-    NEXT_PUBLIC_SUPABASE_URL: 'NEXT_PUBLIC_SUPABASE_URL=http://localhost:8000',
+    // Host port mappings (compose reads these) + the coupled public URLs, kept in lockstep so a
+    // remapped port stays consistent everywhere it's referenced.
+    APP_PORT: `APP_PORT=${appPort}`,
+    KONG_HTTP_PORT: `KONG_HTTP_PORT=${kongPort}`,
+    MINIO_S3_PORT: `MINIO_S3_PORT=${minioS3Port}`,
+    MINIO_CONSOLE_PORT: `MINIO_CONSOLE_PORT=${minioConsolePort}`,
+    POSTGRES_PORT_EXTERNAL: `POSTGRES_PORT_EXTERNAL=${dbPort}`,
+    // In-container loopback: server code hits localhost:<kongPort> / 127.0.0.1:<minioS3Port> and
+    // socat forwards to the real service. Left ports MUST match the URLs below.
+    LOOPBACK_PROXIES: `LOOPBACK_PROXIES=${kongPort}:kong:8000 ${minioS3Port}:minio:9000`,
+    NEXT_PUBLIC_SUPABASE_URL: `NEXT_PUBLIC_SUPABASE_URL=http://localhost:${kongPort}`,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: `NEXT_PUBLIC_SUPABASE_ANON_KEY=${anonKey}`,
     SUPABASE_SERVICE_ROLE_KEY: `SUPABASE_SERVICE_ROLE_KEY=${serviceRoleKey}`,
-    API_EXTERNAL_URL: 'API_EXTERNAL_URL=http://localhost:8000',
-    SITE_URL: 'SITE_URL=http://localhost:3000',
-    NEXT_PUBLIC_URL: 'NEXT_PUBLIC_URL=http://localhost:3000',
+    API_EXTERNAL_URL: `API_EXTERNAL_URL=http://localhost:${kongPort}`,
+    SITE_URL: `SITE_URL=http://localhost:${appPort}`,
+    NEXT_PUBLIC_URL: `NEXT_PUBLIC_URL=http://localhost:${appPort}`,
     NEXT_PUBLIC_IS_SANDBOX: 'NEXT_PUBLIC_IS_SANDBOX=true',
     CRON_SECRET: `CRON_SECRET=${cronSecret}`,
     DRAFT_MODE_SECRET: `DRAFT_MODE_SECRET=${draftSecret}`,
@@ -165,10 +246,10 @@ async function main() {
     // port-scoped, so the browser would send the app's Supabase auth cookies to MinIO too — and
     // MinIO rejects oversized header sets (MetadataTooLarge), breaking image display once cookies
     // grow. 127.0.0.1 is a different cookie host, so the browser never sends them there.
-    R2_S3_PUBLIC_ENDPOINT: 'R2_S3_PUBLIC_ENDPOINT=http://127.0.0.1:9000',
+    R2_S3_PUBLIC_ENDPOINT: `R2_S3_PUBLIC_ENDPOINT=http://127.0.0.1:${minioS3Port}`,
     R2_FORCE_PATH_STYLE: 'R2_FORCE_PATH_STYLE=true',
-    NEXT_PUBLIC_R2_BASE_URL: `NEXT_PUBLIC_R2_BASE_URL=http://127.0.0.1:9000/${bucket}`,
-    NEXT_PUBLIC_R2_PUBLIC_URL: `NEXT_PUBLIC_R2_PUBLIC_URL=http://127.0.0.1:9000/${bucket}`,
+    NEXT_PUBLIC_R2_BASE_URL: `NEXT_PUBLIC_R2_BASE_URL=http://127.0.0.1:${minioS3Port}/${bucket}`,
+    NEXT_PUBLIC_R2_PUBLIC_URL: `NEXT_PUBLIC_R2_PUBLIC_URL=http://127.0.0.1:${minioS3Port}/${bucket}`,
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: `NEXT_PUBLIC_TURNSTILE_SITE_KEY=${turnstileSiteKey}`,
     TURNSTILE_SECRET_KEY: `TURNSTILE_SECRET_KEY=${turnstileSecretKey}`,
     GOTRUE_MAILER_AUTOCONFIRM: `GOTRUE_MAILER_AUTOCONFIRM=${mailerAutoconfirm}`,
@@ -186,6 +267,19 @@ async function main() {
   await writeFile(ENV_PATH, nextEnv, 'utf8');
   console.log('✓ Wrote .env (Postgres, JWT secret + signed anon/service keys, MinIO, app secrets).\n');
 
+  const remapped = [
+    appPort !== 3000 && `app ${appPort} (default 3000)`,
+    kongPort !== 8000 && `Supabase API ${kongPort} (default 8000)`,
+    minioS3Port !== 9000 && `MinIO S3 ${minioS3Port} (default 9000)`,
+    minioConsolePort !== 9001 && `MinIO console ${minioConsolePort} (default 9001)`,
+    dbPort !== 54322 && `Postgres ${dbPort} (default 54322)`,
+  ].filter(Boolean);
+  if (remapped.length) {
+    console.log(
+      `↔ Some default host ports were unavailable (in use, or reserved by the OS — common on Windows).\n  Remapped to free ports: ${remapped.join(', ')}.\n`,
+    );
+  }
+
   // A brand-new .env means brand-new secrets. Postgres only runs its init scripts (which set role
   // passwords) on an EMPTY volume, so a leftover volume from a previous install would keep the old
   // credentials and GoTrue/PostgREST could not log in. Reset volumes when the config is fresh.
@@ -202,10 +296,10 @@ async function main() {
   await run(compose.cmd, [...compose.args, 'up', '-d', '--build'], { cwd: PROJECT_ROOT });
 
   console.log('\n🎉 Stack is up!');
-  console.log('  1. Open the app:    http://localhost:3000');
-  console.log('  2. Finish setup:    complete the browser wizard at http://localhost:3000/setup');
+  console.log(`  1. Open the app:    http://localhost:${appPort}`);
+  console.log(`  2. Finish setup:    complete the browser wizard at http://localhost:${appPort}/setup`);
   console.log('                      (creates your first admin — auto-confirmed, no email needed).');
-  console.log('  3. Supabase API:    http://localhost:8000    MinIO console: http://localhost:9001');
+  console.log(`  3. Supabase API:    http://localhost:${kongPort}    MinIO console: http://localhost:${minioConsolePort}`);
   const composeStr = `${compose.cmd} ${compose.args.join(' ')}`.trim();
   console.log(`\n  Logs: ${composeStr} logs -f nextblock-cms   |   Stop: ${composeStr} down   (add -v to wipe data)`);
 }
