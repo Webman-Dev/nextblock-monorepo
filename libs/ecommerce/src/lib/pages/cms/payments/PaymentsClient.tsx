@@ -1,6 +1,7 @@
 'use client';
 
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Button,
   Card,
@@ -43,25 +44,26 @@ export function PaymentsClient({
   saveAction: (formData: FormData) => Promise<void>;
   saveCredentialsAction: (formData: FormData) => Promise<void>;
 }) {
+  const router = useRouter();
+  const [isSaving, startSaving] = useTransition();
   const [enabledProviders, setEnabledProviders] = useState(initialEnabledProviders);
-
-  // `useState` seeds only on mount. After a save the server action calls
-  // revalidatePath and streams fresh `initialEnabledProviders` back, but the
-  // local copy above would ignore it — so the checkbox kept showing the value
-  // from the last hard reload until an F5. Re-sync when the server value
-  // actually changes (React's "adjust state during render" pattern; the guard
-  // compares by value so it can't loop on the new object identity each render).
-  const [lastServerValue, setLastServerValue] = useState(initialEnabledProviders);
-  if (
-    lastServerValue.stripe !== initialEnabledProviders.stripe ||
-    lastServerValue.freemius !== initialEnabledProviders.freemius
-  ) {
-    setLastServerValue(initialEnabledProviders);
-    setEnabledProviders(initialEnabledProviders);
-  }
 
   const isStripeReady = configStatus?.stripe?.hasKeys;
   const isFreemiusReady = configStatus?.freemius?.hasKeys;
+
+  // Persist the toggles, then force a fresh RSC read. `revalidatePath` alone
+  // left the client Router Cache serving the pre-save value, so the checkbox
+  // snapped back to its old state until a hard reload; `router.refresh()`
+  // refetches the route so the reconciled UI matches what we just wrote.
+  function handleSaveProviders() {
+    const formData = new FormData();
+    formData.set('stripe_enabled', enabledProviders.stripe ? 'true' : 'false');
+    formData.set('freemius_enabled', enabledProviders.freemius ? 'true' : 'false');
+    startSaving(async () => {
+      await saveAction(formData);
+      router.refresh();
+    });
+  }
 
   return (
     <div className="space-y-6 max-w-3xl p-8">
@@ -75,17 +77,7 @@ export function PaymentsClient({
 
       <ProviderCredentialsCard credentials={credentials} saveAction={saveCredentialsAction} />
 
-      <form action={saveAction} className="space-y-6">
-      <input
-        type="hidden"
-        name="stripe_enabled"
-        value={enabledProviders.stripe ? 'true' : 'false'}
-      />
-      <input
-        type="hidden"
-        name="freemius_enabled"
-        value={enabledProviders.freemius ? 'true' : 'false'}
-      />
+      <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Payment Providers</CardTitle>
@@ -154,11 +146,13 @@ export function PaymentsClient({
           </ProviderToggleCard>
 
           <div className="flex justify-end pt-4">
-            <SaveButton />
+            <Button type="button" disabled={isSaving} onClick={handleSaveProviders}>
+              {isSaving ? 'Saving...' : 'Save Changes'}
+            </Button>
           </div>
         </CardContent>
       </Card>
-      </form>
+      </div>
     </div>
   );
 }

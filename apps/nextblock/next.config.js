@@ -92,6 +92,12 @@ const nextConfig = {
   ...(isDockerStandalone
     ? { output: 'standalone', outputFileTracingRoot: path.join(__dirname, '../../') }
     : {}),
+  // Dev-only: origins the dev server trusts for internal requests (HMR websocket,
+  // dev runtime). Without this, browsing via a non-default host like 127.0.0.1 or a
+  // *.localhost subdomain makes Next 16 reject the ws://.../_next/webpack-hmr handshake,
+  // which stalls client hydration (the header auth/search/cart controls never mount).
+  // Inert in production. Add any extra dev hosts you browse from here.
+  allowedDevOrigins: ['localhost', '127.0.0.1'],
   experimental: {
     optimizePackageImports: ['@nextblock-cms/ui', '@nextblock-cms/utils'],
   },
