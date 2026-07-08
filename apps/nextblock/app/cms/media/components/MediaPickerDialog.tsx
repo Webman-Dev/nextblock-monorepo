@@ -8,8 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogFooter,
-  DialogClose,
   Button,
   Input,
   Separator,
@@ -246,13 +244,6 @@ export default function MediaPickerDialog({
             </div>
           )}
         </div>
-        <DialogFooter className="mt-auto pt-4">
-          <DialogClose asChild>
-            <Button type="button" variant="outline">
-              Close
-            </Button>
-          </DialogClose>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
