@@ -249,7 +249,10 @@ export async function getProducts(
       { count: 'exact' }
     )
     .range(start, end)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    // Storefront reads only surface published products. Draft and archived
+    // products must never appear in public blocks such as the product grid.
+    .eq('status', 'active');
 
   if (languageId) {
     query = query.eq('language_id', languageId);

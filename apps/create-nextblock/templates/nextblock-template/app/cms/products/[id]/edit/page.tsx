@@ -157,9 +157,21 @@ export default async function EditProductPage({
       }
     }
 
+    // Product drafts persist prices in major units (dollars, the ProductForm
+    // value shape), but ProductForm re-divides the top-level price/sale_price by
+    // 100 because it expects a raw product row (minor units/cents). Convert the
+    // draft's dollars back to cents so the form shows the saved amount instead of
+    // 1/100th of it (e.g. an imported $29.50 draft otherwise renders as $0.30).
+    // The prices maps and variant prices are already in the dollar shape the form
+    // consumes directly, so only these two scalars need converting.
+    const draftDollarsToStoredCents = (value: unknown) =>
+      typeof value === 'number' && Number.isFinite(value) ? Math.round(value * 100) : value;
+
     normalizedInitialData = {
       ...meta,
       id: product.id,
+      price: draftDollarsToStoredCents(meta.price),
+      sale_price: draftDollarsToStoredCents(meta.sale_price),
       product_media: hydratedProductMedia,
       category_ids: meta.category_ids ?? assignedCategories.map((c: any) => c.id),
     };
