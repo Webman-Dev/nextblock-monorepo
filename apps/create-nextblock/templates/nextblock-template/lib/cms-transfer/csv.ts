@@ -119,7 +119,11 @@ export function getTemplateCsv(contentType: CmsContentType) {
 }
 
 export function parseCsv(content: string) {
-  const result = Papa.parse<CmsCsvRow>(content, {
+  // Strip a leading UTF-8 BOM so a spreadsheet-exported CSV doesn't turn the
+  // first header into a BOM-prefixed "id" (which would break header matching).
+  // Our own export prepends this BOM so Excel opens characters like ™ correctly.
+  const withoutBom = content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
+  const result = Papa.parse<CmsCsvRow>(withoutBom, {
     header: true,
     skipEmptyLines: "greedy",
     transformHeader: (header) => header.trim(),

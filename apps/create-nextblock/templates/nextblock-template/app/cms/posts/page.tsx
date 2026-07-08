@@ -88,6 +88,7 @@ export default async function CmsPostsListPage(props: CmsPostsListPageProps) {
             contentType="posts"
             label="Posts"
             languageId={filterLangId}
+            hasContent={postsWithDetails.length > 0}
           />
           <LanguageFilterSelect
             allLanguages={allLanguages}

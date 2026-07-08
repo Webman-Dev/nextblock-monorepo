@@ -47,10 +47,24 @@ interface ContentTransferControlsProps {
   contentType: CmsContentType;
   label: string;
   languageId?: number;
+  /**
+   * Whether there is anything to export in the current view. When explicitly
+   * `false`, the Export button is disabled (exporting would produce an
+   * empty, header-only file). Import stays available so an empty store can
+   * still be populated. Omitting the prop keeps the button enabled.
+   */
+  hasContent?: boolean;
 }
 
 function downloadTextFile(fileName: string, mimeType: string, content: string) {
-  const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+  // Spreadsheet apps (Excel, Numbers, Google Sheets) decode a CSV with the local
+  // ANSI codepage unless it opens with a UTF-8 byte-order mark, which turns
+  // characters like ™, ©, or é into mojibake ("NextBlockâ„¢"). Prefixing the BOM
+  // keeps UTF-8 intact on open and on re-save. JSON stays BOM-free because
+  // JSON.parse rejects a leading BOM.
+  const needsBom = /csv/i.test(mimeType) && content.charCodeAt(0) !== 0xfeff;
+  const payload = needsBom ? String.fromCharCode(0xfeff) + content : content;
+  const blob = new Blob([payload], { type: `${mimeType};charset=utf-8` });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -133,6 +147,7 @@ export function ContentTransferControls({
   contentType,
   label,
   languageId,
+  hasContent,
 }: ContentTransferControlsProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -219,12 +234,37 @@ export function ContentTransferControls({
     });
   };
 
+  const nothingToExport = hasContent === false;
+  const exportButton = (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={exportCsv}
+      disabled={isPending || nothingToExport}
+    >
+      <Download className="mr-2 h-4 w-4" />
+      Export CSV
+    </Button>
+  );
+
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button type="button" variant="outline" size="sm" onClick={exportCsv} disabled={isPending}>
-        <Download className="mr-2 h-4 w-4" />
-        Export CSV
-      </Button>
+      {nothingToExport ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {/* Wrapper keeps the tooltip hoverable even though the button is disabled. */}
+              <span tabIndex={0} className="inline-flex">
+                {exportButton}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>No {label.toLowerCase()} to export yet.</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        exportButton
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
           <Upload className="mr-2 h-4 w-4" />

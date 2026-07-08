@@ -41,6 +41,29 @@ describe("cms transfer csv helpers", () => {
     expect(JSON.parse(parsed.rows[0].blocks_json)).toHaveLength(1);
   });
 
+  it("round-trips special characters like the ™ symbol", () => {
+    const csv = stringifyCsv(
+      [{ language_code: "en", title: "NextBlock™ — Café © 2026" }],
+      ["language_code", "title"]
+    );
+
+    const parsed = parseCsv(csv);
+
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows[0].title).toBe("NextBlock™ — Café © 2026");
+  });
+
+  it("strips a leading UTF-8 BOM so the first header still matches", () => {
+    const csv = stringifyCsv([{ id: "1", title: "NextBlock™" }], ["id", "title"]);
+    // Spreadsheet apps (and our own export) prefix the file with a BOM.
+    const parsed = parseCsv(String.fromCharCode(0xfeff) + csv);
+
+    expect(parsed.errors).toEqual([]);
+    expect(Object.keys(parsed.rows[0])).toContain("id");
+    expect(parsed.rows[0].id).toBe("1");
+    expect(parsed.rows[0].title).toBe("NextBlock™");
+  });
+
   it("converts plain HTML into a text block fallback", () => {
     const errors: Array<{ row: number; message: string }> = [];
     const blocks = normalizeBlocksFromFields({
