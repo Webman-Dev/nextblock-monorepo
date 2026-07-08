@@ -45,6 +45,21 @@ export function PaymentsClient({
 }) {
   const [enabledProviders, setEnabledProviders] = useState(initialEnabledProviders);
 
+  // `useState` seeds only on mount. After a save the server action calls
+  // revalidatePath and streams fresh `initialEnabledProviders` back, but the
+  // local copy above would ignore it — so the checkbox kept showing the value
+  // from the last hard reload until an F5. Re-sync when the server value
+  // actually changes (React's "adjust state during render" pattern; the guard
+  // compares by value so it can't loop on the new object identity each render).
+  const [lastServerValue, setLastServerValue] = useState(initialEnabledProviders);
+  if (
+    lastServerValue.stripe !== initialEnabledProviders.stripe ||
+    lastServerValue.freemius !== initialEnabledProviders.freemius
+  ) {
+    setLastServerValue(initialEnabledProviders);
+    setEnabledProviders(initialEnabledProviders);
+  }
+
   const isStripeReady = configStatus?.stripe?.hasKeys;
   const isFreemiusReady = configStatus?.freemius?.hasKeys;
 
@@ -207,6 +222,19 @@ function ProviderCredentialsCard({
         <form action={saveAction} className="space-y-6">
           <div className="space-y-4">
             <h3 className="text-sm font-semibold">Stripe (physical products)</h3>
+            <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground space-y-1.5">
+              <p>
+                In the Stripe Dashboard (Developers → Webhooks → Add endpoint), set the
+                endpoint URL to <code>https://your-domain/api/webhooks/stripe</code>, then paste
+                that endpoint&apos;s signing secret below.
+              </p>
+              <p>
+                For local testing, forward events with the Stripe CLI:{' '}
+                <code>stripe listen --forward-to localhost:4200/api/webhooks/stripe</code>{' '}
+                (or <code>npm run stripe</code>). Use the <code>whsec_…</code> secret it prints
+                on startup as the signing secret below — it differs from a Dashboard endpoint&apos;s.
+              </p>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <CredentialField
                 id="stripe_publishableKey"

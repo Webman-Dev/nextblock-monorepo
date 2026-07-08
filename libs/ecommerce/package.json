@@ -1,6 +1,6 @@
 {
   "name": "@nextblock-cms/ecom",
-  "version": "0.12.6",
+  "version": "0.12.8",
   "publishConfig": {
     "access": "public"
   },
