@@ -1794,7 +1794,6 @@ export type Database = {
         Row: {
           avatar_url: string | null
           full_name: string | null
-          github_username: string | null
           id: string
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
@@ -1804,7 +1803,6 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           full_name?: string | null
-          github_username?: string | null
           id: string
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -1814,7 +1812,6 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           full_name?: string | null
-          github_username?: string | null
           id?: string
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]

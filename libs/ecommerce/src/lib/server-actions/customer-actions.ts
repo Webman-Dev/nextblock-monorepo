@@ -9,7 +9,6 @@ export interface ProfileUpdateData {
   full_name?: string;
   avatar_url?: string;
   website?: string;
-  github_username?: string;
   phone?: string;
   billing_address?: CustomerAddressInput | null;
   shipping_address?: CustomerAddressInput | null;
@@ -28,7 +27,6 @@ export async function updateProfile(data: ProfileUpdateData) {
     full_name: data.full_name || null,
     avatar_url: data.avatar_url || null,
     website: data.website || null,
-    github_username: data.github_username || null,
     phone: data.phone || null,
     updated_at: new Date().toISOString(),
   };

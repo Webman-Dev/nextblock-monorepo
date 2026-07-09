@@ -212,7 +212,7 @@ export default function InteractionsModerationClient({
       <div className="space-y-4">
         {filteredInteractions.length > 0 ? (
           filteredInteractions.map((item) => {
-            const authorName = item.profiles?.full_name || item.profiles?.github_username || "Anonymous";
+            const authorName = item.profiles?.full_name || "Anonymous";
             const dateStr = new Date(item.created_at).toLocaleString();
             const targetName = item.products?.title || item.posts?.title || "Unknown Target";
             const targetUrl = item.product_id

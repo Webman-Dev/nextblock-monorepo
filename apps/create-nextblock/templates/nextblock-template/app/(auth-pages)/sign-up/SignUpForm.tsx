@@ -7,7 +7,6 @@ import { Button, Input, Label } from "@nextblock-cms/ui";
 import Link from "next/link";
 import { useTranslations } from "@nextblock-cms/utils";
 import { useSearchParams } from "next/navigation";
-import { GitHubLoginButton } from "../../../components/GitHubLoginButton";
 import { ArrowRight, CheckCircle2, Mail } from "lucide-react";
 
 import { SandboxCredentialsAlert } from "../../../components/SandboxCredentialsAlert";
@@ -100,19 +99,6 @@ export default function SignUpForm({ botProtection, scriptNonce }: SignUpFormPro
         </p>
 
         <div className="mt-8 flex flex-col gap-2">
-          <GitHubLoginButton t={t} redirectTo="/profile" />
-
-          <div className="relative py-2">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                {t('or_continue_with') || "Or continue with"}
-              </span>
-            </div>
-          </div>
-
           <div className="flex flex-col gap-2 [&>input]:mb-3">
             <Label htmlFor="email">{t('email')}</Label>
             <Input name="email" placeholder={t('you_at_example_com')} required />

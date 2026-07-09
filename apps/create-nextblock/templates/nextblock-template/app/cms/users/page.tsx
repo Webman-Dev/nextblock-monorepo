@@ -129,7 +129,6 @@ export default async function CmsUsersListPage() {
                 <TableHead className="w-[80px]">Avatar</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Full Name</TableHead>
-                <TableHead>GitHub</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Joined</TableHead>
                 <TableHead className="text-right w-[80px]">Actions</TableHead>
@@ -146,7 +145,6 @@ export default async function CmsUsersListPage() {
                   </TableCell>
                   <TableCell className="font-medium">{authUser.email}</TableCell>
                   <TableCell className="text-muted-foreground">{profile?.full_name || "N/A"}</TableCell>
-                  <TableCell className="text-muted-foreground">{profile?.github_username || "-"}</TableCell>
                   <TableCell>
                     <Badge variant={
                         profile?.role === "ADMIN" ? "destructive" :

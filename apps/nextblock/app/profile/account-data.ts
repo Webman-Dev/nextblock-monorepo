@@ -18,7 +18,7 @@ export async function requireProfileAccountContext(redirectTo: string) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, avatar_url, full_name, github_username')
+    .select('id, avatar_url, full_name')
     .eq('id', user.id)
     .maybeSingle();
 

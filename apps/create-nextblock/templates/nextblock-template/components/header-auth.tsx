@@ -20,7 +20,7 @@ import { User, LogOut, LayoutDashboard } from "lucide-react";
 export default function AuthButton() {
   const { user, profile, isAdmin, isWriter } = useAuth();
   const { t } = useTranslations();
-  const displayName = profile?.full_name || profile?.github_username || user?.email || null;
+  const displayName = profile?.full_name || user?.email || null;
   const showAdminLink = isAdmin || isWriter;
 
   const handleSignOut = async () => {

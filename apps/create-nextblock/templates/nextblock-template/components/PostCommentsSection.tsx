@@ -77,7 +77,7 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
     try {
       const { data, error: dbError } = await supabase
         .from("cms_interactions" as any)
-        .select("*, profiles(full_name, avatar_url, github_username)")
+        .select("*, profiles(full_name, avatar_url)")
         .eq("post_id", postId)
         .eq("type", "comment")
         .eq("status", "approved")
@@ -280,7 +280,7 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
           optimisticComments.map((comment) => {
             const hasLiked = likedIds.includes(comment.id) || comment.tempHasReacted;
             const likeCount = (comment.reactions as Record<string, number>)?.likes || 0;
-            const commenterName = comment.profiles?.full_name || comment.profiles?.github_username || "Anonymous";
+            const commenterName = comment.profiles?.full_name || "Anonymous";
             const dateStr = new Date(comment.created_at).toLocaleDateString(lang, {
               year: "numeric",
               month: "long",

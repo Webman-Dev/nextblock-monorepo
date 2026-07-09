@@ -43,7 +43,6 @@ export type OrderItem = {
 export type Profile = {
   avatar_url: string | null;
   full_name: string | null;
-  github_username?: string | null;
   id: string;
   phone?: string | null;
   role?: string | null;

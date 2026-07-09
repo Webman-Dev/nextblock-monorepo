@@ -95,7 +95,7 @@ NextBlock CMS integrates with a specific, opinionated set of external services w
 The system delivers six top-level capability families, each surfaced through dedicated route groups in the Next.js App Router:
 
 1. **Public Content Delivery** — Routes `app/[slug]`, `app/article/[slug]`, shared `app/layout.tsx`, `robots.txt`, and `sitemap.xml` serve marketing pages, articles, and product pages.
-2. **Authentication & Account Management** — The `app/(auth-pages)/*` group and `app/auth/callback/route.ts` implement Supabase Auth session exchange, GitHub OAuth (via `components/GitHubLoginButton.tsx`), and profile completion flows.
+2. **Authentication & Account Management** — The `app/(auth-pages)/*` group and `app/auth/callback/route.ts` implement Supabase Auth email/password session exchange and profile completion flows.
 3. **CMS Administration** — The `app/cms/*` route tree provides block editing, media management, product catalog management, order administration, shipping configuration, tax settings, and user administration, gated by role.
 4. **Commerce Surface** — Routes `app/product/*`, `app/cart`, and `app/checkout` implement the customer-facing storefront; `app/api/checkout/route.ts` handles server-side checkout orchestration.
 5. **Operational Endpoints** — Routes `app/api/webhooks/*` (Stripe/Freemius) and `app/api/cron/*` (sandbox reset, currency sync) provide the machine-to-machine surface; `app/api/upload` and `app/api/process-image` handle media ingestion and optimization.
@@ -390,7 +390,7 @@ Based on claims and deferred items in the repository documentation, the followin
 
 #### 1.3.3.5 Integration Points Not Covered
 
-The system does not natively integrate with: alternative payment processors beyond Stripe and Freemius, alternative authentication providers beyond Supabase Auth and GitHub OAuth, alternative object-storage providers beyond S3-compatible endpoints (specifically Cloudflare R2 in reference deployments), alternative monorepo orchestrators beyond Nx, or alternative hosting platforms requiring cron-configuration formats other than Vercel's `vercel.json` schema.
+The system does not natively integrate with: alternative payment processors beyond Stripe and Freemius, alternative authentication providers beyond Supabase Auth, alternative object-storage providers beyond S3-compatible endpoints (specifically Cloudflare R2 in reference deployments), alternative monorepo orchestrators beyond Nx, or alternative hosting platforms requiring cron-configuration formats other than Vercel's `vercel.json` schema.
 
 ---
 
@@ -700,9 +700,9 @@ Three menu locations are supported: `HEADER`, `FOOTER`, and `SIDEBAR`, encoded b
 
 **Description**
 
-Authentication is layered over Supabase Auth using `@supabase/ssr` 0.7.0 and `@supabase/supabase-js` 2.77.0. Server actions in `apps/nextblock/app/actions.ts` implement sign-in, sign-up, and forgot-password flows, complemented by GitHub OAuth via `components/GitHubLoginButton.tsx`. The `app/auth/callback/route.ts` route exchanges authorization codes for sessions (`supabase.auth.exchangeCodeForSession()`), loads the profile role, and redirects using `resolvePostAuthRedirect()`. Email templates for confirmation, email change, invitation, magic-link, reauthentication, and password recovery reside in `libs/db/src/supabase/templates/`. A `handle_new_user()` trigger function paired with the `on_auth_user_created` trigger on `auth.users` automatically provisions a `profiles` row on registration.
+Authentication is layered over Supabase Auth using `@supabase/ssr` 0.7.0 and `@supabase/supabase-js` 2.77.0. Server actions in `apps/nextblock/app/actions.ts` implement sign-in, sign-up, and forgot-password flows. The `app/auth/callback/route.ts` route exchanges authorization codes for sessions (used by the email-confirmation and recovery flows) (`supabase.auth.exchangeCodeForSession()`), loads the profile role, and redirects using `resolvePostAuthRedirect()`. Email templates for confirmation, email change, invitation, magic-link, reauthentication, and password recovery reside in `libs/db/src/supabase/templates/`. A `handle_new_user()` trigger function paired with the `on_auth_user_created` trigger on `auth.users` automatically provisions a `profiles` row on registration.
 
-**Business Value:** Eliminates the need for adopters to integrate a separate identity provider. **User Benefits:** Multiple sign-in methods (email/password, GitHub OAuth, magic link) with localized email templates. **Technical Context:** Supabase Auth session cookies are synchronized by the request proxy to Server Components.
+**Business Value:** Eliminates the need for adopters to integrate a separate identity provider. **User Benefits:** Multiple sign-in methods (email/password, magic link) with localized email templates. **Technical Context:** Supabase Auth session cookies are synchronized by the request proxy to Server Components.
 
 **Dependencies**
 
@@ -1323,7 +1323,7 @@ This subsection provides the detailed, testable requirements that operationalize
 | Requirement ID | Description | Priority | Complexity |
 |:--|:--|:--|:--|
 | F-002-RQ-001 | Supabase Auth session exchange MUST succeed via `app/auth/callback/route.ts` | Must-Have | Medium |
-| F-002-RQ-002 | GitHub OAuth MUST be available as an alternative sign-in path | Should-Have | Low |
+| F-002-RQ-002 | *(Removed)* Third-party OAuth sign-in is intentionally not provided — it cannot be configured as part of a one-click deployment | Won't-Have | — |
 | F-002-RQ-003 | `handle_new_user()` trigger MUST provision a `profiles` row on every `auth.users` insert | Must-Have | Medium |
 | F-003-RQ-001 | First registered user MUST become `ADMIN`; subsequent users MUST become `USER` | Must-Have | Medium |
 | F-003-RQ-002 | `/cms` MUST require `WRITER` or `ADMIN`; `/cms/admin`, `/cms/users`, `/cms/settings` MUST require `ADMIN` only | Must-Have | Medium |
@@ -2135,7 +2135,7 @@ graph TB
 
 #### 3.4.1.1 Responsibilities
 
-Supabase provides PostgreSQL data storage, Row-Level Security, authentication (F-002), and session cookie management. GitHub OAuth is layered on top via the `components/GitHubLoginButton.tsx` component. Six email templates for the authentication flow (confirmation, email change, invitation, magic-link, reauthentication, password recovery) reside in `libs/db/src/supabase/templates/` and are synchronized with Supabase through `npm run configure:supabase-auth`.
+Supabase provides PostgreSQL data storage, Row-Level Security, authentication (F-002), and session cookie management. Six email templates for the authentication flow (confirmation, email change, invitation, magic-link, reauthentication, password recovery) reside in `libs/db/src/supabase/templates/` and are synchronized with Supabase through `npm run configure:supabase-auth`.
 
 #### 3.4.1.2 Environment Variables
 
@@ -2428,7 +2428,7 @@ The Default Technology Stack specified for this project included assumptions tha
 | **Terraform** IaC | Declarative configs (`vercel.json`, Supabase migrations, `project.json`) | Application-layer declarative configuration suffices given the managed-service stack |
 | **GitHub Actions** CI/CD | Vercel Git deploy + Node release scripts | Release cadence and library publishing managed via `tools/scripts/*` |
 | **Python / Flask** backend | TypeScript + Next.js 16 route handlers | Monolithic Next.js model enables RSC co-located with API routes |
-| **Auth0** authentication | Supabase Auth + GitHub OAuth | Supabase Auth unifies database and identity for RLS-driven authorization (F-003) |
+| **Auth0** authentication | Supabase Auth (GoTrue) | Supabase Auth unifies database and identity for RLS-driven authorization (F-003) |
 | **MongoDB** database | Supabase PostgreSQL | Relational schema with RLS is better suited to the commerce and content data model |
 | **Langchain** AI framework | Not present (structural AI-readiness only) | Per §1.3.3.1, AI runtime features are "coming soon" |
 | **React-Native** mobile | Not used — web-only Next.js | Out-of-scope per §1.3.3.5 |
@@ -4156,7 +4156,7 @@ The Zustand-backed cart (with `persist` middleware) captures items in the browse
 
 #### 5.1.3.3 Primary Authoring Flow
 
-Authors sign in via Supabase Auth or GitHub OAuth, whose callback is handled at `app/auth/callback/route.ts`. After the role-based redirect from `lib/auth-redirects.ts`, authors enter `/cms/*` surfaces, which use Tiptap-based editors and the in-app `blockRegistry.ts` to compose pages. Published content triggers a Supabase webhook to `/api/revalidate`, which calls `revalidatePath` for `/slug` (pages) or `/article/slug` (posts).
+Authors sign in via Supabase Auth (email/password), whose email-confirmation callback is handled at `app/auth/callback/route.ts`. After the role-based redirect from `lib/auth-redirects.ts`, authors enter `/cms/*` surfaces, which use Tiptap-based editors and the in-app `blockRegistry.ts` to compose pages. Published content triggers a Supabase webhook to `/api/revalidate`, which calls `revalidatePath` for `/slug` (pages) or `/article/slug` (posts).
 
 #### 5.1.3.4 Integration, Transformation, and Storage
 
@@ -4703,7 +4703,7 @@ The primary error notification path is the Feedback System (F-029), which allows
 
 #### 5.4.4.1 Authentication
 
-Supabase Auth provides email/password, magic-link, and GitHub OAuth. Sign-in server actions live in `app/actions.ts`; the OAuth callback resolves to `app/auth/callback/route.ts`, which exchanges the code for a session and then delegates to `lib/auth-redirects.ts` for the post-auth destination. The redirect resolver validates that any `next` parameter is a safe internal path, preserves `/reset-password`, routes `ADMIN`/`WRITER` to `safePath` or `/cms/dashboard`, sends `USER` without `full_name` to `/profile`, and otherwise falls back to `/`.
+Supabase Auth provides email/password and magic-link sign-in. Sign-in server actions live in `app/actions.ts`; the email-confirmation callback resolves to `app/auth/callback/route.ts`, which exchanges the code for a session and then delegates to `lib/auth-redirects.ts` for the post-auth destination. The redirect resolver validates that any `next` parameter is a safe internal path, preserves `/reset-password`, routes `ADMIN`/`WRITER` to `safePath` or `/cms/dashboard`, sends `USER` without `full_name` to `/profile`, and otherwise falls back to `/`.
 
 #### 5.4.4.2 Authorization Model
 
@@ -5656,7 +5656,7 @@ Declared in migration `00000000000001_setup_cms_core.sql`, these tables bootstra
 | Table | Primary Key | Key Columns / Constraints |
 |-------|-------------|----------------------------|
 | `site_settings` | `key` (text) | `value jsonb` — flat key/value store for global configuration |
-| `profiles` | `id uuid` | FK → `auth.users(id) ON DELETE CASCADE`; `role user_role NOT NULL DEFAULT 'USER'`; `full_name`, `avatar_url`, `website`, `github_username`, `phone` |
+| `profiles` | `id uuid` | FK → `auth.users(id) ON DELETE CASCADE`; `role user_role NOT NULL DEFAULT 'USER'`; `full_name`, `avatar_url`, `website`, `phone` |
 | `user_addresses` | `id` (identity) | FK → `profiles(id)`; `address_type CHECK IN ('billing','shipping')`; `is_default`, `recipient_name`, `line1/2`, `city`, `state`, `postal_code`, `country_code` |
 | `languages` | `id bigint` | `code UNIQUE`, `name`, `is_default`, `is_active DEFAULT true` |
 | `media` | `id uuid` | `uploader_id → profiles`; `object_key UNIQUE`; `variants jsonb`; `blur_data_url`; `width`, `height`, `size_bytes`, `file_path`, `folder` |
@@ -7561,16 +7561,17 @@ flowchart TB
 
 #### 6.4.2.1 Identity Management
 
-The identity provider is **Supabase Auth (GoTrue)**, consumed through the `@supabase/ssr` adapter layer. Four distinct authentication surfaces are exposed to end users:
+The identity provider is **Supabase Auth (GoTrue)**, consumed through the `@supabase/ssr` adapter layer. Three distinct authentication surfaces are exposed to end users:
 
 | Authentication Method | Entry Point | Implementation |
 |-----------------------|-------------|----------------|
 | Email/Password | `signInAction` in `app/actions.ts` | `supabase.auth.signInWithPassword` |
 | Account Registration | `signUpAction` in `app/actions.ts` | `supabase.auth.signUp` with email confirmation |
 | Password Recovery | `forgotPasswordAction` in `app/actions.ts` | `supabase.auth.resetPasswordForEmail` (OTP) |
-| GitHub OAuth | `components/GitHubLoginButton.tsx` | `supabase.auth.signInWithOAuth({ provider: 'github' })` |
 
-The OAuth callback route handler at `apps/nextblock/app/auth/callback/route.ts` receives a short-lived authorization code on the query string, invokes `supabase.auth.exchangeCodeForSession(code)` to convert the code to a session, fetches the user profile via `getProfileWithRoleServerSide(user.id)`, and delegates redirection logic to `resolvePostAuthRedirect` in `apps/nextblock/lib/auth-redirects.ts`. On any exchange failure, the handler redirects to `initialRedirectTo || '/'`.
+> **No third-party OAuth providers.** GitHub OAuth sign-in and account-linking were removed: they cannot be provisioned as part of a one-click deployment (each install needs its own GitHub OAuth app, client secret, and Supabase's manual-linking toggle, none of which can ship in a migration). The unrelated self-update "Connect GitHub" flow (`lib/updates/*`) is not an end-user auth surface and remains.
+
+The auth callback route handler at `apps/nextblock/app/auth/callback/route.ts` receives a short-lived authorization code on the query string (used by the email-confirmation and recovery flows), invokes `supabase.auth.exchangeCodeForSession(code)` to convert the code to a session, fetches the user profile via `getProfileWithRoleServerSide(user.id)`, and delegates redirection logic to `resolvePostAuthRedirect` in `apps/nextblock/lib/auth-redirects.ts`. On any exchange failure, the handler redirects to `initialRedirectTo || '/'`.
 
 Six transactional email templates reside in `libs/db/src/supabase/templates/` — covering confirmation, email change, invitation, magic-link, reauthentication, and password recovery — and are synchronized with the Supabase project via `npm run configure:supabase-auth`.
 
@@ -7652,7 +7653,7 @@ The following sequence diagram depicts the full authentication flow from credent
 sequenceDiagram
     actor User
     participant Browser
-    participant AuthPage as /sign-in or OAuth Button
+    participant AuthPage as /sign-in
     participant SbAuth as Supabase Auth (GoTrue)
     participant Callback as /auth/callback/route.ts
     participant Resolver as lib/auth-redirects.ts
@@ -7660,12 +7661,12 @@ sequenceDiagram
     participant Profiles as profiles table
     participant CMS as /cms/*
 
-    User->>Browser: Submit credentials or OAuth click
-    Browser->>AuthPage: POST (email+password) or redirect (OAuth)
-    AuthPage->>SbAuth: signInWithPassword / signInWithOAuth
-    SbAuth-->>Browser: OAuth code or Session cookies
+    User->>Browser: Submit credentials
+    Browser->>AuthPage: POST (email+password)
+    AuthPage->>SbAuth: signInWithPassword
+    SbAuth-->>Browser: Session cookies
     
-    alt OAuth flow
+    alt Email confirmation / recovery (code exchange)
         Browser->>Callback: GET /auth/callback?code=...
         Callback->>SbAuth: exchangeCodeForSession(code)
         SbAuth-->>Callback: Set-Cookie (HttpOnly, Secure)
@@ -7720,7 +7721,7 @@ Authorization is driven by the `user_role` enum declared in migration `000000000
 | `USER` | Default for new signups | Customer profile, addresses, own orders |
 | `service_role` | Supabase service-role key | Webhooks, cron, admin server actions — bypasses RLS |
 
-Role assignment at bootstrap is governed by the `handle_new_user()` SECURITY DEFINER trigger function bound to `auth.users` via `on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW`. The trigger acquires a `FOR UPDATE` lock on the `site_settings` row where `setting_key = 'is_admin_created'`, assigns `role='ADMIN'` if the latch is false (and sets the latch), otherwise assigns `role='USER'`, detects GitHub OAuth provider for the `github_username` column, and always creates a `profiles` row. The `FOR UPDATE` lock guarantees race-free first-admin election even under concurrent signup attempts.
+Role assignment at bootstrap is governed by the `handle_new_user()` SECURITY DEFINER trigger function bound to `auth.users` via `on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW`. The trigger acquires a `FOR UPDATE` lock on the `site_settings` row where `setting_key = 'is_admin_created'`, assigns `role='ADMIN'` if the latch is false (and sets the latch), otherwise assigns `role='USER'`, and always creates a `profiles` row. The `FOR UPDATE` lock guarantees race-free first-admin election even under concurrent signup attempts.
 
 #### 6.4.3.2 Permission Management and SECURITY DEFINER Helpers
 
@@ -7908,7 +7909,7 @@ The repository does not implement explicit PII masking transforms. The following
 | Error message sanitization | All error responses | Never contains JWT, service role key, or DB connection strings |
 | Admin user list | `/cms/users` | Email addresses displayed (no masking) — audience is ADMIN only |
 
-The CMS admin user-list page uses the service-role client via `supabaseAdmin.auth.admin.listUsers` to enumerate users; since the audience of that surface is already `ADMIN`-gated, no masking transform is applied. PII in `profiles` (`full_name`, `avatar_url`, `phone`, `github_username`) is protected by RLS self-scoping rather than cryptographic masking.
+The CMS admin user-list page uses the service-role client via `supabaseAdmin.auth.admin.listUsers` to enumerate users; since the audience of that surface is already `ADMIN`-gated, no masking transform is applied. PII in `profiles` (`full_name`, `avatar_url`, `phone`) is protected by RLS self-scoping rather than cryptographic masking.
 
 #### 6.4.4.4 Secure Communication
 
@@ -8202,7 +8203,6 @@ For details beyond the scope of this section, consult:
 - `apps/nextblock/app/(auth-pages)/post-sign-in/page.tsx` — 27-line post-auth routing page
 - `apps/nextblock/app/unauthorized/page.tsx` — 26-line unauthorized display
 - `apps/nextblock/context/AuthContext.tsx` — Client auth state provider
-- `apps/nextblock/components/GitHubLoginButton.tsx` — 37-line OAuth initiation
 
 #### CMS Guards and Admin Self-Protection
 
@@ -9691,7 +9691,7 @@ Four distinct persona classes consume the UI, with role-based affordances enforc
 The UI surface supports six top-level capability families, each rooted in a dedicated route group:
 
 1. **Public Content Delivery (F-001)** — locale-aware marketing, article, and product-detail rendering with SEO metadata, `robots.txt`, and `sitemap.xml`.
-2. **Authentication & Account (F-002)** — email/password, GitHub OAuth, magic-link, password reset, profile completion.
+2. **Authentication & Account (F-002)** — email/password, magic-link, password reset, profile completion.
 3. **CMS Authoring (F-004, F-005, F-006, F-007, F-008, F-009)** — block-based page building, Tiptap rich text, media library, translations, revision history, navigation management.
 4. **Commerce (F-013 through F-021)** — catalog browsing, variant selection, cart, checkout, invoicing, customer order history.
 5. **Administration (F-003, F-030)** — user management, package activation, site settings, shipping/tax configuration.
@@ -9852,8 +9852,8 @@ The auth forms consume a typed message union defined in `apps/nextblock/componen
 
 | Path | File | Purpose |
 |:--|:--|:--|
-| `/sign-in` | `app/(auth-pages)/sign-in/page.tsx` | Email/password + GitHub OAuth, forgot-password link, sandbox credentials alert |
-| `/sign-up` | `app/(auth-pages)/sign-up/page.tsx` | Registration (email or GitHub) with success confirmation view |
+| `/sign-in` | `app/(auth-pages)/sign-in/page.tsx` | Email/password, forgot-password link, sandbox credentials alert |
+| `/sign-up` | `app/(auth-pages)/sign-up/page.tsx` | Registration (email) with success confirmation view |
 | `/forgot-password` | `app/(auth-pages)/forgot-password/page.tsx` | Password reset request form |
 | `/post-sign-in` | `app/(auth-pages)/post-sign-in/page.tsx` | Server routing endpoint (non-visual redirector) |
 | `/auth/callback` | `app/auth/callback/route.ts` | OAuth authorization-code exchange handler |
@@ -10046,10 +10046,9 @@ The component consumes `useTheme` from `next-themes`, uses a mounted-state guard
 
 | Interaction | Implementation |
 |:--|:--|
-| Sign-In Form | Email/password + forgot-password link + `GitHubLoginButton` + `SandboxCredentialsAlert` when `NEXT_PUBLIC_IS_SANDBOX === 'true'`. Max-width `160` (mx-auto). Hidden `redirect` field preserved for post-sign-in routing |
+| Sign-In Form | Email/password + forgot-password link + `SandboxCredentialsAlert` when `NEXT_PUBLIC_IS_SANDBOX === 'true'`. Max-width `160` (mx-auto). Hidden `redirect` field preserved for post-sign-in routing |
 | Sign-Up Form | Shared layout with sign-in. Success view rendered when URL contains success flag: confirmation badge (`rounded-full bg-primary/10 text-primary`), `CheckCircle2` icon, email-check instructions with `Mail` icon, "Back to sign in" / "Use different email" actions |
 | Header Auth (`header-auth.tsx`) | Missing-env warning badge + disabled buttons when env vars absent; avatar dropdown (`h-8 w-8 rounded-full`) with profile/dashboard/logout when authenticated; sign-in/sign-up buttons for guests |
-| GitHub OAuth (`GitHubLoginButton.tsx`) | Outline variant, full-width button with embedded GitHub SVG; invokes `supabase.auth.signInWithOAuth({ provider: 'github' })` with callback URL |
 
 ### 7.7.6 Commerce UI Interactions
 
@@ -10275,7 +10274,7 @@ Server-resolved locale (from `X-User-Locale` header) is bridged to client via `T
 
 #### Authentication Screens
 
-- `apps/nextblock/app/(auth-pages)/sign-in/page.tsx` — Sign-in with GitHub OAuth
+- `apps/nextblock/app/(auth-pages)/sign-in/page.tsx` — Email/password sign-in
 - `apps/nextblock/app/(auth-pages)/sign-up/page.tsx` — Sign-up with success state
 - `apps/nextblock/app/(auth-pages)/forgot-password/page.tsx` — Password reset
 - `apps/nextblock/app/(auth-pages)/post-sign-in/page.tsx` — Server-routing endpoint
@@ -10298,7 +10297,6 @@ Server-resolved locale (from `X-User-Locale` header) is bridged to client via `T
 - `apps/nextblock/components/ResponsiveNav.tsx` — Hierarchical navigation
 - `apps/nextblock/components/theme-switcher.tsx` — Four-theme dropdown
 - `apps/nextblock/components/header-auth.tsx` — Authenticated vs guest auth UI
-- `apps/nextblock/components/GitHubLoginButton.tsx` — OAuth trigger button
 - `apps/nextblock/components/form-message.tsx` — Typed auth message renderer
 
 #### Client Context Providers
@@ -10627,7 +10625,7 @@ Three distinct cloud providers compose the production footprint. The rationale f
 | Provider | Role | Selection Rationale |
 |:--|:--|:--|
 | Vercel | Compute + Edge + Cron + RUM | Zero-configuration Next.js 16 hosting; built-in image optimization; native App Router support; no container orchestration overhead; cron scheduling integrated with function lifecycle |
-| Supabase | PostgreSQL + Auth + Storage metadata | Managed PostgreSQL 17 with built-in RLS; GoTrue auth service; GitHub OAuth support; SQL migration CLI; PITR included; generous free tier for open-core distribution |
+| Supabase | PostgreSQL + Auth + Storage metadata | Managed PostgreSQL 17 with built-in RLS; GoTrue auth service; SQL migration CLI; PITR included; generous free tier for open-core distribution |
 | Cloudflare R2 | S3-compatible object storage | Zero egress fees (superior to AWS S3 for media-heavy workloads); S3-compatible API usable via `@aws-sdk/client-s3 ^3.920.0`; global edge presence |
 
 **Documented deviations from the Default Technology Stack** (per §3.7.1):
@@ -10639,7 +10637,7 @@ Three distinct cloud providers compose the production footprint. The rationale f
 | Terraform | Declarative config across `vercel.json`, migrations, `config.toml`, `.env.exemple`, `nx.json` | No multi-service provisioning to orchestrate |
 | GitHub Actions | Vercel Git integration + Node release scripts in `tools/scripts/` | No CI test suite to gate; publication handled imperatively |
 | Python / Flask | TypeScript + Next.js route handlers | Unified stack across client + server |
-| Auth0 | Supabase Auth (GoTrue) + GitHub OAuth | Integrated with RLS at the database layer |
+| Auth0 | Supabase Auth (GoTrue) | Integrated with RLS at the database layer |
 | MongoDB | Supabase PostgreSQL | Relational data model + RLS + SECURITY DEFINER helpers |
 
 ### 8.3.2 Core Services and Versions
@@ -10663,7 +10661,7 @@ Three distinct cloud providers compose the production footprint. The rationale f
 | PostgreSQL | `postgres` | `^3.8` (inventory dual-path fallback) | Direct SQL when RPC unavailable |
 | SSR client | `@supabase/ssr` | `^0.7.0` | Server-side cookie-based session |
 | Browser client | `@supabase/supabase-js` | `^2.77.0` | Client components + editor |
-| Auth (GoTrue) | via `@supabase/ssr` | bundled | Email/password, GitHub OAuth, password reset |
+| Auth (GoTrue) | via `@supabase/ssr` | bundled | Email/password, password reset |
 | Realtime | bundled (enabled in `config.toml`) | bundled | WebSocket subscriptions |
 | CLI | `supabase` | invoked via `npx supabase` | Migrations, link, db push, config push |
 

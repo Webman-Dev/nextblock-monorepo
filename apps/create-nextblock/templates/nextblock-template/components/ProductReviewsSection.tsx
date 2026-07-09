@@ -79,7 +79,7 @@ export default function ProductReviewsSection({ productId }: ProductReviewsSecti
     try {
       const { data, error: dbError } = await supabase
         .from("cms_interactions" as any)
-        .select("*, profiles(full_name, avatar_url, github_username)")
+        .select("*, profiles(full_name, avatar_url)")
         .eq("product_id", productId)
         .eq("type", "review")
         .eq("status", "approved")
@@ -317,7 +317,7 @@ export default function ProductReviewsSection({ productId }: ProductReviewsSecti
           optimisticReviews.map((review) => {
             const hasLiked = likedIds.includes(review.id) || review.tempHasReacted;
             const likeCount = (review.reactions as Record<string, number>)?.likes || 0;
-            const reviewerName = review.profiles?.full_name || review.profiles?.github_username || "Anonymous";
+            const reviewerName = review.profiles?.full_name || "Anonymous";
             const dateStr = new Date(review.created_at).toLocaleDateString(lang, {
               year: "numeric",
               month: "long",

@@ -191,7 +191,6 @@ export default function CmsClientLayout({
 
   const getInitials = () => {
     if (profile && profile.full_name) return profile.full_name.split(' ').map((n: string) => n[0]).join('').substring(0,2).toUpperCase();
-    if (profile && profile.github_username) return profile.github_username.substring(0,2).toUpperCase();
     if (user && user.email) return user.email.charAt(0).toUpperCase();
     return "U"; // Default fallback
   }
@@ -470,11 +469,11 @@ export default function CmsClientLayout({
           <div className="mt-auto p-3 border-t border-slate-200 dark:border-slate-700/60 shrink-0">
             <div className="flex items-center gap-3">
               <Avatar className="h-10 w-10 border">
-                <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.github_username || user?.email} />
+                <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.full_name || user?.email} />
                 <AvatarFallback className="bg-primary/10 text-primary font-medium">{getInitials()}</AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate text-slate-700 dark:text-slate-200">{profile?.full_name || profile?.github_username || user?.email}</p>
+                <p className="text-sm font-medium truncate text-slate-700 dark:text-slate-200">{profile?.full_name || user?.email}</p>
                 <div className="flex items-center gap-1.5">
                   <div className={cn("h-2 w-2 rounded-full", getRoleColor())}></div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">{role}</p>

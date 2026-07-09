@@ -27,7 +27,7 @@ export function ProfileAccountSidebar({
 }: ProfileAccountSidebarProps) {
   const { t } = useTranslations();
   const displayName =
-    profile.full_name || profile.github_username || user.email || 'User';
+    profile.full_name || user.email || 'User';
 
   return (
     <Card className="h-fit">

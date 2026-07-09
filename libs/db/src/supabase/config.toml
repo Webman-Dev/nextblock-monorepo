@@ -167,14 +167,17 @@ otp_expiry = 3600
 # Use a production-ready SMTP server.
 # For hosted Supabase projects, prefer `npm run configure:supabase-auth`, which reads
 # SMTP_* from your env file and pushes the settings plus branded templates automatically.
-# For local/self-hosted Supabase, you can uncomment this block and keep using env() values.
-[auth.email.smtp]
-host = "env(SMTP_HOST)"
-port = "env(SMTP_PORT)"
-user = "env(SMTP_USER)"
-pass = "env(SMTP_PASS)"
-admin_email = "env(SMTP_FROM_EMAIL)"
-sender_name = "env(SMTP_FROM_NAME)"
+# For local/self-hosted Supabase, uncomment this block and set the SMTP_* env vars — note
+# that `port` must resolve to a valid number, so an unset SMTP_PORT breaks `supabase db push`.
+# Left commented by default so a hosted `npm run db:migrate` (which does not push config) works
+# with no SMTP env vars set; local dev falls back to the Inbucket test inbox.
+# [auth.email.smtp]
+# host = "env(SMTP_HOST)"
+# port = "env(SMTP_PORT)"
+# user = "env(SMTP_USER)"
+# pass = "env(SMTP_PASS)"
+# admin_email = "env(SMTP_FROM_EMAIL)"
+# sender_name = "env(SMTP_FROM_NAME)"
 
 [auth.email.template.confirmation]
 subject = "Confirm your email"

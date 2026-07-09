@@ -11,7 +11,6 @@ import {
   AvatarFallback,
   AvatarImage,
 } from '@nextblock-cms/ui/avatar';
-import { Badge } from '@nextblock-cms/ui/badge';
 import { Button } from '@nextblock-cms/ui/button';
 import {
   Card,
@@ -34,7 +33,7 @@ import { Separator } from '@nextblock-cms/ui/separator';
 import { updateProfile, type ProfileUpdateData } from '../server-actions/customer-actions';
 import { addressesMatch, emptyCustomerAddress, normalizeCustomerAddress } from '../customer';
 import { createClient, type Database } from '@nextblock-cms/db';
-import { Github, Globe, Mail, Phone, User as UserIcon, Upload } from 'lucide-react';
+import { Globe, Phone, User as UserIcon, Upload } from 'lucide-react';
 import { useTranslations } from '@nextblock-cms/utils';
 import { countries, normalizeCountryCode } from '../countries';
 
@@ -172,9 +171,6 @@ export function CustomerProfileForm({
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(
     initialSuccessMessage ? { type: 'success', text: initialSuccessMessage } : null
   );
-  const [isGithubConnected, setIsGithubConnected] = useState(false);
-  const [githubEmail, setGithubEmail] = useState<string | null>(null);
-
   const derivedUseBillingForShipping =
     initialData?.use_billing_for_shipping ??
     (!initialData?.shipping_address ||
@@ -192,7 +188,6 @@ export function CustomerProfileForm({
       full_name: initialData?.full_name || '',
       avatar_url: initialData?.avatar_url || '',
       website: initialData?.website || '',
-      github_username: initialData?.github_username || '',
       phone: initialData?.phone || '',
       role: initialData?.role,
       use_billing_for_shipping: derivedUseBillingForShipping,
@@ -210,7 +205,6 @@ export function CustomerProfileForm({
       full_name: initialData.full_name || '',
       avatar_url: initialData.avatar_url || '',
       website: initialData.website || '',
-      github_username: initialData.github_username || '',
       phone: initialData.phone || '',
       role: initialData.role,
       use_billing_for_shipping:
@@ -240,40 +234,6 @@ export function CustomerProfileForm({
         return;
       }
 
-      const githubIdentity = user.identities?.find((id: any) => id.provider === 'github');
-
-      if (githubIdentity) {
-        setIsGithubConnected(true);
-        const providerEmail =
-          githubIdentity.identity_data?.email ||
-          (user.app_metadata.provider === 'github' ? user.email : null);
-        setGithubEmail(providerEmail as string);
-
-        if (!getValues('website')) {
-          const blog =
-            githubIdentity.identity_data?.custom_claims?.blog ||
-            githubIdentity.identity_data?.blog ||
-            githubIdentity.identity_data?.html_url;
-          if (blog) {
-            setValue('website', blog);
-          }
-        }
-
-        if (!getValues('avatar_url')) {
-          const avatar = githubIdentity.identity_data?.avatar_url;
-          if (avatar) {
-            setValue('avatar_url', avatar);
-          }
-        }
-
-        const githubUsername =
-          githubIdentity.identity_data?.user_name ||
-          githubIdentity.identity_data?.preferred_username;
-        if (githubUsername) {
-          setValue('github_username', githubUsername);
-        }
-      }
-
       if (!getValues('full_name') && user.user_metadata?.full_name) {
         setValue('full_name', user.user_metadata.full_name);
       }
@@ -281,19 +241,6 @@ export function CustomerProfileForm({
 
     checkUser();
   }, [getValues, setValue]);
-
-  const handleLinkGithub = async () => {
-    const supabase = createClient();
-    const { error } = await supabase.auth.linkIdentity({ provider: 'github' });
-
-    if (error) {
-      console.error('Error linking GitHub:', error);
-      setMsg({
-        type: 'error',
-        text: t('github_link_failed') || 'Failed to link GitHub account',
-      });
-    }
-  };
 
   const handleMediaSelect = (media: any) => {
     const url = resolveMediaUrl(media?.object_key ?? media?.file_path);
@@ -386,11 +333,6 @@ export function CustomerProfileForm({
             <div className="flex items-center gap-2">
               <span className="font-semibold text-lg">{watch('full_name') || t('full_name')}</span>
             </div>
-            {isGithubConnected && (
-              <Badge variant="secondary" className="mt-2 w-fit gap-1">
-                <Github className="h-3 w-3" /> {t('github_connected') || 'GitHub Connected'}
-              </Badge>
-            )}
           </div>
 
           {accountLinks?.length ? (
@@ -435,35 +377,11 @@ export function CustomerProfileForm({
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="website" className="flex items-center gap-2">
-                  <Globe className="h-4 w-4" /> {t('website')}
-                </Label>
-                <Input id="website" {...register('website')} placeholder="https://example.com" />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="github_username" className="flex items-center gap-2">
-                  <Github className="h-4 w-4" /> {t('github_username')}
-                </Label>
-
-                {isGithubConnected ? (
-                  <div className="space-y-2">
-                    <Input id="github_username" {...register('github_username')} disabled className="bg-muted" />
-                    {githubEmail && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Mail className="h-3 w-3" /> {t('linked_to') || 'Linked to'} {githubEmail}
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <Button type="button" variant="outline" className="w-full" onClick={handleLinkGithub}>
-                    <Github className="mr-2 h-4 w-4" />
-                    {t('connect_github')}
-                  </Button>
-                )}
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="website" className="flex items-center gap-2">
+                <Globe className="h-4 w-4" /> {t('website')}
+              </Label>
+              <Input id="website" {...register('website')} placeholder="https://example.com" />
             </div>
 
             <Separator className="my-2" />

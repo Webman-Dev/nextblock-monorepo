@@ -36,7 +36,6 @@ export default async function ProfilePage() {
             full_name: profile.full_name || '',
             avatar_url: profile.avatar_url || '',
             website: profile.website || '',
-            github_username: profile.github_username || '',
             phone: profile.phone || '',
             billing_address: billingAddress,
             shipping_address: shippingAddress,

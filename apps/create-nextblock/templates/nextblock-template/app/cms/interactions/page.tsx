@@ -32,7 +32,7 @@ export default async function InteractionsPage() {
       created_at,
       product_id,
       post_id,
-      profiles(full_name, avatar_url, github_username),
+      profiles(full_name, avatar_url),
       products(title, slug),
       posts(title, slug)
     `)

@@ -26,8 +26,6 @@ function getMessage(searchParams: URLSearchParams): Message | undefined {
     return undefined;
 }
 
-import { GitHubLoginButton } from "../../../components/GitHubLoginButton";
-
 export default function Login() {
   const { t } = useTranslations();
   const searchParams = useSearchParams();
@@ -46,17 +44,6 @@ export default function Login() {
       </p>
 
       <div className="flex flex-col gap-2 mt-8">
-        <GitHubLoginButton t={t} redirectTo={redirectParam || undefined} />
-
-        <div className="relative py-2">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-2 text-muted-foreground">{t('or_continue_with') || "Or continue with"}</span>
-          </div>
-        </div>
-
         <form className="flex flex-col gap-2 [&>input]:mb-3">
           {redirectParam && <input type="hidden" name="redirect" value={redirectParam} />}
           <Label htmlFor="email">{t('email')}</Label>

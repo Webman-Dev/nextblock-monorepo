@@ -377,7 +377,7 @@ const tableConfigs = {
     primaryKey: ['id'],
   },
   profiles: {
-    columns: ['id', 'updated_at', 'full_name', 'avatar_url', 'website', 'github_username', 'phone', 'role'],
+    columns: ['id', 'updated_at', 'full_name', 'avatar_url', 'website', 'phone', 'role'],
     description: 'Read-only user profiles. Never mutate through Cortex AI.',
     primaryKey: ['id'],
     readOnly: true,

@@ -30,7 +30,6 @@ export default function UserForm({ userToEditAuth, userToEditProfile, userToEdit
       if (data.full_name !== undefined) formData.append('full_name', data.full_name || '');
       if (data.avatar_url !== undefined) formData.append('avatar_url', data.avatar_url || '');
       if (data.website !== undefined) formData.append('website', data.website || '');
-      if (data.github_username !== undefined) formData.append('github_username', data.github_username || '');
       if (data.phone !== undefined) formData.append('phone', data.phone || '');
       if (data.role !== undefined) formData.append('role', data.role);
       
@@ -48,7 +47,6 @@ export default function UserForm({ userToEditAuth, userToEditProfile, userToEdit
               full_name: userToEditProfile?.full_name || '',
               avatar_url: userToEditProfile?.avatar_url || '',
               website: userToEditProfile?.website || '',
-              github_username: userToEditProfile?.github_username || '',
               phone: userToEditProfile?.phone || '',
               role: userToEditProfile?.role || 'USER',
               billing_address: userToEditAddresses.billingAddress,
