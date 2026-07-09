@@ -1,13 +1,111 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import { Input, Label } from '@nextblock-cms/ui';
+import { getCurrencyMinorUnitFactor } from '@nextblock-cms/utils';
 
 import {
   normalizeCurrencyRecord,
   type CurrencyRecord,
 } from '../../../../currency';
+
+/** Currency amounts render with 2 decimals, except zero-decimal currencies (JPY, …). */
+function currencyDecimals(currencyCode: string): number {
+  return getCurrencyMinorUnitFactor(currencyCode) === 1 ? 0 : 2;
+}
+
+function formatMoney(value: number | null | undefined, decimals: number): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '';
+  }
+  return value.toFixed(decimals);
+}
+
+interface MoneyInputProps {
+  id: string;
+  currencyCode: string;
+  value: number | null | undefined;
+  disabled?: boolean;
+  placeholder?: string;
+  className?: string;
+  /** Sale prices may be cleared to null; base prices fall back to 0 when empty. */
+  allowEmpty?: boolean;
+  onValueChange: (value: number | null) => void;
+}
+
+/**
+ * A money field that always displays the padded, currency-correct amount
+ * (e.g. "29.50", not "29.5") when idle, while letting the user type freely
+ * without the value being reformatted mid-keystroke. A plain
+ * `<input type="number">` can't show trailing zeros because its value is a raw
+ * JS number, so we buffer the text locally and re-pad on blur.
+ */
+function MoneyInput({
+  id,
+  currencyCode,
+  value,
+  disabled,
+  placeholder,
+  className,
+  allowEmpty = false,
+  onValueChange,
+}: MoneyInputProps) {
+  const decimals = currencyDecimals(currencyCode);
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState(() => formatMoney(value, decimals));
+
+  // While the field isn't being edited, mirror external updates (auto-fill,
+  // currency sync, variant recalcs) and keep the padded display.
+  useEffect(() => {
+    if (!focused) {
+      setDraft(formatMoney(value, decimals));
+    }
+  }, [value, decimals, focused]);
+
+  return (
+    <Input
+      id={id}
+      type="text"
+      inputMode="decimal"
+      value={draft}
+      disabled={disabled}
+      placeholder={placeholder}
+      className={className}
+      onFocus={() => setFocused(true)}
+      onChange={(event) => {
+        // Keep only digits and a single decimal separator as the user types.
+        let cleaned = event.target.value.replace(/[^0-9.]/g, '');
+        const firstDot = cleaned.indexOf('.');
+        if (firstDot !== -1) {
+          cleaned =
+            cleaned.slice(0, firstDot + 1) +
+            cleaned.slice(firstDot + 1).replace(/\./g, '');
+        }
+        setDraft(cleaned);
+        if (cleaned === '' || cleaned === '.') {
+          onValueChange(allowEmpty ? null : 0);
+          return;
+        }
+        const parsed = Number(cleaned);
+        if (!Number.isNaN(parsed)) {
+          onValueChange(parsed);
+        }
+      }}
+      onBlur={() => {
+        setFocused(false);
+        // Snap the stored value to the currency precision so it matches the
+        // padded display and never lingers as e.g. 29.999.
+        if (value !== null && value !== undefined && !Number.isNaN(value)) {
+          const rounded = Number(value.toFixed(decimals));
+          if (rounded !== value) {
+            onValueChange(rounded);
+          }
+        }
+      }}
+    />
+  );
+}
 
 interface CurrencyPriceFieldsProps {
   idPrefix?: string;
@@ -91,19 +189,14 @@ export function CurrencyPriceFields({
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-bold pointer-events-none">
                     {normalizedCurrency.symbol}
                   </span>
-                  <Input
+                  <MoneyInput
                     id={`${idPrefix}-price-${normalizedCurrency.code}`}
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={prices[normalizedCurrency.code] ?? ''}
+                    currencyCode={normalizedCurrency.code}
+                    value={prices[normalizedCurrency.code]}
                     disabled={isInputDisabled}
                     className="h-8 w-full text-sm pl-6"
-                    onChange={(event) =>
-                      onPriceChange(
-                        normalizedCurrency.code,
-                        Number(event.target.value || 0)
-                      )
+                    onValueChange={(value) =>
+                      onPriceChange(normalizedCurrency.code, value ?? 0)
                     }
                   />
                 </div>
@@ -121,22 +214,16 @@ export function CurrencyPriceFields({
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-bold pointer-events-none">
                     {normalizedCurrency.symbol}
                   </span>
-                  <Input
+                  <MoneyInput
                     id={`${idPrefix}-sale-price-${normalizedCurrency.code}`}
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={salePrices[normalizedCurrency.code] ?? ''}
+                    currencyCode={normalizedCurrency.code}
+                    value={salePrices[normalizedCurrency.code]}
                     disabled={isInputDisabled}
                     placeholder={isStoreManaged ? 'Auto' : '—'}
+                    allowEmpty
                     className="h-8 w-full text-sm pl-6"
-                    onChange={(event) =>
-                      onSalePriceChange(
-                        normalizedCurrency.code,
-                        event.target.value === ''
-                          ? null
-                          : Number(event.target.value)
-                      )
+                    onValueChange={(value) =>
+                      onSalePriceChange(normalizedCurrency.code, value)
                     }
                   />
                 </div>

@@ -231,12 +231,14 @@ export async function getProducts(
     search = '',
     languageId,
     categoryId,
+    status = 'active',
   }: {
     page?: number;
     limit?: number;
     search?: string;
     languageId?: number;
     categoryId?: string;
+    status?: 'active' | 'draft' | 'archived' | 'all';
   } = {}
 ) {
   const start = (page - 1) * limit;
@@ -249,10 +251,14 @@ export async function getProducts(
       { count: 'exact' }
     )
     .range(start, end)
-    .order('created_at', { ascending: false })
-    // Storefront reads only surface published products. Draft and archived
-    // products must never appear in public blocks such as the product grid.
-    .eq('status', 'active');
+    .order('created_at', { ascending: false });
+
+  // Storefront reads default to active-only so draft and archived products never
+  // appear in public blocks such as the product grid. CMS/admin callers pass
+  // status: 'all' to list every product regardless of its publish state.
+  if (status !== 'all') {
+    query = query.eq('status', status);
+  }
 
   if (languageId) {
     query = query.eq('language_id', languageId);

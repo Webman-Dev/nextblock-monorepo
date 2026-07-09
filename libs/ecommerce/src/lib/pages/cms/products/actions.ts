@@ -8,7 +8,9 @@ import {
 
 export async function getProducts(options?: { page?: number; limit?: number; search?: string; languageId?: number }) {
   const supabase = createClient();
-  const { data, count, error } = await (await getProductsLib(supabase, options));
+  // The CMS product list must surface every product regardless of publish state
+  // (draft, active, archived). Only storefront reads filter down to active.
+  const { data, count, error } = await (await getProductsLib(supabase, { ...options, status: 'all' }));
   if (error) throw new Error(error.message);
   return { data, count };
 }
