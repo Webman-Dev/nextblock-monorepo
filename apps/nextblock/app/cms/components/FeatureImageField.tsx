@@ -157,6 +157,7 @@ export default function FeatureImageField({
             </DialogHeader>
             <div className="p-1">
               <MediaUploadForm
+                compact
                 returnJustData={true}
                 defaultFolder={uploadFolder}
                 onUploadSuccess={(newlyUploadedMedia) => {
