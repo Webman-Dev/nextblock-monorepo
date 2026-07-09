@@ -1,6 +1,8 @@
 'use client';
 
 import {
+  FreemiusLicensePanel,
+  type FreemiusOrderLicense,
   InvoiceViewerShell,
   type InvoicePresentationData,
   buildInvoiceDocumentLabels,
@@ -19,6 +21,7 @@ interface CustomerOrderDetailPageClientProps {
     invoice_number: string | null;
   };
   invoice: InvoicePresentationData | null;
+  license: FreemiusOrderLicense | null;
   profile: ProfileAccountSummary;
   user: ProfileAccountUser;
 }
@@ -26,6 +29,7 @@ interface CustomerOrderDetailPageClientProps {
 export function CustomerOrderDetailPageClient({
   order,
   invoice,
+  license,
   profile,
   user,
 }: CustomerOrderDetailPageClientProps) {
@@ -57,6 +61,7 @@ export function CustomerOrderDetailPageClient({
             'print_invoice',
             'Print / Save as PDF'
           )}
+          beforeInvoice={<FreemiusLicensePanel license={license} />}
           action={{
             href: '/profile/orders',
             label: translateOrFallback(

@@ -3,6 +3,8 @@ import { createClient } from '@nextblock-cms/db/server';
 
 import type { InvoicePresentationData } from './invoice';
 import { getInvoicePresentationData } from './invoice-server';
+import { getFreemiusOrderLicense } from './freemius-license';
+import type { FreemiusOrderLicense } from './freemius-license-types';
 
 type SupabaseLikeClient = SupabaseClient<any>;
 
@@ -19,6 +21,13 @@ export interface CustomerOrderSummary {
   tax_total: number | null;
   total: number;
 }
+
+// A "pending" order is only an unfinished checkout attempt: the row is created
+// before the shopper is redirected to the payment provider and is never updated
+// if they abandon (or the provider rejects) the purchase. These never represent
+// a real order, so they are hidden from the customer's own history — only orders
+// that actually went through (trial/paid/shipped/cancelled/refunded) are shown.
+const HIDDEN_CUSTOMER_ORDER_STATUSES = ['pending'] as const;
 
 function getSupabaseClient(client?: SupabaseLikeClient) {
   return client ?? (createClient() as unknown as SupabaseLikeClient);
@@ -49,6 +58,7 @@ export async function getCurrentCustomerOrders(
       'id, invoice_number, paid_at, created_at, currency, status, provider, subtotal, shipping_total, tax_total, total'
     )
     .eq('user_id', user.id)
+    .not('status', 'in', `(${HIDDEN_CUSTOMER_ORDER_STATUSES.join(',')})`)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -72,6 +82,7 @@ export async function getCurrentCustomerOrder(
     )
     .eq('id', orderId)
     .eq('user_id', user.id)
+    .not('status', 'in', `(${HIDDEN_CUSTOMER_ORDER_STATUSES.join(',')})`)
     .maybeSingle();
 
   if (error) {
@@ -87,6 +98,7 @@ export async function getCurrentCustomerOrderInvoice(
 ): Promise<{
   order: CustomerOrderSummary;
   invoice: InvoicePresentationData | null;
+  license: FreemiusOrderLicense | null;
 } | null> {
   const supabase = getSupabaseClient(client);
   const order = await getCurrentCustomerOrder(orderId, supabase);
@@ -99,8 +111,18 @@ export async function getCurrentCustomerOrderInvoice(
     ? await getInvoicePresentationData(orderId, supabase)
     : null;
 
+  // Resolve the activatable license on demand for digital (Freemius) orders so
+  // the buyer can retrieve their key from their order history. Owner scoping is
+  // guaranteed because `getCurrentCustomerOrder` already enforced ownership and
+  // we reuse the same request-scoped client.
+  const license =
+    order.provider === 'freemius'
+      ? await getFreemiusOrderLicense({ orderId, client: supabase })
+      : null;
+
   return {
     order,
     invoice,
+    license,
   };
 }

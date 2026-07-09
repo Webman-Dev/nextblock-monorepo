@@ -316,6 +316,20 @@ export function resolveFreemiusStatusFromWebhookEvent(input: {
     return 'cancelled';
   }
 
+  // A free trial (no payment method) has no subscription and no positive
+  // amount, so the only reliable "this is a trial" signal is the trial end
+  // date carried on the purchase data. Without this a no-card trial would be
+  // left as "pending" forever whenever purchase data is available.
+  if (
+    currentStatus === 'pending' &&
+    (purchaseData?.trialEndsAt ||
+      purchaseData?.trial_ends_at ||
+      purchaseData?.trialEnds ||
+      purchaseData?.trial_ends)
+  ) {
+    return 'trial';
+  }
+
   if (
     purchaseData?.subscriptionId ||
     purchaseData?.subscription_id ||
@@ -326,6 +340,41 @@ export function resolveFreemiusStatusFromWebhookEvent(input: {
   }
 
   return currentStatus as FreemiusTrackedOrderStatus;
+}
+
+// Combine the statuses resolved from the browser checkout callback and from
+// Freemius purchase data, returning the furthest-along state without ever
+// downgrading an order that is already paid. "paid" wins, then "cancelled",
+// then "trial"; otherwise the current status is kept.
+function mergeFreemiusCheckoutStatus(
+  currentStatus: FreemiusTrackedOrderStatus,
+  ...candidates: Array<FreemiusTrackedOrderStatus | null>
+): FreemiusTrackedOrderStatus {
+  const resolved = candidates.filter(
+    (value): value is FreemiusTrackedOrderStatus => Boolean(value)
+  );
+
+  if (currentStatus === 'paid' || resolved.includes('paid')) {
+    return 'paid';
+  }
+
+  if (resolved.includes('cancelled')) {
+    return 'cancelled';
+  }
+
+  if (resolved.includes('trial')) {
+    return 'trial';
+  }
+
+  if (resolved.includes('shipped')) {
+    return 'shipped';
+  }
+
+  if (resolved.includes('refunded')) {
+    return 'refunded';
+  }
+
+  return currentStatus;
 }
 
 function buildMetadataUpdate(metadata: FreemiusOrderMetadata, eventType: string | null) {
@@ -474,15 +523,29 @@ export async function syncFreemiusCheckoutOrder(input: {
     input.checkoutResponse,
     order.status
   );
-  const nextStatus = purchaseData
+  const webhookStatus = purchaseData
     ? resolveFreemiusStatusFromWebhookEvent({
         event,
         currentStatus: order.status,
         purchaseData,
       })
-    : callbackStatus === 'paid'
+    : null;
+  // The browser checkout callback can confirm a trial, but it must never be
+  // trusted to assert a *paid* state on its own (the amount can be missing or
+  // tampered with client-side). Only purchase data fetched from Freemius may
+  // promote an order to "paid".
+  const trustedCallbackStatus =
+    callbackStatus === 'paid'
       ? (order.status as FreemiusTrackedOrderStatus)
       : callbackStatus;
+  // Take the most advanced state either signal reports, so a valid "trial" from
+  // the callback is not lost when purchase-data resolution can only see
+  // "pending" (e.g. a no-card trial with no subscription).
+  const nextStatus = mergeFreemiusCheckoutStatus(
+    order.status as FreemiusTrackedOrderStatus,
+    trustedCallbackStatus,
+    webhookStatus
+  );
   const status = await applyFreemiusOrderState({
     client,
     order,

@@ -1397,7 +1397,6 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
 
                         <Button
                           className="w-full h-auto min-h-[2.75rem] py-2"
-                          variant={freemiusItems.length > 1 ? 'outline' : 'default'}
                           onClick={() =>
                             handlePay(
                               'freemius',

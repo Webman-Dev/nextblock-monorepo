@@ -15,6 +15,8 @@ export * from './lib/components/CustomerProfileForm';
 export * from './lib/components/SubscriptionSelector';
 export * from './lib/components/InvoiceDocument';
 export * from './lib/components/InvoiceViewerShell';
+export * from './lib/components/FreemiusLicensePanel';
+export type { FreemiusOrderLicense } from './lib/freemius-license-types';
 export * from './lib/components/AccountNavigationMenu';
 export * from './lib/components/SimpleTiptapRenderer';
 export { ProductForm } from './lib/pages/cms/products/components/ProductForm';

@@ -3670,7 +3670,10 @@ export async function executeUpdateSectionColumnBlock(
   };
 }
 
-export async function executeCreateCmsPage(input: CreateCmsPageInput, context?: ToolExecutionContext) {
+export async function executeCreateCmsPage(
+  input: z.input<typeof createCmsPageInputSchema>,
+  context?: ToolExecutionContext
+) {
   const parsed = createCmsPageInputSchema.parse(input);
   const supabase = getSupabase(context);
   const actorUserId = getActorUserId(context);
@@ -4590,7 +4593,7 @@ function withActionPlanTranslationGroup(
 }
 
 export async function executeCmsActionPlan(
-  input: ExecuteCmsActionPlanInput,
+  input: z.input<typeof executeCmsActionPlanInputSchema>,
   context?: ToolExecutionContext
 ) {
   const parsed = executeCmsActionPlanInputSchema.parse(input);

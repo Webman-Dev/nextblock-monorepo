@@ -191,9 +191,9 @@ describe('cortex widget registry insert', () => {
 
     await expect(
       insertCortexWidgetDefinition({ from: () => query } as any, definition)
-    ).rejects.toMatchObject<CortexWidgetRegistryInsertError>({
+    ).rejects.toMatchObject({
       code: '23505',
       status: 409,
-    });
+    } satisfies Partial<CortexWidgetRegistryInsertError>);
   });
 });

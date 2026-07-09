@@ -22,6 +22,7 @@ export * from './lib/factory';
 export * from './lib/providers/stripe';
 export * from './lib/providers/freemius';
 export * from './lib/freemius-order-sync';
+export * from './lib/freemius-license';
 export {
   getProduct as getCmsProduct,
   getProducts as getCmsProducts,

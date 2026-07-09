@@ -60,6 +60,26 @@ describe('Freemius order status resolution', () => {
     ).toBe('paid');
   });
 
+  it('marks a no-card trial as trial from purchase data with a trial end date', () => {
+    // A free trial has no subscription and no positive amount, so the trial end
+    // date on the purchase data is the only signal that it is a trial.
+    expect(
+      resolveFreemiusStatusFromWebhookEvent({
+        currentStatus: 'pending',
+        event: {
+          type: 'checkout.purchaseCompleted',
+          data: { license_id: 'license_free_trial' },
+          objects: {},
+        },
+        purchaseData: {
+          licenseId: 'license_free_trial',
+          initialAmount: 0,
+          trialEndsAt: '2026-05-21 00:00:00',
+        },
+      })
+    ).toBe('trial');
+  });
+
   it('marks trial renewal extension webhooks as paid', () => {
     expect(
       resolveFreemiusStatusFromWebhookEvent({

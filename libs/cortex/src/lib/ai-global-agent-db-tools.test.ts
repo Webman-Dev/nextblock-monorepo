@@ -6,11 +6,23 @@ import {
   executeReadDatabaseRecords,
 } from './ai-global-agent-db-tools';
 
+// The mutation helpers return an inferred union (confirmation preview | executed
+// result | failure). These tests deliberately drive the confirmation-preview
+// branch, so narrow to the preview shape for the confirmation-only fields; the
+// runtime expect() assertions still validate the actual values.
+function asDbConfirmation(result: unknown) {
+  return result as {
+    confirmationPhrase: string;
+    message: string;
+    requiresConfirmation: boolean;
+  };
+}
+
 type MockRow = Record<string, any>;
 type MockDatabase = Record<string, MockRow[]>;
 
 class MockQuery {
-  private filters: Array<{ column: string; operator: string; value: unknown }> = [];
+  private filters: Array<{ column: string; operator: string; value: any }> = [];
   private limitCount: number | null = null;
   private operation: 'delete' | 'insert' | 'select' | 'update' | 'upsert' = 'select';
   private orderBy: { ascending: boolean; column: string } | null = null;
@@ -265,7 +277,7 @@ describe('Cortex AI generic database tools', () => {
     expect(result.success).toBe(true);
     expect(result.tables.some((table) => table.table === 'profiles' && table.readOnly)).toBe(true);
     expect(result.tables.some((table) => table.table === 'user_addresses' && table.readOnly)).toBe(true);
-    expect(result.tables.some((table) => table.table === 'auth.users')).toBe(false);
+    expect(result.tables.some((table) => (table.table as string) === 'auth.users')).toBe(false);
   });
 
   it('reads profiles and user addresses but refuses to mutate them', async () => {
@@ -327,7 +339,9 @@ describe('Cortex AI generic database tools', () => {
       values: { status: 'published' },
     };
 
-    const preview = await executeDatabaseMutation(input, { actorUserId: 'user_1', supabase });
+    const preview = asDbConfirmation(
+      await executeDatabaseMutation(input, { actorUserId: 'user_1', supabase })
+    );
 
     expect(preview.requiresConfirmation).toBe(true);
     expect(database.pages[0].status).toBe('draft');
@@ -353,14 +367,18 @@ describe('Cortex AI generic database tools', () => {
       table: 'pages',
       values: { status: 'published' },
     };
-    const preview = await executeDatabaseMutation(input, { actorUserId: 'user_1', supabase });
+    const preview = asDbConfirmation(
+      await executeDatabaseMutation(input, { actorUserId: 'user_1', supabase })
+    );
 
     database.pages.pop();
-    const staleResult = await executeDatabaseMutation(input, {
-      actorUserId: 'user_1',
-      latestUserMessage: preview.confirmationPhrase,
-      supabase,
-    });
+    const staleResult = asDbConfirmation(
+      await executeDatabaseMutation(input, {
+        actorUserId: 'user_1',
+        latestUserMessage: preview.confirmationPhrase,
+        supabase,
+      })
+    );
 
     expect(staleResult.requiresConfirmation).toBe(true);
     expect(staleResult.message).toMatch(/target changed/i);
@@ -386,7 +404,9 @@ describe('Cortex AI generic database tools', () => {
       summary: 'Publish home and add a translation.',
     };
 
-    const preview = await executeDatabaseActionPlan(input, { actorUserId: 'user_1', supabase });
+    const preview = asDbConfirmation(
+      await executeDatabaseActionPlan(input, { actorUserId: 'user_1', supabase })
+    );
     expect(preview.requiresConfirmation).toBe(true);
 
     const result = await executeDatabaseActionPlan(input, {

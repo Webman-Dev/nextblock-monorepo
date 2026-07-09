@@ -1,6 +1,8 @@
 'use client';
 
 import {
+  FreemiusLicensePanel,
+  type FreemiusOrderLicense,
   InvoiceViewerShell,
   type InvoicePresentationData,
   buildInvoiceDocumentLabels,
@@ -29,6 +31,7 @@ export default function CheckoutSuccessPage() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session_id');
   const [invoice, setInvoice] = useState<InvoicePresentationData | null>(null);
+  const [license, setLicense] = useState<FreemiusOrderLicense | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasRemainingCheckoutItems, setHasRemainingCheckoutItems] = useState(false);
@@ -92,6 +95,7 @@ export default function CheckoutSuccessPage() {
         if (result.invoice) {
           const resolvedInvoice = result.invoice as InvoicePresentationData;
           setOrderStatus((result as any).status || resolvedInvoice.order.status || null);
+          setLicense(((result as any).license as FreemiusOrderLicense | null) ?? null);
           const purchasedKeys = new Set(
             resolvedInvoice.order.items.map((item) =>
               buildPurchasedItemKey(item.product_id, item.variant_id)
@@ -169,6 +173,7 @@ export default function CheckoutSuccessPage() {
         </div>
       }
       action={action}
+      beforeInvoice={<FreemiusLicensePanel license={license} />}
       loading={isSyncing}
       loadingMessage={translateOrFallback(
         t,

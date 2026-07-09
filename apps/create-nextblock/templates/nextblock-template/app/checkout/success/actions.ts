@@ -4,6 +4,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import {
   applyOrderInventoryDeduction,
   assignInvoiceMetadata,
+  getFreemiusOrderLicense,
   getInvoicePresentationData,
   getStripeClient,
   syncStripeOrderFromSession,
@@ -107,6 +108,7 @@ export async function fulfillOrderAction(sessionId: string) {
         alreadyPaid: true,
         status: 'paid',
         invoice: await getInvoicePresentationData(order.id, supabase as any),
+        license: await getFreemiusOrderLicense({ orderId: order.id, client: supabase as any }),
       };
     }
 
@@ -116,6 +118,7 @@ export async function fulfillOrderAction(sessionId: string) {
         alreadyPaid: false,
         status: 'trial',
         invoice: await getInvoicePresentationData(order.id, supabase as any),
+        license: await getFreemiusOrderLicense({ orderId: order.id, client: supabase as any }),
       };
     }
 

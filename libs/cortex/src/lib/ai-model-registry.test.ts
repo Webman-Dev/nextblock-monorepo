@@ -27,7 +27,7 @@ describe('Cortex AI OpenRouter routing', () => {
     ).toEqual([
       'openai/gpt-oss-120b:free',
       ...CORTEX_AI_FREE_MODEL_FALLBACK_REGISTRY.filter(
-        (modelId) => modelId !== 'openai/gpt-oss-120b:free'
+        (modelId: string) => modelId !== 'openai/gpt-oss-120b:free'
       ),
     ]);
   });

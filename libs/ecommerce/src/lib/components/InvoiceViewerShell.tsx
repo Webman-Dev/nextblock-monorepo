@@ -34,6 +34,8 @@ interface InvoiceViewerShellProps {
   emptyMessage?: string;
   className?: string;
   showHeader?: boolean;
+  /** Optional content rendered above the invoice (and hidden when printing). */
+  beforeInvoice?: ReactNode;
 }
 
 export function InvoiceViewerShell({
@@ -51,6 +53,7 @@ export function InvoiceViewerShell({
   emptyMessage,
   className = '',
   showHeader = true,
+  beforeInvoice,
 }: InvoiceViewerShellProps) {
   return (
     <>
@@ -130,6 +133,8 @@ export function InvoiceViewerShell({
             {error}
           </div>
         ) : null}
+
+        {beforeInvoice}
 
         {invoice ? (
           <div data-print-invoice-root>

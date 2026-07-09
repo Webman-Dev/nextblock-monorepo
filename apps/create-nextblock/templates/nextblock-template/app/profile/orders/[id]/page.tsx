@@ -24,6 +24,7 @@ export default async function ProfileOrderDetailPage({
       <CustomerOrderDetailPageClient
         order={result.order}
         invoice={result.invoice}
+        license={result.license}
         profile={profile}
         user={user}
       />

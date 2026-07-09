@@ -368,13 +368,32 @@ function createMockSupabase(overrides?: Partial<MockDatabase>) {
   };
 }
 
-function expectConfirmation(result: any) {
+// The tool executors return an inferred union (confirmation preview | executed |
+// failure). Callers that read preview-only fields after asserting can use the
+// returned value, which intersects the original type with the confirmation shape
+// (so no existing field is lost). The runtime expect() checks still validate it.
+function expectConfirmation<T>(
+  result: T
+): T & {
+  confirmationPhrase: string;
+  message?: string;
+  preview: Record<string, unknown>;
+  requiresConfirmation: boolean;
+} {
   expect(result).toMatchObject({
     mutationExecuted: false,
     requiresConfirmation: true,
     success: true,
   });
-  expect(result.confirmationPhrase).toEqual(expect.stringMatching(/^CONFIRM .+ #[a-f0-9]{8}$/));
+  expect((result as { confirmationPhrase?: unknown }).confirmationPhrase).toEqual(
+    expect.stringMatching(/^CONFIRM .+ #[a-f0-9]{8}$/)
+  );
+  return result as T & {
+    confirmationPhrase: string;
+    message?: string;
+    preview: Record<string, unknown>;
+    requiresConfirmation: boolean;
+  };
 }
 
 async function executeConfirmed(
@@ -411,7 +430,7 @@ describe('Cortex AI global agent tool executors', () => {
         mode: 'replace',
       },
       {
-        revalidatePath: (path) => revalidated.push(path),
+        revalidatePath: (path: string) => revalidated.push(path),
         supabase,
       }
     );
@@ -1006,7 +1025,7 @@ describe('Cortex AI global agent tool executors', () => {
           slug: 'studio-tee',
           title: 'Studio Tee',
         },
-        revalidatePath: (path) => revalidated.push(path),
+        revalidatePath: (path: string) => revalidated.push(path),
         supabase,
       }
     );
@@ -1181,8 +1200,8 @@ describe('Cortex AI global agent tool executors', () => {
       summary:
         'Add visible title and description copy above the forms on the English and French Contact pages.',
     });
-    expect(plan?.actions[0].input.block.content.html_content).toContain('<h2>');
-    expect(plan?.actions[1].input.block.content.html_content).toContain('<h2>');
+    expect((plan?.actions[0].input as any).block.content.html_content).toContain('<h2>');
+    expect((plan?.actions[1].input as any).block.content.html_content).toContain('<h2>');
   });
 
   it('uses an action plan to add localized intro copy above forms on both translated pages', async () => {
@@ -1530,12 +1549,12 @@ describe('Cortex AI global agent tool executors', () => {
       { actorUserId: 'admin_1', supabase }
     );
 
-    expectConfirmation(preview);
-    expect(preview.preview).toMatchObject({
+    const confirmed = expectConfirmation(preview);
+    expect(confirmed.preview).toMatchObject({
       actionCount: 2,
       summary: 'Complete 2 CMS actions.',
     });
-    expect(preview.preview.actionSummaries).toHaveLength(2);
+    expect(confirmed.preview.actionSummaries).toHaveLength(2);
     expect(database.pages).toEqual([]);
     expect(database.navigation_items).toEqual([
       { id: 1, label: 'Home', language_id: 1, menu_key: 'HEADER', order: 0, url: '/' },
@@ -1699,13 +1718,13 @@ describe('Cortex AI global agent tool executors', () => {
       supabase,
     });
 
-    expectConfirmation(preview);
+    const confirmed = expectConfirmation(preview);
     expect(database.pages).toHaveLength(0);
     expect(database.blocks).toHaveLength(0);
 
     const result = await executeCreateCmsPage(input, {
       actorUserId: 'admin_1',
-      latestUserMessage: preview.confirmationPhrase,
+      latestUserMessage: confirmed.confirmationPhrase,
       revalidatePath: (path) => revalidated.push(path),
       supabase,
     });
