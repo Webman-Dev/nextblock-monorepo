@@ -158,12 +158,13 @@ export default function MediaPickerDialog({
         </DialogTrigger>
       )}
       <DialogContent className="sm:max-w-[650px] md:max-w-[800px] lg:max-w-[1000px] max-h-[90vh] flex flex-col">
-        <DialogHeader>
+        <DialogHeader className="shrink-0 pb-1">
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
-        <div className="p-1">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1">
           <MediaUploadForm
+            compact
             returnJustData={true}
             defaultFolder={defaultFolder}
             onUploadSuccess={(newMedia) => {
@@ -171,39 +172,40 @@ export default function MediaPickerDialog({
               handleSelect(newMedia);
             }}
           />
-        </div>
 
-        <Separator className="my-4" />
+          <Separator className="my-3" />
 
-        <div className="flex flex-col flex-grow overflow-hidden">
-          <h3 className="text-lg font-medium mb-3 text-center">Or Select from Library</h3>
-          <div className="relative mb-2">
-            <Input
-              type="search"
-              placeholder="Search library..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          </div>
-          {isLoading && filtered.length === 0 ? (
-            <div className="flex-grow flex items-center justify-center">
-              <p>Loading media...</p>
+          <div className="flex flex-col">
+            <h3 className="text-base font-medium mb-2 text-center">Or Select from Library</h3>
+            <div className="sticky top-0 z-10 -mx-1 mb-2 bg-background px-1 pb-1">
+              <div className="relative">
+                <Input
+                  type="search"
+                  placeholder="Search library..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              </div>
             </div>
-          ) : loadError && filtered.length === 0 ? (
-            <div className="flex-grow flex flex-col items-center justify-center gap-3 text-center">
-              <p className="max-w-sm text-sm text-muted-foreground">{loadError}</p>
-              <Button type="button" variant="outline" size="sm" onClick={() => void fetchLibrary()}>
-                Retry
-              </Button>
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="flex-grow flex items-center justify-center">
-              <p>No media found.</p>
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-3 overflow-y-auto min-h-0 pr-2 pb-2">
+            {isLoading && filtered.length === 0 ? (
+              <div className="flex items-center justify-center py-10">
+                <p>Loading media...</p>
+              </div>
+            ) : loadError && filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+                <p className="max-w-sm text-sm text-muted-foreground">{loadError}</p>
+                <Button type="button" variant="outline" size="sm" onClick={() => void fetchLibrary()}>
+                  Retry
+                </Button>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex items-center justify-center py-10">
+                <p>No media found.</p>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-3 pb-2">
               {filtered.map((media: Media) => {
                 const previewPath = resolveMediaPreviewPath(media);
                 const previewSrc = previewPath ? resolveMediaPreviewSrc(previewPath) : null;
@@ -241,8 +243,9 @@ export default function MediaPickerDialog({
                   </button>
                 );
               })}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

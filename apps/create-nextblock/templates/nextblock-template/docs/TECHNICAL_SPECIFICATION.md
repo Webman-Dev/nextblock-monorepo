@@ -269,7 +269,7 @@ The following architectural invariants are enforced at workspace level and must 
 
 **Editor Capabilities** — The `@nextblock-cms/editor` library (version `0.2.24`) exports `Editor`, `NotionEditor`, `EditorToolbar`, `EditorBubbleMenu`, `EditorFloatingMenu`, `EnhancedFloatingMenu`, `SlashCommandList`, `DragHandle`, `HtmlContent`, and `editorExtensions`. Feature set includes Tiptap StarterKit rich text, syntax-highlighted code blocks, tables, task lists, slash commands, drag handles, image handling, character counting, typography, mathematics, emoji, mentions, inline alert and call-to-action widgets, and custom HTML-preserving extensions for `div`, `style`, `script`, `svg`, `span`, and catch-all attribute preservation. A media-picker bridge is exposed via `setOpenImagePicker()`.
 
-**Translation & Localization** — The system supports two locales at present (`en`, `fr` — defined as `SUPPORTED_LOCALES` in `apps/nextblock/proxy.ts`), backed by `languages` and `translations` tables from migration `00000000000001_setup_cms_core.sql`. Content revision history is stored as snapshot + JSON Patch diff (enum `revision_type: snapshot, diff`) per migration `00000000000002_setup_content_tables.sql`.
+**Translation & Localization** — The set of served locales is the active rows of the `languages` table (managed at `/cms/settings/languages`; the proxy reads them with a 60-second in-memory cache and only falls back to the hardcoded `FALLBACK_LOCALES` `en`/`fr` when the DB is unreadable), backed by `languages` and `translations` tables from migration `00000000000001_setup_cms_core.sql`. First-visit language detection is admin-configurable (see F-007): browser `Accept-Language`, IP-country via host geo headers, combined, or always-default — implemented in `apps/nextblock/lib/i18n/detection.ts` and stored in `site_settings.language_detection_settings`. Content revision history is stored as snapshot + JSON Patch diff (enum `revision_type: snapshot, diff`) per migration `00000000000002_setup_content_tables.sql`.
 
 **Page Lifecycle** — Pages move through `draft`, `published`, and `archived` statuses (enum `page_status`).
 
@@ -619,7 +619,11 @@ Media management combines a Cloudflare R2-backed object store with an image-proc
 
 **Description**
 
-Two locales are currently supported — `en` and `fr` — defined as `SUPPORTED_LOCALES` in `apps/nextblock/proxy.ts` and seeded in migration `00000000000008_seed_platform_defaults.sql` (with `en` marked as the single default). The `languages` table enforces a single `is_default` row; the `translations` table stores translation keys with JSONB-per-locale values. Localized content entities (pages, posts, products) are clustered via `translation_group_id` UUIDs. Locale propagation uses the `NEXT_USER_LOCALE` cookie (`maxAge: 31_536_000` seconds, one year) and the `X-User-Locale` request header, both set by the request proxy. The client-side provider chain `LanguageProvider → TranslationsProvider` in `apps/nextblock/app/providers.tsx` bridges server-resolved locale into React context.
+Served locales are the active rows of the `languages` table, managed at `/cms/settings/languages` (the seed provides `en` and `fr`, with `en` as the single default; `apps/nextblock/proxy.ts` keeps `FALLBACK_LOCALES = ['en','fr']` only as a safety net when the DB is unreadable). The `languages` table enforces a single `is_default` row; the `translations` table stores translation keys with JSONB-per-locale values. Localized content entities (pages, posts, products) are clustered via `translation_group_id` UUIDs.
+
+**First-visit language detection** is admin-configurable on `/cms/settings/languages` and stored as the non-sensitive `site_settings` key `language_detection_settings` (`{ mode, rememberVisitorChoice }`). Modes: `browser` (default — full `Accept-Language` q-value parsing), `country` (visitor's country from host geo headers `x-vercel-ip-country` / `cf-ipcountry` / `cloudfront-viewer-country` / `x-country-code`, mapped through `apps/nextblock/lib/i18n/country-languages.ts`), `browser_then_country`, and `default` (no detection). The pure resolution helpers live in `apps/nextblock/lib/i18n/detection.ts`; the proxy applies them for any request without a valid locale cookie, resolving against the active languages + default language read from the DB with a 60-second in-memory cache.
+
+Locale propagation uses the `NEXT_USER_LOCALE` cookie and the `X-User-Locale` request header, both set by the request proxy. When `rememberVisitorChoice` is `true` (default) the cookie persists for one year (`maxAge: 31_536_000` seconds); when `false` it is a session cookie, so detection re-runs each new browser session (the client `LanguageProvider` mirrors the same expiry for manual switcher choices). A valid cookie always beats detection. The client-side provider chain `LanguageProvider → TranslationsProvider` in `apps/nextblock/app/providers.tsx` bridges server-resolved locale into React context.
 
 **Business Value:** Unlocks multi-market deployments without requiring adopters to integrate a separate i18n library. **User Benefits:** Language switching persists across sessions; same content IDs preserve relationships across translations. **Technical Context:** Implemented at schema level (migration `00000000000001_setup_cms_core.sql`), proxy level, and provider level.
 
@@ -1290,7 +1294,8 @@ This subsection provides the detailed, testable requirements that operationalize
 | F-005-RQ-002 | Editor MUST preserve custom HTML constructs (`div`, `style`, `script`, `svg`, `span`) and unrecognized attributes | Must-Have | High |
 | F-006-RQ-001 | Media uploads MUST record metadata (`object_key`, `file_type`, `size_bytes`, `width`, `height`, `blur_data_url`, `variants`) in the `media` table | Must-Have | Medium |
 | F-006-RQ-002 | `recordMediaUpload` MUST reject non-`ADMIN`/non-`WRITER` callers | Must-Have | Low |
-| F-007-RQ-001 | Locale MUST propagate via `NEXT_USER_LOCALE` cookie (1-year max age) and `X-User-Locale` header | Must-Have | Low |
+| F-007-RQ-001 | Locale MUST propagate via `NEXT_USER_LOCALE` cookie (1-year max age when `rememberVisitorChoice` is on; session cookie when off) and `X-User-Locale` header | Must-Have | Low |
+| F-007-RQ-002 | First-visit locale MUST honor the admin-configured detection mode (`browser`, `country`, `browser_then_country`, `default`) from `site_settings.language_detection_settings` | Must-Have | Medium |
 | F-008-RQ-001 | Content revisions MUST use the hybrid snapshot/diff model keyed by `revision_type` enum | Must-Have | Medium |
 | F-009-RQ-001 | Navigation items MUST support `HEADER`, `FOOTER`, `SIDEBAR` locations with hierarchy and ordering | Must-Have | Low |
 
@@ -1303,7 +1308,7 @@ This subsection provides the detailed, testable requirements that operationalize
 | F-004-RQ-001 | Block type string, content object | Validated block content or ZodError | Schema validation synchronous |
 | F-005-RQ-002 | HTML or Tiptap JSON | Rendered editor content preserving DOM | No HTML loss across round-trip |
 | F-006-RQ-001 | Multipart file or presigned PUT | `media` row with metadata | Upload completes within browser timeout |
-| F-007-RQ-001 | `lang` URL parameter or header | Locale cookie + `X-User-Locale` header | Proxy overhead < 5 ms |
+| F-007-RQ-001 | Locale cookie, `Accept-Language`, host geo-country header | Locale cookie + `X-User-Locale` header | Proxy overhead < 5 ms on cache hit; one Supabase round-trip per isolate per 60 s on miss (loaded concurrently with the auth lookup, shared across concurrent misses) |
 
 #### 2.2.1.3 Validation Rules — Content Delivery
 
@@ -1312,7 +1317,7 @@ This subsection provides the detailed, testable requirements that operationalize
 | F-001-RQ-002 | Image MIME must be in supported list | Only R2-served URLs accepted by next/image loader |
 | F-004-RQ-001 | Block `type` MUST exist in registry; content MUST pass Zod schema | Schema prevents XSS via typed fields |
 | F-006-RQ-001 | `size_bytes` must be non-negative; `object_key` unique | RLS: ADMIN/WRITER write; public read |
-| F-007-RQ-001 | Locale MUST be in `SUPPORTED_LOCALES` (`en`, `fr`) | Cookie uses default security attributes |
+| F-007-RQ-001 | Locale MUST be an active `languages` row (hardcoded `FALLBACK_LOCALES` `en`/`fr` only when the DB is unreadable) | Cookie uses default security attributes |
 | F-008-RQ-001 | Snapshot version MUST be unique per `page_id` | Writes RLS-restricted to ADMIN/WRITER |
 | F-009-RQ-001 | `menu_location` MUST be one of the three enum values | Writes RLS-restricted to ADMIN/WRITER |
 
@@ -1612,7 +1617,7 @@ The following matrix links features to the sections of the technical specificati
 | Build Status | `ecommerce:build` Nx standalone target currently not green (per §1.3.3.1) | F-013–F-022 |
 | Freemius Reconciliation | Webhook events acknowledged only; DB reconciliation pending (per §1.3.3.1) | F-017, F-021 |
 | Postal Code Shipping | Schema present; runtime resolver does not consume (per §1.3.3.1) | F-019 |
-| Locale Count | Only `en` and `fr` in current release (per §1.3.3.4) | F-007, F-009, F-013 |
+| Locale Count | Seed provides `en` and `fr`; additional locales are added as `languages` rows at `/cms/settings/languages` | F-007, F-009, F-013 |
 | Module Boundaries | `libs/ui` MUST NOT depend on `apps/nextblock` | F-028 |
 
 ### 2.4.2 Performance Requirements
@@ -1674,7 +1679,7 @@ The following matrix links features to the sections of the technical specificati
 | FX override | `FX_API_BASE_URL` toggle allows switching provider without code change | F-018 |
 | Sandbox dataset | `SANDBOX_RESET_SQL` in `/api/cron/reset-sandbox/route.ts` must be regenerated as schema evolves | F-025, F-026 |
 | Package alignment | `@nextblock-cms/ecom` package name vs. `@nextblock-cms/ecommerce` alias (per §1.3.3.1) requires coordination when republished | F-013–F-022 |
-| Locale expansion | Adding locales beyond `en`/`fr` requires updates to `SUPPORTED_LOCALES` and seed data | F-007 |
+| Locale expansion | Locales are DB-driven: add an active `languages` row (plus translations/content); `FALLBACK_LOCALES` in `proxy.ts` is only a DB-unreachable safety net | F-007 |
 | Block registry updates | New block types must satisfy F-024 contract and register in `blockRegistry.ts` | F-004, F-024 |
 | RLS policy review | Migration `00000000000006_setup_rls_and_grants.sql` should be audited on new table introduction | All DB-backed features |
 
@@ -2254,7 +2259,7 @@ The workspace implements a layered caching strategy aligned with the performance
 | `unstable_cache` (package activation) | 60 s | Avoids DB hit on every F-022 license check | `libs/db/src/lib/package-validation.ts` |
 | Next.js ISR (public layout) | 60 s (`PUBLIC_LAYOUT_REVALIDATE_SECONDS`) | Public content revalidation | `apps/nextblock/app/layout.tsx` |
 | Image cache TTL | 31,536,000 s (1 year) | Immutable optimized-image responses | `next.config.js` |
-| Locale cookie | 31,536,000 s (1 year) | Persistent locale preference | `proxy.ts` |
+| Locale cookie | 31,536,000 s (1 year), or session cookie when "remember visitor's language" is off | Persistent locale preference | `proxy.ts` |
 | On-demand revalidation | N/A | Per-path invalidation via `REVALIDATE_SECRET_TOKEN` | `/api/revalidate` (F-027) |
 | bfcache-compatible HTML | `max-age=0, must-revalidate` | Preserves back-forward cache | `proxy.ts` |
 
@@ -2615,9 +2620,9 @@ flowchart TB
     Supabase --> SyncSession[supabase.auth.getSession<br/>Sync Cookies]
     SyncSession --> Locale{Read<br/>NEXT_USER_LOCALE<br/>Cookie}
     
-    Locale -->|Valid: en or fr| SetLocaleHeader[Set X-User-Locale]
-    Locale -->|Invalid or Missing| DefaultEn[Default to 'en']
-    DefaultEn --> SetLocaleHeader
+    Locale -->|Valid: active language| SetLocaleHeader[Set X-User-Locale]
+    Locale -->|Invalid or Missing| Detect[Detect per settings:<br/>browser / country /<br/>browser_then_country / default]
+    Detect --> SetLocaleHeader
     
     SetLocaleHeader --> GetUser[supabase.auth.getUser]
     GetUser --> CmsGuard{Path starts<br/>with /cms?}

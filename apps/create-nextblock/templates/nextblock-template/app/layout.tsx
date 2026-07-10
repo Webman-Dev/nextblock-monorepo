@@ -33,6 +33,13 @@ import {
   resolveSupabaseUrl,
 } from '../lib/setup/env-status';
 import { resolveMediaBaseUrl } from '../lib/storage/provider';
+import {
+  LANGUAGE_DETECTION_SETTING_KEY,
+  LANGUAGE_DETECTION_CACHE_TAG,
+  DEFAULT_LANGUAGE_DETECTION_SETTINGS,
+  normalizeLanguageDetectionSettings,
+  type LanguageDetectionSettings,
+} from '../lib/i18n/detection';
 
 const defaultUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
 
@@ -81,6 +88,25 @@ const getCachedLanguages = unstable_cache(
   },
   ['public-layout-languages'],
   { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
+);
+
+const getCachedLanguageDetectionSettings = unstable_cache(
+  async (): Promise<LanguageDetectionSettings> => {
+    const supabase = createStaticSupabaseClient();
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', LANGUAGE_DETECTION_SETTING_KEY)
+      .maybeSingle();
+
+    // Absent row or read error = defaults (browser detection, remembered choice).
+    if (error) {
+      return { ...DEFAULT_LANGUAGE_DETECTION_SETTINGS };
+    }
+    return normalizeLanguageDetectionSettings(data?.value);
+  },
+  ['public-language-detection'],
+  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS, tags: [LANGUAGE_DETECTION_CACHE_TAG] }
 );
 
 const getCachedCopyrightSettings = unstable_cache(
@@ -274,6 +300,7 @@ async function loadLayoutData() {
       globalCss: '',
       privacySettings: DEFAULT_PRIVACY_SETTINGS,
       footerAttributionEnabled: true,
+      rememberVisitorChoice: DEFAULT_LANGUAGE_DETECTION_SETTINGS.rememberVisitorChoice,
     };
   }
 
@@ -300,6 +327,7 @@ async function loadLayoutData() {
     translationsResult,
     isEcommerceActive,
     privacySettings,
+    languageDetectionSettings,
   ] = await Promise.all([
     supabase.auth.getUser(),
     getCachedLanguages().catch(() => getActiveLanguagesServerSide().catch(() => [])),
@@ -311,9 +339,19 @@ async function loadLayoutData() {
     getCachedTranslations().catch(() => []),
     verifyPackageOnline('ecommerce').catch(() => false),
     getPrivacySettings().catch(() => DEFAULT_PRIVACY_SETTINGS),
+    getCachedLanguageDetectionSettings().catch(() => ({
+      ...DEFAULT_LANGUAGE_DETECTION_SETTINGS,
+    })),
   ]);
 
-  const availableLanguages: Language[] = availableLanguagesResult;
+  // Serve only active languages, matching the proxy's detection set (is_active
+  // null counts as active). getCachedLanguages / getActiveLanguagesServerSide
+  // both return every row, so filtering here keeps the public switcher and
+  // LanguageProvider in step with the locales the proxy will actually honor —
+  // otherwise picking a deactivated language would ping-pong against the proxy.
+  const availableLanguages: Language[] = availableLanguagesResult.filter(
+    (lang) => lang.is_active !== false,
+  );
   const availableCurrencies: StoreCurrency[] = currenciesResult;
   const defaultLanguage: Language | null =
     availableLanguages.find((lang) => lang.is_default) ?? availableLanguages[0] ?? null;
@@ -368,6 +406,7 @@ async function loadLayoutData() {
     globalCss,
     privacySettings,
     footerAttributionEnabled,
+    rememberVisitorChoice: languageDetectionSettings.rememberVisitorChoice,
   };
 }
 
@@ -449,6 +488,7 @@ export default async function RootLayout({
     globalCss,
     privacySettings,
     footerAttributionEnabled,
+    rememberVisitorChoice,
   } = await loadLayoutData();
   const draft = await draftMode();
   // GTM container id comes solely from the privacy settings row (site_settings).
@@ -502,6 +542,7 @@ export default async function RootLayout({
           initialCurrencyCode={serverCurrencyCode}
           initialAvailableLanguages={availableLanguages}
           initialDefaultLanguage={defaultLanguage}
+          rememberVisitorChoice={rememberVisitorChoice}
           translations={translations}
           nonce={nonce}
         >

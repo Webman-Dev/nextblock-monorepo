@@ -27,13 +27,15 @@ interface LanguageProviderProps {
   serverLocale?: string; // Locale determined on the server (from X-User-Locale header)
   initialAvailableLanguages?: Language[]; // Languages fetched on the server
   initialDefaultLanguage?: Language | null; // Default language determined on the server
+  rememberVisitorChoice?: boolean; // CMS language-detection setting: persist locale for a year vs session-only
 }
 
 export const LanguageProvider = ({
   children,
   serverLocale,
   initialAvailableLanguages,
-  initialDefaultLanguage
+  initialDefaultLanguage,
+  rememberVisitorChoice = true
 }: LanguageProviderProps) => {
 
   const [currentLocale, _setCurrentLocale] = useState<string>(() => {
@@ -124,10 +126,18 @@ export const LanguageProvider = ({
       if (isMounted) { // Check mount status before final state updates
         _setCurrentLocale(effectiveLocale);
         if (typeof window !== 'undefined') {
-          localStorage.setItem(LANGUAGE_STORAGE_KEY, effectiveLocale);
+          // Mirror the cookie's persistence: when "remember" is off, keep no
+          // durable client-side record (and purge any left from a prior session)
+          // so the setting's "session only" promise holds on the client too.
+          if (rememberVisitorChoice) {
+            localStorage.setItem(LANGUAGE_STORAGE_KEY, effectiveLocale);
+          } else {
+            localStorage.removeItem(LANGUAGE_STORAGE_KEY);
+          }
           document.documentElement.lang = effectiveLocale;
         }
-        Cookies.set(LANGUAGE_COOKIE_KEY, effectiveLocale, { path: '/', expires: 365, sameSite: 'Lax' });
+        // Omitting `expires` makes it a session cookie, so detection re-runs next session.
+        Cookies.set(LANGUAGE_COOKIE_KEY, effectiveLocale, { path: '/', ...(rememberVisitorChoice ? { expires: 365 } : {}), sameSite: 'Lax' });
         setIsLoadingLanguages(false); // Done loading/initializing
       }
     };
@@ -137,7 +147,7 @@ export const LanguageProvider = ({
     return () => {
       isMounted = false; // Cleanup function to set isMounted to false
     };
-  }, [serverLocale, initialAvailableLanguages, initialDefaultLanguage, clientSelectedLocale]);
+  }, [serverLocale, initialAvailableLanguages, initialDefaultLanguage, clientSelectedLocale, rememberVisitorChoice]);
 
   const setCurrentLocaleCallback = useCallback(async (localeCode: string) => { // Add async here
     let localeToSet = DEFAULT_FALLBACK_LOCALE;
@@ -159,10 +169,15 @@ export const LanguageProvider = ({
 
     _setCurrentLocale(localeToSet);
     if (typeof window !== 'undefined') {
-      localStorage.setItem(LANGUAGE_STORAGE_KEY, localeToSet);
+      // Match the cookie's persistence (see the init effect): no durable record when off.
+      if (rememberVisitorChoice) {
+        localStorage.setItem(LANGUAGE_STORAGE_KEY, localeToSet);
+      } else {
+        localStorage.removeItem(LANGUAGE_STORAGE_KEY);
+      }
       document.documentElement.lang = localeToSet;
     }
-    Cookies.set(LANGUAGE_COOKIE_KEY, localeToSet, { path: '/', expires: 365, sameSite: 'Lax' });
+    Cookies.set(LANGUAGE_COOKIE_KEY, localeToSet, { path: '/', ...(rememberVisitorChoice ? { expires: 365 } : {}), sameSite: 'Lax' });
 
     // The LanguageSwitcher component is responsible for navigation (push or refresh).
     // We only set the clientSelectedLocale here to ensure the main useEffect
@@ -172,7 +187,7 @@ export const LanguageProvider = ({
       setClientSelectedLocale(localeToSet);
     }
     // router.refresh(); // REMOVED: LanguageSwitcher will handle navigation/refresh.
-  }, [availableLanguages]);
+  }, [availableLanguages, rememberVisitorChoice]);
 
   useEffect(() => {
     if (currentLocale && typeof window !== 'undefined') {

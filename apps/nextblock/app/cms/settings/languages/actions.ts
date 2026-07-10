@@ -2,9 +2,15 @@
 "use server";
 
 import { createClient } from "@nextblock-cms/db/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Database } from "@nextblock-cms/db";
+import {
+  LANGUAGE_DETECTION_SETTING_KEY,
+  LANGUAGE_DETECTION_CACHE_TAG,
+  normalizeLanguageDetectionSettings,
+  type LanguageDetectionSettings,
+} from "../../../../lib/i18n/detection";
 
 type Language = Database["public"]["Tables"]["languages"]["Row"];
 
@@ -259,4 +265,50 @@ export async function deleteLanguage(languageId: number) {
   revalidatePath("/cms/settings/languages");
   revalidatePath("/");
   redirect("/cms/settings/languages?success=Language deleted successfully. All associated content has also been removed.");
+}
+
+// --- Language detection settings (site_settings.language_detection_settings) ---
+
+export async function getLanguageDetectionSettings(): Promise<LanguageDetectionSettings> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("site_settings")
+    .select("value")
+    .eq("key", LANGUAGE_DETECTION_SETTING_KEY)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching language detection settings:", error);
+  }
+  // Absent row or error = defaults (browser detection, remembered choice).
+  return normalizeLanguageDetectionSettings(error ? null : data?.value);
+}
+
+export async function updateLanguageDetectionSettings(
+  input: LanguageDetectionSettings,
+): Promise<{ success?: string; error?: string }> {
+  const supabase = createClient();
+
+  if (!(await verifyAdmin(supabase))) {
+    return { error: "Unauthorized: Admin role required." };
+  }
+
+  // Never trust the client payload shape — coerce to a valid settings object.
+  const settings = normalizeLanguageDetectionSettings(input);
+
+  const { error } = await supabase
+    .from("site_settings")
+    .upsert({ key: LANGUAGE_DETECTION_SETTING_KEY, value: settings });
+
+  if (error) {
+    console.error("Error saving language detection settings:", error);
+    return { error: `Failed to save detection settings: ${error.message}` };
+  }
+
+  updateTag(LANGUAGE_DETECTION_CACHE_TAG);
+  revalidatePath("/cms/settings/languages");
+  revalidatePath("/", "layout");
+  // The proxy caches detection config in-memory for up to a minute per worker,
+  // so the change isn't instant for new visitors — set that expectation here.
+  return { success: "Language detection settings saved. Changes reach new visitors within about a minute." };
 }

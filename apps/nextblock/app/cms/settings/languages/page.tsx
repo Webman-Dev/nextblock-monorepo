@@ -23,6 +23,8 @@ import {
 } from "@nextblock-cms/ui";
 import type { Database } from "@nextblock-cms/db";
 import DeleteLanguageClientButton from './components/DeleteLanguageButton';
+import LanguageDetectionPanel from './components/LanguageDetectionPanel';
+import { getLanguageDetectionSettings } from './actions';
 
 type Language = Database['public']['Tables']['languages']['Row'];
 
@@ -41,7 +43,10 @@ async function getLanguages(): Promise<Language[]> {
 }
 
 export default async function CmsLanguagesListPage() {
-  const languages = await getLanguages();
+  const [languages, detectionSettings] = await Promise.all([
+    getLanguages(),
+    getLanguageDetectionSettings(),
+  ]);
   // The following line for searchParams will cause an error during static generation or if window is not defined.
   // It's better to pass searchParams as props if needed from the page component.
   // For this specific page, success messages are handled by redirect query params which Next.js makes available in page props.
@@ -144,6 +149,12 @@ export default async function CmsLanguagesListPage() {
           </Table>
         </div>
       )}
+      <div className="mt-6">
+        <LanguageDetectionPanel
+          initialSettings={detectionSettings}
+          activeLanguageCount={languages.filter((lang) => lang.is_active !== false).length}
+        />
+      </div>
       <div className="mt-6">
         <Alert variant="warning">
           <ShieldAlert className="h-4 w-4" />

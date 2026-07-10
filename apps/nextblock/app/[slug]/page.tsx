@@ -78,8 +78,12 @@ export async function generateMetadata(
   if (!preferredLocale) {
     try {
       const hdrs = await headers();
-      const al = hdrs.get("accept-language");
-      if (al) preferredLocale = al.split(",")[0]?.split("-")[0];
+      // Proxy-detected locale first: it honors the CMS language-detection settings.
+      preferredLocale = hdrs.get("x-user-locale") || undefined;
+      if (!preferredLocale) {
+        const al = hdrs.get("accept-language");
+        if (al) preferredLocale = al.split(",")[0]?.split("-")[0];
+      }
     } catch {
       // ignore header lookup errors
     }
@@ -153,8 +157,12 @@ export default async function DynamicPage({ params: paramsPromise }: PageProps) 
   if (!preferredLocale) {
     try {
       const hdrs = await headers();
-      const al = hdrs.get("accept-language");
-      if (al) preferredLocale = al.split(",")[0]?.split("-")[0];
+      // Proxy-detected locale first: it honors the CMS language-detection settings.
+      preferredLocale = hdrs.get("x-user-locale") || undefined;
+      if (!preferredLocale) {
+        const al = hdrs.get("accept-language");
+        if (al) preferredLocale = al.split(",")[0]?.split("-")[0];
+      }
     } catch {
       // ignore header lookup errors
     }

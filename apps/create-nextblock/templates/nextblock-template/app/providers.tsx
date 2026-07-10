@@ -44,6 +44,7 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
     initialCurrencyCode,
     initialAvailableLanguages,
     initialDefaultLanguage,
+    rememberVisitorChoice,
     translations,
     nonce
   } = props;
@@ -54,6 +55,7 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
         serverLocale={serverLocale}
         initialAvailableLanguages={initialAvailableLanguages}
         initialDefaultLanguage={initialDefaultLanguage}
+        rememberVisitorChoice={rememberVisitorChoice}
       >
         <CurrencyProvider
           initialCurrencies={initialCurrencies}

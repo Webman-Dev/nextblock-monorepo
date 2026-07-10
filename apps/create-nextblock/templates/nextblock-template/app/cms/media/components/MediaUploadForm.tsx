@@ -21,11 +21,13 @@ interface MediaUploadFormProps {
   // And will use onUploadSuccess instead of router.refresh().
   returnJustData?: boolean;
   defaultFolder?: string; // Optional pre-populated folder
+  // If true, tightens spacing/heights so the form fits inside a modal on shorter screens.
+  compact?: boolean;
 }
 
 import { useUploadFolder } from "../UploadFolderContext";
 
-export default function MediaUploadForm({ onUploadSuccess, returnJustData, defaultFolder }: MediaUploadFormProps) {
+export default function MediaUploadForm({ onUploadSuccess, returnJustData, defaultFolder, compact }: MediaUploadFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [file, setFile] = useState<File | null>(null);
@@ -292,26 +294,27 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData, defau
   };
 
   return (
-    <div className="p-6 border rounded-lg shadow-sm bg-card mb-6">
-      <div role="group" aria-label="Upload new media" className="space-y-4">
+    <div className={`border rounded-lg shadow-sm bg-card ${compact ? "p-4" : "p-6 mb-6"}`}>
+      <div role="group" aria-label="Upload new media" className={compact ? "space-y-3" : "space-y-4"}>
         <div>
-          <Label htmlFor="media-file" className="text-base font-medium">Upload New Media</Label>
-          <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="media-folder" className="text-sm">Folder (e.g., uploads/images/)</Label>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            <Label htmlFor="media-file" className="text-base font-medium">Upload New Media</Label>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="media-folder" className="whitespace-nowrap text-sm text-muted-foreground">Upload Folder:</Label>
               <Input
                 id="media-folder"
                 placeholder="uploads/"
                 value={folder}
                 onChange={(e) => setFolder(e.target.value)}
                 onKeyDown={handleFolderKeyDown}
+                className="h-9 w-44 sm:w-56"
               />
             </div>
           </div>
           <div className="mt-2 flex items-center justify-center w-full">
             <label
               htmlFor="media-file-input"
-              className={`flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-lg cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors ${
+              className={`flex flex-col items-center justify-center w-full ${compact ? "h-28" : "h-40"} border-2 border-dashed rounded-lg cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors ${
                 isDraggingOver ? "border-primary bg-primary-foreground/20" : "border-input"
               }`}
               onDrop={handleDrop}
@@ -319,8 +322,8 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData, defau
               onDragEnter={handleDragEnter}
               onDragLeave={handleDragLeave}
             >
-              <div className="flex flex-col items-center justify-center pt-5 pb-6 pointer-events-none"> {/* pointer-events-none for children */}
-                <UploadCloud className="w-10 h-10 mb-3 text-muted-foreground" />
+              <div className={`flex flex-col items-center justify-center pointer-events-none ${compact ? "pt-3 pb-4" : "pt-5 pb-6"}`}> {/* pointer-events-none for children */}
+                <UploadCloud className={`text-muted-foreground ${compact ? "w-8 h-8 mb-2" : "w-10 h-10 mb-3"}`} />
                 <p className="mb-2 text-sm text-muted-foreground">
                   <span className="font-semibold">Click to upload</span> or drag and drop
                 </p>
@@ -332,7 +335,7 @@ export default function MediaUploadForm({ onUploadSuccess, returnJustData, defau
           {previewUrl && file && file.type.startsWith("image/") && (
             <div className="mt-4">
               <Label>Preview:</Label>
-              <Image src={previewUrl} alt="Preview" width={300} height={192} className="mt-2 rounded-md max-h-48 w-auto object-contain border" />
+              <Image src={previewUrl} alt="Preview" width={300} height={192} className={`mt-2 rounded-md w-auto object-contain border ${compact ? "max-h-32" : "max-h-48"}`} />
             </div>
           )}
           {file && <p className="text-sm mt-2 text-muted-foreground">Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</p>}

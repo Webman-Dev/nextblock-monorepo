@@ -3,13 +3,24 @@ import { NextResponse, type NextRequest } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@nextblock-cms/db';
 import { resolveSupabaseAnonKey, resolveSupabaseUrl } from './lib/setup/env-status';
+import {
+  LANGUAGE_DETECTION_SETTING_KEY,
+  DEFAULT_LANGUAGE_DETECTION_SETTINGS,
+  getCountryFromRequestHeaders,
+  normalizeLanguageDetectionSettings,
+  resolveDetectedLocale,
+  type LanguageDetectionSettings,
+} from './lib/i18n/detection';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type UserRole = Database['public']['Enums']['user_role'];
 
 const LANGUAGE_COOKIE_KEY = 'NEXT_USER_LOCALE';
+// Fallbacks used only when the languages table can't be read (unprovisioned
+// instance, transient DB error). The live language list comes from the DB.
 const DEFAULT_LOCALE = 'en';
-const SUPPORTED_LOCALES = ['en', 'fr'];
+const FALLBACK_LOCALES = ['en', 'fr'];
+const LANGUAGE_COOKIE_MAX_AGE_SECONDS = 31_536_000;
 const cacheLoggingEnabled = process.env.NEXTBLOCK_CACHE_LOGGING_ENABLED === 'true';
 
 const cmsRoutePermissions: Record<string, UserRole[]> = {
@@ -136,6 +147,88 @@ async function hasProvisionedAdmin(supabase: SupabaseClient): Promise<boolean> {
   } catch {
     return true;
   }
+}
+
+interface LocaleRuntimeConfig {
+  /** Active language codes as configured in the CMS (is_active null counts as active). */
+  activeCodes: string[];
+  /** The is_default language, falling back to the first active language. */
+  defaultCode: string;
+  detection: LanguageDetectionSettings;
+}
+
+// Module-level cache for the language list + detection settings, mirroring
+// provisionedAdminCache: middleware modules persist across requests in a worker,
+// so this keeps locale resolution to at most one DB round-trip per minute.
+let localeConfigCache: { value: LocaleRuntimeConfig | null; expires: number } | null = null;
+// In-flight load shared by concurrent cache misses so a burst of requests right
+// after expiry (or on a cold isolate) collapses to a single DB round-trip.
+let localeConfigInflight: Promise<LocaleRuntimeConfig | null> | null = null;
+
+async function loadLocaleRuntimeConfig(
+  supabase: SupabaseClient,
+): Promise<LocaleRuntimeConfig | null> {
+  const now = Date.now();
+  try {
+    const [languagesResult, detectionResult] = await Promise.all([
+      supabase.from('languages').select('code, is_default, is_active'),
+      supabase
+        .from('site_settings')
+        .select('value')
+        .eq('key', LANGUAGE_DETECTION_SETTING_KEY)
+        .maybeSingle(),
+    ]);
+
+    const activeLanguages = (languagesResult.data ?? []).filter(
+      (language: { is_active: boolean | null }) => language.is_active !== false,
+    );
+    if (languagesResult.error || activeLanguages.length === 0) {
+      localeConfigCache = { value: null, expires: now + 10_000 };
+      return null;
+    }
+
+    const defaultCode =
+      activeLanguages.find((language: { is_default: boolean }) => language.is_default)?.code ??
+      activeLanguages[0].code;
+    // A missing/failed settings row means "use defaults" — detection must not
+    // break just because the setting was never saved.
+    const detection = detectionResult.error
+      ? { ...DEFAULT_LANGUAGE_DETECTION_SETTINGS }
+      : normalizeLanguageDetectionSettings(detectionResult.data?.value);
+
+    const value: LocaleRuntimeConfig = {
+      activeCodes: activeLanguages.map((language: { code: string }) => language.code),
+      defaultCode,
+      detection,
+    };
+    localeConfigCache = { value, expires: now + 60_000 };
+    return value;
+  } catch {
+    localeConfigCache = { value: null, expires: now + 10_000 };
+    return null;
+  }
+}
+
+/**
+ * Loads the active languages and the admin-configured detection settings
+ * (site_settings.language_detection_settings — non-sensitive, anon-readable).
+ * Returns null when the DB can't answer (unprovisioned/transient error); the
+ * caller then falls back to the legacy hardcoded locale behavior. Results (and
+ * failures) are cached briefly so an outage never adds per-request queries, and
+ * concurrent misses share one in-flight load.
+ */
+function getLocaleRuntimeConfig(
+  supabase: SupabaseClient,
+): Promise<LocaleRuntimeConfig | null> {
+  if (localeConfigCache && localeConfigCache.expires > Date.now()) {
+    return Promise.resolve(localeConfigCache.value);
+  }
+  if (!localeConfigInflight) {
+    localeConfigInflight = loadLocaleRuntimeConfig(supabase).finally(() => {
+      localeConfigInflight = null;
+    });
+  }
+  return localeConfigInflight;
 }
 
 function getHttpOrigin(value: string | undefined): string | null {
@@ -414,11 +507,35 @@ export async function proxy(request: NextRequest) {
 
   await supabase.auth.getSession();
 
+  // Locale resolution needs nothing from the authenticated user, so load the
+  // locale config concurrently with the user lookup instead of serially.
   const cookieLocale = request.cookies.get(LANGUAGE_COOKIE_KEY)?.value;
-  let currentLocale = cookieLocale;
+  const [localeConfig, userResult] = await Promise.all([
+    getLocaleRuntimeConfig(supabase),
+    supabase.auth.getUser(),
+  ]);
 
-  if (!currentLocale || !SUPPORTED_LOCALES.includes(currentLocale)) {
-    currentLocale = DEFAULT_LOCALE;
+  let currentLocale: string;
+  let rememberVisitorChoice = DEFAULT_LANGUAGE_DETECTION_SETTINGS.rememberVisitorChoice;
+
+  if (localeConfig) {
+    rememberVisitorChoice = localeConfig.detection.rememberVisitorChoice;
+    if (cookieLocale && localeConfig.activeCodes.includes(cookieLocale)) {
+      // An explicit or previously detected choice always wins over detection.
+      currentLocale = cookieLocale;
+    } else {
+      currentLocale = resolveDetectedLocale({
+        mode: localeConfig.detection.mode,
+        acceptLanguage: request.headers.get('accept-language'),
+        countryCode: getCountryFromRequestHeaders(request.headers),
+        availableCodes: localeConfig.activeCodes,
+        defaultCode: localeConfig.defaultCode,
+      });
+    }
+  } else {
+    // Languages unreadable (unprovisioned / transient error): legacy behavior.
+    currentLocale =
+      cookieLocale && FALLBACK_LOCALES.includes(cookieLocale) ? cookieLocale : DEFAULT_LOCALE;
   }
 
   requestHeaders.set('X-User-Locale', currentLocale);
@@ -426,7 +543,7 @@ export async function proxy(request: NextRequest) {
   const {
     data: { user },
     error: userError,
-  } = await supabase.auth.getUser();
+  } = userResult;
 
   // First-boot setup gate (configured but no admin yet, and nobody signed in): funnel
   // anonymous traffic to /setup so the wizard can create the first admin. A logged-in
@@ -518,10 +635,26 @@ export async function proxy(request: NextRequest) {
     finalResponse.cookies.set(cookie.name, cookie.value, cookie);
   });
 
-  if (request.cookies.get(LANGUAGE_COOKIE_KEY)?.value !== currentLocale) {
+  // Only persist the locale cookie when we actually resolved it against the DB.
+  // If localeConfig is null (unprovisioned / transient DB error) we still stamp
+  // X-User-Locale for rendering, but writing the fallback would clobber a
+  // returning visitor's valid non-fallback cookie (e.g. 'es') with 'en' for a
+  // year — so a transient outage must never overwrite a stored preference.
+  const requestCookieLocale = request.cookies.get(LANGUAGE_COOKIE_KEY)?.value;
+  // Re-issue when the value changed OR whenever "remember" is off: the request
+  // Cookie header carries no expiry, so rewriting a same-value session cookie is
+  // the only way to downgrade a previously persistent cookie after an admin
+  // turns remembering off (without it, old 1-year cookies would linger).
+  if (
+    localeConfig &&
+    (requestCookieLocale !== currentLocale || !rememberVisitorChoice)
+  ) {
+    // "Remember visitor's choice" ON -> persist for a year; OFF -> session cookie,
+    // so detection runs again on the next browser session while the language still
+    // sticks for the current one (switcher + in-session consistency).
     finalResponse.cookies.set(LANGUAGE_COOKIE_KEY, currentLocale, {
       path: '/',
-      maxAge: 31_536_000,
+      ...(rememberVisitorChoice ? { maxAge: LANGUAGE_COOKIE_MAX_AGE_SECONDS } : {}),
       sameSite: 'lax',
     });
   }
