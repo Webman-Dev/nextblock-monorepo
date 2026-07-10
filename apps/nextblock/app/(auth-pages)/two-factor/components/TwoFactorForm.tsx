@@ -25,10 +25,11 @@ export default function TwoFactorForm({
     type === 'email' && pendingEmailCode ? `Enter the code we sent to ${email}.` : null,
   );
 
-  const submit = () => {
+  const submit = (codeToSubmit: string = code) => {
+    if (codeToSubmit.length !== 6) return;
     setError(null);
     const formData = new FormData();
-    formData.append('code', code);
+    formData.append('code', codeToSubmit);
     formData.append('redirect_to', redirectTo);
     startTransition(async () => {
       try {
@@ -85,7 +86,13 @@ export default function TwoFactorForm({
             autoFocus
             maxLength={6}
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            onChange={(e) => {
+              const next = e.target.value.replace(/\D/g, '').slice(0, 6);
+              setCode(next);
+              // Auto-submit the moment a full 6-digit code is entered (typed, pasted,
+              // or filled by the OS one-time-code autofill) — no button press needed.
+              if (next.length === 6 && !isPending) submit(next);
+            }}
             placeholder="000000"
             className="tracking-[0.5em] text-center text-lg"
           />
