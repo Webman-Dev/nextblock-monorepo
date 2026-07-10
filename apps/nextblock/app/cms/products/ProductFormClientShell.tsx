@@ -3,32 +3,80 @@
 import React from 'react';
 import { ProductForm } from '@nextblock-cms/ecommerce';
 import MediaPickerDialog from '../media/components/MediaPickerDialog';
-type ProductFormClientShellProps = React.ComponentProps<typeof ProductForm>;
+import DraftStatusActions from '../components/DraftStatusActions';
+
+type ProductFormProps = React.ComponentProps<typeof ProductForm>;
+type ProductUpdateAction = NonNullable<ProductFormProps['updateAction']>;
+
+type ProductFormClientShellProps = ProductFormProps & {
+  /** Present only in edit mode; drives the "Unpublished Draft" toolbar. */
+  productId?: string;
+  /** Draft existence as computed on the server for the current render. */
+  serverHasDraft?: boolean;
+};
 
 const productFormSkeletonRows = ['details', 'description', 'media', 'inventory'];
 
-export default function ProductFormClientShell(props: ProductFormClientShellProps) {
+export default function ProductFormClientShell({
+  productId,
+  serverHasDraft = false,
+  updateAction,
+  ...props
+}: ProductFormClientShellProps) {
   const [isMounted, setIsMounted] = React.useState(false);
+  // The draft toolbar is gated on the server-computed `hasDraft`, but the form
+  // autosave writes a draft WITHOUT revalidating the route (revalidating would
+  // re-init the form and loop the autosave — see updateProductAction). Track
+  // draft existence on the client so the toolbar can appear the moment an
+  // autosave persists a draft, without a server refetch.
+  const [hasDraft, setHasDraft] = React.useState(serverHasDraft);
 
   React.useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  if (!isMounted) {
-    return <ProductFormShellSkeleton />;
-  }
+  // Keep in sync with the server whenever it reports a draft (e.g. block edits
+  // in BlockEditorArea call router.refresh(), which re-runs the page). Only ever
+  // latch ON here — publish/discard reload the whole page, which resets state.
+  React.useEffect(() => {
+    if (serverHasDraft) {
+      setHasDraft(true);
+    }
+  }, [serverHasDraft]);
+
+  // Reveal the toolbar as soon as a form autosave succeeds. The autosave already
+  // upserted a product_drafts row, so a draft now exists.
+  const wrappedUpdateAction = React.useCallback(
+    async (data: Parameters<ProductUpdateAction>[0]) => {
+      const result = await updateAction!(data);
+      setHasDraft(true);
+      return result;
+    },
+    [updateAction]
+  );
 
   return (
-    <ProductForm
-      {...props}
-      mediaPickerNode={
-        <MediaPickerDialog
-          triggerLabel="+ Add Image"
-          triggerVariant="outline"
-          defaultFolder="uploads/products/"
+    <>
+      {productId ? (
+        <DraftStatusActions parentId={productId} parentType="product" hasDraft={hasDraft} />
+      ) : null}
+      {isMounted ? (
+        <ProductForm
+          {...props}
+          hasOpenDraft={hasDraft}
+          updateAction={updateAction ? wrappedUpdateAction : undefined}
+          mediaPickerNode={
+            <MediaPickerDialog
+              triggerLabel="+ Add Image"
+              triggerVariant="outline"
+              defaultFolder="uploads/products/"
+            />
+          }
         />
-      }
-    />
+      ) : (
+        <ProductFormShellSkeleton />
+      )}
+    </>
   );
 }
 

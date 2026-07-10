@@ -13,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from '@nextblock-cms/ui';
 import ProductFormClientShell from '../../ProductFormClientShell';
-import DraftStatusActions from '../../../components/DraftStatusActions';
 import {
   getCmsProduct,
   getEnabledPaymentProviders,
@@ -191,7 +190,6 @@ export default async function EditProductPage({
 
   return (
     <div className="space-y-8 w-full max-w-[1400px] mx-auto px-6 py-8">
-      <DraftStatusActions parentId={product.id} parentType="product" hasDraft={hasDraft} />
       <CortexAiPageContextRegistrar
         context={{
           contentType: 'product',
@@ -279,6 +277,8 @@ export default async function EditProductPage({
       </div>
 
       <ProductFormClientShell
+        productId={product.id}
+        serverHasDraft={hasDraft}
         initialData={normalizedInitialData}
         isEdit
         availableLanguagesProp={languages}

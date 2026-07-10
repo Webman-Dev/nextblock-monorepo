@@ -100,6 +100,8 @@ interface ProductFormProps {
   createAction?: (data: ProductFormValues) => Promise<void>;
   updateAction?: (data: ProductFormValues) => Promise<{ success: boolean } | void>;
   availableCategoriesProp?: Array<{ id: string; name: string; slug: string }>;
+  /** Whether an unpublished draft is currently open for this product (drives the Freemius sync warning). */
+  hasOpenDraft?: boolean;
 }
 
 interface FormSectionProps {
@@ -294,7 +296,8 @@ export function ProductForm({
   configStatus,
   createAction,
   updateAction,
-  availableCategoriesProp = []
+  availableCategoriesProp = [],
+  hasOpenDraft = false
 }: ProductFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showVariations, setShowVariations] = useState(() => Boolean(initialData?.variants?.length));
@@ -367,12 +370,16 @@ export function ProductForm({
     // Nothing has changed since the last autosave — don't re-fire.
     if (snapshot === lastSavedSnapshotRef.current) return;
 
+    // Keep this debounce short so the draft persists — and the "Unpublished
+    // Draft" toolbar appears — soon after the user pauses, without spamming a
+    // write on every keystroke (it's a trailing debounce, so continuous typing
+    // still only fires once they stop).
     const timer = setTimeout(() => {
       if (!isSubmitting) {
         lastSavedSnapshotRef.current = snapshot;
         handleSubmit(onSubmit)();
       }
-    }, 1000);
+    }, 400);
 
     return () => clearTimeout(timer);
   }, [allValues, isEdit, isDirty, isSubmitting, handleSubmit]);
@@ -1080,7 +1087,10 @@ export function ProductForm({
                   <Input id="freemius_plan_id" {...register('freemius_plan_id')} className="h-9" />
                 </div>
                 {hasFreemiusProductId ? (
-                  <SyncFreemiusPricingButton productId={watch('freemius_product_id') as string} />
+                  <SyncFreemiusPricingButton
+                    productId={watch('freemius_product_id') as string}
+                    hasOpenDraft={hasOpenDraft}
+                  />
                 ) : null}
               </div>
 

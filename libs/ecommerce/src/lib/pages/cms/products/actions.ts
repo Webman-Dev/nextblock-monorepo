@@ -42,6 +42,10 @@ export async function triggerSingleProductSync(productId: string) {
   try {
     const result = await syncSingleFreemiusProduct(productId);
     revalidatePath('/cms/products', 'page');
+    // The sync writes pricing directly onto the live product row(s). Also
+    // invalidate the edit route so an open editor re-hydrates with the synced
+    // values instead of autosaving a draft built from stale pre-sync values.
+    revalidatePath('/cms/products/[id]/edit', 'page');
     return { success: true, data: result };
   } catch (error: any) {
     return { error: error.message || 'Failed to sync product with Freemius' };
