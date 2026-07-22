@@ -16,9 +16,11 @@ interface UserFormProps {
     shippingAddress: CustomerAddressInput | null;
   };
   formAction: (formData: FormData) => Promise<{ error?: string } | void>;
+  /** Lock the role selector — true when this user is the only remaining Admin. */
+  lockRole?: boolean;
 }
 
-export default function UserForm({ userToEditAuth, userToEditProfile, userToEditAddresses, formAction }: UserFormProps) {
+export default function UserForm({ userToEditAuth, userToEditProfile, userToEditAddresses, formAction, lockRole }: UserFormProps) {
   const searchParams = useSearchParams();
   const successMsg = searchParams.get('success');
 
@@ -63,6 +65,7 @@ export default function UserForm({ userToEditAuth, userToEditProfile, userToEdit
           email={userToEditAuth.email}
           onAction={handleAdminSave}
           initialSuccessMessage={successMsg}
+          lockRole={lockRole}
       />
     </div>
   );

@@ -67,6 +67,10 @@ interface CustomerProfileFormProps {
   accountLinks?: AccountNavigationLink[];
   onAction?: (data: ExtendedProfileUpdateData) => Promise<{ error?: string } | void>;
   initialSuccessMessage?: string | null;
+  /** Disable the admin Role selector (e.g. this is the only Admin, so its role can't be changed). */
+  lockRole?: boolean;
+  /** Explanation shown under the disabled Role selector. */
+  lockRoleReason?: string;
 }
 
 function buildAddressDefaults(address?: ExtendedProfileUpdateData['billing_address']) {
@@ -165,6 +169,8 @@ export function CustomerProfileForm({
   accountLinks,
   onAction,
   initialSuccessMessage,
+  lockRole,
+  lockRoleReason,
 }: CustomerProfileFormProps) {
   const { t } = useTranslations();
   const [loading, setLoading] = useState(false);
@@ -434,6 +440,7 @@ export function CustomerProfileForm({
                   <Select
                     value={watch('role') || 'USER'}
                     onValueChange={(val: UserRole) => setValue('role', val)}
+                    disabled={lockRole}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select role" />
@@ -444,6 +451,12 @@ export function CustomerProfileForm({
                       <SelectItem value="ADMIN">Admin</SelectItem>
                     </SelectContent>
                   </Select>
+                  {lockRole && (
+                    <p className="text-xs text-muted-foreground">
+                      {lockRoleReason ||
+                        "This is the only Admin account, so its role can't be changed. Promote another user to Admin first."}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

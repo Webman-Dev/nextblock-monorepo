@@ -55,7 +55,7 @@ import {
   createCustomBlockDefinition,
   updateCustomBlockDefinition,
 } from "../actions";
-import { orderCustomBlockFieldsByLayout } from "@nextblock-cms/utils";
+import { orderCustomBlockFieldsByLayout, cn } from "@nextblock-cms/utils";
 import type { CustomBlockDefinition, CustomBlockField } from "@nextblock-cms/utils";
 
 // Allowed container and field tags
@@ -544,6 +544,14 @@ export function BlockComposer({ initialData, mode }: BlockComposerProps) {
       toast.error("Block must contain at least one field.");
       return;
     }
+    if (fields.some((field) => !field.key.trim())) {
+      toast.error("Every property needs a key.");
+      return;
+    }
+    if (duplicateFieldKeys.size > 0) {
+      toast.error("Property keys must be unique — fix the highlighted duplicate keys.");
+      return;
+    }
 
     const payload = {
       name,
@@ -823,10 +831,30 @@ export function BlockComposer({ initialData, mode }: BlockComposerProps) {
     return used;
   }, [layoutFieldRefs, selectedNodePath]);
 
+  // Property keys that appear on more than one field. Duplicate keys are invalid (a key
+  // must be unique), so they're flagged in the editor rather than silently dropping a field.
+  const duplicateFieldKeys = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const field of fields) {
+      counts.set(field.key, (counts.get(field.key) ?? 0) + 1);
+    }
+    const dups = new Set<string>();
+    for (const [key, count] of counts) {
+      if (count > 1) dups.add(key);
+    }
+    return dups;
+  }, [fields]);
+
   // Keep the Properties Schema list itself ordered to match the layout blueprint,
   // so the fields editor mirrors the visual tree order everywhere.
   useEffect(() => {
     setFields((prev) => {
+      // While any keys collide, skip layout-driven reordering: orderCustomBlockFieldsByLayout
+      // dedupes by key and would silently drop the colliding field. Keep the list intact so
+      // the duplicate can be flagged (red border) and fixed by the user instead of vanishing.
+      const keys = prev.map((field) => field.key);
+      if (new Set(keys).size !== keys.length) return prev;
+
       const ordered = orderCustomBlockFieldsByLayout(prev, layoutSchema);
       const unchanged =
         ordered.length === prev.length && ordered.every((field, index) => field === prev[index]);
@@ -1063,8 +1091,18 @@ export function BlockComposer({ initialData, mode }: BlockComposerProps) {
                               value={field.key}
                               placeholder="e.g. quote"
                               onChange={(e) => updateField(idx, { key: e.target.value })}
-                              className="h-8 font-mono text-xs"
+                              aria-invalid={duplicateFieldKeys.has(field.key)}
+                              className={cn(
+                                "h-8 font-mono text-xs",
+                                duplicateFieldKeys.has(field.key) &&
+                                  "border-destructive focus-visible:ring-destructive"
+                              )}
                             />
+                            {duplicateFieldKeys.has(field.key) && (
+                              <p className="text-[10px] font-medium text-destructive">
+                                Duplicate key — property keys must be unique.
+                              </p>
+                            )}
                           </div>
                           <div className="md:col-span-4 space-y-1">
                             <Label className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">Label</Label>

@@ -57,6 +57,75 @@ function createServiceRoleClient() {
   });
 }
 
+export async function createUser(formData: FormData) {
+  const supabase = createClient();
+  const adminCheck = await verifyAdmin(supabase);
+  if (!adminCheck.isAdmin) {
+    return { error: adminCheck.error || "Unauthorized" };
+  }
+
+  const email = (formData.get("email") as string | null)?.trim().toLowerCase() || "";
+  const password = (formData.get("password") as string | null) || "";
+  const fullName = (formData.get("full_name") as string | null)?.trim() || "";
+  const role = formData.get("role") as UserRole;
+  // Admin-created accounts are confirmed by default so the user can sign in
+  // immediately without an SMTP round-trip (mirrors completeSetup / auto-accept).
+  const emailConfirm = formData.get("email_confirm") !== "false";
+
+  if (!email) {
+    return { error: "Email is required." };
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { error: "Enter a valid email address." };
+  }
+  if (!password || password.length < 8) {
+    return { error: "Password must be at least 8 characters." };
+  }
+  if (!role || !['ADMIN', 'WRITER', 'USER'].includes(role)) {
+    return { error: "Invalid role specified." };
+  }
+
+  const adminSupabase = createServiceRoleClient();
+
+  const { data: created, error: createError } = await adminSupabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: emailConfirm,
+    user_metadata: fullName ? { full_name: fullName } : {},
+  });
+
+  if (createError || !created?.user) {
+    if (createError && /already|registered|exists/i.test(createError.message)) {
+      return { error: "An account with this email already exists." };
+    }
+    return { error: `Failed to create user: ${createError?.message ?? 'unknown error'}` };
+  }
+
+  // The handle_new_user trigger inserts the profile row during createUser and assigns
+  // role USER (an admin already exists, so this account is never the first user). Apply
+  // the admin's chosen role and name explicitly afterward.
+  const { error: profileError } = await adminSupabase
+    .from("profiles")
+    .update({ role, full_name: fullName || null })
+    .eq("id", created.user.id);
+
+  revalidatePath("/cms/users");
+
+  if (profileError) {
+    // The account was created (trigger seeded role USER), but applying the chosen role
+    // failed. Land the admin on the edit screen — the recovery path — rather than
+    // stranding them on the create form, where a retry would hit "email already exists".
+    console.error("Error setting new user profile:", profileError);
+    redirect(
+      `/cms/users/${created.user.id}/edit?success=${encodeURIComponent(
+        "User created, but their role wasn't applied automatically — set it below and save.",
+      )}`,
+    );
+  }
+
+  redirect(`/cms/users/${created.user.id}/edit?success=User created successfully`);
+}
+
 export async function updateUserProfile(userIdToUpdate: string, formData: FormData) {
   const supabase = createClient();
   const adminCheck = await verifyAdmin(supabase);

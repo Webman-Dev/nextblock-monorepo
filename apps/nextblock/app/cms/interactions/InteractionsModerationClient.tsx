@@ -4,8 +4,17 @@ import React, { useState, useTransition } from "react";
 import { Button } from "@nextblock-cms/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar";
 import { Badge } from "@nextblock-cms/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@nextblock-cms/ui";
 import { updateInteractionStatus, saveNotificationEmails } from "../../actions/interactions";
 import { cn } from "@nextblock-cms/utils";
+import EmailRecipientsInput, { type EmailRecipientsInputHandle } from "./EmailRecipientsInput";
 import {
   MessageSquare,
   Check,
@@ -31,44 +40,100 @@ export default function InteractionsModerationClient({
 }: InteractionsModerationClientProps) {
   const [interactions, setInteractions] = useState<any[]>(initialInteractions);
 
-  // Notification settings states
-  const [emailsInput, setEmailsInput] = useState("");
+  // Notification settings states. `emails` is the working (editable) list; `savedEmails`
+  // mirrors what is persisted, so cancelling can revert unsaved edits.
+  const [emails, setEmails] = useState<string[]>([]);
+  const [savedEmails, setSavedEmails] = useState<string[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [savingEmails, setSavingEmails] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null);
+  const recipientsRef = React.useRef<EmailRecipientsInputHandle>(null);
+  const autoCloseTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearAutoClose = () => {
+    if (autoCloseTimer.current) {
+      clearTimeout(autoCloseTimer.current);
+      autoCloseTimer.current = null;
+    }
+  };
+
+  // Cancel any pending success auto-close timer on unmount.
+  React.useEffect(() => clearAutoClose, []);
+
+  const parseEmails = (raw: string | undefined | null): string[] =>
+    (raw || "")
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean);
 
   React.useEffect(() => {
     if (isAdmin) {
       import("../../actions/interactions").then(({ getNotificationEmails }) => {
         getNotificationEmails().then((res) => {
           if (res.success && res.emails) {
-            setEmailsInput(res.emails);
+            const list = parseEmails(res.emails);
+            setEmails(list);
+            setSavedEmails(list);
           }
         });
       });
     }
   }, [isAdmin]);
 
+  const openSettings = () => {
+    // Start from the last-saved list with a clean slate — discards any edits abandoned
+    // in a previous open, and clears stale success/error banners.
+    clearAutoClose();
+    setEmails(savedEmails);
+    setSettingsError(null);
+    setSettingsSuccess(null);
+    setIsSettingsOpen(true);
+  };
+
+  const closeSettings = () => {
+    if (savingEmails) return; // don't dismiss mid-save
+    clearAutoClose();
+    setEmails(savedEmails); // revert unsaved edits
+    setSettingsError(null);
+    setSettingsSuccess(null);
+    setIsSettingsOpen(false);
+  };
+
   const handleSaveEmails = async () => {
+    // Commit any address still typed in the input. `null` means it's invalid — the
+    // input already shows the inline error, so don't proceed to save.
+    const finalList = recipientsRef.current?.flush();
+    if (finalList === null) return;
+    const list = finalList ?? emails;
+
+    clearAutoClose(); // supersede any prior success timer
     setSavingEmails(true);
     setSettingsError(null);
     setSettingsSuccess(null);
 
-    const res = await saveNotificationEmails(emailsInput);
-    setSavingEmails(false);
-
-    if (res.error) {
-      setSettingsError(res.error);
-    } else {
-      setSettingsSuccess("Notification settings saved successfully.");
-      if (res.emails) {
-        setEmailsInput(res.emails);
+    try {
+      const res = await saveNotificationEmails(list.join(", "));
+      if (res.error) {
+        setSettingsError(res.error);
+      } else {
+        const saved = parseEmails(res.emails);
+        setEmails(saved);
+        setSavedEmails(saved);
+        setSettingsSuccess("Notification settings saved successfully.");
+        // Auto-close after a beat. Tracked so a reopen/second save cancels it.
+        autoCloseTimer.current = setTimeout(() => {
+          autoCloseTimer.current = null;
+          setSettingsSuccess(null);
+          setIsSettingsOpen(false);
+        }, 1500);
       }
-      setTimeout(() => {
-        setSettingsSuccess(null);
-        setIsSettingsOpen(false);
-      }, 1500);
+    } catch {
+      // The server action rejected (offline, 500, auth outage). Surface it — the
+      // `finally` re-enables the close paths so the dialog can never get stuck.
+      setSettingsError("Couldn't save settings. Check your connection and try again.");
+    } finally {
+      setSavingEmails(false);
     }
   };
   const [filterType, setFilterType] = useState<"all" | "review" | "comment">("all");
@@ -141,7 +206,7 @@ export default function InteractionsModerationClient({
         {isAdmin && (
           <div className="flex items-center gap-2 self-start md:self-auto">
             <Button
-              onClick={() => setIsSettingsOpen(true)}
+              onClick={openSettings}
               className="flex items-center gap-2 text-xs"
               variant="outline"
             >
@@ -347,62 +412,64 @@ export default function InteractionsModerationClient({
         )}
       </div>
 
-      {/* Settings Modal */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-background border border-border rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                <Mail className="h-5 w-5 text-primary" />
-                Notification Settings
-              </h3>
-              <button
-                onClick={() => setIsSettingsOpen(false)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <p className="text-sm text-muted-foreground text-left">
+      {/* Settings Modal — Radix Dialog handles focus trap/restore, Escape, and overlay
+          click. onOpenChange fires for every close path; closeSettings() blocks dismissal
+          mid-save and reverts unsaved edits. */}
+      <Dialog
+        open={isSettingsOpen}
+        onOpenChange={(open) => {
+          if (!open) closeSettings();
+          else setIsSettingsOpen(true);
+        }}
+      >
+        <DialogContent
+          className="max-w-md rounded-2xl space-y-4"
+          onInteractOutside={(e) => {
+            if (savingEmails) e.preventDefault();
+          }}
+          onEscapeKeyDown={(e) => {
+            if (savingEmails) e.preventDefault();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-primary" />
+              Notification Settings
+            </DialogTitle>
+            <DialogDescription>
               Configure which email addresses receive notification alerts when new pending reviews or comments are submitted.
-            </p>
-            <div className="space-y-1.5 text-left">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-                Email Recipients
-              </label>
-              <textarea
-                value={emailsInput}
-                onChange={(e) => setEmailsInput(e.target.value)}
-                placeholder="admin@example.com, moderator@example.com"
-                className="w-full min-h-[80px] bg-background border border-border rounded-xl px-3 py-2 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
-              />
-              <span className="text-[10px] text-muted-foreground">
-                Enter a comma-separated list of email addresses.
-              </span>
-            </div>
+            </DialogDescription>
+          </DialogHeader>
 
-            {settingsError && <div className="text-xs font-medium text-destructive text-left">{settingsError}</div>}
-            {settingsSuccess && <div className="text-xs font-medium text-emerald-600 text-left">{settingsSuccess}</div>}
-
-            <div className="flex justify-end gap-3 pt-2">
-              <Button
-                variant="ghost"
-                onClick={() => setIsSettingsOpen(false)}
-                disabled={savingEmails}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSaveEmails}
-                disabled={savingEmails}
-                className="min-w-[100px]"
-              >
-                {savingEmails ? "Saving..." : "Save Settings"}
-              </Button>
-            </div>
+          <div className="space-y-1.5 text-left">
+            <label
+              htmlFor="notification-emails-input"
+              className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block"
+            >
+              Email Recipients
+            </label>
+            <EmailRecipientsInput
+              ref={recipientsRef}
+              inputId="notification-emails-input"
+              value={emails}
+              onChange={setEmails}
+              disabled={savingEmails}
+            />
           </div>
-        </div>
-      )}
+
+          {settingsError && <div role="alert" className="text-xs font-medium text-destructive text-left">{settingsError}</div>}
+          {settingsSuccess && <div className="text-xs font-medium text-emerald-600 text-left">{settingsSuccess}</div>}
+
+          <DialogFooter className="gap-3 sm:gap-2">
+            <Button variant="ghost" onClick={closeSettings} disabled={savingEmails}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEmails} disabled={savingEmails} className="min-w-[100px]">
+              {savingEmails ? "Saving..." : "Save Settings"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
