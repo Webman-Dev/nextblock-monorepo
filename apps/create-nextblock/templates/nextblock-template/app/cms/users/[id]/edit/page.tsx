@@ -17,6 +17,7 @@ async function getUserAndProfileData(userId: string): Promise<{
   authUser: AuthUser;
   profile: Profile | null;
   addresses: Awaited<ReturnType<typeof getDefaultUserAddresses>>;
+  isSoleAdmin: boolean;
 } | null> {
 
   // Fetch user from auth.users
@@ -64,7 +65,24 @@ async function getUserAndProfileData(userId: string): Promise<{
 
   const addresses = await getDefaultUserAddresses(userId, serviceSupabase as any);
 
-  return { authUser: simplifiedAuthUser, profile: profileData as Profile | null, addresses };
+  // Is this user the only remaining Admin? If so, the edit form locks the role selector
+  // so the last admin can't demote themselves out of CMS access (the server action also
+  // guards this — the lock just prevents hitting that error).
+  let isSoleAdmin = false;
+  if ((profileData as Profile | null)?.role === 'ADMIN') {
+    const { count } = await serviceSupabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'ADMIN');
+    isSoleAdmin = count === 1;
+  }
+
+  return {
+    authUser: simplifiedAuthUser,
+    profile: profileData as Profile | null,
+    addresses,
+    isSoleAdmin,
+  };
 }
 
 export default async function EditUserPage(props: { params: Promise<{ id: string }> }) {
@@ -90,6 +108,7 @@ export default async function EditUserPage(props: { params: Promise<{ id: string
         userToEditProfile={userData.profile}
         userToEditAddresses={userData.addresses}
         formAction={updateUserActionWithId}
+        lockRole={userData.isSoleAdmin}
       />
     </div>
   );

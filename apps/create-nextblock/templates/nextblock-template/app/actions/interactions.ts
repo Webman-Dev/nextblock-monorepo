@@ -348,12 +348,35 @@ export async function saveNotificationEmails(emails: string) {
     return { error: "Unauthorized. Admin role required." };
   }
 
-  // Basic validation of emails
-  const cleaned = emails
+  // Validate every address, dedupe (case-insensitive), and normalize to lowercase.
+  // Mirrors the client-side check so a crafted/legacy payload can't persist junk.
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const tokens = emails
     .split(",")
     .map((e) => e.trim())
-    .filter(Boolean)
-    .join(", ");
+    .filter(Boolean);
+
+  const seen = new Set<string>();
+  const valid: string[] = [];
+  const invalid: string[] = [];
+  for (const token of tokens) {
+    const lower = token.toLowerCase();
+    if (!emailRe.test(lower)) {
+      invalid.push(token);
+      continue;
+    }
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    valid.push(lower);
+  }
+
+  if (invalid.length > 0) {
+    return {
+      error: `Invalid email address${invalid.length > 1 ? "es" : ""}: ${invalid.join(", ")}`,
+    };
+  }
+
+  const cleaned = valid.join(", ");
 
   try {
     const { error } = await supabase

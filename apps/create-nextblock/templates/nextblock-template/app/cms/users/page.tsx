@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@nextblock-cms/ui";
 import { Badge } from "@nextblock-cms/ui";
-import { MoreHorizontal, Edit3, Users } from "lucide-react";
+import { MoreHorizontal, Edit3, Users, PlusCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -110,7 +110,11 @@ export default async function CmsUsersListPage() {
     <div className="w-full">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold">Manage Users</h1>
-        {/* No "Create New User" button as users are created via sign-up flow. Admins manage roles. */}
+        <Button asChild>
+          <Link href="/cms/users/new" className="flex items-center">
+            <PlusCircle className="mr-2 h-4 w-4" /> Create User
+          </Link>
+        </Button>
       </div>
 
       {users.length === 0 ? (
@@ -118,8 +122,13 @@ export default async function CmsUsersListPage() {
           <Users className="mx-auto h-12 w-12 text-muted-foreground" />
           <h3 className="mt-2 text-sm font-medium text-foreground">No other users found</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            New users will appear here after they sign up.
+            Create a user, or new users will appear here after they sign up.
           </p>
+          <Button asChild className="mt-4">
+            <Link href="/cms/users/new" className="flex items-center">
+              <PlusCircle className="mr-2 h-4 w-4" /> Create User
+            </Link>
+          </Button>
         </div>
       ) : (
         <div className="rounded-lg border overflow-hidden">
