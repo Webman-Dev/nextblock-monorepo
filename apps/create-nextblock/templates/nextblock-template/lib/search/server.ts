@@ -2,6 +2,7 @@ import 'server-only';
 
 import { getSsgSupabaseClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 import { resolveMediaUrl } from '../media/resolveMediaUrl';
+import { getHomepageTranslationGroupId } from '../../app/lib/homepage';
 import type {
   GlobalSearchFilter,
   GlobalSearchResponse,
@@ -340,6 +341,7 @@ async function fetchPages(languageId: number | null): Promise<SearchCandidate[]>
       meta_description,
       updated_at,
       language_id,
+      translation_group_id,
       languages!inner(code),
       media:feature_image_id(object_key, blur_data_url, width, height),
       blocks(content, block_type, order)
@@ -360,10 +362,18 @@ async function fetchPages(languageId: number | null): Promise<SearchCandidate[]>
     return [];
   }
 
+  // Every language variation of the homepage (its translation group, any slug)
+  // is served at "/", so link those results there rather than at "/{slug}".
+  const homepageGroupId = await getHomepageTranslationGroupId(supabase);
+
   return data.map((page: any) => {
     const bodyText = buildBodyFromBlocks(page.blocks);
     const description = page.meta_description || null;
-    const href = page.slug === 'home' || page.slug === 'accueil' ? '/' : `/${page.slug}`;
+    const isHomepage =
+      (homepageGroupId && page.translation_group_id === homepageGroupId) ||
+      page.slug === 'home' ||
+      page.slug === 'accueil';
+    const href = isHomepage ? '/' : `/${page.slug}`;
     const media = getFirstRelation(page.media as { object_key?: string | null } | { object_key?: string | null }[] | null);
 
     return {

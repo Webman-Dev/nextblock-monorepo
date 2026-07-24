@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import type { Database } from "@nextblock-cms/db";
 import { v4 as uuidv4 } from 'uuid';
 import { getOrCreateContentDraft } from "../../../lib/visual-editing/draft-content";
+import { getHomepageTranslationGroupId } from "../../lib/homepage";
 
 type PageStatus = Database['public']['Enums']['page_status'];
 import { encodedRedirect } from "@nextblock-cms/utils/server";
@@ -18,11 +19,16 @@ function getOptionalFeatureImageId(formData: FormData) {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
 
-function revalidatePublicPageSlug(slug: string | null | undefined) {
+function revalidatePublicPageSlug(
+  slug: string | null | undefined,
+  isHomepage = false
+) {
   if (!slug) return;
 
   revalidatePath(`/${slug}`);
-  if (slug === "home" || slug === "accueil") {
+  // Any language variation of the homepage is also served at "/", regardless of
+  // its slug — bust that cache too (the literal-slug check is a cheap fallback).
+  if (isHomepage || slug === "home" || slug === "accueil") {
     revalidatePath("/");
   }
 }
@@ -91,7 +97,11 @@ export async function createPage(formData: FormData) {
   }
 
   revalidatePath("/cms/pages");
-  revalidatePublicPageSlug(newPage?.slug);
+  const createHomepageGroupId = await getHomepageTranslationGroupId(supabase);
+  revalidatePublicPageSlug(
+    newPage?.slug,
+    !!createHomepageGroupId && newPage?.translation_group_id === createHomepageGroupId
+  );
 
   if (newPage?.id) {
     redirect(`/cms/pages/${newPage.id}/edit?success=${encodeURIComponent("Page created successfully.")}`);
@@ -168,15 +178,51 @@ export async function updatePage(pageId: number, formData: FormData) {
   }
 
   revalidatePath("/cms/pages");
-  revalidatePublicPageSlug(existingPage.slug);
+  const updateHomepageGroupId = await getHomepageTranslationGroupId(supabase);
+  const updateIsHomepage =
+    !!updateHomepageGroupId && existingPage.translation_group_id === updateHomepageGroupId;
+  revalidatePublicPageSlug(existingPage.slug, updateIsHomepage);
   if (rawFormData.slug && rawFormData.slug !== existingPage.slug) {
-      revalidatePublicPageSlug(rawFormData.slug);
+      revalidatePublicPageSlug(rawFormData.slug, updateIsHomepage);
   }
 
   revalidatePath(pageEditPath);
   return { success: true };
 }
 
+
+/**
+ * Publish a page directly (status -> "published") so it becomes visible on the
+ * live site. Used by the draft-aware "View Live" button when an admin chooses to
+ * publish a still-draft page. Revalidates the public surfaces, including "/" when
+ * the page belongs to the homepage translation group.
+ */
+export async function publishPage(pageId: number): Promise<{ error?: string } | void> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "User not authenticated." };
+
+  const { data: page, error } = await supabase
+    .from("pages")
+    .update({ status: "published", updated_at: new Date().toISOString() })
+    .eq("id", pageId)
+    .select("slug, translation_group_id")
+    .single();
+
+  if (error || !page) {
+    return { error: error?.message || "Could not publish the page." };
+  }
+
+  revalidatePath("/cms/pages");
+  revalidatePath(`/cms/pages/${pageId}/edit`);
+  const homepageGroupId = await getHomepageTranslationGroupId(supabase);
+  revalidatePublicPageSlug(
+    page.slug,
+    !!homepageGroupId && page.translation_group_id === homepageGroupId
+  );
+
+  return {};
+}
 
 export async function deletePage(pageId: number) {
   const supabase = createClient();
@@ -194,6 +240,13 @@ export async function deletePage(pageId: number) {
   }
 
   const { translation_group_id } = page;
+
+  // Resolve whether this is the homepage BEFORE deleting the group rows — once
+  // the default-language "home" page is gone, the lookup would return null and a
+  // homepage with a non-literal slug wouldn't get "/" revalidated.
+  const deleteHomepageGroupId = await getHomepageTranslationGroupId(supabase);
+  const deleteIsHomepage =
+    !!deleteHomepageGroupId && translation_group_id === deleteHomepageGroupId;
 
   // 2. Find All Related Pages
   const { data: relatedPages, error: relatedPagesError } = await supabase
@@ -239,7 +292,7 @@ export async function deletePage(pageId: number) {
   revalidatePath("/cms/navigation");
   if (relatedPages) {
     relatedPages.forEach(p => {
-      revalidatePublicPageSlug(p.slug);
+      revalidatePublicPageSlug(p.slug, deleteIsHomepage);
     });
   }
 

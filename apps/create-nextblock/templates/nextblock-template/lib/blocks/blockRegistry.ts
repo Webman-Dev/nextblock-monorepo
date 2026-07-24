@@ -27,13 +27,37 @@ export const HeadingBlockSchema = z.object({
 });
 export type HeadingBlockContent = z.infer<typeof HeadingBlockSchema>;
 
+// Stock-photo attribution (required for Unsplash: photographer + Unsplash must be
+// credited and linked). Optional; set when an external_url is a stock photo. Field
+// names match the search_stock_photos result so the agent can copy them verbatim.
+// All fields are nullable + optional: the search_stock_photos result carries
+// explicit nulls for missing values (e.g. Pexels has no downloadLocation, and
+// utmSource is null until the Unsplash app name is set), and the agent copies the
+// object verbatim — so the schema must accept null, not just undefined.
+export const ImageAttributionSchema = z.object({
+  provider: z.string().nullable().optional().describe('e.g. "unsplash" or "pexels"'),
+  photographer: z.string().nullable().optional(),
+  photographerUrl: z.string().nullable().optional(),
+  sourceUrl: z.string().nullable().optional().describe('Link to the photo on the provider'),
+  downloadLocation: z.string().nullable().optional().describe('Unsplash download-trigger endpoint'),
+  utmSource: z.string().nullable().optional().describe('Unsplash app name for attribution utm_source'),
+});
+export type ImageAttribution = z.infer<typeof ImageAttributionSchema>;
+
 export const ImageBlockSchema = z.object({
-  media_id: z.string().nullable().describe('UUID of the media item'),
+  media_id: z.string().nullable().optional().describe('UUID of the media item'),
   object_key: z.string().nullable().optional().describe('The actual R2 object key'),
+  external_url: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('Direct external image URL (e.g. a stock photo). Rendered as-is; media_id/object_key are not required when this is set.'),
+  attribution: ImageAttributionSchema.optional().describe('Stock-photo credit (required for Unsplash).'),
   alt_text: z.string().optional().describe('Alternative text'),
   caption: z.string().optional().describe('Optional caption'),
   width: z.number().nullable().optional().describe('Image width'),
   height: z.number().nullable().optional().describe('Image height'),
+  blur_data_url: z.string().nullable().optional().describe('Base64 blur placeholder'),
 });
 export type ImageBlockContent = z.infer<typeof ImageBlockSchema>;
 
@@ -77,8 +101,10 @@ const BackgroundSchema = z.object({
   min_height: z.string().optional(),
   gradient: GradientSchema.optional(),
   image: z.object({
-    media_id: z.string(),
-    object_key: z.string(),
+    media_id: z.string().optional(),
+    object_key: z.string().optional(),
+    external_url: z.string().optional(),
+    attribution: ImageAttributionSchema.optional(),
     alt_text: z.string().optional(),
     width: z.number().optional(),
     height: z.number().optional(),

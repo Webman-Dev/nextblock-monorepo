@@ -155,6 +155,51 @@ export async function bulkDraftProductsAction(productIds: string[]) {
   return { success: true, count: ids.length };
 }
 
+/**
+ * Publish a single product directly (status -> "active") so it becomes visible on
+ * the storefront. Used by the draft-aware "View Live" button when an admin chooses
+ * to publish a still-draft product. A plain status write (mirrors
+ * bulkDraftProductsAction) — it does NOT touch variants, prices, or the sale
+ * schedule.
+ */
+export async function publishProductAction(
+  productId: string
+): Promise<{ error?: string } | void> {
+  const id = String(productId || '').trim();
+  if (!id) {
+    return { error: 'Missing product id.' };
+  }
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: 'You must be signed in to publish a product.' };
+  }
+
+  const { data: product, error } = await supabase
+    .from('products')
+    .update({
+      status: 'active',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select('slug')
+    .single();
+
+  if (error || !product) {
+    return { error: error?.message || 'Could not publish the product.' };
+  }
+
+  revalidatePath('/cms/products');
+  revalidatePath(`/cms/products/${id}/edit`);
+  if (product.slug) {
+    revalidatePath(`/product/${product.slug}`);
+  }
+  return {};
+}
+
 export async function createProductAttributeAction(input: { name: string; slug?: string }) {
   const supabase = getServiceRoleSupabaseClient();
   const name = input.name.trim();

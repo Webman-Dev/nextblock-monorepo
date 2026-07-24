@@ -36,6 +36,7 @@ export default async function CortexAiSettingsPage({
     : {};
   const storedKeyUpdatedAt = formatDate(status.storedOpenRouterKeyUpdatedAt);
   const selectedModelUpdatedAt = formatDate(status.selectedModel?.updatedAt || null);
+  const stockKeysUpdatedAt = formatDate(status.stockKeysUpdatedAt);
   let compatibleModels: Awaited<ReturnType<typeof listCortexAiCompatibleOpenRouterModels>> = [];
   let modelCatalogError: string | null = null;
 
@@ -73,6 +74,16 @@ export default async function CortexAiSettingsPage({
       selectedModelUpdatedAt={selectedModelUpdatedAt}
       hasEncryptionKey={status.hasEncryptionKey}
       modelCatalogError={modelCatalogError}
+      activeStockProvider={status.activeStockProvider}
+      hasStoredPexelsKey={status.hasStoredPexelsKey}
+      maskedStoredPexelsKey={status.maskedStoredPexelsKey}
+      hasStoredUnsplashKey={status.hasStoredUnsplashKey}
+      maskedStoredUnsplashKey={status.maskedStoredUnsplashKey}
+      hasEnvPexelsKey={status.hasEnvPexelsKey}
+      hasEnvUnsplashKey={status.hasEnvUnsplashKey}
+      stockKeysUpdatedAt={stockKeysUpdatedAt}
+      unsplashAppName={status.unsplashAppName}
+      agentSettings={status.agentSettings}
       successMessage={params.success}
       errorMessage={params.error}
     />

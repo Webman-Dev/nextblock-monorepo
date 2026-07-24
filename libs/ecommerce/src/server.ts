@@ -35,6 +35,7 @@ export {
 export {
   createProductAction,
   updateProductAction,
+  publishProductAction,
   deleteProductAction,
   createCategoryAction,
   updateCategoryAction,

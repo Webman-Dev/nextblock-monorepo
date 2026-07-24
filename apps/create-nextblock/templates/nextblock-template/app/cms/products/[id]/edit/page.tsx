@@ -1,7 +1,7 @@
 import { verifyPackageOnline, getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ChevronDown, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ChevronDown } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -11,6 +11,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  ViewLiveButton,
 } from '@nextblock-cms/ui';
 import ProductFormClientShell from '../../ProductFormClientShell';
 import {
@@ -21,6 +22,7 @@ import {
   getStoreConfigStatus,
   normalizeCurrencyRecord,
   updateProductAction,
+  publishProductAction,
   getCategoriesWithCount,
   getProductCategories,
 } from '@nextblock-cms/ecommerce/server';
@@ -265,14 +267,14 @@ export default async function EditProductPage({
             </DropdownMenu>
           ) : null}
 
-          {product.slug && product.status === 'active' && (
-            <Button variant="outline" asChild>
-              <Link href={`/product/${product.slug}`} target="_blank">
-                <ExternalLink className="w-4 h-4 mr-2" />
-                View
-              </Link>
-            </Button>
-          )}
+          {product.slug ? (
+            <ViewLiveButton
+              href={`/product/${product.slug}`}
+              isLive={product.status === 'active'}
+              label="product"
+              publishAction={publishProductAction.bind(null, product.id)}
+            />
+          ) : null}
         </div>
       </div>
 

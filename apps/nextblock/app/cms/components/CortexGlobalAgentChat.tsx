@@ -85,6 +85,9 @@ type CortexAgentStreamEvent =
       type: "error";
     }
   | {
+      type: "status";
+    }
+  | {
       type: "finish";
     };
 
@@ -92,7 +95,10 @@ const LEGACY_STORAGE_KEY = "nextblock-cortex-global-agent-chat";
 const THREADS_STORAGE_KEY = "nextblock-cortex-global-agent-chat-threads";
 const MAX_STORED_MESSAGES = 40;
 const MAX_STORED_THREADS = 20;
-const REQUEST_TIMEOUT_MS = 90000;
+// Idle timeout: the request is aborted only after this many ms with NO stream
+// activity, so a long multi-section build that keeps streaming tool/text events
+// is not killed at a fixed wall-clock deadline.
+const IDLE_TIMEOUT_MS = 90000;
 const CORTEX_AI_SETTINGS_CHANGED_EVENT = "nextblock:cortex-ai-settings-changed";
 const MUTATING_TOOL_NAMES = new Set([
   "create_cms_page",
@@ -105,6 +111,9 @@ const MUTATING_TOOL_NAMES = new Set([
   "execute_database_mutation",
   "execute_cms_action_plan",
   "insert_content_block",
+  "rewrite_page_draft",
+  "set_content_images",
+  "translate_page",
   "update_cms_item_field",
   "update_current_cms_fields",
   "update_content_block",
@@ -122,6 +131,22 @@ const TOOL_COPY: Record<string, { done: string; running: string }> = {
   search_documentation: {
     done: "Documentation searched",
     running: "Searching documentation...",
+  },
+  fetch_url_content: {
+    done: "Website content read",
+    running: "Reading the website...",
+  },
+  rewrite_page_draft: {
+    done: "Draft rewrite staged",
+    running: "Staging a live draft...",
+  },
+  translate_page: {
+    done: "Translation created",
+    running: "Creating the translation...",
+  },
+  set_content_images: {
+    done: "Images updated",
+    running: "Setting images...",
   },
   create_cms_page: {
     done: "Page created",
@@ -875,23 +900,9 @@ export function CortexGlobalAgentChat() {
   const canSubmit = useMemo(() => input.trim().length > 0 && !isStreaming, [input, isStreaming]);
   const fallbackPageContext = useMemo(() => buildFallbackPageContext(pathname), [pathname]);
   const pageContext = cortexAiPageContext?.pageContext ?? fallbackPageContext;
-  const hasSuccessfulMutationActivity = useMemo(
-    () =>
-      toolActivities.some(
-        (activity) =>
-          activity.status === "success" &&
-          isMutatingToolName(activity.name) &&
-          toolOutputExecutedMutation(activity.output)
-      ),
-    [toolActivities]
-  );
   const visibleToolActivities = useMemo(
     () =>
       toolActivities.filter((activity, index) => {
-        if (hasSuccessfulMutationActivity && activity.status === "error") {
-          return false;
-        }
-
         if (activity.status !== "error") {
           const confirmationKey = getConfirmationKey(activity);
 
@@ -908,11 +919,21 @@ export function CortexGlobalAgentChat() {
           return true;
         }
 
+        // Keep genuine failures visible. Only hide an error when a later retry
+        // of the SAME tool succeeded (a transient error that self-recovered);
+        // do not hide it just because some other, unrelated tool later
+        // succeeded, or a multi-section build would look fully successful even
+        // when individual sections failed.
         return !toolActivities
           .slice(index + 1)
-          .some((nextActivity) => nextActivity.status === "success" && !toolOutputIsNotice(nextActivity.output));
+          .some(
+            (nextActivity) =>
+              nextActivity.name === activity.name &&
+              nextActivity.status === "success" &&
+              !toolOutputIsNotice(nextActivity.output)
+          );
       }),
-    [cancelledConfirmationKeys, hasSuccessfulMutationActivity, toolActivities]
+    [cancelledConfirmationKeys, toolActivities]
   );
 
   const updateThreadMessages = (
@@ -1133,10 +1154,17 @@ export function CortexGlobalAgentChat() {
     }));
     const abortController = new AbortController();
     let timedOut = false;
-    const timeoutId = window.setTimeout(() => {
-      timedOut = true;
-      abortController.abort();
-    }, REQUEST_TIMEOUT_MS);
+    let idleTimeoutId: number | undefined;
+    const armIdleTimeout = () => {
+      if (idleTimeoutId !== undefined) {
+        window.clearTimeout(idleTimeoutId);
+      }
+      idleTimeoutId = window.setTimeout(() => {
+        timedOut = true;
+        abortController.abort();
+      }, IDLE_TIMEOUT_MS);
+    };
+    armIdleTimeout();
 
     if (!threadId) {
       const thread = createChatThread([userMessage, assistantMessage]);
@@ -1206,6 +1234,9 @@ export function CortexGlobalAgentChat() {
           break;
         }
 
+        // Reset the idle timer on every chunk so an actively-streaming build
+        // (many tool + text events) is never aborted mid-flight.
+        armIdleTimeout();
         buffer += decoder.decode(value, { stream: true });
         const frames = buffer.split("\n\n");
         buffer = frames.pop() || "";
@@ -1282,7 +1313,9 @@ export function CortexGlobalAgentChat() {
         )
       );
     } finally {
-      window.clearTimeout(timeoutId);
+      if (idleTimeoutId !== undefined) {
+        window.clearTimeout(idleTimeoutId);
+      }
       if (shouldRefreshAfterMutation && typeof window !== "undefined") {
         // Let client-rendered lists (e.g. the custom blocks library) refetch even
         // though router.refresh() does not re-run their mount-time data fetch.
@@ -1463,6 +1496,13 @@ export function CortexGlobalAgentChat() {
                   onConfirm={confirmToolCall}
                 />
               ))}
+            </div>
+          )}
+
+          {isStreaming && (
+            <div className="flex items-center gap-2 px-1 text-xs text-slate-500 dark:text-slate-400">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+              <span>Cortex is working… building a full page can take a little while.</span>
             </div>
           )}
         </div>

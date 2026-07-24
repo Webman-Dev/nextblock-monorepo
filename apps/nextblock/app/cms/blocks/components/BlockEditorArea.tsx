@@ -68,6 +68,33 @@ interface EditingNestedBlockInfo {
   blockData: NestedBlockData;
 }
 
+// AI-generated Live Draft blocks arrive without a DB id, so key={block.id} collides
+// (all undefined) and dnd/inline-edit/delete — which all key off block.id — break for
+// them. Give any block missing (or duplicating) an id a deterministic, unique negative
+// temp id. Deterministic (no Math.random) so SSR and client render identical keys.
+function withStableBlockIds(blocks: Block[]): Block[] {
+  const used = new Set<number>();
+  let nextTempId = -1;
+  const takeTempId = () => {
+    while (used.has(nextTempId)) {
+      nextTempId -= 1;
+    }
+    used.add(nextTempId);
+    const id = nextTempId;
+    nextTempId -= 1;
+    return id;
+  };
+
+  return blocks.map((block) => {
+    const id = block.id;
+    if (id != null && !used.has(id)) {
+      used.add(id);
+      return block;
+    }
+    return { ...block, id: takeTempId() };
+  });
+}
+
 export default function BlockEditorArea({ parentId, parentType, initialBlocks, languageId }: BlockEditorAreaProps) {
   // Prevent SSR/hydration mismatches from dnd-kit by rendering on client only
   // Important: keep hooks order stable across renders; defer early return until after hooks
@@ -76,7 +103,9 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
     setIsMounted(true);
   }, []);
 
-  const [blocks, setBlocks] = useState<Block[]>(() => initialBlocks.sort((a, b) => a.order - b.order));
+  const [blocks, setBlocks] = useState<Block[]>(() =>
+    withStableBlockIds(initialBlocks).sort((a, b) => a.order - b.order)
+  );
   const lastSavedBlocks = useRef(blocks);
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -89,7 +118,7 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
   const [tempNestedBlockContent, setTempNestedBlockContent] = useState<Json | null>(null);
 
   useEffect(() => {
-    const sortedBlocks = initialBlocks.sort((a, b) => a.order - b.order);
+    const sortedBlocks = withStableBlockIds(initialBlocks).sort((a, b) => a.order - b.order);
     setBlocks(sortedBlocks);
     lastSavedBlocks.current = sortedBlocks;
   }, [initialBlocks]);

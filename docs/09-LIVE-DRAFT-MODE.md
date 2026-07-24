@@ -84,7 +84,13 @@ Products support two kinds of visual editing:
 
 ---
 
-## 5. Local Verification
+## 5. Cortex AI Integration
+
+The Cortex AI global agent's `rewrite_page_draft` tool writes into `content_drafts` rather than the live `blocks` table, so an AI-generated whole-page rewrite (e.g. "rewrite my home page with 5 sections") lands as an unpublished draft. It seeds the draft `meta` from the current published item and carries `base_version` from the item's version. The user then previews via `/api/draft/start?path=/<slug>` and publishes with the normal `publishVisualEditingDraft` flow, which applies the blocks live and auto-creates a revision snapshot. See [08-NEXTBLOCK-CORTEX-AI-ARCHITECTURE.md](./08-NEXTBLOCK-CORTEX-AI-ARCHITECTURE.md#external-url-ingestion-and-live-draft-page-rewrites).
+
+---
+
+## 6. Local Verification
 
 To test Live Draft Mode locally:
 

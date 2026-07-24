@@ -179,22 +179,33 @@ export default function EditableBlock({
        }
        case 'image': {
          const content = (block.content || {}) as any;
-         const imageUrl = resolveMediaUrl(content.object_key) || content.src;
+         const externalUrl =
+           typeof content.external_url === 'string' && /^https?:\/\//i.test(content.external_url.trim())
+             ? content.external_url.trim()
+             : null;
+         const imageUrl = externalUrl || resolveMediaUrl(content.object_key) || content.src;
+         if (!imageUrl) {
+           return (
+             <div className="flex h-28 w-full items-center justify-center gap-2 rounded border border-dashed py-2 text-muted-foreground">
+               <ImageIcon className="h-6 w-6" />
+               <span className="text-sm">No image selected</span>
+             </div>
+           );
+         }
          return (
-              <div className="flex gap-4 py-2">
-                 <div className="flex-shrink-0 h-16 w-16 bg-muted rounded overflow-hidden flex items-center justify-center border">
-                     {imageUrl ? (
-                         /* eslint-disable-next-line @next/next/no-img-element */
-                         <img src={imageUrl} alt={content.alt_text || 'Block image'} className="h-full w-full object-cover" />
-                     ) : (
-                         <ImageIcon className="h-6 w-6 text-muted-foreground" />
-                     )}
-                 </div>
-                 <div className="flex flex-col justify-center">
-                     <span className="text-sm font-medium truncate max-w-[200px]">{content.alt_text || 'No description'}</span>
-                     <span className="text-xs text-muted-foreground truncate max-w-[200px]">{imageUrl ? 'Image set' : 'No image selected'}</span>
-                 </div>
-              </div>
+           <figure className="w-full py-1">
+             {/* eslint-disable-next-line @next/next/no-img-element */}
+             <img
+               src={imageUrl}
+               alt={content.alt_text || 'Block image'}
+               className="h-auto w-full rounded border"
+             />
+             {(content.caption || content.alt_text) && (
+               <figcaption className="mt-1 truncate text-xs text-muted-foreground">
+                 {content.caption || content.alt_text}
+               </figcaption>
+             )}
+           </figure>
          );
        }
        case 'button': {

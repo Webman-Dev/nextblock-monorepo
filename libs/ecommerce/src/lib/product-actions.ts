@@ -722,6 +722,9 @@ export async function copyProductFromLanguage(
 
   if (sourceBlocks && sourceBlocks.length > 0) {
     const blocksInserts = sourceBlocks.map(block => {
+      // Strip identity/timestamp columns (via rest-spread) so the DB generates
+      // fresh ones for the copy; the extracted fields are intentionally discarded.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id, created_at, updated_at, ...rest } = block;
       return {
         ...rest,

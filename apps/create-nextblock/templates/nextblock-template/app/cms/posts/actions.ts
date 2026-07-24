@@ -12,6 +12,51 @@ type PageStatus = Database['public']['Enums']['page_status'];
 import { encodedRedirect } from "@nextblock-cms/utils/server"; // Ensure this is correctly imported
 // --- createPost and updatePost functions to be updated similarly for error returns ---
 
+/**
+ * Publish a post directly (status -> "published") so it becomes visible on the
+ * live site. Used by the draft-aware "View Live" button when an admin chooses to
+ * publish a still-draft post.
+ */
+export async function publishPost(postId: number): Promise<{ error?: string } | void> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "User not authenticated." };
+
+  const nowIso = new Date().toISOString();
+  const { data: existing } = await supabase
+    .from("posts")
+    .select("published_at")
+    .eq("id", postId)
+    .maybeSingle();
+
+  // Publishing "now": if the post has no publish date or a future-scheduled one,
+  // set it to now so it isn't withheld by the public "published_at <= now" filter.
+  const currentPublishedAt = existing?.published_at;
+  const setPublishedNow =
+    !currentPublishedAt || new Date(currentPublishedAt).getTime() > Date.now();
+
+  const { data: post, error } = await supabase
+    .from("posts")
+    .update({
+      status: "published",
+      updated_at: nowIso,
+      ...(setPublishedNow ? { published_at: nowIso } : {}),
+    })
+    .eq("id", postId)
+    .select("slug")
+    .single();
+
+  if (error || !post) {
+    return { error: error?.message || "Could not publish the post." };
+  }
+
+  revalidatePath("/cms/posts");
+  revalidatePath(`/cms/posts/${postId}/edit`);
+  revalidatePath(`/article/${post.slug}`);
+  revalidatePath("/articles");
+  return {};
+}
+
 export async function createPost(formData: FormData) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();

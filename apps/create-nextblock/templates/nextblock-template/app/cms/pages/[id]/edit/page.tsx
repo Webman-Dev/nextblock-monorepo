@@ -20,7 +20,7 @@ interface PageWithBlocks extends Page {
   translation_group_id: string;
 }
 
-async function getPageDataWithBlocks(id: number): Promise<{ page: PageWithBlocks; hasDraft: boolean } | null> {
+async function getPageDataWithBlocks(id: number): Promise<{ page: PageWithBlocks; hasDraft: boolean; liveStatus: string; liveSlug: string } | null> {
   const supabase = createClient();
   const { data: pageData, error: pageError } = await supabase
     .from("pages")
@@ -71,7 +71,14 @@ async function getPageDataWithBlocks(id: number): Promise<{ page: PageWithBlocks
     };
   }
 
-  return { page: pageWithBlocks, hasDraft };
+  return {
+    page: pageWithBlocks,
+    hasDraft,
+    // The LIVE row's status/slug (before the draft overlay above) — the "View
+    // Live" button must reflect what is actually published, not the draft.
+    liveStatus: pageData.status as string,
+    liveSlug: pageData.slug as string,
+  };
 }
 
 
@@ -90,13 +97,15 @@ export default async function EditPage(props: { params: Promise<{ id: string }> 
 
   const pageDataResult = await getPageDataWithBlocks(pageId);
   if (!pageDataResult) return notFound();
-  const { page: pageWithBlocks, hasDraft } = pageDataResult;
+  const { page: pageWithBlocks, hasDraft, liveStatus, liveSlug } = pageDataResult;
 
   const allSiteLanguages = await getActiveLanguagesServerSide();
 
   const draft = await draftMode();
   const updatePageWithId = updatePage.bind(null, pageId);
   const publicPageUrl = `/${pageWithBlocks.slug}`;
+  const isLive = liveStatus === "published";
+  const liveViewUrl = liveSlug === "home" ? "/" : `/${liveSlug}`;
   let initialFeatureImageUrl: string | null = null;
   let initialFeatureImageId: string | null = null;
 
@@ -123,6 +132,8 @@ export default async function EditPage(props: { params: Promise<{ id: string }> 
       allSiteLanguages={allSiteLanguages}
       updatePageAction={updatePageWithId}
       publicPageUrl={publicPageUrl}
+      isLive={isLive}
+      liveViewUrl={liveViewUrl}
       isDraftModeEnabled={draft.isEnabled}
       initialFeatureImageUrl={initialFeatureImageUrl}
       initialFeatureImageId={initialFeatureImageId}

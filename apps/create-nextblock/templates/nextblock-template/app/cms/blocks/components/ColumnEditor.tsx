@@ -180,22 +180,44 @@ function SortableColumnBlock({ block, index, columnIndex, onEdit, onDelete, bloc
          );
       }
       case 'image': {
-        const imageUrl = resolveMediaUrl(block.content.object_key) || block.content.src;
+        const externalUrl =
+          typeof block.content.external_url === 'string' &&
+          /^https?:\/\//i.test(block.content.external_url.trim())
+            ? block.content.external_url.trim()
+            : null;
+        const imageUrl = externalUrl || resolveMediaUrl(block.content.object_key) || block.content.src;
+        if (!imageUrl) {
+          return (
+            <div
+              className={cn(
+                "flex h-20 w-full items-center justify-center gap-2 rounded border border-dashed",
+                isDarkBackground ? "border-white/20 text-white/50" : "border-muted-foreground/30 text-muted-foreground"
+              )}
+            >
+              <ImageIcon className="h-5 w-5" />
+              <span className="text-[10px]">No image selected</span>
+            </div>
+          );
+        }
         return (
-             <div className="flex gap-3">
-                <div className="flex-shrink-0 h-10 w-10 bg-muted/20 rounded overflow-hidden flex items-center justify-center border border-white/10">
-                    {imageUrl ? (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img src={imageUrl} alt={block.content.alt_text || 'Block image'} className="h-full w-full object-cover" />
-                    ) : (
-                        <ImageIcon className={cn("h-5 w-5", isDarkBackground ? "text-white/50" : "text-muted-foreground")} />
-                    )}
-                </div>
-                <div className="flex flex-col justify-center">
-                    <span className="text-xs font-medium truncate max-w-[150px]">{block.content.alt_text || 'No description'}</span>
-                     <span className={cn("text-[10px] truncate max-w-[150px]", isDarkBackground ? "text-white/50" : "text-muted-foreground")}>{imageUrl ? 'Image set' : 'No image selected'}</span>
-                </div>
-             </div>
+          <figure className="w-full">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imageUrl}
+              alt={block.content.alt_text || 'Block image'}
+              className="h-auto w-full rounded border border-white/10"
+            />
+            {(block.content.caption || block.content.alt_text) && (
+              <figcaption
+                className={cn(
+                  "mt-1 truncate text-[10px]",
+                  isDarkBackground ? "text-white/60" : "text-muted-foreground"
+                )}
+              >
+                {block.content.caption || block.content.alt_text}
+              </figcaption>
+            )}
+          </figure>
         );
       }
       case 'button': {

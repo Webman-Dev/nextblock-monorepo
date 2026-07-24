@@ -5730,6 +5730,34 @@ DROP POLICY IF EXISTS site_settings_delete_policy ON public.site_settings;
 CREATE POLICY site_settings_delete_policy ON public.site_settings FOR DELETE TO authenticated USING ((((key <> ALL (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text, 'language_detection_settings'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) OR ((key = ANY (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text, 'language_detection_settings'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role))));
 
 
+-- >>> FROM: 00000000000012_cortex_ai_stock_photo_settings.sql <<<
+-- Protect the Cortex AI stock-photo provider API keys stored in site_settings.
+--
+-- The stock-photo search tool (search_stock_photos) can read a Pexels or Unsplash
+-- API key from site_settings so the key lives in the database instead of an env var.
+-- Those two rows are SECRETS and must never be publicly readable: like the OpenRouter
+-- BYOK key, they belong in the sensitive-keys group that only authenticated ADMINs can
+-- read or write. The baseline site_settings SELECT policy makes any key NOT in that
+-- group anon-readable, so we add the two stock-photo keys to every policy's sensitive
+-- array. The value stored is an encrypted envelope, but we protect the row regardless.
+--
+-- Forward-only; recreates all four site_settings policies idempotently, preserving the
+-- existing sensitive keys (including language_detection_settings on the write policies,
+-- which stays anon-READABLE and is therefore not added to the SELECT policy).
+
+DROP POLICY IF EXISTS site_settings_read_policy ON public.site_settings;
+CREATE POLICY site_settings_read_policy ON public.site_settings FOR SELECT USING (((key <> ALL (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text, 'cortex_ai_pexels_api_key'::text, 'cortex_ai_unsplash_access_key'::text])) OR ((key = ANY (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text, 'cortex_ai_pexels_api_key'::text, 'cortex_ai_unsplash_access_key'::text])) AND (( SELECT auth.role() AS role) = 'authenticated'::text) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role))));
+
+DROP POLICY IF EXISTS site_settings_insert_policy ON public.site_settings;
+CREATE POLICY site_settings_insert_policy ON public.site_settings FOR INSERT TO authenticated WITH CHECK ((((key <> ALL (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text, 'language_detection_settings'::text, 'cortex_ai_pexels_api_key'::text, 'cortex_ai_unsplash_access_key'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) OR ((key = ANY (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text, 'language_detection_settings'::text, 'cortex_ai_pexels_api_key'::text, 'cortex_ai_unsplash_access_key'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role))));
+
+DROP POLICY IF EXISTS site_settings_update_policy ON public.site_settings;
+CREATE POLICY site_settings_update_policy ON public.site_settings FOR UPDATE TO authenticated USING ((((key <> ALL (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text, 'language_detection_settings'::text, 'cortex_ai_pexels_api_key'::text, 'cortex_ai_unsplash_access_key'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) OR ((key = ANY (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text, 'language_detection_settings'::text, 'cortex_ai_pexels_api_key'::text, 'cortex_ai_unsplash_access_key'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role)))) WITH CHECK ((((key <> ALL (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text, 'language_detection_settings'::text, 'cortex_ai_pexels_api_key'::text, 'cortex_ai_unsplash_access_key'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) OR ((key = ANY (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text, 'language_detection_settings'::text, 'cortex_ai_pexels_api_key'::text, 'cortex_ai_unsplash_access_key'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role))));
+
+DROP POLICY IF EXISTS site_settings_delete_policy ON public.site_settings;
+CREATE POLICY site_settings_delete_policy ON public.site_settings FOR DELETE TO authenticated USING ((((key <> ALL (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text, 'language_detection_settings'::text, 'cortex_ai_pexels_api_key'::text, 'cortex_ai_unsplash_access_key'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) OR ((key = ANY (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text, 'language_detection_settings'::text, 'cortex_ai_pexels_api_key'::text, 'cortex_ai_unsplash_access_key'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role))));
+
+
   -- Step D: Record the applied migrations in history (truncated in Step B) so
   -- \`npm run db:migrate:check\` reports up to date instead of listing every file as pending.
   INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES
@@ -5744,7 +5772,8 @@ CREATE POLICY site_settings_delete_policy ON public.site_settings FOR DELETE TO 
     ('00000000000008', 'setup_article_reorder'),
     ('00000000000009', 'home_live_demo_promo_contrast'),
     ('00000000000010', 'drop_github_username'),
-    ('00000000000011', 'language_detection_admin_only')
+    ('00000000000011', 'language_detection_admin_only'),
+    ('00000000000012', 'cortex_ai_stock_photo_settings')
   ON CONFLICT (version) DO NOTHING;
 
   -- Step E: Anchor preserved profiles

@@ -18,7 +18,7 @@ function reapplyDirectives() {
     for (const ext of ['.tsx', '.ts', '.jsx', '.js']) {
       const srcFile = path.join(SRC_DIR, relNoExt + ext);
       if (fs.existsSync(srcFile)) {
-        const head = fs.readFileSync(srcFile, 'utf8').replace(/^﻿/, '').trimStart();
+        const head = fs.readFileSync(srcFile, 'utf8').replace(/^\uFEFF/, '').trimStart();
         if (/^['"]use client['"]/.test(head)) return "'use client';";
         if (/^['"]use server['"]/.test(head)) return "'use server';";
         return null;
@@ -43,7 +43,7 @@ function reapplyDirectives() {
       const directive = directiveForModule(relNoExt);
       if (!directive) continue;
       const contents = fs.readFileSync(full, 'utf8');
-      const trimmed = contents.replace(/^﻿/, '').trimStart();
+      const trimmed = contents.replace(/^\uFEFF/, '').trimStart();
       if (
         trimmed.startsWith("'use client'") ||
         trimmed.startsWith('"use client"') ||

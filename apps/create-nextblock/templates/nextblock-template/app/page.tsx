@@ -2,7 +2,7 @@ import React from 'react';
 import { cookies, draftMode, headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
+import { createClient, getSsgSupabaseClient } from '@nextblock-cms/db/server';
 import PageClientContent from './[slug]/PageClientContent';
 import { getPageDataBySlug } from './[slug]/page.utils';
 import BlockRenderer from '../components/BlockRenderer';
@@ -29,12 +29,57 @@ interface PageTranslation {
   }[];
 }
 
-async function getHomepageSlugForLocale(locale: string): Promise<string> {
-  if (locale === 'fr') {
-    return 'accueil';
+// Resolve the homepage for a given locale WITHOUT assuming a per-locale slug.
+// The homepage is, by convention, the default-language page at slug "home".
+// Its translated versions may use ANY slug (e.g. "accueil"), so we find the
+// localized version through the shared translation group. This lets "/" serve
+// every language variation of the homepage regardless of what slug it uses.
+async function resolveHomepageData(preferredLocale: string) {
+  const defaultHome = await getPageDataBySlug('home', DEFAULT_LOCALE);
+
+  // Default locale (or a homepage with no linked translations): serve it directly.
+  if (defaultHome && (preferredLocale === DEFAULT_LOCALE || !defaultHome.translation_group_id)) {
+    return defaultHome;
   }
 
-  return 'home';
+  // Resolve the localized homepage via the shared translation group (any slug),
+  // so "/" serves every language variation regardless of the slug it uses. In
+  // draft (preview) mode we include unpublished siblings; otherwise only published.
+  if (defaultHome?.translation_group_id) {
+    const draft = await draftMode();
+    const supabase = draft.isEnabled ? createClient() : getSsgSupabaseClient();
+    let siblingQuery = supabase
+      .from('pages')
+      .select('slug, languages!inner(code)')
+      .eq('translation_group_id', defaultHome.translation_group_id)
+      .eq('languages.code', preferredLocale)
+      .limit(1);
+
+    if (!draft.isEnabled) {
+      siblingQuery = siblingQuery.eq('status', 'published');
+    }
+
+    const { data: sibling } = await siblingQuery.maybeSingle();
+    const localizedSlug = (sibling as { slug?: string } | null)?.slug;
+    if (localizedSlug) {
+      const localized = await getPageDataBySlug(localizedSlug, preferredLocale);
+      if (localized) {
+        return localized;
+      }
+    }
+  }
+
+  // Fallbacks: the preferred locale's own "home" slug (covers a missing or
+  // renamed default-language home that the group lookup couldn't anchor on),
+  // then the default home. Either may be null — the caller renders notFound().
+  if (preferredLocale !== DEFAULT_LOCALE) {
+    const localizedHome = await getPageDataBySlug('home', preferredLocale);
+    if (localizedHome) {
+      return localizedHome;
+    }
+  }
+
+  return defaultHome;
 }
 
 async function getPreferredLocale() {
@@ -71,8 +116,7 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 
   const preferredLocale = await getPreferredLocale();
-  const homepageSlug = await getHomepageSlugForLocale(preferredLocale);
-  const pageData = await getPageDataBySlug(homepageSlug, preferredLocale);
+  const pageData = await resolveHomepageData(preferredLocale);
 
   if (!pageData) {
     return { title: 'Homepage Not Found' };
@@ -128,15 +172,14 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function RootPage() {
   const preferredLocale = await getPreferredLocale();
-  const homepageSlug = await getHomepageSlugForLocale(preferredLocale);
-  const pageData = await getPageDataBySlug(homepageSlug, preferredLocale);
+  const pageData = await resolveHomepageData(preferredLocale);
 
   if (!pageData) {
-    console.error(
-      `Homepage data not found for slug: ${homepageSlug} (locale: ${preferredLocale})`
-    );
+    console.error(`Homepage data not found (locale: ${preferredLocale})`);
     notFound();
   }
+
+  const homepageSlug = pageData.slug;
 
   const translatedSlugs: { [key: string]: string } = {};
   if (pageData.translation_group_id) {

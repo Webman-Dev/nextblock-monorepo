@@ -1,16 +1,17 @@
 // app/cms/blocks/components/BackgroundSelector.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import Image from "next/image";
 import { Label, Select, SelectTrigger, SelectContent, SelectItem, SelectValue, Button, Input, Checkbox } from "@nextblock-cms/ui";
 import { CustomSelectWithInput, ColorPicker } from "@nextblock-cms/ui";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
-import { Trash } from "lucide-react";
+import { Trash, DownloadCloud } from "lucide-react";
 import type { Database } from "@nextblock-cms/db";
 import { SectionBlockContent } from '../../../../lib/blocks/blockRegistry';
 import MediaPickerDialog from "../../media/components/MediaPickerDialog";
 import { resolveMediaUrl } from "../../../../lib/media/resolveMediaUrl";
+import { importExternalImageToMedia } from "../../media/import-external-image";
 
 type Media = Database["public"]["Tables"]["media"]["Row"];
 
@@ -26,6 +27,13 @@ export default function BackgroundSelector({ background, onChange }: BackgroundS
   const [minHeight, setMinHeight] = useState(background?.min_height || "");
   const [imagePosition, setImagePosition] = useState<string>(selectedImage?.position || "center");
   const [overlayDirection, setOverlayDirection] = useState(selectedImage?.overlay?.gradient?.direction || "to bottom");
+  const [externalBgUrlInput, setExternalBgUrlInput] = useState("");
+  const [bgImportError, setBgImportError] = useState<string | null>(null);
+  const [isBgImporting, startBgImport] = useTransition();
+  const externalBgUrl =
+    selectedImage && typeof selectedImage.external_url === "string" && /^https?:\/\//i.test(selectedImage.external_url)
+      ? selectedImage.external_url
+      : null;
 
   useEffect(() => {
     setMinHeight(background?.min_height || "");
@@ -93,10 +101,58 @@ export default function BackgroundSelector({ background, onChange }: BackgroundS
       image: {
         media_id: "",
         object_key: "",
+        external_url: undefined,
         size: "cover",
         position: "center",
         overlay: undefined,
       },
+    });
+  };
+
+  const handleUseExternalBgUrl = () => {
+    const url = externalBgUrlInput.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      setBgImportError("Enter a valid http(s) image URL.");
+      return;
+    }
+    setBgImportError(null);
+    onChange({
+      type: "image",
+      image: {
+        ...selectedImage,
+        external_url: url,
+        media_id: undefined,
+        object_key: undefined,
+        size: selectedImage?.size || "cover",
+        position: selectedImage?.position || "center",
+      },
+    });
+    setExternalBgUrlInput("");
+  };
+
+  const handleImportBgToLibrary = () => {
+    if (!externalBgUrl) return;
+    setBgImportError(null);
+    startBgImport(async () => {
+      const result = await importExternalImageToMedia({ url: externalBgUrl, altText: selectedImage?.alt_text });
+      if ("error" in result) {
+        setBgImportError(result.error);
+        return;
+      }
+      onChange({
+        type: "image",
+        image: {
+          ...selectedImage,
+          external_url: undefined,
+          media_id: result.media.id,
+          object_key: result.media.object_key,
+          width: result.media.width || undefined,
+          height: result.media.height || undefined,
+          blur_data_url: result.media.blur_data_url || undefined,
+          size: selectedImage?.size || "cover",
+          position: selectedImage?.position || "center",
+        },
+      });
     });
   };
 
@@ -292,24 +348,46 @@ export default function BackgroundSelector({ background, onChange }: BackgroundS
         {backgroundType === "image" && (
           <div className="space-y-1.5">
             <Label className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Image</Label>
-            {selectedImage?.object_key ? (
+            {(selectedImage?.object_key || externalBgUrl) ? (
               <div className="flex items-center gap-2 h-9">
                 <div className="relative w-9 h-9 rounded border bg-muted overflow-hidden flex-shrink-0 shadow-sm">
-                  {selectedImageUrl ? (
+                  {externalBgUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={externalBgUrl}
+                      alt="Thumbnail"
+                      className="absolute inset-0 h-full w-full object-cover"
+                      style={{ objectPosition: selectedImage?.position }}
+                    />
+                  ) : selectedImageUrl ? (
                     <Image
                       src={selectedImageUrl}
                       alt="Thumbnail"
                       fill
                       sizes="36px"
                       className="object-cover"
-                      style={{ objectPosition: selectedImage.position }}
+                      style={{ objectPosition: selectedImage?.position }}
                     />
                   ) : null}
-                  {selectedImage.overlay && (
+                  {selectedImage?.overlay && (
                     <div className="absolute inset-0" style={{ background: generateGradientCss(selectedImage.overlay.gradient) }} />
                   )}
                 </div>
                 <div className="flex items-center gap-1.5">
+                  {externalBgUrl && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-9 px-2.5 text-xs"
+                      onClick={handleImportBgToLibrary}
+                      disabled={isBgImporting}
+                      title="Save this image to your media library"
+                    >
+                      <DownloadCloud className="mr-1 h-3.5 w-3.5" />
+                      {isBgImporting ? "Saving..." : "Save"}
+                    </Button>
+                  )}
                   <MediaPickerDialog
                     triggerLabel="Change"
                     triggerVariant="outline"
@@ -334,7 +412,7 @@ export default function BackgroundSelector({ background, onChange }: BackgroundS
                 </div>
               </div>
             ) : (
-              <div className="h-9 flex items-center">
+              <div className="h-9 flex items-center gap-2">
                 <MediaPickerDialog
                   triggerLabel="Select Image"
                   triggerVariant="outline"
@@ -346,13 +424,30 @@ export default function BackgroundSelector({ background, onChange }: BackgroundS
                     Select Image
                   </Button>
                 </MediaPickerDialog>
+                <Input
+                  value={externalBgUrlInput}
+                  onChange={(e) => setExternalBgUrlInput(e.target.value)}
+                  placeholder="or paste image URL"
+                  className="h-9 text-xs w-[170px]"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-2.5 text-xs"
+                  onClick={handleUseExternalBgUrl}
+                  disabled={!externalBgUrlInput.trim()}
+                >
+                  Use URL
+                </Button>
               </div>
             )}
+            {bgImportError && <p className="text-xs text-red-500">{bgImportError}</p>}
           </div>
         )}
 
         {/* Overlay Checkbox */}
-        {backgroundType === "image" && selectedImage?.object_key && (
+        {backgroundType === "image" && (selectedImage?.object_key || externalBgUrl) && (
           <div className="space-y-1.5">
             <Label className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Overlay</Label>
             <div className="flex items-center justify-center h-9 border border-input rounded-md px-3 bg-background">

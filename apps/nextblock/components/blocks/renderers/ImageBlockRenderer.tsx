@@ -1,16 +1,23 @@
 import React from "react";
 import Image from "next/image";
 import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
+import { StockPhotoCredit, isStockPhotoCreditCaption, type StockPhotoAttribution } from "./StockPhotoCredit";
 
 export type ImageBlockContent = {
     media_id: string | null;
     object_key: string | null;
+    external_url?: string | null;
+    attribution?: StockPhotoAttribution | null;
     alt_text: string | null;
     caption: string | null;
     width: number | null;
     height: number | null;
     blur_data_url: string | null;
 };
+
+function isRenderableExternalImageUrl(value: unknown): value is string {
+  return typeof value === "string" && /^https?:\/\//i.test(value.trim());
+}
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 
@@ -28,6 +35,55 @@ const ImageBlockRenderer: React.FC<ImageBlockRendererProps> = ({
   visualEditAttributes,
 }) => {
   void languageId;
+
+  // External URL (e.g. a stock photo the AI inserted). Rendered with a plain
+  // <img> so it works for any allowlisted https host without Next image
+  // remotePatterns config. The caption/figure structure matches the R2 path.
+  if (isRenderableExternalImageUrl(content.external_url)) {
+    const hasDimensions =
+      typeof content.width === "number" &&
+      typeof content.height === "number" &&
+      content.width > 0 &&
+      content.height > 0;
+
+    // Don't render a caption that merely repeats the attribution credit — the
+    // StockPhotoCredit below already renders "Photo by … on {Provider}". (Stock
+    // photos historically stored the credit string in `caption` too, which showed
+    // the same line twice.)
+    const captionText = content.caption?.trim() ?? "";
+    const showCaption =
+      captionText.length > 0 && !isStockPhotoCreditCaption(captionText, content.attribution);
+
+    return (
+      <div className="w-full" {...visualEditAttributes}>
+        <figure className="my-6 text-center mx-auto max-w-full">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={content.external_url as string}
+            alt={content.alt_text || ""}
+            {...(hasDimensions
+              ? { width: content.width as number, height: content.height as number }
+              : {})}
+            loading={priority ? "eager" : "lazy"}
+            decoding="async"
+            className="rounded-md border max-w-full h-auto mx-auto"
+          />
+          {showCaption && (
+            <figcaption className="text-sm text-muted-foreground mt-2">
+              {content.caption}
+            </figcaption>
+          )}
+          {content.attribution && (
+            <StockPhotoCredit
+              attribution={content.attribution}
+              className="mt-1 block text-xs text-muted-foreground"
+            />
+          )}
+        </figure>
+      </div>
+    );
+  }
+
   if (!content.media_id || !content.object_key) {
     return (
       <div

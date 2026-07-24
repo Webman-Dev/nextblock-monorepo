@@ -83,7 +83,14 @@ function generateBackgroundStyles(background: SectionBlockContent['background'])
     
     case 'image':
       if (background.image) {
-        const imageUrl = resolveMediaUrl(background.image.object_key);
+        // Prefer an external stock-photo URL (external_url) before the stored R2
+        // object key, so AI-inserted hero backgrounds paint in the editor too.
+        const externalBgUrl =
+          typeof background.image.external_url === 'string' &&
+          /^https?:\/\//i.test(background.image.external_url.trim())
+            ? background.image.external_url.trim()
+            : null;
+        const imageUrl = externalBgUrl || resolveMediaUrl(background.image.object_key);
         if (!imageUrl) {
           break;
         }

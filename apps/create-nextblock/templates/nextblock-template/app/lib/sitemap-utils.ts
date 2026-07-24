@@ -1,4 +1,5 @@
 import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
+import { getHomepageTranslationGroupId } from './homepage';
 
 /**
  * A single, language-aware entry destined for the XML sitemap.
@@ -30,11 +31,13 @@ export interface SitemapEntry {
  * re-advertised under the generic `/{slug}` catch-all:
  *  - `product-template` backs the product layout (app/product/[slug]); it is
  *    not a public page.
- *  - `home` / `accueil` back the locale-resolved homepage served at "/"
- *    (see getHomepageSlugForLocale in app/page.tsx); listing them as `/home`
- *    and `/accueil` would duplicate the canonical "/" entry.
+ *
+ * The homepage and its translations are excluded separately, by translation
+ * group (see `getHomepageTranslationGroupId`), because every language variation
+ * of the homepage is served at "/" regardless of the slug it uses — listing it
+ * under `/{slug}` would duplicate the canonical "/" entry.
  */
-const EXCLUDED_PAGE_SLUGS = new Set(['product-template', 'home', 'accueil']);
+const EXCLUDED_PAGE_SLUGS = new Set(['product-template']);
 
 type SupabaseLikeClient = ReturnType<typeof getSsgSupabaseClient>;
 
@@ -157,12 +160,13 @@ function rowsToEntries(
 export async function fetchAllPublishedPages(): Promise<SitemapEntry[]> {
   const supabase = getSsgSupabaseClient();
   try {
-    const [{ data: pages, error }, languageMap] = await Promise.all([
+    const [{ data: pages, error }, languageMap, homepageGroupId] = await Promise.all([
       supabase
         .from('pages')
         .select('slug, updated_at, language_id, translation_group_id')
         .eq('status', 'published'),
       fetchLanguageMap(supabase),
+      getHomepageTranslationGroupId(supabase),
     ]);
 
     if (error) {
@@ -171,7 +175,10 @@ export async function fetchAllPublishedPages(): Promise<SitemapEntry[]> {
     }
 
     const rows = (pages ?? []).filter(
-      (page) => page.slug && !EXCLUDED_PAGE_SLUGS.has(page.slug),
+      (page) =>
+        page.slug &&
+        !EXCLUDED_PAGE_SLUGS.has(page.slug) &&
+        !(homepageGroupId && page.translation_group_id === homepageGroupId),
     );
 
     return rowsToEntries(

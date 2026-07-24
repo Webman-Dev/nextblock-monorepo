@@ -64,7 +64,7 @@ Known incomplete or future work:
 - Footer link updates currently replace footer links for the selected locale. Footer append mode is not yet implemented.
 - Documentation search is keyword/scored search over `posts` and `pages`, not a vector embedding RAG system yet.
 - The sandbox should eventually seed a visible product/package item for Cortex AI, similar to ecommerce. The preferred image asset is `apps/nextblock/public/images/cortex-ai-square.webp`.
-- Block insertion is intentionally left for a follow-up pass with explicit idempotency keys.
+- Block insertion, creation (`create_cms_page/post/product`), deletion (`delete_cms_item`), multi-step plans (`execute_cms_action_plan`), direct typed DB CRUD, external URL ingestion (`fetch_url_content`), and whole-page rewrites staged into Live Draft Mode (`rewrite_page_draft`) are all implemented (this "future work" note is stale — see the tool inventory in `createCortexGlobalAgentTools` and the "External URL Ingestion and Live-Draft Page Rewrites" section below). Per-block mutations still write directly to live `blocks` via service role (no draft/snapshot); only `rewrite_page_draft` goes through `content_drafts`.
 
 ## Important Files
 
@@ -909,10 +909,15 @@ Model orchestration:
 
 - Uses `streamText`.
 - Uses `buildCortexAiRoutingPolicy`.
-- Uses `stepCountIs(6)`.
+- Uses `stepCountIs(8)` (raised from 6 to allow read -> plan -> build/confirm multi-tool sequences such as rewriting a full page).
 - Temperature is `0.1`.
-- Max output tokens is `2000`.
-- Per-model attempt timeout is `30000ms`.
+- Max output tokens is `4000` (raised from 2000; this is a per-step cap that also counts reasoning/tool-argument tokens, so a low value could starve the post-tool summary step and produce empty text).
+- Per-attempt timeout is **idle-based** (`GLOBAL_AGENT_MODEL_IDLE_TIMEOUT_MS = 60000`): the attempt aborts only after 60s with no stream activity, and the timer resets on every stream part. A slow-but-progressing generation is not killed mid-answer.
+
+Read-only tool summaries:
+
+- After a successful `read_current_cms_item` or `search_documentation`, if the model emits no follow-up text, the route now returns a **deterministic, truthful summary built from the tool output** (`summarizeReadCurrentCmsItemOutput` / `summarizeSearchDocumentationOutput`) instead of the old canned "the model was interrupted before it could finish a summary" line. Read tools have no side effects, so the answer never depends on the model narrating them.
+- `looksLikeRawToolCallLeak` only flags **structural** markers (`<toolcall>`/`<tool_call>`/`<function_call>` wrappers, or a JSON object carrying both `"name"`/`"tool"` and `"arguments"`). It no longer discards legitimate prose that merely quotes a tool name or the bare word "arguments".
 
 System prompt:
 
@@ -982,6 +987,89 @@ This was added after a real issue where:
 3. The UI showed an error or raw tool-call text.
 
 The current implementation treats the DB tool result as the source of truth once a mutation succeeds.
+
+## Section Design Intelligence
+
+Section blocks are the layout primitive for multi-section pages (heroes, landing/marketing pages). The strict `section` schema requires every layout field, so cheap models used to either fail validation or emit bland sections. Two mechanisms now make section authoring reliable:
+
+1. **Server-side section normalizer** (`normalizeSectionContent` in `libs/cortex/src/lib/ai-global-agent-tools.ts`). Runs on every create/insert of a `section` block (via `normalizeBlockContentForType`). It:
+   - Fills all required layout fields with sensible defaults: `container_type` `container`, `column_gap` `lg`, `padding` `{top:'xl',bottom:'xl'}`, `vertical_alignment` `center` for heroes / `start` otherwise.
+   - Keeps the grid in sync: `responsive_columns.desktop` is derived from the number of columns actually provided in `column_blocks` (clamped 1-4), so the grid never has empty trailing tracks or overflowing cells.
+   - Completes background intent: a bare `{type:'gradient'}` gets real color stops; a `theme` background without a theme defaults to `muted`; an `image` background without a real `media_id` is downgraded to `none` (the AI cannot invent media).
+   - Deep-normalizes and validates each nested column block (also fixes a prior bug where nested blocks were only shallow-validated on CREATE).
+   - Tolerates a model that flattens columns into a single list (`[blockA, blockB]`) by treating them as one column.
+
+   Net effect: a model can emit a section with just `column_blocks` plus intent (`is_hero`, an optional `background`) and the server produces a valid, well-styled section.
+
+2. **Design recipe in the global-agent system prompt** (`route.ts`, the `PAGE DESIGN` bullets). Tells the model to compose pages from `section` blocks, supply one column per desired grid track, make the first section a hero, alternate `none`/`theme:'muted'`/`theme:'primary'` backgrounds for rhythm, use discrete heading blocks (not `<h2>` inside text HTML), and prefer gradient/theme backgrounds unless a real `media_id` exists. A single `text` block's `html_content` still accepts fully custom HTML/CSS for bespoke sections.
+
+## External URL Ingestion and Live-Draft Page Rewrites
+
+Two tools power the "rewrite my home page based on `<url>`" use case. Both live in `libs/cortex/src/lib/ai-global-agent-tools.ts` and are registered in `createCortexGlobalAgentTools`.
+
+### fetch_url_content (read-only)
+
+- Input: `{ url: string (http/https), maxChars?: number (500-20000, default 8000) }`.
+- Fetches an external page and returns `{ title, description, headings[], text, finalUrl, truncated }` (scripts/styles/svg stripped, HTML reduced to readable text).
+- Safety: rejects non-http(s) URLs and blocks local/loopback/private/link-local hosts and cloud metadata endpoints (`isBlockedFetchHost`), re-checks the host after redirects, enforces a 12s timeout and a ~2MB read cap, and only processes `text/html`/`text/plain` responses.
+- No confirmation, no DB access. The agent calls it FIRST when a prompt references an external site, then writes new sections from the returned material.
+
+### rewrite_page_draft (mutating, staged into Live Draft Mode)
+
+- Input: `cmsTarget (contentType/entityId/slug/title)` + `blocks: CreateCmsBlock[] (1-20)` + optional `meta` overrides (title/slug/status/meta_title/meta_description).
+- Replaces ALL blocks of a page/post with the supplied set, but writes them into a `content_drafts` row (via `context.supabase` service role) instead of the live `blocks` table. It seeds `meta` from the current published item (so metadata is preserved) and carries `base_version` from the item version.
+- Nothing goes live: the user previews the draft (`/api/draft/start?path=/<slug>`), then Publishes from the edit screen. Publishing runs the existing draft-publish path, which applies the blocks live AND calls `createPageRevision`/`createPostRevision` — so the rewrite is previewable and reversible.
+- Blocks are normalized through the same `normalizeCreateBlocks` pipeline as `create_cms_page` (section defaults, column-count sync, nested validation).
+- Two-step confirmation like other mutating tools; the confirmation payload hash excludes non-deterministic nested `temp_id`s so the confirm phrase is stable.
+- Result: `{ mutationExecuted, contentType, entityId, slug, blockCount, editPath, draftPreviewPath, isDraft: true }`. The chat treats it as mutating (`MUTATING_TOOL_NAMES`) and navigates to `editPath`, where the "Unpublished Draft → Publish/Discard" toolbar (`DraftStatusActions`) appears.
+
+Typical flow for "rewrite my home page with 5 sections based on `<url>`": `fetch_url_content(url)` → design a hero + 4 sections following the PAGE DESIGN recipe → `rewrite_page_draft(home, blocks)` → user previews and publishes.
+
+## Stock Photos and External Images
+
+Cortex can insert real photos into pages at zero inference cost, and external image URLs are supported natively across the block system.
+
+### search_stock_photos (read-only)
+
+- In `libs/cortex/src/lib/ai-global-agent-tools.ts`; registered in `createCortexGlobalAgentTools`.
+- Input: `{ query: string, count?: 1-15 (default 6), orientation?: 'landscape'|'portrait'|'square' }`.
+- Key resolution: `resolveCortexAiStockPhotoProvider(supabase)` prefers an admin-stored, encrypted key in `site_settings` (`cortex_ai_pexels_api_key` / `cortex_ai_unsplash_access_key`, read via the service-role client), then falls back to the `PEXELS_API_KEY` / `UNSPLASH_ACCESS_KEY` env vars. Pexels wins when both exist. Returns a clear "not configured" message if neither is set. Both are free API keys.
+- The stored keys are protected by migration `00000000000012_cortex_ai_stock_photo_settings.sql`, which adds them to the `site_settings` sensitive-keys RLS group (admin-only read/write, never anon-readable), and encrypted with the same envelope as the OpenRouter BYOK key.
+- **The model is told up front whether stock photos are available.** The global-agent route resolves the provider and injects it into the system prompt: available → "use search_stock_photos"; not configured → "do NOT call search_stock_photos; use gradient/theme backgrounds." So a missing key never wastes a tool call, and the keys are never mandatory — Cortex builds pages either way.
+- Admin UI: `/cms/settings/cortex-ai` has a Stock Photos card (save/clear Pexels + Unsplash keys, step-by-step, and why) via `saveStockPhotoKeysAction` / `clearStockPhotoKeysAction`.
+- Rate-limit fallback: `resolveCortexAiStockPhotoProviders` returns ALL configured providers ordered Pexels→Unsplash; `executeSearchStockPhotos` tries them in order, falling through to the next on error/HTTP 429/empty results, and returns `attemptedProviders`.
+- Returns `{ photos: [{ url, thumbnailUrl, alt, width, height, photographer, photographerUrl, sourceUrl, downloadLocation, credit, provider }], provider, usageGuidance, attemptedProviders, success }`. The agent drops a photo `url` into an image block's `external_url` or a section background's `image.external_url`, and copies the photo's attribution fields into the image content's `attribution`.
+
+### Provider compliance (Unsplash API Guidelines)
+
+Unsplash has strict usage rules; Pexels' license is permissive (attribution optional, re-hosting allowed, no download trigger). Handled:
+
+- **Hotlink**: external stock URLs render via a plain `<img>` from the provider host (never proxied). `importExternalImageToMedia` **refuses to re-host `*.unsplash.com` images** (Pexels re-host is allowed).
+- **Trigger downloads**: `maybeTriggerStockPhotoDownloads(blocks, supabase)` fires each Unsplash `download_location` (with the resolved Unsplash key) when a photo is committed to a page. Wired into the create (`insertContentBlocks`), `rewrite_page_draft`, `insert_content_block`, and `update_content_block` persist paths. Best-effort/fire-and-forget; depends on the agent copying `attribution.downloadLocation` from the search result.
+- **Attribution**: `ImageAttributionSchema` on the image block + section background image carries `{ provider, photographer, photographerUrl, sourceUrl, downloadLocation }`. The shared `StockPhotoCredit` component renders "Photo by {photographer} on {Provider}" with the photographer + provider linked and `utm_source`/`utm_medium` params on Unsplash links. The system prompt requires the agent to set `attribution` (and the image caption) from the search result.
+- **App name/branding**: dashboard-side (the operator's Unsplash app registration); NextBlock uses no Unsplash branding. The `utm_source` in `StockPhotoCredit.tsx` defaults to `nextblock` — change it to the registered app name if needed.
+
+### External image URLs in blocks
+
+- `ImageBlockSchema` (`external_url`) and the section `BackgroundSchema.image` (`external_url`, with `media_id`/`object_key` now optional) accept a direct https URL. The cortex fallback schemas mirror this.
+- Renderers: `ImageBlockRenderer` and `SectionBlockRenderer` render an external URL with a plain `<img>` (so any allowlisted host works without Next `remotePatterns`), and keep the optimized `next/image` path for stored R2 media. `normalizeSectionContent` accepts image backgrounds with an `external_url` (filling `size`/`position`) instead of downgrading them.
+- Security: the CSP `img-src` allows `https:` (images only — see `apps/nextblock/proxy.ts`), so trusted ADMIN/WRITER authors can embed any https image. script/style/connect stay strict.
+
+### Persist to media library
+
+- `importExternalImageToMedia` (`apps/nextblock/app/cms/media/import-external-image.ts`, ADMIN/WRITER) downloads an external image (SSRF-guarded, 15MB/15s caps), measures it with `sharp`, generates a blur placeholder, uploads to R2/Supabase Storage via the shared storage provider, and records it with `recordMediaUpload`. Returns `{ media_id, object_key, width, height, url, blur_data_url }`.
+- Editor UX: `ImageBlockEditor` and `BackgroundSelector` accept a pasted image URL and show a **Save to media library** action that swaps the external URL for a permanent optimized media reference (or the author can replace it with their own uploaded asset).
+
+## Advanced Agent Settings
+
+The global agent's model limits are admin-tunable from `/cms/settings/cortex-ai` (collapsible "Advanced settings"), stored as a non-secret JSON `site_settings` row `cortex_ai_agent_settings` and read by the route via `resolveCortexAiAgentSettings(supabase)` (defaults + clamping in `normalizeCortexAiAgentSettings`, `libs/cortex/src/lib/ai-config.ts`):
+
+- `maxOutputTokens` — per-step output cap. **`null` = Unlimited** (the route omits the cap so the model uses its own full budget). Default 16000. This is the main lever when a large `rewrite_page_draft` gets truncated.
+- `maxSteps` — `stepCountIs(n)` tool-call rounds. Default 8.
+- `temperature` — default 0.1.
+- `responseTimeoutMs` — the per-attempt idle abort. Default 120000.
+
+All values are clamped to safe bounds (`CORTEX_AI_AGENT_SETTINGS_BOUNDS`). Actions: `saveCortexAiAgentSettingsAction` / `resetCortexAiAgentSettingsAction`. The route applies them per attempt (omitting `maxOutputTokens` entirely when Unlimited).
 
 ## Dashboard Chat UI
 
@@ -1121,8 +1209,8 @@ Notes:
 
 Current protections:
 
-- Server-side per-model timeout: 30 seconds.
-- Client request timeout: 45 seconds.
+- Server-side **idle** timeout: 60 seconds with no stream activity (resets on each stream part).
+- Client **idle** timeout: 90 seconds with no stream activity (`IDLE_TIMEOUT_MS`, resets on each chunk), so a long multi-section build is not aborted at a fixed wall-clock deadline.
 - Client stops reading on `finish`.
 
 If it still happens:

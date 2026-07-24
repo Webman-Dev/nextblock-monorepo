@@ -4,7 +4,9 @@ import Link from "next/link";
 import React from "react";
 import { Separator } from "@nextblock-cms/ui";
 import { Button } from "@nextblock-cms/ui";
-import { ArrowLeft, Eye, FilePenLine } from "lucide-react";
+import { ViewLiveButton } from "@nextblock-cms/ui";
+import { ArrowLeft, FilePenLine } from "lucide-react";
+import { publishPage } from "../../actions";
 import PageForm from "../../components/PageForm";
 import BlockEditorArea from "../../../blocks/components/BlockEditorArea";
 import ContentLanguageSwitcher from "../../../components/ContentLanguageSwitcher";
@@ -31,6 +33,8 @@ interface EditPageClientProps {
   allSiteLanguages: Language[];
   updatePageAction: (formData: FormData) => Promise<{ error?: string } | void>;
   publicPageUrl: string;
+  isLive: boolean;
+  liveViewUrl: string;
   isDraftModeEnabled: boolean;
   initialFeatureImageUrl?: string | null;
   initialFeatureImageId?: string | null;
@@ -43,6 +47,8 @@ export default function EditPageClient({
   allSiteLanguages,
   updatePageAction,
   publicPageUrl,
+  isLive,
+  liveViewUrl,
   isDraftModeEnabled,
   initialFeatureImageUrl,
   initialFeatureImageId,
@@ -105,15 +111,12 @@ export default function EditPageClient({
                 allSiteLanguages={allSiteLanguages}
               />
             )}
-            <Button variant="outline" asChild>
-              <Link
-                href={publicPageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Eye className="mr-2 h-4 w-4" /> View Live
-              </Link>
-            </Button>
+            <ViewLiveButton
+              href={liveViewUrl}
+              isLive={isLive}
+              label="page"
+              publishAction={() => publishPage(pageId)}
+            />
             <Button variant="secondary" asChild>
               <a
                 href={draftModeUrl}

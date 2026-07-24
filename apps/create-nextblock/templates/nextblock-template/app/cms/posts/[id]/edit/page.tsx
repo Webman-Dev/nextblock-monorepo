@@ -3,13 +3,13 @@ import React from "react";
 import { Separator } from "@nextblock-cms/ui";
 import { createClient } from "@nextblock-cms/db/server";
 import PostForm from "../../components/PostForm";
-import { updatePost } from "../../actions";
+import { updatePost, publishPost } from "../../actions";
 import type { Database } from "@nextblock-cms/db";
 import { notFound, redirect } from "next/navigation";
 import BlockEditorArea from "../../../blocks/components/BlockEditorArea";
 import Link from "next/link";
-import { Button } from "@nextblock-cms/ui";
-import { ArrowLeft, Eye, FilePenLine } from "lucide-react";
+import { Button, ViewLiveButton } from "@nextblock-cms/ui";
+import { ArrowLeft, FilePenLine } from "lucide-react";
 import ContentLanguageSwitcher from "../../../components/ContentLanguageSwitcher";
 import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server";
 import { normalizeContentDraftRow } from "../../../../../lib/visual-editing/draft-content";
@@ -30,7 +30,7 @@ interface PostWithBlocks extends PostType {
   translation_group_id: string;
 }
 
-async function getPostDataWithBlocks(id: number): Promise<{ post: PostWithBlocks; hasDraft: boolean } | null> {
+async function getPostDataWithBlocks(id: number): Promise<{ post: PostWithBlocks; hasDraft: boolean; liveStatus: string; liveSlug: string } | null> {
   const supabase = createClient();
   const { data: postData, error: postError } = await supabase
     .from("posts")
@@ -86,7 +86,14 @@ async function getPostDataWithBlocks(id: number): Promise<{ post: PostWithBlocks
     };
   }
 
-  return { post: postWithBlocks, hasDraft };
+  return {
+    post: postWithBlocks,
+    hasDraft,
+    // The LIVE row's status/slug (before the draft overlay above) — the "View
+    // Live" button must reflect what is actually published, not the draft.
+    liveStatus: postData.status as string,
+    liveSlug: postData.slug as string,
+  };
 }
 
 export default async function EditPostPage(props: { params: Promise<{ id: string }> }) {
@@ -113,7 +120,7 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
     return notFound();
   }
 
-  const { post: postWithBlocks, hasDraft } = postDataResult;
+  const { post: postWithBlocks, hasDraft, liveStatus, liveSlug } = postDataResult;
 
   let initialFeatureImageUrl: string | null = null;
   let initialFeatureImageIdProp: string | null = null;
@@ -138,6 +145,8 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
   const updatePostWithId = updatePost.bind(null, postId);
   const publicPostUrl = `/article/${postWithBlocks.slug}`;
   const draftModeUrl = `/api/draft/start?path=${encodeURIComponent(publicPostUrl)}`;
+  const isLive = liveStatus === "published";
+  const liveViewUrl = `/article/${liveSlug}`;
   
   return (
     <UploadFolderProvider defaultFolder={`posts/${postWithBlocks.slug}/`}>
@@ -181,11 +190,12 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
                   allSiteLanguages={allSiteLanguages}
                 />
               )}
-              <Button variant="outline" asChild>
-                <Link href={publicPostUrl} target="_blank" rel="noopener noreferrer">
-                  <Eye className="mr-2 h-4 w-4" /> View Live Post
-                </Link>
-              </Button>
+              <ViewLiveButton
+                href={liveViewUrl}
+                isLive={isLive}
+                label="post"
+                publishAction={publishPost.bind(null, postId)}
+              />
               <Button variant="secondary" asChild>
                 <a href={draftModeUrl} target="_blank" rel="noopener noreferrer">
                   <FilePenLine className="mr-2 h-4 w-4" />

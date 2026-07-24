@@ -32,5 +32,11 @@ declare namespace NodeJS {
     FREEMIUS_SANDBOX_ENABLED?: string;
     OPENROUTER_API_KEY?: string;
     CORTEX_AI_ENCRYPTION_KEY?: string;
+    // Free stock-photo providers for Cortex AI's search_stock_photos tool. Set
+    // either one; Pexels is preferred when both are present.
+    PEXELS_API_KEY?: string;
+    UNSPLASH_ACCESS_KEY?: string;
+    // Optional fallback for the Unsplash utm_source app name (usually set in the CMS).
+    UNSPLASH_APP_NAME?: string;
   }
 }

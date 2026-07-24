@@ -6,16 +6,23 @@ import { redirect } from 'next/navigation';
 import { createClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 
 import {
+  CORTEX_AI_AGENT_SETTINGS_DEFAULTS,
+  CORTEX_AI_AGENT_SETTINGS_KEY,
   CORTEX_AI_OPENROUTER_MODEL_SELECTION_SETTING_KEY,
   CORTEX_AI_OPENROUTER_SETTING_KEY,
   CORTEX_AI_PACKAGE_ID,
+  CORTEX_AI_PEXELS_SETTING_KEY,
+  CORTEX_AI_UNSPLASH_APP_NAME_SETTING_KEY,
+  CORTEX_AI_UNSPLASH_SETTING_KEY,
   createCortexAiStoredModelSelection,
   encryptStoredOpenRouterApiKey,
   getCortexAiEnvConfig,
   getEnvOpenRouterKeyStatus,
   getStoredOpenRouterKeyStatus,
   listCortexAiCompatibleOpenRouterModels,
+  normalizeCortexAiAgentSettings,
   safeParseCortexAiModelSelection,
+  type CortexAiAgentSettings,
   type CortexAiStoredModelSelection,
 } from '@nextblock-cms/cortex';
 
@@ -23,14 +30,24 @@ const CORTEX_AI_SETTINGS_PATH = '/cms/settings/cortex-ai';
 
 type CortexAiSettingsStatus = {
   activeKeySource: 'env' | 'stored' | 'none';
+  activeStockProvider: 'pexels' | 'unsplash' | null;
+  agentSettings: CortexAiAgentSettings;
   hasEncryptionKey: boolean;
   hasEnvOpenRouterKey: boolean;
+  hasEnvPexelsKey: boolean;
+  hasEnvUnsplashKey: boolean;
   hasStoredOpenRouterKey: boolean;
+  hasStoredPexelsKey: boolean;
+  hasStoredUnsplashKey: boolean;
   isPackageActive: boolean;
   maskedEnvOpenRouterKey: string | null;
   maskedStoredOpenRouterKey: string | null;
+  maskedStoredPexelsKey: string | null;
+  maskedStoredUnsplashKey: string | null;
   selectedModel: CortexAiStoredModelSelection | null;
+  stockKeysUpdatedAt: string | null;
   storedOpenRouterKeyUpdatedAt: string | null;
+  unsplashAppName: string | null;
 };
 
 function redirectWithStatus(status: 'success' | 'error', message: string): never {
@@ -66,7 +83,15 @@ export async function getCortexAiSettingsStatus(): Promise<CortexAiSettingsStatu
   const env = getCortexAiEnvConfig();
   const envKeyStatus = getEnvOpenRouterKeyStatus();
 
-  const [{ data: storedKeyRow }, { data: selectedModelRow }, isPackageActive] = await Promise.all([
+  const [
+    { data: storedKeyRow },
+    { data: selectedModelRow },
+    { data: storedPexelsRow },
+    { data: storedUnsplashRow },
+    { data: unsplashAppNameRow },
+    { data: agentSettingsRow },
+    isPackageActive,
+  ] = await Promise.all([
     supabase
       .from('site_settings')
       .select('value')
@@ -77,11 +102,44 @@ export async function getCortexAiSettingsStatus(): Promise<CortexAiSettingsStatu
       .select('value')
       .eq('key', CORTEX_AI_OPENROUTER_MODEL_SELECTION_SETTING_KEY)
       .maybeSingle(),
+    supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', CORTEX_AI_PEXELS_SETTING_KEY)
+      .maybeSingle(),
+    supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', CORTEX_AI_UNSPLASH_SETTING_KEY)
+      .maybeSingle(),
+    supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', CORTEX_AI_UNSPLASH_APP_NAME_SETTING_KEY)
+      .maybeSingle(),
+    supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', CORTEX_AI_AGENT_SETTINGS_KEY)
+      .maybeSingle(),
     verifyPackageOnline(CORTEX_AI_PACKAGE_ID).catch(() => false),
   ]);
 
   const storedKeyStatus = getStoredOpenRouterKeyStatus(storedKeyRow?.value);
   const selectedModel = safeParseCortexAiModelSelection(selectedModelRow?.value);
+  const pexelsStatus = getStoredOpenRouterKeyStatus(storedPexelsRow?.value);
+  const unsplashStatus = getStoredOpenRouterKeyStatus(storedUnsplashRow?.value);
+  const hasEnvPexelsKey = Boolean(process.env.PEXELS_API_KEY?.trim());
+  const hasEnvUnsplashKey = Boolean(process.env.UNSPLASH_ACCESS_KEY?.trim());
+  const activeStockProvider: 'pexels' | 'unsplash' | null = pexelsStatus.hasStoredKey
+    ? 'pexels'
+    : unsplashStatus.hasStoredKey
+      ? 'unsplash'
+      : hasEnvPexelsKey
+        ? 'pexels'
+        : hasEnvUnsplashKey
+          ? 'unsplash'
+          : null;
 
   return {
     activeKeySource: storedKeyStatus.hasStoredKey
@@ -89,14 +147,27 @@ export async function getCortexAiSettingsStatus(): Promise<CortexAiSettingsStatu
       : env.hasOpenRouterEnvKey
         ? 'env'
         : 'none',
+    activeStockProvider,
     hasEncryptionKey: env.hasEncryptionKey,
     hasEnvOpenRouterKey: env.hasOpenRouterEnvKey,
+    hasEnvPexelsKey,
+    hasEnvUnsplashKey,
     hasStoredOpenRouterKey: storedKeyStatus.hasStoredKey,
+    hasStoredPexelsKey: pexelsStatus.hasStoredKey,
+    hasStoredUnsplashKey: unsplashStatus.hasStoredKey,
     isPackageActive,
     maskedEnvOpenRouterKey: envKeyStatus.maskedEnvOpenRouterKey,
     maskedStoredOpenRouterKey: storedKeyStatus.maskedKey,
+    maskedStoredPexelsKey: pexelsStatus.maskedKey,
+    maskedStoredUnsplashKey: unsplashStatus.maskedKey,
+    agentSettings: normalizeCortexAiAgentSettings(agentSettingsRow?.value),
     selectedModel: storedKeyStatus.hasStoredKey ? selectedModel : null,
+    stockKeysUpdatedAt: pexelsStatus.updatedAt || unsplashStatus.updatedAt || null,
     storedOpenRouterKeyUpdatedAt: storedKeyStatus.updatedAt,
+    unsplashAppName:
+      typeof unsplashAppNameRow?.value === 'string' && unsplashAppNameRow.value.trim()
+        ? unsplashAppNameRow.value.trim()
+        : null,
   };
 }
 
@@ -160,6 +231,154 @@ export async function clearOpenRouterApiKeyAction() {
 
   revalidatePath(CORTEX_AI_SETTINGS_PATH);
   redirectWithStatus('success', 'Stored OpenRouter key cleared.');
+}
+
+export async function saveStockPhotoKeysAction(formData: FormData) {
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+    throw new Error('Sandbox environment cannot save keys to the database.');
+  }
+
+  try {
+    const supabase = await requireAdminSupabaseClient();
+    const pexelsKey = String(formData.get('pexels_api_key') || '').trim();
+    const unsplashKey = String(formData.get('unsplash_access_key') || '').trim();
+    const unsplashAppName = String(formData.get('unsplash_app_name') || '').trim();
+
+    if (!pexelsKey && !unsplashKey && !unsplashAppName) {
+      throw new Error('Enter a Pexels or Unsplash API key, or an Unsplash app name.');
+    }
+
+    const rows: Array<{ key: string; value: unknown }> = [];
+
+    if (pexelsKey) {
+      rows.push({
+        key: CORTEX_AI_PEXELS_SETTING_KEY,
+        value: encryptStoredOpenRouterApiKey(pexelsKey),
+      });
+    }
+
+    if (unsplashKey) {
+      rows.push({
+        key: CORTEX_AI_UNSPLASH_SETTING_KEY,
+        value: encryptStoredOpenRouterApiKey(unsplashKey),
+      });
+    }
+
+    // Non-secret: the registered Unsplash app name for attribution utm_source.
+    if (unsplashAppName) {
+      rows.push({ key: CORTEX_AI_UNSPLASH_APP_NAME_SETTING_KEY, value: unsplashAppName });
+    }
+
+    const { error } = await supabase.from('site_settings').upsert(rows);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  } catch (error) {
+    redirectWithStatus(
+      'error',
+      error instanceof Error ? error.message : 'Failed to save stock photo keys.'
+    );
+  }
+
+  revalidatePath(CORTEX_AI_SETTINGS_PATH);
+  redirectWithStatus('success', 'Stock photo API key saved.');
+}
+
+export async function clearStockPhotoKeysAction() {
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+    throw new Error('Sandbox environment cannot clear keys from the database.');
+  }
+
+  try {
+    const supabase = await requireAdminSupabaseClient();
+    const { error } = await supabase
+      .from('site_settings')
+      .delete()
+      .in('key', [CORTEX_AI_PEXELS_SETTING_KEY, CORTEX_AI_UNSPLASH_SETTING_KEY]);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  } catch (error) {
+    redirectWithStatus(
+      'error',
+      error instanceof Error ? error.message : 'Failed to clear stock photo keys.'
+    );
+  }
+
+  revalidatePath(CORTEX_AI_SETTINGS_PATH);
+  redirectWithStatus('success', 'Stock photo API keys cleared.');
+}
+
+export async function saveCortexAiAgentSettingsAction(formData: FormData) {
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+    throw new Error('Sandbox environment cannot save settings to the database.');
+  }
+
+  try {
+    const supabase = await requireAdminSupabaseClient();
+    const unlimited = String(formData.get('max_output_unlimited') || '') === 'on';
+    const rawMaxOutput = String(formData.get('max_output_tokens') || '').trim();
+    const rawTimeoutSeconds = Number(formData.get('response_timeout_seconds'));
+
+    // normalizeCortexAiAgentSettings clamps everything to safe bounds.
+    const settings = normalizeCortexAiAgentSettings({
+      maxOutputTokens: unlimited
+        ? null
+        : rawMaxOutput
+          ? Number(rawMaxOutput)
+          : CORTEX_AI_AGENT_SETTINGS_DEFAULTS.maxOutputTokens,
+      maxSteps: Number(formData.get('max_steps')),
+      responseTimeoutMs: Number.isFinite(rawTimeoutSeconds)
+        ? rawTimeoutSeconds * 1000
+        : CORTEX_AI_AGENT_SETTINGS_DEFAULTS.responseTimeoutMs,
+      temperature: Number(formData.get('temperature')),
+    });
+
+    const { error } = await supabase.from('site_settings').upsert({
+      key: CORTEX_AI_AGENT_SETTINGS_KEY,
+      value: settings,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  } catch (error) {
+    redirectWithStatus(
+      'error',
+      error instanceof Error ? error.message : 'Failed to save advanced settings.'
+    );
+  }
+
+  revalidatePath(CORTEX_AI_SETTINGS_PATH);
+  redirectWithStatus('success', 'Advanced agent settings saved.');
+}
+
+export async function resetCortexAiAgentSettingsAction() {
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+    throw new Error('Sandbox environment cannot change settings in the database.');
+  }
+
+  try {
+    const supabase = await requireAdminSupabaseClient();
+    const { error } = await supabase
+      .from('site_settings')
+      .delete()
+      .eq('key', CORTEX_AI_AGENT_SETTINGS_KEY);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  } catch (error) {
+    redirectWithStatus(
+      'error',
+      error instanceof Error ? error.message : 'Failed to reset advanced settings.'
+    );
+  }
+
+  revalidatePath(CORTEX_AI_SETTINGS_PATH);
+  redirectWithStatus('success', 'Advanced agent settings reset to defaults.');
 }
 
 export async function saveCortexAiModelSelectionAction(formData: FormData) {

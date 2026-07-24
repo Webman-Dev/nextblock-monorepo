@@ -26,9 +26,110 @@ export const CORTEX_AI_PACKAGE_NAME = 'NextBlock Cortex AI';
 export const CORTEX_AI_OPENROUTER_SETTING_KEY = 'cortex_ai_openrouter_api_key';
 export const CORTEX_AI_OPENROUTER_MODEL_SELECTION_SETTING_KEY =
   'cortex_ai_openrouter_model_selection';
+// Stock-photo provider keys. Both are SECRETS and protected by the site_settings
+// sensitive-keys RLS (migration 00000000000012) — admin-only read/write, never
+// anon-readable. Stored as an encrypted envelope, same as the OpenRouter BYOK key.
+export const CORTEX_AI_PEXELS_SETTING_KEY = 'cortex_ai_pexels_api_key';
+export const CORTEX_AI_UNSPLASH_SETTING_KEY = 'cortex_ai_unsplash_access_key';
+// The operator's registered Unsplash application name, used as the utm_source on
+// Unsplash attribution links (their API guidelines require it to match the app).
+// Non-secret: stored as a plain, publicly-readable site_settings value.
+export const CORTEX_AI_UNSPLASH_APP_NAME_SETTING_KEY = 'cortex_ai_unsplash_app_name';
+
+// Advanced, admin-tunable knobs for the global agent (the page builder). Non-secret
+// JSON stored in site_settings. `maxOutputTokens: null` means UNLIMITED — the cap is
+// omitted so the model uses its own full output budget.
+export const CORTEX_AI_AGENT_SETTINGS_KEY = 'cortex_ai_agent_settings';
+
+export type CortexAiAgentSettings = {
+  maxOutputTokens: number | null;
+  maxSteps: number;
+  temperature: number;
+  responseTimeoutMs: number;
+};
+
+export const CORTEX_AI_AGENT_SETTINGS_DEFAULTS: CortexAiAgentSettings = {
+  maxOutputTokens: 16000,
+  maxSteps: 8,
+  responseTimeoutMs: 120000,
+  temperature: 0.1,
+};
+
+// Guardrails so a bad value can't wedge the agent (each step is a full model call,
+// so the step ceiling doubles as a runaway-loop / runaway-cost backstop).
+export const CORTEX_AI_AGENT_SETTINGS_BOUNDS = {
+  maxOutputTokens: { max: 200000, min: 256 },
+  maxSteps: { max: 100, min: 2 },
+  responseTimeoutMs: { max: 600000, min: 15000 },
+  temperature: { max: 2, min: 0 },
+};
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number) {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, parsed));
+}
+
+/** Merge stored overrides onto the defaults, clamping every value to safe bounds. */
+export function normalizeCortexAiAgentSettings(raw: unknown): CortexAiAgentSettings {
+  const record =
+    raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const bounds = CORTEX_AI_AGENT_SETTINGS_BOUNDS;
+  const defaults = CORTEX_AI_AGENT_SETTINGS_DEFAULTS;
+
+  const rawMaxOutput = record.maxOutputTokens;
+  const maxOutputTokens =
+    rawMaxOutput === null || rawMaxOutput === 'unlimited' || rawMaxOutput === ''
+      ? null
+      : clampNumber(rawMaxOutput, bounds.maxOutputTokens.min, bounds.maxOutputTokens.max, defaults.maxOutputTokens ?? 16000);
+
+  return {
+    maxOutputTokens,
+    maxSteps: Math.round(clampNumber(record.maxSteps, bounds.maxSteps.min, bounds.maxSteps.max, defaults.maxSteps)),
+    responseTimeoutMs: Math.round(
+      clampNumber(record.responseTimeoutMs, bounds.responseTimeoutMs.min, bounds.responseTimeoutMs.max, defaults.responseTimeoutMs)
+    ),
+    temperature: clampNumber(record.temperature, bounds.temperature.min, bounds.temperature.max, defaults.temperature),
+  };
+}
+
+/** Read the admin-tuned agent settings from site_settings, falling back to defaults. */
+export async function resolveCortexAiAgentSettings(
+  supabase?: { from: (table: string) => any } | null
+): Promise<CortexAiAgentSettings> {
+  if (supabase) {
+    try {
+      const { data } = await supabase
+        .from('site_settings')
+        .select('value')
+        .eq('key', CORTEX_AI_AGENT_SETTINGS_KEY)
+        .maybeSingle();
+
+      if (data?.value) {
+        return normalizeCortexAiAgentSettings(data.value);
+      }
+    } catch {
+      // Fall through to defaults if the settings read fails.
+    }
+  }
+
+  return { ...CORTEX_AI_AGENT_SETTINGS_DEFAULTS };
+}
 
 function readEnvValue(name: string) {
   return process.env[name]?.trim() || null;
+}
+
+export function getPexelsEnvApiKey() {
+  assertServerOnly();
+  return readEnvValue('PEXELS_API_KEY');
+}
+
+export function getUnsplashEnvApiKey() {
+  assertServerOnly();
+  return readEnvValue('UNSPLASH_ACCESS_KEY');
 }
 
 export function getOpenRouterEnvApiKey() {

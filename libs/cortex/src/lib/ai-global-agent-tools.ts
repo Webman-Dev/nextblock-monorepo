@@ -37,10 +37,21 @@ type BlockContentValidator = (
 type MenuKey = 'HEADER' | 'FOOTER';
 type CmsContentType = 'page' | 'post' | 'product';
 
+/**
+ * Imports an external image URL into the NextBlock media library and returns the
+ * new media row id (a UUID). Injected by the app (which owns storage + sharp);
+ * the lib can't import the app-side importer directly. Absent in tests/CLI.
+ */
+type ImportExternalImageFn = (input: {
+  url: string;
+  altText?: string;
+}) => Promise<{ id: string } | { error: string }>;
+
 type ToolExecutionContext = {
   actorUserId?: string | null;
   cortexAiApiKey?: string | null;
   cortexAiModelSelection?: unknown;
+  importExternalImage?: ImportExternalImageFn;
   latestUserMessage?: string | null;
   pageContext?: CortexAiPageContext | null;
   revalidatePath?: RevalidateFn;
@@ -184,7 +195,7 @@ export const updateCurrentCmsFieldsInputSchema = z.strictObject({
     .strictObject({
       description_json: z.unknown().optional(),
       excerpt: z.string().max(2000).nullable().optional(),
-      feature_image_id: z.string().trim().min(1).max(120).nullable().optional(),
+      feature_image_id: z.string().trim().min(1).max(2048).nullable().optional(),
       label: z.string().max(120).nullable().optional(),
       meta_description: z.string().max(500).nullable().optional(),
       meta_title: z.string().max(160).nullable().optional(),
@@ -235,7 +246,7 @@ export const insertContentBlockInputSchema = cmsTargetInputSchema.extend({
 export const createCmsPageInputSchema = z.strictObject({
   blocks: z.array(createCmsBlockInputSchema).max(20).optional(),
   contactEmail: z.string().email().optional(),
-  feature_image_id: z.string().trim().min(1).max(120).nullable().optional(),
+  feature_image_id: z.string().trim().min(1).max(2048).nullable().optional(),
   languageCode: z.string().trim().min(2).max(80).optional(),
   meta_description: z.string().max(500).nullable().optional(),
   meta_title: z.string().max(160).nullable().optional(),
@@ -248,7 +259,7 @@ export const createCmsPageInputSchema = z.strictObject({
 export const createCmsPostInputSchema = z.strictObject({
   blocks: z.array(createCmsBlockInputSchema).max(20).optional(),
   excerpt: z.string().max(2000).nullable().optional(),
-  feature_image_id: z.string().trim().min(1).max(120).nullable().optional(),
+  feature_image_id: z.string().trim().min(1).max(2048).nullable().optional(),
   label: z.string().max(120).nullable().optional(),
   languageCode: z.string().trim().min(2).max(80).optional(),
   meta_description: z.string().max(500).nullable().optional(),
@@ -700,9 +711,10 @@ const backgroundSchema = z.object({
     .object({
       alt_text: z.string().optional(),
       blur_data_url: z.string().optional(),
+      external_url: z.string().optional(),
       height: z.number().optional(),
-      media_id: z.string(),
-      object_key: z.string(),
+      media_id: z.string().optional(),
+      object_key: z.string().optional(),
       overlay: z
         .object({
           gradient: gradientSchema,
@@ -780,8 +792,9 @@ const fallbackBlockSchemas: Record<BlockType, z.ZodTypeAny> = {
   image: z.object({
     alt_text: z.string().optional(),
     caption: z.string().optional(),
+    external_url: z.string().nullable().optional(),
     height: z.number().nullable().optional(),
-    media_id: z.string().nullable(),
+    media_id: z.string().nullable().optional(),
     object_key: z.string().nullable().optional(),
     width: z.number().nullable().optional(),
   }),
@@ -937,6 +950,61 @@ function getCmsEntityId(pageContext: CortexAiPageContext) {
     : getNumericEntityId(pageContext);
 }
 
+const EXTERNAL_IMAGE_URL_RE = /^https?:\/\//i;
+const MEDIA_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve an image reference to a media library id (UUID). A media id is
+ * returned as-is; an external http(s) URL (e.g. a search_stock_photos result)
+ * is imported into the media library first via the injected importer, and the
+ * new media id is returned. `feature_image_id` and `product_media.media_id` are
+ * UUID FKs, so a raw URL would fail with "invalid input syntax for type uuid".
+ */
+async function resolveMediaReference(
+  value: unknown,
+  context: ToolExecutionContext | undefined,
+  altText?: string
+): Promise<string | null> {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (!EXTERNAL_IMAGE_URL_RE.test(trimmed)) {
+    // Not a URL: it must be a media library id (a UUID). Reject anything else
+    // (data: URIs, protocol-relative //host, ftp:, blob:, …) with a clear message
+    // rather than passing a bogus value into a uuid FK column.
+    if (MEDIA_ID_RE.test(trimmed)) {
+      return trimmed;
+    }
+
+    throw new Error(
+      `"${trimmed}" is not a usable image reference — provide an https:// image URL or a media library id.`
+    );
+  }
+
+  const importFn = context?.importExternalImage;
+
+  if (!importFn) {
+    throw new Error(
+      'I can only attach an image from a URL when media import is available here. Please pick an image from the media library instead.'
+    );
+  }
+
+  const result = await importFn({ altText, url: trimmed });
+
+  if ('error' in result) {
+    throw new Error(`I could not import the image from that URL: ${result.error}`);
+  }
+
+  return result.id;
+}
+
 function normalizePublicSlug(slug: unknown) {
   return typeof slug === 'string' ? slug.trim().replace(/^\/+|\/+$/g, '') : '';
 }
@@ -990,6 +1058,15 @@ function revalidateCurrentCmsSurfaces(
 
   if (publicPath) {
     revalidatePath(publicPath);
+  }
+
+  // Every language variation of the homepage is served at "/" (its slug may be
+  // "home", "accueil", "startseite", …), so getPublicCmsPath only maps the
+  // default-language "home" to "/". Bust "/" for any page edit so a translated
+  // homepage stays fresh there too — it's a cheap no-op re-render for ordinary
+  // (non-homepage) pages.
+  if (pageContext.contentType === 'page' && publicPath !== '/') {
+    revalidatePath('/');
   }
 
   if (pageContext.contentType === 'product') {
@@ -1202,31 +1279,30 @@ function normalizeCurrencyCode(value: string | undefined) {
   return (value || 'USD').trim().toUpperCase();
 }
 
-function minorUnitAmountToMajor(value: number, currencyCode: string) {
-  const zeroDecimalCurrencies = new Set(['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']);
-  const precision = zeroDecimalCurrencies.has(normalizeCurrencyCode(currencyCode)) ? 0 : 2;
+const ZERO_DECIMAL_CURRENCY_CODES = new Set([
+  'BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF',
+]);
 
-  return value / 10 ** precision;
+function currencyMinorUnitPrecision(currencyCode: string) {
+  return ZERO_DECIMAL_CURRENCY_CODES.has(normalizeCurrencyCode(currencyCode)) ? 0 : 2;
 }
 
-function maybeCentsToMajor(value: unknown, currencyCode: string) {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? minorUnitAmountToMajor(value, currencyCode)
-    : 0;
+// Major units (e.g. dollars) -> minor units (e.g. cents), precision-aware so
+// zero-decimal currencies (JPY, KRW, …) are NOT multiplied by 100.
+function majorUnitAmountToMinor(value: number, currencyCode: string) {
+  return Math.round(value * 10 ** currencyMinorUnitPrecision(currencyCode));
 }
 
-function mapMinorPriceMapToMajor(value: unknown, fallbackCurrencyCode: string) {
+function serializeMajorPriceMapToMinor(value: unknown, fallbackCurrencyCode: string) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {};
   }
 
   return Object.entries(value as Record<string, unknown>).reduce<Record<string, number>>(
     (prices, [currencyCode, amount]) => {
-      if (typeof amount === 'number' && Number.isFinite(amount)) {
-        prices[normalizeCurrencyCode(currencyCode || fallbackCurrencyCode)] = minorUnitAmountToMajor(
-          amount,
-          currencyCode || fallbackCurrencyCode
-        );
+      if (typeof amount === 'number' && Number.isFinite(amount) && amount >= 0) {
+        const code = normalizeCurrencyCode(currencyCode || fallbackCurrencyCode);
+        prices[code] = majorUnitAmountToMinor(amount, code);
       }
 
       return prices;
@@ -1343,7 +1419,7 @@ function inferNestedBlockTypeFromContent(content: Record<string, unknown>): Bloc
     return 'heading';
   }
 
-  if ('media_id' in content || 'object_key' in content) {
+  if ('media_id' in content || 'object_key' in content || 'external_url' in content) {
     return 'image';
   }
 
@@ -2211,12 +2287,200 @@ function normalizeFormFields(fields: unknown) {
   });
 }
 
+const SECTION_GAP_VALUES = new Set(['none', 'sm', 'md', 'lg', 'xl']);
+const SECTION_PADDING_VALUES = new Set(['none', 'sm', 'md', 'lg', 'xl']);
+const SECTION_CONTAINER_VALUES = new Set([
+  'full-width',
+  'container',
+  'container-sm',
+  'container-lg',
+  'container-xl',
+]);
+const SECTION_ALIGN_VALUES = new Set(['start', 'center', 'end', 'stretch']);
+const SECTION_BACKGROUND_TYPES = new Set(['none', 'theme', 'solid', 'gradient', 'image']);
+const SECTION_THEME_VALUES = new Set(['primary', 'secondary', 'muted', 'accent', 'destructive']);
+const SECTION_IMAGE_POSITION_VALUES = new Set(['center', 'top', 'bottom', 'left', 'right']);
+
+function isExternalImageUrl(value: unknown): value is string {
+  return typeof value === 'string' && /^https?:\/\//i.test(value.trim());
+}
+
+function pickEnumValue(value: unknown, allowed: Set<string>, fallback: string) {
+  return typeof value === 'string' && allowed.has(value) ? value : fallback;
+}
+
+function clampSectionColumnCount(value: number) {
+  if (!Number.isFinite(value)) {
+    return 1;
+  }
+
+  return Math.min(4, Math.max(1, Math.round(value)));
+}
+
+function normalizeSectionGradient(rawGradient: unknown): Record<string, unknown> {
+  const defaultStops = [
+    { color: '#1e3a8a', position: 0 },
+    { color: '#3b82f6', position: 100 },
+  ];
+
+  if (!isPlainJsonRecord(rawGradient)) {
+    return { direction: 'to bottom right', stops: defaultStops, type: 'linear' };
+  }
+
+  const gradientType = rawGradient.type === 'radial' ? 'radial' : 'linear';
+  const stops =
+    Array.isArray(rawGradient.stops) && rawGradient.stops.length >= 2
+      ? rawGradient.stops
+      : defaultStops;
+  const direction =
+    typeof rawGradient.direction === 'string' && rawGradient.direction.trim()
+      ? rawGradient.direction
+      : gradientType === 'radial'
+        ? 'circle at center'
+        : 'to bottom right';
+
+  return { direction, stops, type: gradientType };
+}
+
+function normalizeSectionBackground(rawBackground: unknown): Record<string, unknown> {
+  if (!isPlainJsonRecord(rawBackground)) {
+    return { type: 'none' };
+  }
+
+  const type = pickEnumValue(rawBackground.type, SECTION_BACKGROUND_TYPES, 'none');
+  const minHeight =
+    typeof rawBackground.min_height === 'string' && rawBackground.min_height.trim()
+      ? { min_height: rawBackground.min_height }
+      : {};
+
+  if (type === 'theme') {
+    return { theme: pickEnumValue(rawBackground.theme, SECTION_THEME_VALUES, 'muted'), type, ...minHeight };
+  }
+
+  if (type === 'solid') {
+    return typeof rawBackground.solid_color === 'string' && rawBackground.solid_color.trim()
+      ? { solid_color: rawBackground.solid_color, type, ...minHeight }
+      : { type: 'none' };
+  }
+
+  if (type === 'gradient') {
+    return { gradient: normalizeSectionGradient(rawBackground.gradient), type, ...minHeight };
+  }
+
+  if (type === 'image') {
+    const image = isPlainJsonRecord(rawBackground.image) ? rawBackground.image : null;
+    const externalUrl = image && isExternalImageUrl(image.external_url) ? image.external_url.trim() : null;
+    const hasStoredMedia = Boolean(
+      image &&
+        typeof image.media_id === 'string' &&
+        image.media_id.trim() &&
+        typeof image.object_key === 'string' &&
+        image.object_key.trim()
+    );
+
+    // Accept an external image URL (e.g. an AI-inserted stock photo) OR a stored
+    // media reference. Fill the required size/position defaults so it validates
+    // and renders as a cover background. Only downgrade when neither is usable.
+    if (image && (externalUrl || hasStoredMedia)) {
+      return {
+        image: {
+          ...image,
+          ...(externalUrl ? { external_url: externalUrl } : {}),
+          position: pickEnumValue(image.position, SECTION_IMAGE_POSITION_VALUES, 'center'),
+          size: image.size === 'contain' ? 'contain' : 'cover',
+        },
+        type,
+        ...minHeight,
+      };
+    }
+
+    return { type: 'none' };
+  }
+
+  return { type: 'none', ...minHeight };
+}
+
+// Fills every required section layout field with sensible defaults, keeps the
+// grid column count (responsive_columns.desktop) in sync with the number of
+// columns actually provided, and deep-normalizes each nested column block. This
+// lets a cheap model emit a section with just intent + content (columns, an
+// optional background, is_hero) and still pass strict validation and render well.
+function normalizeSectionContent(
+  rawContent: Record<string, unknown>,
+  label: string,
+  context?: ToolExecutionContext
+): SectionBlockContent {
+  const isHero = rawContent.is_hero === true;
+
+  let rawColumns = Array.isArray(rawContent.column_blocks) ? rawContent.column_blocks : [];
+
+  // Leniency: a model that flattens the columns into a single list of blocks
+  // ([blockA, blockB]) instead of an array-of-columns ([[blockA],[blockB]]) gets
+  // treated as one column rather than silently dropping its blocks.
+  if (rawColumns.length > 0 && rawColumns.every((column) => isPlainJsonRecord(column) && !Array.isArray(column))) {
+    rawColumns = [rawColumns];
+  }
+
+  const normalizedColumns: ColumnBlock[][] = rawColumns.map((column, columnIndex) => {
+    const blocks = Array.isArray(column) ? column : [];
+
+    return blocks.map((nested, blockIndex) =>
+      normalizeNestedColumnBlock(nested, `${label} column ${columnIndex} block ${blockIndex}`, context)
+    );
+  });
+
+  const columns = normalizedColumns.length > 0 ? normalizedColumns : [[]];
+  const desktop = clampSectionColumnCount(columns.length);
+  const requestedColumns = isPlainJsonRecord(rawContent.responsive_columns)
+    ? rawContent.responsive_columns
+    : {};
+  const requestedTablet = Number((requestedColumns as Record<string, unknown>).tablet);
+  const requestedMobile = Number((requestedColumns as Record<string, unknown>).mobile);
+  const tablet = Number.isFinite(requestedTablet)
+    ? Math.min(3, Math.max(1, Math.min(desktop, requestedTablet)))
+    : Math.min(3, desktop);
+  const mobile = Number.isFinite(requestedMobile) ? Math.min(2, Math.max(1, requestedMobile)) : 1;
+  const padding = isPlainJsonRecord(rawContent.padding) ? rawContent.padding : {};
+
+  const normalized: Record<string, unknown> = {
+    ...rawContent,
+    background: normalizeSectionBackground(rawContent.background),
+    column_blocks: columns,
+    column_gap: pickEnumValue(rawContent.column_gap, SECTION_GAP_VALUES, 'lg'),
+    container_type: pickEnumValue(rawContent.container_type, SECTION_CONTAINER_VALUES, 'container'),
+    padding: {
+      bottom: pickEnumValue((padding as Record<string, unknown>).bottom, SECTION_PADDING_VALUES, 'xl'),
+      top: pickEnumValue((padding as Record<string, unknown>).top, SECTION_PADDING_VALUES, 'xl'),
+    },
+    responsive_columns: { desktop, mobile, tablet },
+    vertical_alignment: pickEnumValue(
+      rawContent.vertical_alignment,
+      SECTION_ALIGN_VALUES,
+      isHero ? 'center' : 'start'
+    ),
+  };
+
+  // Avoid an empty carousel render: only keep slider mode if real slides exist.
+  if (normalized.slider === true && !(Array.isArray(normalized.slides) && normalized.slides.length > 0)) {
+    normalized.slider = false;
+  }
+
+  return normalized as SectionBlockContent;
+}
+
 function normalizeBlockContentForType(
   blockType: BlockType,
   rawContent: Record<string, unknown>,
   label: string,
   context?: ToolExecutionContext
 ) {
+  if (blockType === 'section') {
+    const normalizedSection = normalizeSectionContent(rawContent, label, context);
+    assertValidBlockContent(blockType, normalizedSection, label, context);
+
+    return normalizedSection;
+  }
+
   const content = cloneJsonValue(rawContent);
 
   if (blockType === 'heading') {
@@ -2510,6 +2774,8 @@ async function insertContentBlocks(params: {
   if (error) {
     throw new Error(`Failed to insert ${params.contentType} blocks: ${serializeError(error)}`);
   }
+
+  void maybeTriggerStockPhotoDownloads(params.blocks, params.supabase);
 
   return Array.isArray(data) ? data : [];
 }
@@ -3266,6 +3532,16 @@ export async function executeUpdateCurrentCmsFields(
     return confirmation;
   }
 
+  // A feature image supplied as an external URL (e.g. a stock photo) must be
+  // imported into the media library first — feature_image_id is a UUID FK.
+  if (typeof updatePayload.feature_image_id === 'string') {
+    updatePayload.feature_image_id = await resolveMediaReference(
+      updatePayload.feature_image_id,
+      context,
+      typeof pageContext.title === 'string' ? pageContext.title : undefined
+    );
+  }
+
   const table =
     pageContext.contentType === 'page'
       ? 'pages'
@@ -3365,6 +3641,8 @@ export async function executeUpdateContentBlock(
   if (updateError || !updatedBlock) {
     throw new Error(`Failed to update block ${parsed.blockId}: ${serializeError(updateError)}`);
   }
+
+  void maybeTriggerStockPhotoDownloads([{ content: nextContent }], supabase);
 
   revalidateCurrentCmsSurfaces(context, pageContext);
 
@@ -3511,6 +3789,8 @@ export async function executeInsertContentBlock(
   if (insertError || !insertedBlock) {
     throw new Error(`Failed to insert content block: ${serializeError(insertError)}`);
   }
+
+  void maybeTriggerStockPhotoDownloads([normalizedBlock], supabase);
 
   revalidateCurrentCmsSurfaces(context, targetContext);
 
@@ -3737,11 +4017,17 @@ export async function executeCreateCmsPage(
   }
 
   const translationGroupId = translationGroup.translationGroupId || createId();
+  const resolvedFeatureImageId = await resolveMediaReference(
+    payload.item.feature_image_id,
+    context,
+    parsed.title
+  );
   const { data: page, error } = await supabase
     .from('pages')
     .insert({
       ...payload.item,
       author_id: actorUserId,
+      feature_image_id: resolvedFeatureImageId,
       translation_group_id: translationGroupId,
     })
     .select('id, language_id, slug, status, title, translation_group_id')
@@ -3856,11 +4142,17 @@ export async function executeCreateCmsPost(input: CreateCmsPostInput, context?: 
   }
 
   const translationGroupId = translationGroup.translationGroupId || createId();
+  const resolvedFeatureImageId = await resolveMediaReference(
+    payload.item.feature_image_id,
+    context,
+    parsed.title
+  );
   const { data: post, error } = await supabase
     .from('posts')
     .insert({
       ...payload.item,
       author_id: actorUserId,
+      feature_image_id: resolvedFeatureImageId,
       translation_group_id: translationGroupId,
     })
     .select('id, language_id, slug, status, title, translation_group_id')
@@ -4071,55 +4363,38 @@ function isUnsupportedDatedSpecial(input: UpdateCmsItemFieldInput) {
   );
 }
 
-async function buildProductFormValuesFromRow(
-  product: any,
-  supabase: SupabaseLike,
-  overrides: Record<string, unknown>
-) {
-  const defaultCurrencyCode = await getDefaultCurrencyCode(supabase);
-  const { productSchema } = await getEcommerceProductModule();
+/**
+ * Build the exact `products` column patch for a single-field product update.
+ * Price-family fields are converted from major units (what the model supplies)
+ * to the precision-aware minor units the DB stores; every other field maps to
+ * its column verbatim. This patch is applied DIRECTLY to the products row — it
+ * never reconstructs the whole product, so variants, sale schedule, custom
+ * canonical, and unrelated currency prices are left untouched.
+ */
+async function buildProductColumnUpdate(
+  field: string,
+  value: unknown,
+  supabase: SupabaseLike
+): Promise<Record<string, unknown>> {
+  if (field === 'price' || field === 'sale_price') {
+    if (value === null || value === undefined) {
+      return { [field]: null };
+    }
 
-  return productSchema.parse({
-    description_json:
-      overrides.description_json !== undefined
-        ? validateProductDescriptionJson(overrides.description_json)
-        : product.description_json || undefined,
-    freemius_plan_id: product.freemius_plan_id || '',
-    freemius_product_id: product.freemius_product_id || '',
-    is_taxable: overrides.is_taxable ?? product.is_taxable ?? true,
-    language_id: overrides.language_id ?? product.language_id,
-    meta_description: overrides.meta_description ?? product.meta_description ?? '',
-    meta_title: overrides.meta_title ?? product.meta_title ?? '',
-    payment_provider: overrides.payment_provider ?? product.payment_provider ?? 'stripe',
-    price:
-      overrides.price !== undefined
-        ? overrides.price
-        : maybeCentsToMajor(product.price, defaultCurrencyCode),
-    prices: overrides.prices ?? mapMinorPriceMapToMajor(product.prices, defaultCurrencyCode),
-    product_media: undefined,
-    product_type: overrides.product_type ?? product.product_type ?? 'physical',
-    sale_price:
-      overrides.sale_price !== undefined
-        ? overrides.sale_price
-        : product.sale_price === null || product.sale_price === undefined
-          ? null
-          : minorUnitAmountToMajor(Number(product.sale_price), defaultCurrencyCode),
-    sale_prices: overrides.sale_prices ?? mapMinorPriceMapToMajor(product.sale_prices, defaultCurrencyCode),
-    short_description: overrides.short_description ?? product.short_description ?? '',
-    sku: overrides.sku ?? product.sku,
-    slug: overrides.slug ?? product.slug,
-    status: overrides.status ?? product.status ?? 'draft',
-    stock: overrides.stock ?? product.stock ?? 0,
-    title: overrides.title ?? product.title,
-    trial_period_days: overrides.trial_period_days ?? product.trial_period_days ?? 0,
-    trial_requires_payment_method:
-      overrides.trial_requires_payment_method ??
-      product.trial_requires_payment_method ??
-      false,
-    upc: overrides.upc ?? product.upc ?? '',
-    variation_attributes: [],
-    variants: [],
-  });
+    const currency = await getDefaultCurrencyCode(supabase);
+    return { [field]: majorUnitAmountToMinor(Number(value), currency) };
+  }
+
+  if (field === 'prices' || field === 'sale_prices') {
+    const currency = await getDefaultCurrencyCode(supabase);
+    return { [field]: serializeMajorPriceMapToMinor(value, currency) };
+  }
+
+  if (field === 'description_json') {
+    return { description_json: validateProductDescriptionJson(value) };
+  }
+
+  return { [field]: value };
 }
 
 function buildSingleFieldUpdatePayload(
@@ -4282,30 +4557,62 @@ export async function executeUpdateCmsItemField(
   }
 
   if (target.contentType === 'product') {
-    const { updateProduct: updateEcommerceProduct } = await getEcommerceProductModule();
-    const productPayload = await buildProductFormValuesFromRow(target.item, getSupabase(context), payload);
-    const product = await updateEcommerceProduct(getSupabase(context) as any, String(target.item.id), productPayload);
+    // Patch ONLY the requested column on the products row. We deliberately do NOT
+    // route single-field product edits through the ecommerce updateProduct /
+    // upsert_product_with_variants path: that full-product rewrite wipes the
+    // product's variants + variant_attribute_mapping, clears its scheduled sale
+    // window and custom canonical, and (via a non-precision-aware ×100) corrupts
+    // zero-decimal-currency prices — all as a side effect of changing e.g. the
+    // price, stock, or title.
+    const supabase = getSupabase(context);
+    const productUpdate = await buildProductColumnUpdate(field, payload[field], supabase);
+    const { data: product, error } = await supabase
+      .from('products')
+      .update({
+        ...productUpdate,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', target.item.id)
+      .select('id, language_id, slug, status, title')
+      .single();
+
+    if (error || !product) {
+      throw new Error(`Failed to update product: ${serializeError(error)}`);
+    }
 
     revalidateCurrentCmsSurfaces(
       context,
       {
         contentType: 'product',
-        entityId: String(target.item.id),
-        languageId: product?.language_id ?? target.item.language_id,
-        slug: product?.slug ?? target.item.slug,
-        title: product?.title ?? target.item.title,
+        entityId: String(product.id),
+        languageId: product.language_id,
+        slug: product.slug,
+        title: product.title,
       },
-      product?.slug ?? target.item.slug
+      product.slug
     );
 
     return {
       contentType: 'product',
-      entityId: target.item.id,
+      entityId: product.id,
       field,
       mutationExecuted: true,
-      slug: product?.slug ?? target.item.slug,
+      slug: product.slug,
       success: true,
       updatedFields: [field],
+    };
+  }
+
+  // A feature image passed as an external URL must be imported into the media
+  // library first — feature_image_id is a UUID FK, not a URL.
+  if (field === 'feature_image_id' && typeof payload.feature_image_id === 'string') {
+    payload = {
+      ...payload,
+      feature_image_id: await resolveMediaReference(
+        payload.feature_image_id,
+        context,
+        typeof target.item.title === 'string' ? target.item.title : undefined
+      ),
     };
   }
 
@@ -4718,6 +5025,1177 @@ export async function executeCmsActionPlan(
   };
 }
 
+// ---------------------------------------------------------------------------
+// fetch_url_content: read an external web page's readable content so the agent
+// can base new CMS content on it (e.g. "rewrite my home page based on <url>").
+// Read-only, no confirmation.
+// ---------------------------------------------------------------------------
+
+export const fetchUrlContentInputSchema = z.strictObject({
+  maxChars: z
+    .number()
+    .int()
+    .min(500)
+    .max(20000)
+    .default(8000)
+    .describe('Maximum characters of readable body text to return.'),
+  url: z
+    .string()
+    .trim()
+    .min(1)
+    .max(2048)
+    .refine((value) => /^https?:\/\//i.test(value), 'URL must start with http:// or https://.'),
+});
+
+export type FetchUrlContentInput = z.input<typeof fetchUrlContentInputSchema>;
+
+const FETCH_URL_CONTENT_TIMEOUT_MS = 12000;
+const FETCH_URL_CONTENT_MAX_BYTES = 2_000_000;
+
+function isBlockedFetchHost(hostname: string) {
+  const host = hostname.trim().toLowerCase().replace(/\.$/, '').replace(/^\[|\]$/g, '');
+
+  if (
+    !host ||
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.local') ||
+    host.endsWith('.internal') ||
+    host === 'metadata.google.internal'
+  ) {
+    return true;
+  }
+
+  if (host === '0.0.0.0' || host === '::1' || host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd')) {
+    return true;
+  }
+
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+
+  if (ipv4) {
+    const a = Number(ipv4[1]);
+    const b = Number(ipv4[2]);
+
+    if (
+      a === 10 ||
+      a === 127 ||
+      a === 0 ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function decodeHtmlEntitiesToText(value: string) {
+  return value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractReadableTextFromHtml(html: string, maxChars: number) {
+  const cleaned = html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<svg\b[\s\S]*?<\/svg>/gi, ' ');
+
+  const titleMatch = html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
+  const descriptionMatch =
+    html.match(/<meta[^>]+name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i) ||
+    html.match(/<meta[^>]+content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i);
+
+  const headings = [...cleaned.matchAll(/<h([1-3])\b[^>]*>([\s\S]*?)<\/h\1>/gi)]
+    .map((match) => decodeHtmlEntitiesToText(match[2]))
+    .filter(Boolean)
+    .slice(0, 40);
+
+  const bodyMatch = cleaned.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i);
+  const bodyText = decodeHtmlEntitiesToText(bodyMatch?.[1] ?? cleaned);
+
+  return {
+    description: descriptionMatch ? decodeHtmlEntitiesToText(descriptionMatch[1]) : '',
+    headings,
+    text: bodyText.slice(0, maxChars),
+    title: titleMatch ? decodeHtmlEntitiesToText(titleMatch[1]) : '',
+    truncated: bodyText.length > maxChars,
+  };
+}
+
+export async function executeFetchUrlContent(input: FetchUrlContentInput) {
+  const parsed = fetchUrlContentInputSchema.parse(input);
+
+  let target: URL;
+
+  try {
+    target = new URL(parsed.url);
+  } catch {
+    return { message: `"${parsed.url}" is not a valid URL.`, success: false, url: parsed.url };
+  }
+
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+    return { message: 'Only http and https URLs can be fetched.', success: false, url: parsed.url };
+  }
+
+  if (isBlockedFetchHost(target.hostname)) {
+    return {
+      message: 'Refusing to fetch a local, private, or internal address.',
+      success: false,
+      url: parsed.url,
+    };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_URL_CONTENT_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(target.toString(), {
+      headers: {
+        accept: 'text/html,application/xhtml+xml,text/plain',
+        'user-agent': 'NextBlockCortexAI/1.0 (+https://nextblock.dev)',
+      },
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return {
+        message: `The URL responded with HTTP ${response.status}.`,
+        status: response.status,
+        success: false,
+        url: parsed.url,
+      };
+    }
+
+    const finalUrl = response.url || target.toString();
+
+    try {
+      if (isBlockedFetchHost(new URL(finalUrl).hostname)) {
+        return {
+          message: 'The URL redirected to a blocked internal address.',
+          success: false,
+          url: parsed.url,
+        };
+      }
+    } catch {
+      // Keep the original URL if the resolved URL cannot be parsed.
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+
+    if (!/text\/html|text\/plain|application\/xhtml/i.test(contentType)) {
+      return {
+        contentType,
+        message: `The URL is not an HTML or text page (content-type: ${contentType || 'unknown'}).`,
+        success: false,
+        url: parsed.url,
+      };
+    }
+
+    const raw = await response.text();
+    const boundedRaw =
+      raw.length > FETCH_URL_CONTENT_MAX_BYTES ? raw.slice(0, FETCH_URL_CONTENT_MAX_BYTES) : raw;
+    const extracted = extractReadableTextFromHtml(boundedRaw, parsed.maxChars);
+
+    if (!extracted.text && !extracted.title) {
+      return { message: 'The URL returned no readable text content.', success: false, url: parsed.url };
+    }
+
+    return {
+      description: extracted.description,
+      finalUrl,
+      headings: extracted.headings,
+      success: true,
+      text: extracted.text,
+      title: extracted.title,
+      truncated: extracted.truncated,
+      url: parsed.url,
+    };
+  } catch (error) {
+    const aborted =
+      error instanceof Error && (error.name === 'AbortError' || /abort/i.test(error.message));
+
+    return {
+      message: aborted
+        ? 'Fetching the URL timed out.'
+        : `Failed to fetch the URL: ${serializeError(error)}`,
+      success: false,
+      url: parsed.url,
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// search_stock_photos: find relevant free stock photos (Pexels/Unsplash) whose
+// URLs the agent can drop straight into image blocks or section backgrounds.
+// Read-only, zero inference cost. Provider auto-detected by which API key is set.
+// ---------------------------------------------------------------------------
+
+export const searchStockPhotosInputSchema = z.strictObject({
+  count: z.number().int().min(1).max(15).default(6),
+  orientation: z
+    .enum(['landscape', 'portrait', 'square'])
+    .optional()
+    .describe('Preferred image orientation. Use landscape for hero/section backgrounds.'),
+  query: z.string().trim().min(2).max(200).describe('What the photos should depict, e.g. "herbal supplements".'),
+});
+
+export type SearchStockPhotosInput = z.input<typeof searchStockPhotosInputSchema>;
+
+const STOCK_PHOTO_TIMEOUT_MS = 12000;
+
+type CortexAiStockPhotoProvider = { apiKey: string; provider: 'pexels' | 'unsplash' };
+
+/**
+ * Resolve ALL configured stock-photo providers, ordered by preference: Pexels
+ * first, then Unsplash. Each provider's key comes from an admin-stored, encrypted
+ * site_settings row (read via the service-role client) if present, else the
+ * PEXELS_API_KEY / UNSPLASH_ACCESS_KEY env var. The tool tries them in order,
+ * falling back to the next provider when one is rate-limited or errors.
+ *
+ * ai-config (which pulls in server-only secret crypto) is imported lazily so this
+ * module's static graph stays test-friendly; the DB branch only runs server-side.
+ */
+export async function resolveCortexAiStockPhotoProviders(
+  supabase?: SupabaseLike
+): Promise<CortexAiStockPhotoProvider[]> {
+  let pexelsKey: string | null = null;
+  let unsplashKey: string | null = null;
+
+  if (supabase) {
+    try {
+      const { CORTEX_AI_PEXELS_SETTING_KEY, CORTEX_AI_UNSPLASH_SETTING_KEY, decryptStoredOpenRouterApiKey } =
+        await import('./ai-config');
+
+      const decrypt = (value: unknown): string | null => {
+        if (!value) {
+          return null;
+        }
+
+        try {
+          const decrypted = decryptStoredOpenRouterApiKey(value);
+          return typeof decrypted === 'string' && decrypted.trim() ? decrypted.trim() : null;
+        } catch {
+          return null;
+        }
+      };
+
+      const { data } = await supabase
+        .from('site_settings')
+        .select('key, value')
+        .in('key', [CORTEX_AI_PEXELS_SETTING_KEY, CORTEX_AI_UNSPLASH_SETTING_KEY]);
+      const rows = Array.isArray(data) ? data : [];
+      pexelsKey = decrypt(rows.find((row: any) => row.key === CORTEX_AI_PEXELS_SETTING_KEY)?.value);
+      unsplashKey = decrypt(rows.find((row: any) => row.key === CORTEX_AI_UNSPLASH_SETTING_KEY)?.value);
+    } catch {
+      // Fall through to env vars if the settings read/decrypt fails.
+    }
+  }
+
+  if (!pexelsKey) {
+    pexelsKey = process.env.PEXELS_API_KEY?.trim() || null;
+  }
+
+  if (!unsplashKey) {
+    unsplashKey = process.env.UNSPLASH_ACCESS_KEY?.trim() || null;
+  }
+
+  const providers: CortexAiStockPhotoProvider[] = [];
+
+  if (pexelsKey) {
+    providers.push({ apiKey: pexelsKey, provider: 'pexels' });
+  }
+
+  if (unsplashKey) {
+    providers.push({ apiKey: unsplashKey, provider: 'unsplash' });
+  }
+
+  return providers;
+}
+
+/** The primary (first-preference) stock-photo provider, or null when none configured. */
+export async function resolveCortexAiStockPhotoProvider(
+  supabase?: SupabaseLike
+): Promise<CortexAiStockPhotoProvider | null> {
+  const providers = await resolveCortexAiStockPhotoProviders(supabase);
+  return providers[0] ?? null;
+}
+
+/**
+ * The operator's registered Unsplash application name (for attribution utm_source).
+ * Read from the CMS setting first, then the UNSPLASH_APP_NAME env var. Never
+ * hardcoded — it must match the operator's own Unsplash app registration.
+ */
+async function resolveUnsplashAppName(supabase?: SupabaseLike): Promise<string | null> {
+  if (supabase) {
+    try {
+      const { CORTEX_AI_UNSPLASH_APP_NAME_SETTING_KEY } = await import('./ai-config');
+      const { data } = await supabase
+        .from('site_settings')
+        .select('value')
+        .eq('key', CORTEX_AI_UNSPLASH_APP_NAME_SETTING_KEY)
+        .maybeSingle();
+      const value = (data as { value?: unknown } | null)?.value;
+
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    } catch {
+      // Fall through to env.
+    }
+  }
+
+  return process.env.UNSPLASH_APP_NAME?.trim() || null;
+}
+
+async function fetchStockProviderJson(url: string, headers: Record<string, string>) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), STOCK_PHOTO_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, { headers, signal: controller.signal });
+
+    if (!response.ok) {
+      throw new Error(`Stock photo provider responded with HTTP ${response.status}.`);
+    }
+
+    return await response.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function toFiniteOrNull(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function collectUnsplashDownloadLocations(content: unknown, out: Set<string>) {
+  if (!isPlainJsonRecord(content)) {
+    return;
+  }
+
+  const readDownload = (attribution: unknown) => {
+    if (
+      isPlainJsonRecord(attribution) &&
+      attribution.provider === 'unsplash' &&
+      typeof attribution.downloadLocation === 'string' &&
+      attribution.downloadLocation.trim()
+    ) {
+      out.add(attribution.downloadLocation.trim());
+    }
+  };
+
+  readDownload(content.attribution);
+
+  if (isPlainJsonRecord(content.background) && isPlainJsonRecord(content.background.image)) {
+    readDownload(content.background.image.attribution);
+  }
+
+  if (Array.isArray(content.column_blocks)) {
+    for (const column of content.column_blocks) {
+      if (Array.isArray(column)) {
+        for (const nested of column) {
+          if (isPlainJsonRecord(nested)) {
+            collectUnsplashDownloadLocations(nested.content, out);
+          }
+        }
+      }
+    }
+  }
+
+  if (Array.isArray(content.slides)) {
+    for (const slide of content.slides) {
+      collectUnsplashDownloadLocations(slide, out);
+    }
+  }
+}
+
+/**
+ * Fire the Unsplash download-trigger endpoint for every Unsplash photo placed in
+ * the given blocks. Required by the Unsplash API Guidelines when a photo is used.
+ * Best-effort and fire-and-forget: it resolves the Unsplash key, dedupes, and
+ * never blocks or fails the mutation.
+ */
+export async function maybeTriggerStockPhotoDownloads(
+  blocks: Array<{ content?: unknown } | null | undefined>,
+  supabase?: SupabaseLike
+) {
+  try {
+    const locations = new Set<string>();
+
+    for (const block of blocks) {
+      collectUnsplashDownloadLocations(block?.content, locations);
+    }
+
+    if (locations.size === 0) {
+      return;
+    }
+
+    const providers = await resolveCortexAiStockPhotoProviders(supabase);
+    const unsplash = providers.find((provider) => provider.provider === 'unsplash');
+
+    if (!unsplash) {
+      return;
+    }
+
+    await Promise.all(
+      [...locations].map((location) =>
+        fetch(location, { headers: { Authorization: `Client-ID ${unsplash.apiKey}` } }).catch(
+          () => undefined
+        )
+      )
+    );
+  } catch {
+    // Never let attribution telemetry break a CMS mutation.
+  }
+}
+
+async function searchStockPhotosViaProvider(
+  provider: CortexAiStockPhotoProvider,
+  parsed: z.infer<typeof searchStockPhotosInputSchema>,
+  unsplashAppName?: string | null
+) {
+  const params = new URLSearchParams({
+    per_page: String(parsed.count),
+    query: parsed.query,
+  });
+
+  if (parsed.orientation) {
+    params.set('orientation', parsed.orientation);
+  }
+
+  if (provider.provider === 'pexels') {
+    const data = await fetchStockProviderJson(
+      `https://api.pexels.com/v1/search?${params.toString()}`,
+      { Authorization: provider.apiKey }
+    );
+
+    return (Array.isArray(data?.photos) ? data.photos : [])
+      .map((photo: any) => {
+        const photographer = typeof photo?.photographer === 'string' ? photo.photographer : null;
+
+        return {
+          alt: typeof photo?.alt === 'string' && photo.alt.trim() ? photo.alt.trim() : parsed.query,
+          credit: photographer ? `Photo by ${photographer} on Pexels` : 'Photo on Pexels',
+          downloadLocation: null,
+          height: toFiniteOrNull(photo?.height),
+          photographer,
+          photographerUrl: typeof photo?.photographer_url === 'string' ? photo.photographer_url : null,
+          provider: 'pexels' as const,
+          sourceUrl: typeof photo?.url === 'string' ? photo.url : null,
+          thumbnailUrl: photo?.src?.medium || photo?.src?.large || null,
+          url: photo?.src?.large2x || photo?.src?.large || photo?.src?.original || null,
+          width: toFiniteOrNull(photo?.width),
+        };
+      })
+      .filter((photo: { url: unknown }) => typeof photo.url === 'string');
+  }
+
+  const data = await fetchStockProviderJson(
+    `https://api.unsplash.com/search/photos?${params.toString()}`,
+    { Authorization: `Client-ID ${provider.apiKey}` }
+  );
+
+  return (Array.isArray(data?.results) ? data.results : [])
+    .map((photo: any) => {
+      const photographer = typeof photo?.user?.name === 'string' ? photo.user.name : null;
+
+      return {
+        alt:
+          (typeof photo?.alt_description === 'string' && photo.alt_description.trim()) ||
+          (typeof photo?.description === 'string' && photo.description.trim()) ||
+          parsed.query,
+        credit: photographer ? `Photo by ${photographer} on Unsplash` : 'Photo on Unsplash',
+        // Unsplash requires triggering this endpoint when the photo is actually
+        // used; carry it so the block-persist path can fire it.
+        downloadLocation:
+          typeof photo?.links?.download_location === 'string' ? photo.links.download_location : null,
+        height: toFiniteOrNull(photo?.height),
+        photographer,
+        photographerUrl: typeof photo?.user?.links?.html === 'string' ? photo.user.links.html : null,
+        provider: 'unsplash' as const,
+        sourceUrl: typeof photo?.links?.html === 'string' ? photo.links.html : null,
+        thumbnailUrl: photo?.urls?.small || photo?.urls?.thumb || null,
+        url: photo?.urls?.regular || photo?.urls?.full || photo?.urls?.raw || null,
+        // The operator's registered Unsplash app name for the attribution utm_source.
+        utmSource: unsplashAppName || null,
+        width: toFiniteOrNull(photo?.width),
+      };
+    })
+    .filter((photo: { url: unknown }) => typeof photo.url === 'string');
+}
+
+export async function executeSearchStockPhotos(
+  input: SearchStockPhotosInput,
+  context?: ToolExecutionContext
+) {
+  const parsed = searchStockPhotosInputSchema.parse(input);
+  const providers = await resolveCortexAiStockPhotoProviders(context?.supabase);
+
+  if (providers.length === 0) {
+    return {
+      message:
+        'No stock photo provider is configured. Add a free Pexels or Unsplash API key in /cms/settings/cortex-ai (or set PEXELS_API_KEY / UNSPLASH_ACCESS_KEY).',
+      photos: [],
+      success: false,
+    };
+  }
+
+  // Try each configured provider in order (Pexels, then Unsplash). Falls through
+  // to the next provider when one errors — e.g. a 429 when the free-tier quota is
+  // exhausted — or returns no matches, so a rate-limited Pexels never blocks results.
+  const unsplashAppName = providers.some((provider) => provider.provider === 'unsplash')
+    ? await resolveUnsplashAppName(context?.supabase)
+    : null;
+  const attemptedProviders: string[] = [];
+  let lastError: unknown = null;
+
+  for (const provider of providers) {
+    attemptedProviders.push(provider.provider);
+
+    try {
+      const photos = await searchStockPhotosViaProvider(provider, parsed, unsplashAppName);
+
+      if (photos.length > 0) {
+        return {
+          attemptedProviders,
+          photos,
+          provider: provider.provider,
+          query: parsed.query,
+          success: true,
+          usageGuidance:
+            provider.provider === 'unsplash'
+              ? 'Unsplash photos: keep them hotlinked (use `url` as external_url; never save an Unsplash photo to the media library) and attribute each one — copy the photo\'s attribution fields into the image content\'s `attribution` (photographer, photographerUrl, sourceUrl, downloadLocation, utmSource, provider "unsplash"). The site renders the "Photo by … on Unsplash" credit from `attribution` automatically, so do NOT also copy the credit into `caption` (leave caption empty unless you have a genuine descriptive caption).'
+              : 'Set the image content\'s `attribution` (photographer, photographerUrl, sourceUrl, provider "pexels"). The site renders the "Photo by … on Pexels" credit from `attribution` automatically, so do NOT also copy the credit into `caption` (leave caption empty unless you have a genuine descriptive caption). Pexels attribution is appreciated but optional.',
+        };
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  return {
+    attemptedProviders,
+    message: lastError
+      ? `Stock photo search failed across ${attemptedProviders.join(', ')}: ${serializeError(lastError)}`
+      : `No matching stock photos found for "${parsed.query}".`,
+    photos: [],
+    success: false,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// rewrite_page_draft: replace ALL blocks of a page/post with a new set, staged
+// into Live Draft Mode (content_drafts) so the user previews before publishing.
+// Publishing the draft applies it live AND auto-snapshots a revision.
+// ---------------------------------------------------------------------------
+
+export const rewritePageDraftInputSchema = cmsTargetInputSchema.extend({
+  blocks: z.array(createCmsBlockInputSchema).min(1).max(20),
+  meta: z
+    .strictObject({
+      meta_description: z.string().max(500).nullable().optional(),
+      meta_title: z.string().max(160).nullable().optional(),
+      slug: z.string().trim().min(1).max(300).optional(),
+      status: z.enum(['draft', 'published', 'archived']).optional(),
+      title: z.string().trim().min(1).max(300).optional(),
+    })
+    .partial()
+    .optional(),
+});
+
+export type RewritePageDraftInput = z.infer<typeof rewritePageDraftInputSchema>;
+
+const DRAFT_META_CARRYOVER_FIELDS = [
+  'custom_canonical',
+  'excerpt',
+  'feature_image_id',
+  'label',
+  'language_id',
+  'meta_description',
+  'meta_title',
+  'published_at',
+  'slug',
+  'status',
+  'subtitle',
+  'title',
+  'translation_group_id',
+] as const;
+
+function buildDraftMetaFromItem(item: Record<string, any>) {
+  const meta: Record<string, unknown> = {};
+
+  for (const field of DRAFT_META_CARRYOVER_FIELDS) {
+    if (field in item && item[field] !== undefined) {
+      meta[field] = item[field];
+    }
+  }
+
+  return meta;
+}
+
+function buildDraftPreviewPath(contentType: 'page' | 'post', publicSlug: string) {
+  if (!publicSlug) {
+    return null;
+  }
+
+  const path =
+    contentType === 'page' ? (publicSlug === 'home' ? '/' : `/${publicSlug}`) : `/article/${publicSlug}`;
+
+  return `/api/draft/start?path=${encodeURIComponent(path)}`;
+}
+
+export async function executeRewritePageDraft(
+  input: RewritePageDraftInput,
+  context?: ToolExecutionContext
+) {
+  const parsed = rewritePageDraftInputSchema.parse(input);
+  const supabase = getSupabase(context);
+  const actorUserId = getActorUserId(context);
+  const target = await resolveCmsTarget(parsed, context);
+
+  if (target.contentType === 'product') {
+    throw new Error(
+      'rewrite_page_draft supports pages and posts only. Products use description_json, not page blocks.'
+    );
+  }
+
+  const parentType = target.contentType;
+  const parentId = Number(target.item.id);
+
+  if (!Number.isInteger(parentId) || parentId <= 0) {
+    throw new Error('Could not resolve a valid page/post id for the draft rewrite.');
+  }
+
+  const languageId = Number(target.item.language_id);
+
+  if (!Number.isInteger(languageId) || languageId <= 0) {
+    throw new Error('The target page/post is missing a language id.');
+  }
+
+  const normalizedBlocks = normalizeCreateBlocks(parsed.blocks, undefined, undefined, context);
+  const draftBlocks = normalizedBlocks.map((block, index) => ({
+    block_type: block.block_type,
+    content: block.content,
+    language_id: languageId,
+    order: index,
+    page_id: parentType === 'page' ? parentId : null,
+    post_id: parentType === 'post' ? parentId : null,
+    product_id: null,
+  }));
+
+  const meta = buildDraftMetaFromItem(target.item as Record<string, any>);
+
+  if (parsed.meta) {
+    for (const [key, value] of Object.entries(parsed.meta)) {
+      if (value !== undefined) {
+        meta[key] = value;
+      }
+    }
+  }
+
+  const publicSlug = normalizePublicSlug(
+    typeof meta.slug === 'string' ? meta.slug : target.item.slug
+  );
+  const title =
+    typeof meta.title === 'string' && meta.title.trim()
+      ? meta.title
+      : String(target.item.title || publicSlug || 'Untitled');
+  const editPath =
+    parentType === 'page' ? `/cms/pages/${parentId}/edit` : `/cms/posts/${parentId}/edit`;
+  const draftPreviewPath = buildDraftPreviewPath(parentType, publicSlug);
+
+  const payload = {
+    blocks: draftBlocks,
+    meta,
+    parent_id: parentId,
+    parent_type: parentType,
+    tool: 'rewrite_page_draft',
+  };
+
+  const confirmation = getConfirmationPreview({
+    action: 'REWRITE DRAFT',
+    context,
+    payload,
+    preview: {
+      blockCount: draftBlocks.length,
+      contentType: parentType,
+      slug: publicSlug,
+      summary: `Stage a Live Draft that replaces the ${parentType} "${title}" with ${pluralize(
+        draftBlocks.length,
+        'new block'
+      )}. Nothing goes live until you review the draft and click Publish (which also saves a revision snapshot).`,
+      title,
+    },
+    subject: `${parentType}-${parentId}`,
+  });
+
+  if (confirmation) {
+    return confirmation;
+  }
+
+  const baseVersion = Number(target.item.version) || 1;
+
+  const { error: deleteError } = await supabase
+    .from('content_drafts')
+    .delete()
+    .eq('parent_type', parentType)
+    .eq('parent_id', parentId);
+
+  if (deleteError) {
+    throw new Error(`Failed to clear the existing draft: ${serializeError(deleteError)}`);
+  }
+
+  const { error: insertError } = await supabase.from('content_drafts').insert({
+    author_id: actorUserId,
+    base_version: baseVersion,
+    blocks: draftBlocks,
+    meta,
+    parent_id: parentId,
+    parent_type: parentType,
+  });
+
+  if (insertError) {
+    throw new Error(`Failed to save the draft: ${serializeError(insertError)}`);
+  }
+
+  void maybeTriggerStockPhotoDownloads(draftBlocks, supabase);
+
+  revalidateCurrentCmsSurfaces(
+    context,
+    { contentType: parentType, entityId: parentId, languageId, slug: publicSlug, title },
+    publicSlug
+  );
+
+  return {
+    blockCount: draftBlocks.length,
+    contentType: parentType,
+    draftPreviewPath,
+    editPath,
+    entityId: parentId,
+    isDraft: true,
+    mutationExecuted: true,
+    slug: publicSlug,
+    success: true,
+    title,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// translate_page: create a linked target-language copy of the current page/post.
+// The tool copies the source structure + images verbatim and applies a compact
+// source->target TEXT map the agent supplies, so translating is one small tool
+// call (no rebuild, no photo search) and the new page is linked to the original.
+// ---------------------------------------------------------------------------
+
+// Content keys whose string values are visible copy that should be translated.
+const TRANSLATABLE_STRING_FIELDS = new Set([
+  'alt_text',
+  'author_name',
+  'author_title',
+  'caption',
+  'html_content',
+  'label',
+  'placeholder',
+  'quote',
+  'submit_button_text',
+  'success_message',
+  'text',
+  'text_content',
+  'title',
+]);
+
+function translateString(
+  value: string,
+  translations: Record<string, string>,
+  sortedEntries: Array<[string, string]>
+): string {
+  if (!value) {
+    return value;
+  }
+
+  // Exact match on the whole value (optionally trimmed) is the most reliable.
+  if (Object.prototype.hasOwnProperty.call(translations, value)) {
+    return translations[value];
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed !== value && Object.prototype.hasOwnProperty.call(translations, trimmed)) {
+    return value.replace(trimmed, translations[trimmed]);
+  }
+
+  // Otherwise replace known source phrases wherever they appear (e.g. inside
+  // html_content). Longest-first so a short phrase never clobbers part of a longer one.
+  let result = value;
+
+  for (const [from, to] of sortedEntries) {
+    if (from && result.includes(from)) {
+      result = result.split(from).join(to);
+    }
+  }
+
+  return result;
+}
+
+function translateBlockContent(
+  content: unknown,
+  translations: Record<string, string>,
+  sortedEntries: Array<[string, string]>
+): unknown {
+  if (Array.isArray(content)) {
+    return content.map((item) => translateBlockContent(item, translations, sortedEntries));
+  }
+
+  if (content && typeof content === 'object') {
+    const out: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(content as Record<string, unknown>)) {
+      if (typeof value === 'string' && TRANSLATABLE_STRING_FIELDS.has(key)) {
+        out[key] = translateString(value, translations, sortedEntries);
+      } else if (value && typeof value === 'object') {
+        out[key] = translateBlockContent(value, translations, sortedEntries);
+      } else {
+        out[key] = value;
+      }
+    }
+
+    return out;
+  }
+
+  return content;
+}
+
+export const translatePageInputSchema = z.strictObject({
+  targetLanguageCode: z
+    .string()
+    .trim()
+    .min(2)
+    .max(80)
+    .describe('Target language code or name, e.g. "fr" or "French".'),
+  title: z
+    .string()
+    .trim()
+    .min(1)
+    .max(300)
+    .optional()
+    .describe('Translated page title (defaults to translating the source title).'),
+  translations: z
+    .record(z.string(), z.string())
+    .describe(
+      'Map of every visible source string to its translation, e.g. { "Explore Our Products": "Explorez nos produits" }. Include headings, paragraph text, button labels, image alt text, captions, and form labels.'
+    ),
+});
+
+export type TranslatePageInput = z.infer<typeof translatePageInputSchema>;
+
+export async function executeTranslatePage(
+  input: TranslatePageInput,
+  context?: ToolExecutionContext
+) {
+  const parsed = translatePageInputSchema.parse(input);
+  const pageContext = getCurrentCmsContext(context);
+
+  if (pageContext.contentType === 'product') {
+    throw new Error('translate_page supports pages and posts only.');
+  }
+
+  const supabase = getSupabase(context);
+  const entityId = getNumericEntityId(pageContext);
+  const table = pageContext.contentType === 'page' ? 'pages' : 'posts';
+  const parentColumn = pageContext.contentType === 'page' ? 'page_id' : 'post_id';
+
+  const { data: source, error: sourceError } = await supabase
+    .from(table)
+    .select('*')
+    .eq('id', entityId)
+    .single();
+
+  if (sourceError || !source) {
+    throw new Error(
+      `Could not read the source ${pageContext.contentType} to translate: ${serializeError(sourceError)}`
+    );
+  }
+
+  const { data: blockRows, error: blocksError } = await supabase
+    .from('blocks')
+    .select('id, block_type, content, order')
+    .eq(parentColumn, entityId);
+
+  if (blocksError) {
+    throw new Error(`Could not read the source blocks: ${serializeError(blocksError)}`);
+  }
+
+  const orderedBlocks = (Array.isArray(blockRows) ? blockRows : [])
+    .slice()
+    .sort((a: any, b: any) => Number(a.order) - Number(b.order));
+
+  if (orderedBlocks.length === 0) {
+    throw new Error(`The source ${pageContext.contentType} has no content blocks to translate.`);
+  }
+
+  const translations = parsed.translations || {};
+  const sortedEntries = Object.entries(translations)
+    .filter(([from]) => Boolean(from))
+    .sort((a, b) => b[0].length - a[0].length);
+
+  const translatedBlocks = orderedBlocks.map((block: any, index: number) => ({
+    blockType: block.block_type,
+    content: translateBlockContent(cloneJsonValue(block.content), translations, sortedEntries),
+    order: index,
+  }));
+
+  const targetLanguage = await getDefaultLanguageRecord(supabase, parsed.targetLanguageCode);
+  const sourceTitle = String(source.title || '');
+  const translatedTitle =
+    parsed.title || translateString(sourceTitle, translations, sortedEntries) || sourceTitle || 'Untitled';
+  const translateOptional = (value: unknown) =>
+    typeof value === 'string' && value.trim()
+      ? translateString(value, translations, sortedEntries)
+      : undefined;
+
+  // Localize the slug from the translated title ("Home" -> "Accueil" ->
+  // "accueil") instead of copying the source slug verbatim, so each language
+  // gets its own clean URL. Fall back to the source slug (then a generic slug)
+  // if the title yields nothing sluggable (e.g. a non-latin script).
+  const translatedSlug = slugify(translatedTitle) || source.slug || 'translated-page';
+
+  const commonInput = {
+    blocks: translatedBlocks,
+    feature_image_id: source.feature_image_id ?? undefined,
+    languageCode: targetLanguage.code,
+    meta_description: translateOptional(source.meta_description),
+    meta_title: translateOptional(source.meta_title),
+    slug: translatedSlug,
+    // Publish the translation immediately so it goes live the moment the owner
+    // confirms — the localized homepage/page is then reachable and the public
+    // language switcher can find it (drafts are filtered out of public lookups).
+    status: 'published' as const,
+    title: translatedTitle,
+    translationGroupId: source.translation_group_id || undefined,
+  };
+  const createInput =
+    pageContext.contentType === 'post'
+      ? {
+          ...commonInput,
+          excerpt: translateOptional(source.excerpt),
+          label: translateOptional(source.label),
+          // Inherit the source post's publish date (or "now" if it has none) so a
+          // published translation sorts alongside its original in the article list
+          // instead of jumping to the top with a null published_at.
+          published_at: source.published_at ?? new Date().toISOString(),
+          subtitle: translateOptional(source.subtitle),
+        }
+      : commonInput;
+
+  const confirmation = getConfirmationPreview({
+    action: 'TRANSLATE',
+    context,
+    payload: { createInput, sourceId: source.id, tool: 'translate_page' },
+    preview: {
+      blockCount: translatedBlocks.length,
+      contentType: pageContext.contentType,
+      languageCode: targetLanguage.code,
+      slug: commonInput.slug,
+      status: commonInput.status,
+      summary: `Publish a ${targetLanguage.code.toUpperCase()} translation of "${sourceTitle}" — it goes live immediately, linked to the original ${pageContext.contentType}, at /${commonInput.slug} with ${pluralize(
+        translatedBlocks.length,
+        'translated block'
+      )}.`,
+      title: translatedTitle,
+    },
+    subject: `translate ${pageContext.contentType} ${source.id} to ${targetLanguage.code}`,
+  });
+
+  if (confirmation) {
+    return confirmation;
+  }
+
+  const childContext = { ...context, skipConfirmation: true } as ToolExecutionContext;
+  const created =
+    pageContext.contentType === 'post'
+      ? await executeCreateCmsPost(createInput as any, childContext)
+      : await executeCreateCmsPage(createInput as any, childContext);
+
+  return { ...(created as Record<string, unknown>), isTranslation: true, languageCode: targetLanguage.code };
+}
+
+const setContentImagesInputSchema = z.strictObject({
+  images: z.array(z.string().trim().min(1).max(2048)).min(1).max(12),
+});
+type SetContentImagesInput = z.infer<typeof setContentImagesInputSchema>;
+
+/**
+ * Set the feature image (pages/posts) or the ordered image gallery (products)
+ * for the CURRENT CMS item. Each entry may be an existing media library id or an
+ * external image URL (imported automatically). The first entry is the feature /
+ * main image. For pages/posts only the first entry is used (they have a single
+ * feature image); for products every entry becomes a product_media row in order.
+ */
+export async function executeSetContentImages(
+  input: SetContentImagesInput,
+  context?: ToolExecutionContext
+) {
+  const parsed = setContentImagesInputSchema.parse(input);
+  const pageContext = getCurrentCmsContext(context);
+  const supabase = getSupabase(context);
+  const entityId = getCmsEntityId(pageContext);
+  const label = pageContext.title || pageContext.slug || 'current item';
+  const isProduct = pageContext.contentType === 'product';
+
+  const confirmation = getConfirmationPreview({
+    action: 'SET IMAGES',
+    context,
+    payload: { images: parsed.images, tool: 'set_content_images' },
+    preview: {
+      contentType: pageContext.contentType,
+      imageCount: parsed.images.length,
+      slug: pageContext.slug,
+      summary: isProduct
+        ? `Set ${pluralize(
+            parsed.images.length,
+            'image'
+          )} on product "${label}" (the first becomes the main product image, the rest the gallery).`
+        : `Set the feature image on the ${pageContext.contentType} "${label}".`,
+      title: pageContext.title,
+    },
+    subject: `set images on ${pageContext.contentType} ${String(entityId)}`,
+  });
+
+  if (confirmation) {
+    return confirmation;
+  }
+
+  // Resolve every reference to a media id, importing external URLs as needed.
+  const mediaIds: string[] = [];
+  for (let index = 0; index < parsed.images.length; index += 1) {
+    const mediaId = await resolveMediaReference(
+      parsed.images[index],
+      context,
+      `${label} image ${index + 1}`
+    );
+
+    if (mediaId) {
+      mediaIds.push(mediaId);
+    }
+  }
+
+  if (mediaIds.length === 0) {
+    throw new Error('None of the provided images could be resolved to a media item.');
+  }
+
+  if (isProduct) {
+    // Set the product's image gallery by writing product_media DIRECTLY. We must
+    // NOT route this through updateProduct / upsert_product_with_variants: that is
+    // a full product rewrite that (because it re-serializes the whole row) would
+    // wipe the product's variants, clear its scheduled sale window and custom
+    // canonical, re-round-trip prices (corrupting zero-decimal currencies), and
+    // hard-delete the previous images from storage. Images live in a separate
+    // join table, so touch only that.
+    const { data: product, error: productError } = await supabase
+      .from('products')
+      .select('id, slug, language_id, title')
+      .eq('id', entityId)
+      .maybeSingle();
+
+    if (productError || !product) {
+      throw new Error(
+        `Could not load the product to set images: ${serializeError(productError)}`
+      );
+    }
+
+    // Dedupe: product_media's PK is (product_id, media_id); a repeated id would
+    // violate it and leave the product with no images after the delete.
+    const uniqueMediaIds = [...new Set(mediaIds)];
+
+    const { error: deleteError } = await supabase
+      .from('product_media')
+      .delete()
+      .eq('product_id', entityId);
+
+    if (deleteError) {
+      throw new Error(
+        `Could not clear the product's existing images: ${serializeError(deleteError)}`
+      );
+    }
+
+    const { error: insertError } = await supabase.from('product_media').insert(
+      uniqueMediaIds.map((media_id, mediaIndex) => ({
+        media_id,
+        product_id: entityId,
+        sort_order: mediaIndex,
+      }))
+    );
+
+    if (insertError) {
+      throw new Error(`Could not save the product images: ${serializeError(insertError)}`);
+    }
+
+    revalidateCurrentCmsSurfaces(
+      context,
+      {
+        contentType: 'product',
+        entityId: String(entityId),
+        languageId: product.language_id,
+        slug: product.slug,
+        title: product.title,
+      },
+      product.slug
+    );
+    context?.revalidatePath?.('/cms/products');
+
+    return {
+      contentType: 'product',
+      entityId,
+      imageCount: uniqueMediaIds.length,
+      mutationExecuted: true,
+      slug: product.slug,
+      success: true,
+    };
+  }
+
+  const table = pageContext.contentType === 'page' ? 'pages' : 'posts';
+  const { data: item, error } = await supabase
+    .from(table)
+    .update({
+      feature_image_id: mediaIds[0],
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', entityId)
+    .select('id, language_id, slug, status, title')
+    .single();
+
+  if (error || !item) {
+    throw new Error(`Failed to set the feature image: ${serializeError(error)}`);
+  }
+
+  revalidateCurrentCmsSurfaces(context, pageContext, item.slug);
+
+  return {
+    contentType: pageContext.contentType,
+    entityId,
+    extraImagesIgnored: mediaIds.length - 1,
+    imageCount: 1,
+    mutationExecuted: true,
+    slug: item.slug,
+    success: true,
+  };
+}
+
 export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
   return {
     ...createCortexDatabaseAgentTools(context),
@@ -4741,6 +6219,41 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
         'Search the NextBlock documentation database and return concise source snippets for factual CMS guidance.',
       execute: (input) => executeSearchDocumentationWithTimeout(input, context),
       inputSchema: searchDocumentationInputSchema,
+      strict: true,
+    }),
+    fetch_url_content: tool({
+      description:
+        'Fetch the readable content (title, meta description, headings, and body text) of an external web page so you can base new CMS content on it. Read-only, no confirmation. Use this first whenever the user references an external URL to copy, adapt, or draw inspiration from, e.g. "rewrite my home page based on https://example.com".',
+      execute: (input) => executeFetchUrlContent(input),
+      inputSchema: fetchUrlContentInputSchema,
+      strict: true,
+    }),
+    search_stock_photos: tool({
+      description:
+        'Find relevant, free, high-quality stock photos (Unsplash/Pexels) for page imagery. Returns a list of photos each with a direct image `url`, `width`, `height`, `alt`, and `photographer`. Read-only, zero cost. Use the returned `url` directly as an image block\'s external_url or a section image background\'s image.external_url when building or revamping pages, so layouts show real photos instantly. Set orientation "landscape" for hero/section backgrounds.',
+      execute: (input) => executeSearchStockPhotos(input, context),
+      inputSchema: searchStockPhotosInputSchema,
+      strict: true,
+    }),
+    rewrite_page_draft: tool({
+      description:
+        'Replace ALL blocks of an existing page or post with a brand-new set of blocks, staged as a Live Draft (content_drafts) that the user previews before publishing. Use this for whole-page redesigns/rewrites such as "rewrite my home page with 5 sections". Provide the complete new list of top-level blocks in `blocks` (usually section blocks for a landing/home page, each with nested heading/text/button blocks). Nothing goes live until the user publishes the draft, and publishing auto-creates a revision snapshot so the change is reversible. Mutating: first returns a confirmation phrase; only stages the draft after the user replies with the exact phrase.',
+      execute: (input) => executeRewritePageDraft(input, context),
+      inputSchema: rewritePageDraftInputSchema,
+      strict: true,
+    }),
+    translate_page: tool({
+      description:
+        'Translate the CURRENT page or post into another language. This copies the source page\'s entire structure, layout, and images automatically and links the new page to the original as a translation — you ONLY supply the text translations. Provide targetLanguageCode (e.g. "fr") and a `translations` map of every visible source string to its translation (headings, paragraph text, button labels, image alt text, captions, form labels). Do NOT rebuild the layout or call search_stock_photos for a translation. Requires an open page/post. Mutating: first returns a confirmation phrase; only creates the translation after exact confirmation.',
+      execute: (input) => executeTranslatePage(input, context),
+      inputSchema: translatePageInputSchema,
+      strict: true,
+    }),
+    set_content_images: tool({
+      description:
+        "Set the feature image for the CURRENT page or post, or the image gallery for the CURRENT product. Pass `images`: a list of image URLs (e.g. `url` values returned by search_stock_photos) and/or existing media library IDs. External URLs are imported into the media library automatically — NEVER put an image URL directly into feature_image_id. The FIRST image becomes the feature image (pages/posts) or the main product image (products); for a product the remaining images become its gallery in order (this REPLACES the product's current images). Requires an open page/post/product. Mutating: first returns a confirmation phrase; only applies after exact confirmation.",
+      execute: (input) => executeSetContentImages(input, context),
+      inputSchema: setContentImagesInputSchema,
       strict: true,
     }),
     create_cms_page: tool({

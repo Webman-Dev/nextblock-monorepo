@@ -18,6 +18,7 @@ import TextBlockRenderer from "./TextBlockRenderer";
 import HeadingBlockRenderer from "./HeadingBlockRenderer";
 import ImageBlockRenderer from "./ImageBlockRenderer";
 import ButtonBlockRenderer from "./ButtonBlockRenderer";
+import { StockPhotoCredit } from "./StockPhotoCredit";
 
 const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || "";
 const BACKGROUND_COMPOSITING_CLASSES =
@@ -35,6 +36,57 @@ const ECOMMERCE_BLOCK_TYPES = new Set([
 function loadEcommerceBlockRenderer(blockType: string) {
   return import("../ecommerceRendererLoaders").then((module) =>
     module.loadEcommerceBlockRenderer(blockType)
+  );
+}
+
+type SectionBackgroundImage = NonNullable<
+  NonNullable<SectionBlockContent["background"]>["image"]
+>;
+
+// Renders a section's background image. External https URLs (e.g. AI-inserted
+// stock photos) use a plain <img> so any allowlisted host works without Next
+// image remotePatterns config; stored R2 media keeps the optimized next/image
+// path. Returns null when neither a URL nor an object key is present.
+function renderBackgroundImageElement(image: SectionBackgroundImage, priority: boolean) {
+  const externalUrl =
+    typeof image.external_url === "string" && /^https?:\/\//i.test(image.external_url.trim())
+      ? image.external_url.trim()
+      : null;
+  const objectFit: "cover" | "contain" = image.size === "contain" ? "contain" : "cover";
+  const objectPosition = image.position || "center";
+
+  if (externalUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={externalUrl}
+        alt={image.alt_text || ""}
+        loading={priority ? "eager" : "lazy"}
+        fetchPriority={priority ? "high" : "auto"}
+        decoding="async"
+        className="absolute inset-0 h-full w-full"
+        style={{ objectFit, objectPosition }}
+      />
+    );
+  }
+
+  if (!image.object_key) {
+    return null;
+  }
+
+  return (
+    <Image
+      src={`${R2_BASE_URL}/${image.object_key}`}
+      alt={image.alt_text || ""}
+      fill
+      priority={priority}
+      fetchPriority={priority ? "high" : "auto"}
+      placeholder={image.blur_data_url ? "blur" : "empty"}
+      blurDataURL={image.blur_data_url || undefined}
+      quality={image.quality || 80}
+      sizes="100vw"
+      style={{ objectFit, objectPosition }}
+    />
   );
 }
 
@@ -410,21 +462,7 @@ export default async function SectionBlockRenderer({
             {/* Background image Layer for slide */}
             {slideBackground.type === 'image' && slideBackground.image && (
               <div className={ABSOLUTE_BACKGROUND_CLASSES}>
-                <Image
-                  src={`${R2_BASE_URL}/${slideBackground.image.object_key}`}
-                  alt={slideBackground.image.alt_text || ""}
-                  fill
-                  priority={slidePriority}
-                  fetchPriority={slidePriority ? "high" : "auto"}
-                  placeholder={slideBackground.image.blur_data_url ? "blur" : "empty"}
-                  blurDataURL={slideBackground.image.blur_data_url || undefined}
-                  quality={slideBackground.image.quality || 80}
-                  sizes="100vw"
-                  style={{
-                    objectFit: slideBackground.image.size === 'contain' ? 'contain' : 'cover',
-                    objectPosition: slideBackground.image.position || 'center',
-                  }}
-                />
+                {renderBackgroundImageElement(slideBackground.image, slidePriority)}
                 {slideBackground.image.overlay && slideBackground.image.overlay.gradient && (
                   <div 
                     className="absolute inset-0 transform-gpu [backface-visibility:hidden]"
@@ -525,23 +563,15 @@ export default async function SectionBlockRenderer({
       {...visualEditAttributes}
     >
       {/* Background image Layer */}
+      {content.background?.type === 'image' && content.background.image?.attribution && (
+        <StockPhotoCredit
+          attribution={content.background.image.attribution}
+          className="pointer-events-auto absolute bottom-1 right-2 z-10 rounded bg-black/40 px-1.5 py-0.5 text-[10px] text-white/90 backdrop-blur-sm [&_a]:text-white"
+        />
+      )}
       {content.background?.type === 'image' && content.background.image && (
         <div className={ABSOLUTE_BACKGROUND_CLASSES}>
-          <Image
-            src={`${R2_BASE_URL}/${content.background.image.object_key}`}
-            alt={content.background.image.alt_text || ""}
-            fill
-            priority={isHero}
-            fetchPriority={isHero ? "high" : "auto"}
-            placeholder={content.background.image.blur_data_url ? "blur" : "empty"}
-            blurDataURL={content.background.image.blur_data_url || undefined}
-            quality={content.background.image.quality || 80}
-            sizes="100vw"
-            style={{
-              objectFit: content.background.image.size === 'contain' ? 'contain' : 'cover',
-              objectPosition: content.background.image.position || 'center',
-            }}
-          />
+          {renderBackgroundImageElement(content.background.image, isHero)}
           {content.background.image.overlay && content.background.image.overlay.gradient && (
             <div 
               className="absolute inset-0 transform-gpu [backface-visibility:hidden]"

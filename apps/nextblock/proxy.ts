@@ -394,6 +394,11 @@ function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string | u
       "'self'",
       'data:',
       'blob:',
+      // Allow any https image source. NextBlock lets trusted ADMIN/WRITER authors
+      // embed external image URLs (e.g. AI-inserted stock photos from Unsplash/
+      // Pexels, or any pasted https image). Images cannot execute code, so this is
+      // a low-risk relaxation; script/style/connect stay strict.
+      'https:',
       supabaseOrigin,
       ...assetSources,
       'https://checkout.freemius.com',

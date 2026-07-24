@@ -140,9 +140,14 @@ import {
   executeCreateCmsPost,
   executeCreateCmsProduct,
   executeDeleteCmsItem,
+  executeFetchUrlContent,
   executeInsertContentBlock,
   executePrepareDeleteCmsItem,
   executeReadCurrentCmsItem,
+  executeRewritePageDraft,
+  executeSearchStockPhotos,
+  executeSetContentImages,
+  executeTranslatePage,
   executeSearchDocumentation,
   executeSearchDocumentationWithTimeout,
   executeUpdateContentBlock,
@@ -157,11 +162,14 @@ type MockRow = Record<string, any>;
 
 type MockDatabase = {
   blocks: MockRow[];
+  content_drafts: MockRow[];
   currencies: MockRow[];
   languages: MockRow[];
   navigation_items: MockRow[];
   pages: MockRow[];
   posts: MockRow[];
+  product_media: MockRow[];
+  product_variants: MockRow[];
   products: MockRow[];
   site_settings: MockRow[];
 };
@@ -341,6 +349,7 @@ function createMockSupabase(overrides?: Partial<MockDatabase>) {
   const calls: MockRow[] = [];
   const database: MockDatabase = {
     blocks: [],
+    content_drafts: [],
     currencies: [{ code: 'USD', id: 1, is_active: true, is_default: true }],
     languages: [{ code: 'en', id: 1 }],
     navigation_items: [
@@ -348,6 +357,8 @@ function createMockSupabase(overrides?: Partial<MockDatabase>) {
     ],
     pages: [],
     posts: [],
+    product_media: [],
+    product_variants: [],
     products: [],
     site_settings: [],
     ...overrides,
@@ -1171,6 +1182,665 @@ describe('Cortex AI global agent tool executors', () => {
     expect(database.blocks[1].content.html_content).toContain('Let us help you move faster');
   });
 
+  it('normalizes a minimal section block into a valid, well-styled section on insert', async () => {
+    const { database, supabase } = createMockSupabase({
+      blocks: [],
+      pages: [
+        {
+          id: 7,
+          language_id: 1,
+          slug: 'home',
+          title: 'Home',
+          translation_group_id: 'group-home',
+        },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeInsertContentBlock,
+      {
+        block: {
+          blockType: 'section',
+          content: {
+            // Only intent + content supplied; the server fills the rest.
+            background: { type: 'gradient' },
+            column_blocks: [
+              [
+                { block_type: 'heading', content: { level: 1, text_content: 'Welcome' } },
+                { block_type: 'text', content: { html_content: '<p>Intro copy</p>' } },
+              ],
+              [{ block_type: 'heading', content: { level: 3, text_content: 'Feature A' } }],
+              [{ block_type: 'heading', content: { level: 3, text_content: 'Feature B' } }],
+            ],
+            is_hero: true,
+            // Intentionally mismatched: 3 columns provided but desktop says 1.
+            responsive_columns: { desktop: 1, mobile: 1, tablet: 1 },
+          },
+        },
+        contentType: 'page',
+        position: 'end',
+        slug: 'home',
+      },
+      { revalidatePath: () => undefined, supabase }
+    );
+
+    expect(result).toMatchObject({
+      blockType: 'section',
+      contentType: 'page',
+      entityId: 7,
+      mutationExecuted: true,
+      success: true,
+    });
+
+    expect(database.blocks).toHaveLength(1);
+    const section = database.blocks[0].content as Record<string, any>;
+
+    // Grid column count is synced to the number of columns actually provided.
+    expect(section.responsive_columns.desktop).toBe(3);
+    // Every required layout field is filled with sensible defaults.
+    expect(section.container_type).toBe('container');
+    expect(section.column_gap).toBe('lg');
+    expect(section.padding).toMatchObject({ bottom: 'xl', top: 'xl' });
+    expect(section.vertical_alignment).toBe('center');
+    // A bare gradient intent is completed with real color stops.
+    expect(section.background.type).toBe('gradient');
+    expect(section.background.gradient.stops.length).toBeGreaterThanOrEqual(2);
+    // Nested blocks are preserved and normalized.
+    expect(section.column_blocks).toHaveLength(3);
+    expect(section.column_blocks[0][0]).toMatchObject({ block_type: 'heading' });
+    expect(section.column_blocks[0][0].content.text_content).toBe('Welcome');
+    expect(section.column_blocks[0][1].content.html_content).toContain('Intro copy');
+  });
+
+  it('rewrite_page_draft stages a normalized Live Draft without touching live blocks', async () => {
+    const { database, supabase } = createMockSupabase({
+      blocks: [
+        {
+          block_type: 'text',
+          content: { html_content: '<p>Old home</p>' },
+          id: 99,
+          language_id: 1,
+          order: 0,
+          page_id: 7,
+          post_id: null,
+        },
+      ],
+      content_drafts: [],
+      pages: [
+        {
+          id: 7,
+          language_id: 1,
+          meta_description: 'Welcome',
+          meta_title: 'Home',
+          slug: 'home',
+          status: 'published',
+          title: 'Home',
+          translation_group_id: 'group-home',
+          version: 3,
+        },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeRewritePageDraft,
+      {
+        blocks: [
+          {
+            blockType: 'section',
+            content: {
+              background: { type: 'gradient' },
+              column_blocks: [
+                [
+                  { block_type: 'heading', content: { level: 1, text_content: 'Fresh Hero' } },
+                  { block_type: 'text', content: { html_content: '<p>New intro</p>' } },
+                ],
+              ],
+              is_hero: true,
+            },
+          },
+          {
+            blockType: 'section',
+            content: {
+              background: { theme: 'muted', type: 'theme' },
+              column_blocks: [
+                [{ block_type: 'heading', content: { level: 3, text_content: 'Feature A' } }],
+                [{ block_type: 'heading', content: { level: 3, text_content: 'Feature B' } }],
+                [{ block_type: 'heading', content: { level: 3, text_content: 'Feature C' } }],
+              ],
+            },
+          },
+        ],
+        contentType: 'page',
+        slug: 'home',
+      },
+      { actorUserId: 'admin-1', revalidatePath: () => undefined, supabase }
+    );
+
+    expect(result).toMatchObject({
+      blockCount: 2,
+      contentType: 'page',
+      draftPreviewPath: '/api/draft/start?path=%2F',
+      editPath: '/cms/pages/7/edit',
+      entityId: 7,
+      isDraft: true,
+      mutationExecuted: true,
+      slug: 'home',
+      success: true,
+    });
+
+    // The live page blocks are untouched — the rewrite only stages a draft.
+    expect(database.blocks).toHaveLength(1);
+    expect(database.blocks[0].content.html_content).toContain('Old home');
+
+    // Exactly one content_drafts row was staged, carrying over existing meta.
+    expect(database.content_drafts).toHaveLength(1);
+    const draft = database.content_drafts[0];
+    expect(draft).toMatchObject({
+      author_id: 'admin-1',
+      base_version: 3,
+      parent_id: 7,
+      parent_type: 'page',
+    });
+    expect(draft.meta).toMatchObject({ status: 'published', title: 'Home' });
+    expect(draft.blocks).toHaveLength(2);
+    expect(draft.blocks[0]).toMatchObject({
+      block_type: 'section',
+      language_id: 1,
+      order: 0,
+      page_id: 7,
+      post_id: null,
+    });
+    // Hero normalized to a single column; feature section to three columns.
+    expect(draft.blocks[0].content.responsive_columns.desktop).toBe(1);
+    expect(draft.blocks[0].content.background.type).toBe('gradient');
+    expect(draft.blocks[1].content.responsive_columns.desktop).toBe(3);
+  });
+
+  it('fetch_url_content refuses local, private, and metadata addresses', async () => {
+    const localhost = await executeFetchUrlContent({ url: 'http://localhost:3000/admin' });
+    expect(localhost).toMatchObject({ success: false });
+    expect(String((localhost as { message?: string }).message).toLowerCase()).toContain('local');
+
+    const metadata = await executeFetchUrlContent({ url: 'http://169.254.169.254/latest/meta-data' });
+    expect(metadata).toMatchObject({ success: false });
+
+    const privateIp = await executeFetchUrlContent({ url: 'http://10.0.0.5/' });
+    expect(privateIp).toMatchObject({ success: false });
+  });
+
+  it('fetch_url_content extracts readable content from an HTML page', async () => {
+    const html =
+      '<html><head><title>Acme Co</title><meta name="description" content="We craft fine widgets"></head><body><h1>Welcome to Acme</h1><p>We build the best widgets in town.</p><script>trackingCall()</script></body></html>';
+
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' }, status: 200 })
+    );
+
+    try {
+      const result = (await executeFetchUrlContent({ url: 'https://acme.example.com' })) as {
+        success: boolean;
+        title: string;
+        description: string;
+        headings: string[];
+        text: string;
+      };
+
+      expect(result.success).toBe(true);
+      expect(result.title).toBe('Acme Co');
+      expect(result.description).toBe('We craft fine widgets');
+      expect(result.headings).toContain('Welcome to Acme');
+      expect(result.text).toContain('best widgets');
+      expect(result.text).not.toContain('trackingCall');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('normalizes a section with an external image background instead of downgrading it', async () => {
+    const { database, supabase } = createMockSupabase({
+      blocks: [],
+      pages: [
+        {
+          id: 7,
+          language_id: 1,
+          slug: 'home',
+          title: 'Home',
+          translation_group_id: 'group-home',
+        },
+      ],
+    });
+
+    await executeConfirmed(
+      executeInsertContentBlock,
+      {
+        block: {
+          blockType: 'section',
+          content: {
+            background: {
+              image: { alt_text: 'Herbs', external_url: 'https://images.example.com/hero.jpg' },
+              type: 'image',
+            },
+            column_blocks: [
+              [{ block_type: 'heading', content: { level: 1, text_content: 'Welcome' } }],
+            ],
+            is_hero: true,
+          },
+        },
+        contentType: 'page',
+        position: 'end',
+        slug: 'home',
+      },
+      { revalidatePath: () => undefined, supabase }
+    );
+
+    const section = database.blocks[0].content as Record<string, any>;
+    expect(section.background.type).toBe('image');
+    expect(section.background.image.external_url).toBe('https://images.example.com/hero.jpg');
+    // Required render fields are filled so it validates and renders as a cover background.
+    expect(section.background.image.size).toBe('cover');
+    expect(section.background.image.position).toBe('center');
+  });
+
+  it('search_stock_photos reports when no provider is configured', async () => {
+    const originalPexels = process.env.PEXELS_API_KEY;
+    const originalUnsplash = process.env.UNSPLASH_ACCESS_KEY;
+    delete process.env.PEXELS_API_KEY;
+    delete process.env.UNSPLASH_ACCESS_KEY;
+
+    try {
+      const result = (await executeSearchStockPhotos({ query: 'herbal supplements' })) as {
+        success: boolean;
+        photos: unknown[];
+        message?: string;
+      };
+      expect(result.success).toBe(false);
+      expect(result.photos).toEqual([]);
+      expect(String(result.message)).toMatch(/PEXELS_API_KEY|UNSPLASH_ACCESS_KEY/);
+    } finally {
+      if (originalPexels === undefined) delete process.env.PEXELS_API_KEY;
+      else process.env.PEXELS_API_KEY = originalPexels;
+      if (originalUnsplash === undefined) delete process.env.UNSPLASH_ACCESS_KEY;
+      else process.env.UNSPLASH_ACCESS_KEY = originalUnsplash;
+    }
+  });
+
+  it('search_stock_photos normalizes Pexels results', async () => {
+    const originalPexels = process.env.PEXELS_API_KEY;
+    process.env.PEXELS_API_KEY = 'test-key';
+
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response(
+          JSON.stringify({
+            photos: [
+              {
+                alt: 'Fresh herbs on a table',
+                height: 4000,
+                photographer: 'Jane Doe',
+                src: {
+                  large: 'https://images.pexels.com/photo/1/large.jpg',
+                  large2x: 'https://images.pexels.com/photo/1/large2x.jpg',
+                  medium: 'https://images.pexels.com/photo/1/medium.jpg',
+                },
+                url: 'https://www.pexels.com/photo/1/',
+                width: 6000,
+              },
+            ],
+          }),
+          { headers: { 'content-type': 'application/json' }, status: 200 }
+        )
+    );
+
+    try {
+      const result = (await executeSearchStockPhotos({ orientation: 'landscape', query: 'herbs' })) as {
+        success: boolean;
+        provider: string;
+        photos: Array<{ url: string; width: number; height: number; alt: string; photographer: string }>;
+      };
+      expect(result.success).toBe(true);
+      expect(result.provider).toBe('pexels');
+      expect(result.photos).toHaveLength(1);
+      expect(result.photos[0].url).toBe('https://images.pexels.com/photo/1/large2x.jpg');
+      expect(result.photos[0].width).toBe(6000);
+      expect(result.photos[0].photographer).toBe('Jane Doe');
+    } finally {
+      vi.unstubAllGlobals();
+      if (originalPexels === undefined) delete process.env.PEXELS_API_KEY;
+      else process.env.PEXELS_API_KEY = originalPexels;
+    }
+  });
+
+  it('translate_page creates a linked published translation, copying structure and translating text', async () => {
+    const { database, supabase } = createMockSupabase({
+      blocks: [
+        {
+          block_type: 'heading',
+          content: { level: 1, text_content: 'Explore Our Products' },
+          id: 10,
+          language_id: 1,
+          order: 0,
+          page_id: 7,
+          post_id: null,
+        },
+        {
+          block_type: 'text',
+          content: { html_content: '<p>Discover our leader in natural health.</p>' },
+          id: 11,
+          language_id: 1,
+          order: 1,
+          page_id: 7,
+          post_id: null,
+        },
+      ],
+      languages: [
+        { code: 'en', id: 1, is_default: true },
+        { code: 'fr', id: 2 },
+      ],
+      pages: [
+        {
+          id: 7,
+          language_id: 1,
+          slug: 'home',
+          status: 'published',
+          title: 'Home',
+          translation_group_id: 'group-home',
+        },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeTranslatePage,
+      {
+        targetLanguageCode: 'fr',
+        title: 'Accueil',
+        translations: {
+          'Discover our leader in natural health.': 'Découvrez notre leader en santé naturelle.',
+          'Explore Our Products': 'Explorez nos produits',
+        },
+      },
+      {
+        actorUserId: 'admin-1',
+        pageContext: { contentType: 'page', entityId: 7 },
+        revalidatePath: () => undefined,
+        supabase,
+      }
+    );
+
+    expect(result).toMatchObject({
+      contentType: 'page',
+      isTranslation: true,
+      languageCode: 'fr',
+      mutationExecuted: true,
+      success: true,
+    });
+
+    // The FR page was created published, with a localized slug, linked to the
+    // same translation group.
+    const frPage = database.pages.find((page) => page.language_id === 2);
+    expect(frPage).toMatchObject({
+      language_id: 2,
+      slug: 'accueil',
+      status: 'published',
+      title: 'Accueil',
+      translation_group_id: 'group-home',
+    });
+
+    // Its blocks were copied structurally with the text translated.
+    const frBlocks = database.blocks
+      .filter((block) => block.page_id === frPage?.id)
+      .sort((a, b) => a.order - b.order);
+    expect(frBlocks).toHaveLength(2);
+    expect(frBlocks[0].content.text_content).toBe('Explorez nos produits');
+    expect(frBlocks[1].content.html_content).toContain('Découvrez notre leader en santé naturelle');
+
+    // The original English page is untouched.
+    expect(database.pages.filter((page) => page.language_id === 1)).toHaveLength(1);
+  });
+
+  it('set_content_images imports an external feature image URL and sets feature_image_id on a post', async () => {
+    const { database, supabase } = createMockSupabase({
+      posts: [
+        {
+          feature_image_id: null,
+          id: 5,
+          language_id: 1,
+          slug: 'omegas',
+          status: 'draft',
+          title: 'Omegas',
+          translation_group_id: 'g-omegas',
+        },
+      ],
+    });
+
+    const importedUrls: string[] = [];
+    const importExternalImage = async ({ url }: { url: string }) => {
+      importedUrls.push(url);
+      return { id: 'media-uuid-123' };
+    };
+
+    const result = await executeConfirmed(
+      executeSetContentImages,
+      { images: ['https://images.pexels.com/photos/1/photo.jpeg?w=940'] },
+      {
+        actorUserId: 'admin-1',
+        importExternalImage,
+        pageContext: { contentType: 'post', entityId: 5 },
+        revalidatePath: () => undefined,
+        supabase,
+      }
+    );
+
+    expect(result).toMatchObject({
+      contentType: 'post',
+      imageCount: 1,
+      mutationExecuted: true,
+      success: true,
+    });
+    // The Pexels URL was imported (not written verbatim), and the returned media
+    // id landed in feature_image_id.
+    expect(importedUrls).toEqual(['https://images.pexels.com/photos/1/photo.jpeg?w=940']);
+    expect(database.posts.find((post) => post.id === 5)?.feature_image_id).toBe('media-uuid-123');
+  });
+
+  it('update_current_cms_fields imports an external feature image URL instead of writing the raw URL', async () => {
+    const { database, supabase } = createMockSupabase({
+      posts: [
+        {
+          feature_image_id: null,
+          id: 8,
+          language_id: 1,
+          slug: 'news',
+          status: 'draft',
+          title: 'News',
+        },
+      ],
+    });
+
+    const importExternalImage = async () => ({ id: 'media-xyz' });
+
+    const result = await executeConfirmed(
+      executeUpdateCurrentCmsFields,
+      { fields: { feature_image_id: 'https://images.pexels.com/photos/2/p.jpeg' } },
+      {
+        actorUserId: 'admin-1',
+        importExternalImage,
+        pageContext: { contentType: 'post', entityId: 8 },
+        revalidatePath: () => undefined,
+        supabase,
+      }
+    );
+
+    expect(result).toMatchObject({ mutationExecuted: true, success: true });
+    expect(database.posts.find((post) => post.id === 8)?.feature_image_id).toBe('media-xyz');
+  });
+
+  it('set_content_images sets a product gallery via product_media without touching the product row or variants', async () => {
+    const { database, supabase } = createMockSupabase({
+      product_media: [{ media_id: 'old-media-1', product_id: 'prod-1', sort_order: 0 }],
+      products: [
+        {
+          id: 'prod-1',
+          language_id: 1,
+          slug: 'omega-oil',
+          status: 'active',
+          title: 'Omega Oil',
+        },
+      ],
+    });
+
+    const importedUrls: string[] = [];
+    const importExternalImage = async ({ url }: { url: string }) => {
+      importedUrls.push(url);
+      return { id: url.includes('/1/') ? 'new-media-1' : 'new-media-2' };
+    };
+
+    const result = await executeConfirmed(
+      executeSetContentImages,
+      {
+        images: [
+          'https://images.pexels.com/photos/1/a.jpeg',
+          'https://images.pexels.com/photos/2/b.jpeg',
+        ],
+      },
+      {
+        actorUserId: 'admin-1',
+        importExternalImage,
+        pageContext: { contentType: 'product', entityId: 'prod-1' },
+        revalidatePath: () => undefined,
+        supabase,
+      }
+    );
+
+    expect(result).toMatchObject({
+      contentType: 'product',
+      imageCount: 2,
+      mutationExecuted: true,
+      success: true,
+    });
+    expect(importedUrls).toHaveLength(2);
+    // The old product_media row was replaced by the two new media ids in order.
+    const media = database.product_media
+      .filter((row) => row.product_id === 'prod-1')
+      .sort((a, b) => a.sort_order - b.sort_order);
+    expect(media.map((row) => row.media_id)).toEqual(['new-media-1', 'new-media-2']);
+    // The product row itself is untouched (no full-product rewrite).
+    expect(database.products.find((row) => row.id === 'prod-1')).toMatchObject({
+      slug: 'omega-oil',
+      status: 'active',
+      title: 'Omega Oil',
+    });
+  });
+
+  it('set_content_images rejects a non-URL, non-media-id image reference', async () => {
+    const { supabase } = createMockSupabase({
+      posts: [{ feature_image_id: null, id: 9, language_id: 1, slug: 'p', status: 'draft', title: 'P' }],
+    });
+
+    await expect(
+      executeConfirmed(
+        executeSetContentImages,
+        { images: ['data:image/png;base64,iVBORw0KGgo='] },
+        {
+          actorUserId: 'admin-1',
+          importExternalImage: async () => ({ id: 'unused' }),
+          pageContext: { contentType: 'post', entityId: 9 },
+          revalidatePath: () => undefined,
+          supabase,
+        }
+      )
+    ).rejects.toThrow(/not a usable image reference/);
+  });
+
+  it('set_content_images passes an existing media id through without importing', async () => {
+    const { database, supabase } = createMockSupabase({
+      pages: [
+        {
+          feature_image_id: null,
+          id: 3,
+          language_id: 1,
+          slug: 'about',
+          status: 'published',
+          title: 'About',
+          translation_group_id: 'g-about',
+        },
+      ],
+    });
+
+    let importCalled = false;
+    const importExternalImage = async () => {
+      importCalled = true;
+      return { id: 'should-not-be-used' };
+    };
+
+    await executeConfirmed(
+      executeSetContentImages,
+      { images: ['3f2504e0-4f89-41d3-9a0c-0305e82c3301'] },
+      {
+        actorUserId: 'admin-1',
+        importExternalImage,
+        pageContext: { contentType: 'page', entityId: 3 },
+        revalidatePath: () => undefined,
+        supabase,
+      }
+    );
+
+    expect(importCalled).toBe(false);
+    expect(database.pages.find((page) => page.id === 3)?.feature_image_id).toBe(
+      '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
+    );
+  });
+
+  it('search_stock_photos falls back to Unsplash when Pexels is rate-limited', async () => {
+    const originalPexels = process.env.PEXELS_API_KEY;
+    const originalUnsplash = process.env.UNSPLASH_ACCESS_KEY;
+    process.env.PEXELS_API_KEY = 'pexels-key';
+    process.env.UNSPLASH_ACCESS_KEY = 'unsplash-key';
+
+    vi.stubGlobal('fetch', async (url: unknown) => {
+      if (String(url).includes('api.pexels.com')) {
+        return new Response('rate limit', { status: 429 });
+      }
+
+      return new Response(
+        JSON.stringify({
+          results: [
+            {
+              alt_description: 'fresh herbs',
+              height: 3000,
+              links: { html: 'https://unsplash.com/photos/x' },
+              urls: { regular: 'https://images.unsplash.com/x', small: 'https://images.unsplash.com/x-sm' },
+              user: { name: 'Ansel' },
+              width: 4000,
+            },
+          ],
+        }),
+        { headers: { 'content-type': 'application/json' }, status: 200 }
+      );
+    });
+
+    try {
+      const result = (await executeSearchStockPhotos({ query: 'herbs' })) as {
+        success: boolean;
+        provider: string;
+        attemptedProviders: string[];
+        photos: Array<{ url: string; provider: string }>;
+      };
+      expect(result.success).toBe(true);
+      expect(result.provider).toBe('unsplash');
+      expect(result.attemptedProviders).toEqual(['pexels', 'unsplash']);
+      expect(result.photos[0].url).toBe('https://images.unsplash.com/x');
+    } finally {
+      vi.unstubAllGlobals();
+      if (originalPexels === undefined) delete process.env.PEXELS_API_KEY;
+      else process.env.PEXELS_API_KEY = originalPexels;
+      if (originalUnsplash === undefined) delete process.env.UNSPLASH_ACCESS_KEY;
+      else process.env.UNSPLASH_ACCESS_KEY = originalUnsplash;
+    }
+  });
+
   it('builds a deterministic action plan for visible English and French contact intro copy', () => {
     const plan = buildVisibleContactIntroActionPlan(
       'can you add a title and description above the form on both contact pages english and french'
@@ -1751,7 +2421,8 @@ describe('Cortex AI global agent tool executors', () => {
       recipient_email: 'info@nextblock.dev',
       submit_button_text: 'Send Message',
     });
-    expect(revalidated).toEqual(['/cms/pages/1/edit', '/contact-us', '/cms/pages']);
+    // Page mutations also bust "/" so a translated homepage (any slug) stays fresh.
+    expect(revalidated).toEqual(['/cms/pages/1/edit', '/contact-us', '/', '/cms/pages']);
   });
 
   it('creates a translated page in the supplied translation group', async () => {
@@ -2108,6 +2779,59 @@ describe('Cortex AI global agent tool executors', () => {
       unsupported: true,
     });
     expect(database.products[0].sale_price).toBe(999);
+  });
+
+  it('update_cms_item_field patches a product field surgically, preserving variants, sale schedule, and canonical', async () => {
+    const { database, supabase } = createMockSupabase({
+      product_variants: [
+        { id: 'var-1', product_id: 'prod_2', sku: 'SERUM-30', stock_quantity: 5 },
+      ],
+      products: [
+        {
+          custom_canonical: 'https://example.com/serum',
+          id: 'prod_2',
+          language_id: 1,
+          price: 2000,
+          sale_end_at: '2026-06-01T00:00:00Z',
+          sale_price: 1500,
+          sale_start_at: '2026-05-01T00:00:00Z',
+          slug: 'serum',
+          status: 'active',
+          stock: 7,
+          title: 'Serum',
+        },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeUpdateCmsItemField,
+      { contentType: 'product', entityId: 'prod_2', field: 'stock', value: 12 },
+      { revalidatePath: () => undefined, supabase }
+    );
+
+    expect(result).toMatchObject({
+      contentType: 'product',
+      field: 'stock',
+      mutationExecuted: true,
+      success: true,
+    });
+
+    const product = database.products.find((row) => row.id === 'prod_2');
+    expect(product?.stock).toBe(12);
+    // A full-product rewrite would have nulled the sale schedule + canonical and
+    // re-round-tripped the price; the surgical patch leaves everything else alone.
+    expect(product).toMatchObject({
+      custom_canonical: 'https://example.com/serum',
+      price: 2000,
+      sale_end_at: '2026-06-01T00:00:00Z',
+      sale_price: 1500,
+      sale_start_at: '2026-05-01T00:00:00Z',
+      status: 'active',
+      title: 'Serum',
+    });
+    // Variants are never touched (the code doesn't reference product_variants).
+    expect(database.product_variants).toHaveLength(1);
+    expect(database.product_variants[0]).toMatchObject({ id: 'var-1', stock_quantity: 5 });
   });
 
   it('prepares and confirms deleting page translation groups and nav links', async () => {

@@ -21,6 +21,9 @@ import {
   executeDeleteCmsItem,
   executeDeleteCustomBlock,
   executeInsertContentBlock,
+  executeRewritePageDraft,
+  executeSetContentImages,
+  executeTranslatePage,
   executeUpdateContentBlock,
   executeUpdateCmsItemField,
   executeUpdateCurrentCmsFields,
@@ -29,16 +32,45 @@ import {
   executeUpdateSectionColumnBlock,
   isOpenRouterRateLimitError,
   omitUnsupportedCortexAiModelOptions,
+  resolveCortexAiAgentSettings,
+  resolveCortexAiStockPhotoProvider,
   safeParseCortexAiModelSelection,
   summarizeCortexAiRoutingError,
   type CortexAiPageContext,
   z,
 } from '@nextblock-cms/cortex';
 import { validateBlockContent } from '../../../../lib/blocks/blockRegistry';
+import { importExternalImageToMedia } from '../../../cms/media/import-external-image';
 
 export const dynamic = 'force-dynamic';
 
-const GLOBAL_AGENT_MODEL_ATTEMPT_TIMEOUT_MS = 30000;
+// Idle (not absolute) timeout: the attempt is only aborted after this many ms
+// with NO stream activity. A slow-but-progressing generation (e.g. building a
+// full multi-section page, which streams tool-input deltas for a while) keeps
+// resetting the timer instead of being killed mid-answer.
+const GLOBAL_AGENT_MODEL_IDLE_TIMEOUT_MS = 120000;
+
+// Heartbeat sent to the browser every few seconds while an attempt streams, so a
+// long tool-call generation (which produces no client-facing events) keeps the
+// client's idle timer alive and shows a "working" indicator instead of looking
+// frozen.
+const GLOBAL_AGENT_HEARTBEAT_INTERVAL_MS = 5000;
+
+// Bridges the app-side media importer (sharp + storage, request-scoped auth) into
+// the Cortex tool context so image tools can turn an external URL (e.g. a stock
+// photo) into a media library id for feature_image_id / product_media.
+async function importExternalImageForCortex(input: {
+  url: string;
+  altText?: string;
+}): Promise<{ id: string } | { error: string }> {
+  const result = await importExternalImageToMedia({ altText: input.altText, url: input.url });
+
+  if ('error' in result) {
+    return { error: result.error };
+  }
+
+  return { id: result.media.id };
+}
 
 const globalAgentMessageSchema = z.strictObject({
   content: z.string().min(1).max(8000),
@@ -58,6 +90,9 @@ const confirmedToolCallSchema = z.strictObject({
     'execute_database_mutation',
     'execute_cms_action_plan',
     'insert_content_block',
+    'rewrite_page_draft',
+    'set_content_images',
+    'translate_page',
     'update_cms_item_field',
     'update_content_block',
     'update_current_cms_fields',
@@ -103,6 +138,19 @@ const GLOBAL_AGENT_SYSTEM_PROMPT = [
   'Use describe_database_schema, read_database_records, execute_database_mutation, and execute_database_action_plan for direct database tasks that are not covered by a more specific CMS tool. Use typed CRUD tools only; never ask for or invent raw SQL.',
   'For direct database mutations, always return the confirmation preview first. Never claim a database mutation is complete until the confirmed tool result has mutationExecuted=true. Do not edit auth users, profiles, user addresses, password fields, API keys, tokens, secrets, private keys, credentials, or the cortex_ai_openrouter_api_key site setting.',
   'Use fetch_ecommerce_stats for quantitative questions about revenue, products, or order counts. This tool is read-only.',
+  'PAGE DESIGN: when building or redesigning a page layout (a landing page, home page, hero, or marketing sections), compose it from section blocks. A section is a full-width horizontal band; place nested heading, text, button, and image blocks inside its column_blocks, which is an array of columns (each column is a list of blocks).',
+  'You only need to supply each section\'s column_blocks plus intent: set is_hero:true on the first/hero section and optionally a background such as { "type": "gradient" } or { "type": "theme", "theme": "primary" } or { "type": "theme", "theme": "muted" }. Cortex fills every other layout field (container, padding, gaps, responsive columns, alignment) with good defaults and sets the grid to the number of columns you provide, so provide exactly as many columns as you want across.',
+  'For an attractive page: make the hero one centered column with a level-1 heading, a short text paragraph, and a button, over a gradient or theme:"primary" background. Then alternate section backgrounds for rhythm (none, then theme:"muted", then none, then a theme:"primary" call-to-action band). Use a 3-column section for feature cards and a 4-column section for stats.',
+  'Use discrete heading blocks for headings (not <h2> inside text HTML). A text block\'s html_content accepts rich HTML with inline styles and <style> tags, so use a text block for any fully custom styled section.',
+  'IMAGES: for real photos, call search_stock_photos with a short descriptive query (e.g. "herbal supplements") and use a returned photo `url`. Put it into an image block as { "external_url": "<url>", "alt_text": "..." }, or into a section image background as { "type": "image", "image": { "external_url": "<url>", "size": "cover", "position": "center", "alt_text": "..." } } — great for hero backgrounds; pair a hero image background with a dark gradient overlay so text stays legible. Prefer landscape orientation for backgrounds. If no stock provider is configured or you have no real image URL, use gradient or theme backgrounds instead of image backgrounds; never invent an image URL or a media_id.',
+  'STOCK PHOTO ATTRIBUTION (required): whenever you use a photo from search_stock_photos, copy that photo\'s attribution fields verbatim into the same image content as `attribution`: { "provider": "...", "photographer": "...", "photographerUrl": "...", "sourceUrl": "...", "downloadLocation": "...", "utmSource": "..." }. For an image block also set `caption` to the photo\'s `credit` string. Keep stock photos hotlinked (put `url` in external_url); never save an Unsplash photo to the media library. Unsplash attribution is mandatory; Pexels is recommended.',
+  'To rewrite or redesign an ENTIRE existing page or post (for example "rewrite my home page with 5 sections"), use rewrite_page_draft with the COMPLETE new list of top-level blocks (usually section blocks). This stages a Live Draft the user previews and publishes; it does not overwrite the live page and is fully reversible, so prefer it over deleting and recreating a page. You may call read_current_cms_item first to see the current structure. For a brand-new page from scratch, use create_cms_page (up to 20 blocks).',
+  'When the user references an external website or URL to base content on (for example "based on https://example.com"), call fetch_url_content with that URL FIRST to read its title, description, headings, and body text, then use that material to write the new sections. Never invent facts about an external site you have not fetched.',
+  'A typical "rewrite my home page based on <url>" request is: (1) fetch_url_content(<url>); (2) search_stock_photos for imagery; (3) design a hero plus several content sections from the fetched content following the PAGE DESIGN rules; (4) call rewrite_page_draft for the home page with all the new section blocks. Then tell the user to preview and publish the draft.',
+  'IMPORTANT: never stop after only reading a URL or searching photos — those are preparation steps. In the SAME turn, always continue and call the block-building tool (rewrite_page_draft for a full-page rewrite, or create_cms_page for a new page) to actually build the page. Fetching and searching alone accomplish nothing the user asked for.',
+  'TRANSLATION: to translate the CURRENT page or post into another language (e.g. "translate this page to French"), use the translate_page tool — NOT rewrite_page_draft, NOT create_cms_page, and NEVER search_stock_photos (a translation reuses the same layout and images). First call read_current_cms_item with includeBlockContent to see the exact source text, then call translate_page with targetLanguageCode (e.g. "fr") and a `translations` map of EVERY visible source string to its translation: headings, paragraph and HTML text, button labels, image alt text, captions, and form labels. translate_page copies the page structure and images automatically and links the new page to the original as a translation — you only supply the text translations.',
+  'IMAGES: to set a page or post FEATURE image, or a PRODUCT\'s images, call set_content_images with `images` — a list of image URLs (use the `url` values from search_stock_photos) and/or existing media library ids. The FIRST image is the feature image (pages/posts) or the main product image (products); for a product the remaining images become its gallery in order. External URLs are imported into the media library automatically. NEVER put an image URL into feature_image_id (it is a media id, not a URL). A section hero/background image is different — that belongs to the section block and is set with update_content_block or update_section_column_block using an external image URL, not set_content_images.',
+  'The home page is the page whose slug is "home" (served at "/"). When the user says "my home page" and no page context is supplied, target rewrite_page_draft with contentType "page" and slug "home".',
   'For order-status questions like "how many pending orders" or "how many trial orders", use the tool result report.matchingOrderStatus or report.orderStatusCounts, and use all_time unless the user names a specific time period.',
   'Never invent database fields, raw SQL, markdown content, or unsupported tool arguments.',
 ].join(' ');
@@ -140,6 +188,9 @@ type CortexAgentStreamEvent =
       type: 'error';
     }
   | {
+      type: 'status';
+    }
+  | {
       type: 'finish';
     };
 
@@ -156,22 +207,37 @@ type CortexAgentStreamPart = {
 
 async function requireAdminAccess() {
   const supabase = createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
 
-  if (userError || !user) {
+  // This route has no middleware refreshing the session per request, and getUser()
+  // only validates the *current* access token — it does not refresh an expired one.
+  // So when the access token lapses between two requests (classically: a tool-call
+  // preview and its confirmation a minute or two later), getUser() fails and a
+  // legitimate admin gets a spurious 403 ("You do not have permission…"). getSession()
+  // refreshes an expired token from the refresh-token cookie and persists the rotated
+  // token via setAll (this handler runs it before the stream response is returned, so
+  // the Set-Cookie still lands), and we retry once to smooth over a transient read.
+  let userId: string | null = null;
+
+  for (let attempt = 0; attempt < 2 && !userId; attempt += 1) {
+    await supabase.auth.getSession().catch(() => undefined);
+    const { data, error } = await supabase.auth.getUser();
+
+    if (!error && data?.user) {
+      userId = data.user.id;
+    }
+  }
+
+  if (!userId) {
     return null;
   }
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('role')
-    .eq('id', user.id)
+    .eq('id', userId)
     .single();
 
-  return !profileError && profile?.role === 'ADMIN' ? { userId: user.id } : null;
+  return !profileError && profile?.role === 'ADMIN' ? { userId } : null;
 }
 
 function jsonError(message: string, status: number) {
@@ -204,10 +270,16 @@ function formatPageContextForPrompt(pageContext: CortexAiPageContext | null | un
     .join(', ');
 }
 
-function buildGlobalAgentSystemPrompt(pageContext: CortexAiPageContext | null | undefined) {
+function buildGlobalAgentSystemPrompt(
+  pageContext: CortexAiPageContext | null | undefined,
+  stockPhotoProvider: { provider: string } | null
+) {
   return [
     GLOBAL_AGENT_SYSTEM_PROMPT,
     formatPageContextForPrompt(pageContext),
+    stockPhotoProvider
+      ? `Stock photos ARE available (provider: ${stockPhotoProvider.provider}). Use search_stock_photos for real hero and section imagery.`
+      : 'No stock photo provider is configured, so DO NOT call search_stock_photos. Use gradient or theme section backgrounds instead, and only add image blocks or image backgrounds when the user supplies an image URL.',
     'When the user says "this page", "this post", "this product", "this field", or "this block", interpret that through the supplied current CMS edit context.',
     'Do not update content outside the supplied current CMS context.',
   ].join(' ');
@@ -227,25 +299,20 @@ function getToolCallId(part: CortexAgentStreamPart) {
 function looksLikeRawToolCallLeak(value: string) {
   const normalized = value.toLowerCase();
 
+  // Only treat STRUCTURAL markers of a raw tool-call payload as a leak. The
+  // previous version flagged any prose that merely quoted a tool name or the
+  // bare word "arguments", which discarded legitimate summaries (e.g. a model
+  // describing what read_current_cms_item returned) and fell through to a
+  // canned "interrupted" message. Genuine leaked payloads carry a <toolcall>
+  // wrapper or a JSON object with both "name" and "arguments" keys.
   return (
     normalized.includes('<toolcall') ||
     normalized.includes('</toolcall') ||
-    normalized.includes('"arguments"') ||
-    normalized.includes('"update_navigation_bar"') ||
-    normalized.includes('"update_footer"') ||
-    normalized.includes('"search_documentation"') ||
-    normalized.includes('"read_current_cms_item"') ||
-    normalized.includes('"update_current_cms_fields"') ||
-    normalized.includes('"update_cms_item_field"') ||
-    normalized.includes('"update_content_block"') ||
-    normalized.includes('"insert_content_block"') ||
-    normalized.includes('"update_section_column_block"') ||
-    normalized.includes('"create_cms_page"') ||
-    normalized.includes('"create_cms_post"') ||
-    normalized.includes('"create_cms_product"') ||
-    normalized.includes('"execute_cms_action_plan"') ||
-    normalized.includes('"prepare_delete_cms_item"') ||
-    normalized.includes('"delete_cms_item"')
+    normalized.includes('<tool_call') ||
+    normalized.includes('</tool_call') ||
+    normalized.includes('<function_call') ||
+    (normalized.includes('"arguments"') &&
+      (normalized.includes('"name"') || normalized.includes('"tool"')))
   );
 }
 
@@ -355,6 +422,80 @@ function getConfirmationSummary(toolName?: string, output?: unknown) {
   return 'Complete the requested CMS change.';
 }
 
+function describeBlockTypeCounts(blocks: unknown) {
+  if (!Array.isArray(blocks) || blocks.length === 0) {
+    return '';
+  }
+
+  const counts = new Map<string, number>();
+
+  for (const block of blocks) {
+    if (isRecord(block)) {
+      const type = typeof block.blockType === 'string' ? block.blockType : 'block';
+      counts.set(type, (counts.get(type) ?? 0) + 1);
+    }
+  }
+
+  return [...counts.entries()].map(([type, count]) => pluralize(count, `${type} block`)).join(', ');
+}
+
+// Deterministic, truthful summary for a read of the current CMS item. Read
+// tools have no side effects, so if the model does not narrate the result
+// (empty text, token/step exhaustion, idle timeout), the route can still hand
+// the user a real answer instead of a canned "the model was interrupted" line.
+function summarizeReadCurrentCmsItemOutput(output: unknown) {
+  if (!isRecord(output) || output.success !== true) {
+    return null;
+  }
+
+  const context = isRecord(output.context) ? output.context : null;
+  const contentType =
+    context && typeof context.contentType === 'string' ? context.contentType : 'item';
+  const item = isRecord(output.item) ? output.item : null;
+  const title = item && typeof item.title === 'string' ? item.title : null;
+  const slug = item && typeof item.slug === 'string' ? item.slug : null;
+  const status = item && typeof item.status === 'string' ? item.status : null;
+  const blocks = Array.isArray(output.blocks) ? output.blocks : [];
+
+  const identity = title ? `the ${contentType} "${title}"` : `the current ${contentType}`;
+  const meta = [slug ? `slug "${slug}"` : null, status ? `status ${status}` : null]
+    .filter(Boolean)
+    .join(', ');
+
+  if (contentType === 'product') {
+    return `Here is ${identity}${meta ? ` (${meta})` : ''}.`;
+  }
+
+  const breakdown = describeBlockTypeCounts(blocks);
+
+  return `Here is ${identity}${meta ? ` (${meta})` : ''}. It currently has ${pluralize(
+    blocks.length,
+    'content block'
+  )}${breakdown ? `: ${breakdown}` : ''}.`;
+}
+
+function summarizeSearchDocumentationOutput(output: unknown) {
+  if (!isRecord(output)) {
+    return null;
+  }
+
+  const results = Array.isArray(output.results) ? output.results : [];
+
+  if (results.length === 0) {
+    return 'I searched the published pages and posts but did not find a relevant match.';
+  }
+
+  const titles = results
+    .map((result) => (isRecord(result) && typeof result.title === 'string' ? result.title : null))
+    .filter((value): value is string => Boolean(value))
+    .slice(0, 5);
+
+  return `I searched the published content and found ${pluralize(
+    results.length,
+    'relevant result'
+  )}${titles.length > 0 ? `: ${titles.join(', ')}` : ''}.`;
+}
+
 function getToolCompletionMessage(toolName?: string, output?: unknown) {
   if (isRecord(output)) {
     if (output.requiresConfirmation === true) {
@@ -384,11 +525,11 @@ function getToolCompletionMessage(toolName?: string, output?: unknown) {
   }
 
   if (toolName === 'search_documentation') {
-    return 'I searched the documentation, but the model was interrupted before it could finish a summary.';
+    return summarizeSearchDocumentationOutput(output) || 'I searched the documentation for you.';
   }
 
   if (toolName === 'read_current_cms_item') {
-    return 'I read the current CMS item, but the model was interrupted before it could finish a summary.';
+    return summarizeReadCurrentCmsItemOutput(output) || 'I read the current CMS item for you.';
   }
 
   if (toolName === 'fetch_ecommerce_stats') {
@@ -438,6 +579,56 @@ function getToolCompletionMessage(toolName?: string, output?: unknown) {
 
   if (toolName === 'insert_content_block') {
     return 'Done. I inserted the content block.';
+  }
+
+  if (toolName === 'fetch_url_content') {
+    const title = readStringField(output, 'title');
+    return title ? `I read the page "${title}".` : 'I read the requested URL.';
+  }
+
+  if (toolName === 'search_stock_photos') {
+    if (isRecord(output) && output.success === false) {
+      return readStringField(output, 'message') || 'I could not search for stock photos.';
+    }
+
+    const count = Array.isArray((output as { photos?: unknown[] })?.photos)
+      ? (output as { photos: unknown[] }).photos.length
+      : 0;
+
+    return count > 0
+      ? `I found ${pluralize(count, 'stock photo')} to use.`
+      : 'I did not find matching stock photos.';
+  }
+
+  if (toolName === 'translate_page') {
+    if (!mutationExecuted) {
+      return 'I prepared the translation.';
+    }
+
+    const languageCode = readStringField(output, 'languageCode');
+    return `Done — I published the${languageCode ? ` ${languageCode.toUpperCase()}` : ''} translation and linked it to the original. It's live now — open the page and switch languages to see it. You can still edit the wording anytime.`;
+  }
+
+  if (toolName === 'set_content_images') {
+    if (!mutationExecuted) {
+      return 'I prepared the image update.';
+    }
+
+    const contentType = readStringField(output, 'contentType');
+    return contentType === 'product'
+      ? 'Done — I updated the product images. The first is the main image and the rest are the gallery.'
+      : 'Done — I set the feature image. Reload the editor to see it.';
+  }
+
+  if (toolName === 'rewrite_page_draft') {
+    if (!mutationExecuted) {
+      return 'I prepared the page rewrite draft.';
+    }
+
+    const contentType = readStringField(output, 'contentType') || 'page';
+    const draftPreviewPath = readStringField(output, 'draftPreviewPath');
+
+    return `Done — I staged a Live Draft rewrite of your ${contentType}. It is NOT live yet. Open the ${contentType} edit screen to preview the draft${draftPreviewPath ? ` (preview it live at ${draftPreviewPath})` : ''}, then click Publish to go live. Publishing also saves a revision snapshot you can restore if you change your mind.`;
   }
 
   if (toolName === 'update_section_column_block') {
@@ -521,6 +712,12 @@ async function executeConfirmedToolCall(params: {
       return executeUpdateContentBlock(params.input as any, params.context);
     case 'insert_content_block':
       return executeInsertContentBlock(params.input as any, params.context);
+    case 'rewrite_page_draft':
+      return executeRewritePageDraft(params.input as any, params.context);
+    case 'set_content_images':
+      return executeSetContentImages(params.input as any, params.context);
+    case 'translate_page':
+      return executeTranslatePage(params.input as any, params.context);
     case 'update_current_cms_fields':
       return executeUpdateCurrentCmsFields(params.input as any, params.context);
     case 'update_footer':
@@ -606,11 +803,22 @@ function getRetryableStreamError(
   return error;
 }
 
-function createAttemptAbortSignal(requestSignal: AbortSignal) {
+function createAttemptAbortSignal(
+  requestSignal: AbortSignal,
+  idleTimeoutMs: number = GLOBAL_AGENT_MODEL_IDLE_TIMEOUT_MS
+) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort(new Error('Cortex AI response timed out. Please try again.'));
-  }, GLOBAL_AGENT_MODEL_ATTEMPT_TIMEOUT_MS);
+  let timeoutId: ReturnType<typeof setTimeout>;
+
+  const armIdleTimeout = () => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      controller.abort(new Error('Cortex AI response timed out. Please try again.'));
+    }, idleTimeoutMs);
+  };
+
+  armIdleTimeout();
+
   const abortFromRequest = () => controller.abort(requestSignal.reason);
 
   if (requestSignal.aborted) {
@@ -620,6 +828,8 @@ function createAttemptAbortSignal(requestSignal: AbortSignal) {
   }
 
   return {
+    // Called on every stream part to reset the idle timer.
+    bump: armIdleTimeout,
     cleanup: () => {
       clearTimeout(timeoutId);
       requestSignal.removeEventListener('abort', abortFromRequest);
@@ -659,6 +869,7 @@ export async function POST(request: Request) {
       const stream = createConfirmedToolCallStream({
         context: {
           actorUserId: adminAccess.userId,
+          importExternalImage: importExternalImageForCortex,
           latestUserMessage: confirmedToolCall.confirmationPhrase,
           pageContext,
           supabase: getServiceRoleSupabaseClient(),
@@ -684,6 +895,7 @@ export async function POST(request: Request) {
       const stream = createConfirmedToolCallStream({
         context: {
           actorUserId: adminAccess.userId,
+          importExternalImage: importExternalImageForCortex,
           latestUserMessage,
           pageContext,
           supabase: getServiceRoleSupabaseClient(),
@@ -728,12 +940,17 @@ export async function POST(request: Request) {
       actorUserId: adminAccess.userId,
       cortexAiApiKey: sandboxKey,
       cortexAiModelSelection: sandboxKey && modelSelection ? modelSelection : undefined,
+      importExternalImage: importExternalImageForCortex,
       latestUserMessage,
       pageContext,
       supabase: getServiceRoleSupabaseClient(),
       validateBlockContent,
     });
-    const systemPrompt = buildGlobalAgentSystemPrompt(pageContext);
+    const stockPhotoProvider = await resolveCortexAiStockPhotoProvider(
+      getServiceRoleSupabaseClient()
+    );
+    const agentSettings = await resolveCortexAiAgentSettings(getServiceRoleSupabaseClient());
+    const systemPrompt = buildGlobalAgentSystemPrompt(pageContext, stockPhotoProvider);
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -758,30 +975,51 @@ export async function POST(request: Request) {
           );
 
           try {
-            const attemptAbort = createAttemptAbortSignal(request.signal);
-            const attemptOptions = omitUnsupportedCortexAiModelOptions(
-              {
-                abortSignal: attemptAbort.signal,
-                maxOutputTokens: 2000,
-                messages: parsedRequest.data.messages,
-                maxRetries: 0,
-                stopWhen: stepCountIs(6),
-                system: systemPrompt,
-                temperature: 0.1,
-                tools,
-              } as Record<string, unknown>,
-              {
-                modelId,
-                modelSelection: routingPolicy.modelSelection,
-              }
+            const attemptAbort = createAttemptAbortSignal(
+              request.signal,
+              agentSettings.responseTimeoutMs
             );
+            const baseOptions: Record<string, unknown> = {
+              abortSignal: attemptAbort.signal,
+              messages: parsedRequest.data.messages,
+              maxRetries: 0,
+              // Admin-tunable step budget (Advanced settings): room for
+              // read -> plan -> build/confirm multi-tool sequences.
+              stopWhen: stepCountIs(agentSettings.maxSteps),
+              system: systemPrompt,
+              temperature: agentSettings.temperature,
+              tools,
+            };
+
+            // maxOutputTokens is a per-step cap that also counts the JSON of a tool
+            // call, so a whole-page rewrite needs plenty of room. `null` = Unlimited:
+            // omit the cap entirely so the model uses its own full output budget.
+            if (agentSettings.maxOutputTokens !== null) {
+              baseOptions.maxOutputTokens = agentSettings.maxOutputTokens;
+            }
+
+            const attemptOptions = omitUnsupportedCortexAiModelOptions(baseOptions, {
+              modelId,
+              modelSelection: routingPolicy.modelSelection,
+            });
             const result = streamText({
               ...attemptOptions,
               model: client.model(modelId),
             } as Parameters<typeof streamText>[0]);
 
+            // Keep the browser's connection + idle timer alive and show a "working"
+            // indicator while a big tool call is generated with no client events.
+            const heartbeat = setInterval(() => {
+              try {
+                controller.enqueue(encodeStreamEvent({ type: 'status' }));
+              } catch {
+                // Controller already closed; nothing to send.
+              }
+            }, GLOBAL_AGENT_HEARTBEAT_INTERVAL_MS);
+
             try {
               for await (const rawPart of result.fullStream) {
+                attemptAbort.bump();
                 const part = rawPart as CortexAgentStreamPart;
 
                 if (part.type === 'text-delta' && part.text) {
@@ -834,6 +1072,7 @@ export async function POST(request: Request) {
                 }
               }
             } finally {
+              clearInterval(heartbeat);
               attemptAbort.cleanup();
             }
 

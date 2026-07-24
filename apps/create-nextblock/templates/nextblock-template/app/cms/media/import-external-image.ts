@@ -1,0 +1,289 @@
+// app/cms/media/import-external-image.ts
+"use server";
+
+import "server-only";
+
+import sharp from "sharp";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+
+import { createClient } from "@nextblock-cms/db/server";
+import { recordMediaUpload } from "@nextblock-cms/db";
+import { getS3Client } from "@nextblock-cms/utils/server";
+
+import { getStorageBackend, getStorageBucket } from "../../../lib/storage/provider";
+import { supabaseUploadObject } from "../../../lib/storage/supabase-storage";
+import { resolveMediaUrl } from "../../../lib/media/resolveMediaUrl";
+
+const MAX_IMPORT_BYTES = 15 * 1024 * 1024; // 15MB
+const IMPORT_TIMEOUT_MS = 15000;
+
+type ImportExternalImageResult =
+  | {
+      success: true;
+      media: {
+        id: string;
+        object_key: string;
+        width: number;
+        height: number;
+        url: string;
+        blur_data_url: string | null;
+        alt_text: string;
+      };
+    }
+  | { error: string };
+
+/**
+ * Reject local/loopback/private/link-local hosts and cloud metadata endpoints so an
+ * admin-supplied URL cannot be used to probe internal infrastructure (SSRF).
+ */
+function isBlockedImportHost(hostname: string): boolean {
+  const host = hostname.trim().toLowerCase().replace(/\.$/, "").replace(/^\[|\]$/g, "");
+
+  if (
+    !host ||
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal") ||
+    host === "metadata.google.internal"
+  ) {
+    return true;
+  }
+
+  if (host === "0.0.0.0" || host === "::1" || host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd")) {
+    return true;
+  }
+
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+
+  if (ipv4) {
+    const a = Number(ipv4[1]);
+    const b = Number(ipv4[2]);
+
+    if (a === 10 || a === 127 || a === 0 || (a === 192 && b === 168) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function extensionForImage(contentType: string, sharpFormat?: string): string {
+  const format = (sharpFormat || "").toLowerCase();
+  const byFormat: Record<string, string> = { jpeg: "jpg", jpg: "jpg", png: "png", webp: "webp", avif: "avif", gif: "gif", svg: "svg" };
+  if (byFormat[format]) return byFormat[format];
+
+  const ct = contentType.toLowerCase();
+  if (ct.includes("jpeg") || ct.includes("jpg")) return "jpg";
+  if (ct.includes("png")) return "png";
+  if (ct.includes("webp")) return "webp";
+  if (ct.includes("avif")) return "avif";
+  if (ct.includes("gif")) return "gif";
+  if (ct.includes("svg")) return "svg";
+  return "jpg";
+}
+
+function slugifyFileBase(value: string): string {
+  const base = (value || "image")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return base || "image";
+}
+
+/**
+ * Download an external image (e.g. an AI-inserted stock photo) and persist it into the
+ * NextBlock media library (R2 or Supabase Storage) so it becomes a permanent, optimized
+ * asset the page no longer hotlinks. ADMIN/WRITER only.
+ */
+export async function importExternalImageToMedia(input: {
+  url: string;
+  altText?: string;
+  fileName?: string;
+}): Promise<ImportExternalImageResult> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be signed in to import an image." };
+  }
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+
+  if (!profile || !["ADMIN", "WRITER"].includes(profile.role)) {
+    return { error: "You do not have permission to import media." };
+  }
+
+  let target: URL;
+
+  try {
+    target = new URL(input.url);
+  } catch {
+    return { error: "That is not a valid URL." };
+  }
+
+  if (target.protocol !== "https:" && target.protocol !== "http:") {
+    return { error: "Only http/https image URLs can be imported." };
+  }
+
+  if (isBlockedImportHost(target.hostname)) {
+    return { error: "Refusing to fetch a local, private, or internal address." };
+  }
+
+  // Unsplash API Guidelines require photos to stay hotlinked to their original
+  // image URL — re-hosting them into our own storage is not permitted. Pexels'
+  // license does allow downloading/hosting, so only Unsplash is blocked here.
+  const importHost = target.hostname.toLowerCase();
+  if (importHost === "unsplash.com" || importHost.endsWith(".unsplash.com")) {
+    return {
+      error:
+        "Unsplash requires photos to stay hotlinked, so they can't be saved into your media library. Keep it as an external image (it still displays fine), or use a Pexels photo or your own upload if you need a stored asset.",
+    };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), IMPORT_TIMEOUT_MS);
+  let buffer: Buffer;
+  let contentType: string;
+
+  try {
+    const response = await fetch(target.toString(), {
+      headers: { accept: "image/*" },
+      redirect: "follow",
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return { error: `The image URL responded with HTTP ${response.status}.` };
+    }
+
+    if (isBlockedImportHost(new URL(response.url || target.toString()).hostname)) {
+      return { error: "The image URL redirected to a blocked internal address." };
+    }
+
+    contentType = response.headers.get("content-type") || "";
+
+    if (!/^image\//i.test(contentType)) {
+      return { error: `The URL is not an image (content-type: ${contentType || "unknown"}).` };
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+
+    if (arrayBuffer.byteLength > MAX_IMPORT_BYTES) {
+      return { error: "The image is too large to import (max 15MB)." };
+    }
+
+    buffer = Buffer.from(arrayBuffer);
+  } catch (error) {
+    const aborted = error instanceof Error && /abort/i.test(error.message);
+    return {
+      error: aborted
+        ? "Fetching the image timed out."
+        : `Failed to fetch the image: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  let width = 0;
+  let height = 0;
+  let blurDataUrl: string | null = null;
+  let sharpFormat: string | undefined;
+  const isSvg = /svg/i.test(contentType);
+
+  if (!isSvg) {
+    try {
+      const metadata = await sharp(buffer).metadata();
+      width = metadata.width || 0;
+      height = metadata.height || 0;
+      sharpFormat = metadata.format;
+
+      const blurBuffer = await sharp(buffer).resize(16, 16, { fit: "inside" }).webp({ quality: 40 }).toBuffer();
+      blurDataUrl = `data:image/webp;base64,${blurBuffer.toString("base64")}`;
+    } catch {
+      // Non-fatal: proceed without dimensions/blur (e.g. an unusual format sharp can't parse).
+    }
+  }
+
+  const extension = extensionForImage(contentType, sharpFormat);
+  const baseName = slugifyFileBase(
+    input.fileName || input.altText || target.hostname.replace(/^www\./, "").split(".")[0] || "image"
+  );
+  const random = Math.random().toString(36).slice(2, 8);
+  const objectKey = `uploads/${baseName}-${Date.now()}-${random}.${extension}`;
+  const resolvedContentType = contentType || `image/${extension}`;
+
+  try {
+    if (getStorageBackend() === "supabase") {
+      await supabaseUploadObject(objectKey, buffer, resolvedContentType);
+    } else {
+      const s3Client = await getS3Client();
+      const bucket = getStorageBucket();
+
+      if (!s3Client || !bucket) {
+        return { error: "File storage is not configured on this server." };
+      }
+
+      await s3Client.send(
+        new PutObjectCommand({
+          Body: buffer,
+          Bucket: bucket,
+          ContentType: resolvedContentType,
+          Key: objectKey,
+          Metadata: { "uploader-user-id": user.id },
+        })
+      );
+    }
+  } catch (error) {
+    return {
+      error: `Failed to upload the image to storage: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
+  const publicUrl = resolveMediaUrl(objectKey) ?? "";
+  const fileName = `${baseName}.${extension}`;
+  const altText = (input.altText || baseName.replace(/-/g, " ")).trim();
+  const originalVariant = {
+    fileType: resolvedContentType,
+    height,
+    objectKey,
+    sizeBytes: buffer.byteLength,
+    url: publicUrl,
+    variantLabel: "original",
+    width,
+  };
+
+  const record = await recordMediaUpload(
+    {
+      blurDataUrl: blurDataUrl || undefined,
+      description: altText || undefined,
+      fileName,
+      originalImageDetails: originalVariant,
+      r2OriginalKey: objectKey,
+      r2Variants: [originalVariant],
+    },
+    true
+  );
+
+  if (!record || "error" in record) {
+    return { error: record && "error" in record ? record.error : "Failed to record the imported image." };
+  }
+
+  const media = record.data;
+
+  return {
+    media: {
+      alt_text: (media.description || altText || "").trim(),
+      blur_data_url: media.blur_data_url ?? blurDataUrl,
+      height: media.height || height,
+      id: media.id,
+      object_key: media.object_key,
+      url: publicUrl,
+      width: media.width || width,
+    },
+    success: true,
+  };
+}
