@@ -1398,6 +1398,137 @@ describe('Cortex AI global agent tool executors', () => {
     }
   });
 
+  it('fetch_url_content prefers the schema.org Product image as mainImage', async () => {
+    const html = [
+      '<html><head><title>Chanca Piedra</title>',
+      '<meta property="og:image" content="/img/og-fallback.jpg">',
+      '<script type="application/ld+json">',
+      JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        image: ['https://cdn.example.com/products/chanca-piedra-500.jpg'],
+        name: 'Chanca Piedra',
+      }),
+      '</script></head><body><h1>Chanca Piedra</h1>',
+      '<img src="/assets/logo.png" alt="logo">',
+      '<img src="/img/bottle.jpg" alt="bottle">',
+      '</body></html>',
+    ].join('');
+
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' }, status: 200 })
+    );
+
+    try {
+      const result = (await executeFetchUrlContent({
+        url: 'https://shop.example.com/shop/chanca-piedra',
+      })) as { images: string[]; mainImage: string | null; success: boolean };
+
+      expect(result.success).toBe(true);
+      // Structured product data outranks og:image and in-body <img>.
+      expect(result.mainImage).toBe('https://cdn.example.com/products/chanca-piedra-500.jpg');
+      // Relative URLs are resolved against the final URL.
+      expect(result.images).toContain('https://shop.example.com/img/og-fallback.jpg');
+      expect(result.images).toContain('https://shop.example.com/img/bottle.jpg');
+      // Site chrome is filtered out.
+      expect(result.images.some((url) => url.includes('logo.png'))).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('fetch_url_content falls back through og:image, srcset, and lazy-loaded images', async () => {
+    const html = [
+      '<html><head><title>Widgets</title></head><body>',
+      '<img src="data:image/gif;base64,R0lGOD" data-src="/lazy/hero.jpg">',
+      '<img srcset="/small.jpg 400w, /large.jpg 1200w">',
+      '<img src="/icons/favicon.png">',
+      '<img src="/tiny.jpg" width="48">',
+      '</body></html>',
+    ].join('');
+
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' }, status: 200 })
+    );
+
+    try {
+      const result = (await executeFetchUrlContent({ url: 'https://acme.example.com/p' })) as {
+        images: string[];
+        mainImage: string | null;
+      };
+
+      // The data: URI placeholder is skipped in favour of the real lazy src.
+      expect(result.mainImage).toBe('https://acme.example.com/lazy/hero.jpg');
+      // srcset resolves to the widest candidate.
+      expect(result.images).toContain('https://acme.example.com/large.jpg');
+      expect(result.images.some((url) => url.includes('small.jpg'))).toBe(false);
+      // Icons and declared thumbnails are dropped.
+      expect(result.images.some((url) => url.includes('favicon'))).toBe(false);
+      expect(result.images.some((url) => url.includes('tiny.jpg'))).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('fetch_url_content upgrades a thumbnail to the full-size image the page links to', async () => {
+    // The lightbox pattern real shops use: a downscaled <img> beside an <a href>
+    // to the original, with og:image pointing at the thumbnail.
+    const html = [
+      '<html><head><title>Chanca Piedra</title>',
+      '<meta property="og:image" content="https://shop.example.com/uploads/products/thumbnails/3643%20Chanca%20Piedra.webp">',
+      '</head><body>',
+      '<img src="/uploads/products/thumbnails/3643 Chanca Piedra.webp" width="570" alt="Chanca Piedra">',
+      '<a data-fancybox="gallery" href="/uploads/products/3643 Chanca Piedra.webp">zoom</a>',
+      '</body></html>',
+    ].join('');
+
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' }, status: 200 })
+    );
+
+    try {
+      const result = (await executeFetchUrlContent({
+        url: 'https://shop.example.com/shop/chanca-piedra',
+      })) as { images: string[]; mainImage: string | null };
+
+      expect(result.mainImage).toBe(
+        'https://shop.example.com/uploads/products/3643%20Chanca%20Piedra.webp'
+      );
+      // The thumbnail is not offered separately once it has been upgraded.
+      expect(result.images.some((url) => url.includes('/thumbnails/'))).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('fetch_url_content reports no mainImage rather than inventing one', async () => {
+    const html = '<html><head><title>Text only</title></head><body><p>Just words here.</p></body></html>';
+
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' }, status: 200 })
+    );
+
+    try {
+      const result = (await executeFetchUrlContent({ url: 'https://acme.example.com' })) as {
+        images: string[];
+        mainImage: string | null;
+      };
+
+      expect(result.mainImage).toBeNull();
+      expect(result.images).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('normalizes a section with an external image background instead of downgrading it', async () => {
     const { database, supabase } = createMockSupabase({
       blocks: [],
@@ -1732,6 +1863,55 @@ describe('Cortex AI global agent tool executors', () => {
       status: 'active',
       title: 'Omega Oil',
     });
+  });
+
+  it('set_content_images targets a product by slug with no CMS page context open', async () => {
+    const { database, supabase } = createMockSupabase({
+      products: [
+        {
+          id: 'prod-9',
+          language_id: 1,
+          slug: 'chanca-piedra',
+          status: 'draft',
+          title: 'Chanca Piedra',
+        },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeSetContentImages,
+      {
+        contentType: 'product',
+        images: ['https://cdn.example.com/products/chanca-piedra-500.jpg'],
+        slug: 'chanca-piedra',
+      },
+      {
+        actorUserId: 'admin-1',
+        importExternalImage: async () => ({ id: 'media-9' }),
+        // Deliberately no pageContext: this is the dashboard-chat case.
+        revalidatePath: () => undefined,
+        supabase,
+      }
+    );
+
+    expect(result).toMatchObject({
+      contentType: 'product',
+      imageCount: 1,
+      mutationExecuted: true,
+      success: true,
+    });
+    expect(database.product_media.map((row) => row.media_id)).toEqual(['media-9']);
+  });
+
+  it('set_content_images still requires a target when none can be resolved', async () => {
+    const { supabase } = createMockSupabase();
+
+    await expect(
+      executeSetContentImages(
+        { images: ['https://cdn.example.com/a.jpg'] },
+        { actorUserId: 'admin-1', importExternalImage: async () => ({ id: 'm' }), supabase }
+      )
+    ).rejects.toThrow(/No current CMS page context/);
   });
 
   it('set_content_images rejects a non-URL, non-media-id image reference', async () => {
@@ -2341,6 +2521,57 @@ describe('Cortex AI global agent tool executors', () => {
     });
   });
 
+  it('creates a product and attaches its image in one confirmed action plan', async () => {
+    const { database, supabase } = createMockSupabase();
+    const context = {
+      actorUserId: 'admin-1',
+      importExternalImage: async () => ({ id: 'media-plan-1' }),
+      revalidatePath: () => undefined,
+      supabase,
+    };
+    const planInput = {
+      actions: [
+        {
+          input: { price: 25, slug: 'chanca-piedra', title: 'Chanca Piedra' },
+          tool: 'create_cms_product',
+        },
+        {
+          input: {
+            contentType: 'product',
+            images: ['https://cdn.example.com/chanca.jpg'],
+            slug: 'chanca-piedra',
+          },
+          tool: 'set_content_images',
+        },
+      ],
+      summary: 'Create the product and set its main image.',
+    };
+
+    // The product does not exist yet at preview time; the plan must still
+    // preview cleanly instead of failing to resolve the image target.
+    const preview = (await executeCmsActionPlan(planInput as any, context)) as {
+      confirmationPhrase: string;
+      preview: { actionSummaries: string[] };
+      requiresConfirmation: boolean;
+    };
+
+    expect(preview.requiresConfirmation).toBe(true);
+    expect(preview.preview.actionSummaries).toHaveLength(2);
+    expect(preview.preview.actionSummaries[1]).toContain('created in this plan');
+    expect(database.products).toHaveLength(0);
+
+    const result = await executeCmsActionPlan(planInput as any, {
+      ...context,
+      latestUserMessage: preview.confirmationPhrase,
+    });
+
+    expect(result).toMatchObject({ mutationExecuted: true, success: true });
+    expect(database.products[0]).toMatchObject({ slug: 'chanca-piedra' });
+    // The image landed on the product the plan just created.
+    expect(database.product_media.map((row) => row.media_id)).toEqual(['media-plan-1']);
+    expect(database.product_media[0].product_id).toBe(database.products[0].id);
+  });
+
   it('confirms a navigation-only action plan without returning a navigation path', async () => {
     const { supabase } = createMockSupabase({
       navigation_items: [
@@ -2614,6 +2845,269 @@ describe('Cortex AI global agent tool executors', () => {
       status: 'draft',
       stock: 0,
     });
+  });
+
+  it('creates a product with an imported main image and a full description in one confirmed call', async () => {
+    const { database, supabase } = createMockSupabase();
+    const importedUrls: string[] = [];
+
+    const result = await executeConfirmed(
+      executeCreateCmsProduct,
+      {
+        description_json: {
+          content: [
+            { content: [{ text: 'Traditional herbal support.', type: 'text' }], type: 'paragraph' },
+          ],
+          type: 'doc',
+        },
+        images: ['https://cdn.example.com/products/chanca-piedra-500.jpg'],
+        price: 25,
+        short_description: 'Traditional herbal support.',
+        title: 'Chanca Piedra',
+      },
+      {
+        importExternalImage: async ({ url }: { url: string }) => {
+          importedUrls.push(url);
+          return { id: 'media-chanca-1' };
+        },
+        revalidatePath: () => undefined,
+        supabase,
+      }
+    );
+
+    expect(result).toMatchObject({
+      contentType: 'product',
+      imageCount: 1,
+      mutationExecuted: true,
+      slug: 'chanca-piedra',
+      success: true,
+    });
+    expect(importedUrls).toEqual(['https://cdn.example.com/products/chanca-piedra-500.jpg']);
+    // The image is handed to createProduct as product_media, and the body copy
+    // survives as description_json — both in the single confirmed call.
+    expect(database.products[0].product_media).toEqual([{ media_id: 'media-chanca-1' }]);
+    expect(database.products[0].description_json).toMatchObject({ type: 'doc' });
+    // price is major units on the way in, minor units in storage.
+    expect(database.products[0].price).toBe(2500);
+  });
+
+  it('creates Product Description Blocks parented by product_id', async () => {
+    const { database, supabase } = createMockSupabase();
+
+    const result = (await executeConfirmed(
+      executeCreateCmsProduct,
+      {
+        blocks: [
+          { blockType: 'heading', content: { level: 2, text_content: 'Benefits' } },
+          { blockType: 'text', content: { html_content: '<p>Traditional herbal support.</p>' } },
+        ],
+        images: ['https://cdn.example.com/a.jpg'],
+        price: 25,
+        title: 'Chanca Piedra',
+      },
+      {
+        actorUserId: 'admin-1',
+        importExternalImage: async () => ({ id: 'media-1' }),
+        revalidatePath: () => undefined,
+        supabase,
+      }
+    )) as { blockCount: number; entityId: string; success: boolean };
+
+    expect(result.success).toBe(true);
+    expect(result.blockCount).toBe(2);
+
+    const productId = database.products[0].id;
+    const productBlocks = database.blocks
+      .filter((row) => row.product_id === productId)
+      .sort((a, b) => a.order - b.order);
+
+    expect(productBlocks).toHaveLength(2);
+    expect(productBlocks.map((row) => row.block_type)).toEqual(['heading', 'text']);
+    // check_exactly_one_parent: page_id/post_id must stay null for a product block.
+    expect(productBlocks.every((row) => row.page_id === null && row.post_id === null)).toBe(true);
+  });
+
+  it('names the description blocks in the product confirmation', async () => {
+    const { supabase } = createMockSupabase();
+
+    const preview = (await executeCreateCmsProduct(
+      {
+        blocks: [{ blockType: 'text', content: { html_content: '<p>Copy.</p>' } }],
+        price: 25,
+        title: 'Chanca Piedra',
+      },
+      { actorUserId: 'admin-1', supabase }
+    )) as { preview: Record<string, unknown> };
+
+    expect(preview.preview['blockCount']).toBe(1);
+  });
+
+  it('inserts a content block on a product that is not open in the editor', async () => {
+    const { database, supabase } = createMockSupabase({
+      products: [
+        {
+          id: 'prod-7',
+          language_id: 1,
+          slug: 'chanca-piedra',
+          status: 'draft',
+          title: 'Chanca Piedra',
+        },
+      ],
+    });
+
+    const result = (await executeConfirmed(
+      executeInsertContentBlock,
+      {
+        block: { blockType: 'text', content: { html_content: '<p>Extra copy.</p>' } },
+        contentType: 'product',
+        position: 'end',
+        slug: 'chanca-piedra',
+      },
+      { actorUserId: 'admin-1', revalidatePath: () => undefined, supabase }
+    )) as { contentType: string; mutationExecuted: boolean };
+
+    expect(result).toMatchObject({ contentType: 'product', mutationExecuted: true });
+    expect(database.blocks.filter((row) => row.product_id === 'prod-7')).toHaveLength(1);
+  });
+
+  it('builds the product body from description_html', async () => {
+    const { database, supabase } = createMockSupabase();
+
+    const result = (await executeConfirmed(
+      executeCreateCmsProduct,
+      {
+        description_html:
+          '<h2>Benefits</h2><p>Traditional herbal support.</p><ul><li>Kidney health</li></ul>',
+        price: 25,
+        short_description: 'Traditional herbal support.',
+        title: 'Chanca Piedra',
+      },
+      { revalidatePath: () => undefined, supabase }
+    )) as { success: boolean };
+
+    expect(result.success).toBe(true);
+
+    const doc = database.products[0].description_json;
+    expect(doc.type).toBe('doc');
+    expect(doc.content.map((node: any) => node.type)).toEqual([
+      'heading',
+      'paragraph',
+      'bulletList',
+    ]);
+    expect(JSON.stringify(doc)).toContain('Traditional herbal support.');
+  });
+
+  it('accepts every body shape a model plausibly sends for description_json', async () => {
+    const shapes: Array<[string, unknown]> = [
+      ['html string', '<p>Body copy.</p>'],
+      ['plain text', 'Body copy.'],
+      ['bare node array', [{ content: [{ text: 'Body copy.', type: 'text' }], type: 'paragraph' }]],
+      [
+        'content without doc type',
+        { content: [{ content: [{ text: 'Body copy.', type: 'text' }], type: 'paragraph' }] },
+      ],
+      ['single node object', { content: [{ text: 'Body copy.', type: 'text' }], type: 'paragraph' }],
+      [
+        'correct document',
+        {
+          content: [{ content: [{ text: 'Body copy.', type: 'text' }], type: 'paragraph' }],
+          type: 'doc',
+        },
+      ],
+    ];
+
+    for (const [label, description_json] of shapes) {
+      const { database, supabase } = createMockSupabase();
+
+      const result = (await executeConfirmed(
+        executeCreateCmsProduct,
+        { description_json, price: 25, title: 'Chanca Piedra' },
+        { revalidatePath: () => undefined, supabase }
+      )) as { success: boolean };
+
+      expect(result.success, label).toBe(true);
+
+      const doc = database.products[0].description_json;
+      expect(doc?.type, label).toBe('doc');
+      expect(JSON.stringify(doc), label).toContain('Body copy.');
+    }
+  });
+
+  it('never stores an empty description document', async () => {
+    // An empty doc passes validation but renders as a blank slab and hides the
+    // storefront's "no description" fallback, so it must stay null.
+    for (const body of [
+      { description_json: { content: [], type: 'doc' } },
+      { description_html: '   ' },
+      { description_html: '<p></p>' },
+    ]) {
+      const { database, supabase } = createMockSupabase();
+
+      await executeConfirmed(
+        executeCreateCmsProduct,
+        { ...body, price: 25, title: 'Chanca Piedra' },
+        { revalidatePath: () => undefined, supabase }
+      );
+
+      expect(database.products[0].description_json ?? null).toBeNull();
+    }
+  });
+
+  it('previews a description supplied as html so the user sees it is included', async () => {
+    const { supabase } = createMockSupabase();
+
+    const preview = (await executeCreateCmsProduct(
+      { description_html: '<p>Body copy.</p>', price: 25, title: 'Chanca Piedra' },
+      { supabase }
+    )) as { preview: Record<string, unknown> };
+
+    expect(Number(preview.preview['descriptionLength'])).toBeGreaterThan(0);
+  });
+
+  it('still creates the product when the image import fails, and reports why', async () => {
+    const { database, supabase } = createMockSupabase();
+
+    const result = (await executeConfirmed(
+      executeCreateCmsProduct,
+      {
+        images: ['https://cdn.example.com/broken.jpg'],
+        price: 25,
+        title: 'Chanca Piedra',
+      },
+      {
+        importExternalImage: async () => ({ error: 'remote host returned 404' }),
+        revalidatePath: () => undefined,
+        supabase,
+      }
+    )) as { imageCount: number; imageError?: string; success: boolean };
+
+    // Losing the photo must not cost the user the product and its copy.
+    expect(result.success).toBe(true);
+    expect(result.imageCount).toBe(0);
+    expect(result.imageError).toContain('404');
+    expect(database.products[0]).toMatchObject({ slug: 'chanca-piedra' });
+    expect(database.products[0].product_media).toEqual([]);
+  });
+
+  it('previews the images and description a product will be created with', async () => {
+    const { supabase } = createMockSupabase();
+
+    const preview = (await executeCreateCmsProduct(
+      {
+        description_json: {
+          content: [{ content: [{ text: 'Body copy.', type: 'text' }], type: 'paragraph' }],
+          type: 'doc',
+        },
+        images: ['https://cdn.example.com/a.jpg'],
+        price: 25,
+        title: 'Chanca Piedra',
+      },
+      { importExternalImage: async () => ({ id: 'unused' }), supabase }
+    )) as { preview: Record<string, unknown>; requiresConfirmation: boolean };
+
+    expect(preview.requiresConfirmation).toBe(true);
+    expect(preview.preview).toMatchObject({ imageCount: 1 });
+    expect(Number(preview.preview['descriptionLength'])).toBeGreaterThan(0);
   });
 
   it('returns duplicate slug failures without mutating', async () => {

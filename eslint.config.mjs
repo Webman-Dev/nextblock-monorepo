@@ -40,7 +40,9 @@ export default [
           // module light and to allow partial-export test mocks). Exempt it from the
           // "static imports of lazy-loaded libraries" check; the scope depConstraints
           // and buildable-lib checks below still apply.
-          checkDynamicDependenciesExceptions: ['^@nextblock-cms/utils$'],
+          // Subpaths (e.g. @nextblock-cms/utils/editor-blocks) are covered too:
+          // the tsconfig "@nextblock-cms/utils/*" mapping makes them the same lib.
+          checkDynamicDependenciesExceptions: ['^@nextblock-cms/utils(/.*)?$'],
           depConstraints: [
             {
               sourceTag: 'scope:public',

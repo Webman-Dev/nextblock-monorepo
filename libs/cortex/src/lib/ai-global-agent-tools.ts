@@ -1,6 +1,7 @@
 import { tool } from 'ai';
 import { createCortexDatabaseAgentTools } from './ai-global-agent-db-tools';
 import { createCortexCustomBlockTools } from './ai-global-agent-custom-block-tools';
+import { editorDocumentFromHtml } from './editor-document-from-html';
 import { z } from './zod-config';
 
 export const availableCortexAiBlockTypes = [
@@ -193,6 +194,8 @@ export const readCurrentCmsItemInputSchema = z.strictObject({
 export const updateCurrentCmsFieldsInputSchema = z.strictObject({
   fields: z
     .strictObject({
+      // Accepts an HTML string as well as an editor document — see
+      // validateProductDescriptionJson.
       description_json: z.unknown().optional(),
       excerpt: z.string().max(2000).nullable().optional(),
       feature_image_id: z.string().trim().min(1).max(2048).nullable().optional(),
@@ -236,6 +239,19 @@ const createCmsBlockInputSchema = z.strictObject({
   order: z.number().int().min(0).optional(),
 });
 
+// Declared here (not next to executeSetContentImages) because the CMS action-plan
+// union below references it, and module-level consts are not hoisted.
+export const setContentImagesInputSchema = cmsTargetInputSchema.extend({
+  images: z
+    .array(z.string().trim().min(1).max(2048))
+    .min(1)
+    .max(12)
+    .describe(
+      'External https image URLs (imported into the media library automatically) and/or existing media library ids. The first entry is the feature image (pages/posts) or the main product image (products).'
+    ),
+});
+type SetContentImagesInput = z.input<typeof setContentImagesInputSchema>;
+
 export const insertContentBlockInputSchema = cmsTargetInputSchema.extend({
   anchorBlockId: z.number().int().positive().optional(),
   anchorBlockType: z.enum(availableCortexAiBlockTypes).optional(),
@@ -273,9 +289,35 @@ export const createCmsPostInputSchema = z.strictObject({
 });
 
 export const createCmsProductInputSchema = z.strictObject({
+  // Products render "Product Description Blocks" exactly like pages/posts render
+  // their blocks (blocks.product_id). This is the richest body and takes
+  // precedence over description_html on the public product page.
+  blocks: z
+    .array(createCmsBlockInputSchema)
+    .max(20)
+    .optional()
+    .describe(
+      'Content blocks for the product description area, same block vocabulary as create_cms_page. Rendered on the public product page in place of the plain description.'
+    ),
+  // Fallback body input. A plain string is something every model can produce
+  // under a strict tool schema, unlike the untyped description_json below.
+  description_html: z
+    .string()
+    .max(60000)
+    .optional()
+    .describe(
+      'The product body as an HTML fragment (headings, paragraphs, lists, bold/italic/links). Converted to the editor document automatically. Prefer this over description_json.'
+    ),
   description_json: z.unknown().optional(),
   freemius_plan_id: z.string().optional(),
   freemius_product_id: z.string().optional(),
+  images: z
+    .array(z.string().trim().min(1).max(2048))
+    .max(12)
+    .optional()
+    .describe(
+      'Product images, in order: the first becomes the main product image and the rest the gallery. Each entry is either an external https image URL (imported into the media library automatically) or an existing media library id.'
+    ),
   is_taxable: z.boolean().default(true),
   languageCode: z.string().trim().min(2).max(80).optional(),
   meta_description: z.string().max(500).nullable().optional(),
@@ -321,6 +363,7 @@ const wrappedCmsActionPlanActionSchema = z.discriminatedUnion('tool', [
   z.strictObject({ input: updateFooterInputSchema, tool: z.literal('update_footer') }),
   z.strictObject({ input: updateNavigationBarInputSchema, tool: z.literal('update_navigation_bar') }),
   z.strictObject({ input: updateSectionColumnBlockInputSchema, tool: z.literal('update_section_column_block') }),
+  z.strictObject({ input: setContentImagesInputSchema, tool: z.literal('set_content_images') }),
 ]);
 
 const flatCmsActionPlanActionSchema = z.union([
@@ -356,6 +399,9 @@ const flatCmsActionPlanActionSchema = z.union([
     .transform(({ tool, ...input }) => ({ input, tool })),
   updateSectionColumnBlockInputSchema
     .extend({ tool: z.literal('update_section_column_block') })
+    .transform(({ tool, ...input }) => ({ input, tool })),
+  setContentImagesInputSchema
+    .extend({ tool: z.literal('set_content_images') })
     .transform(({ tool, ...input }) => ({ input, tool })),
 ]);
 
@@ -1005,6 +1051,79 @@ async function resolveMediaReference(
   return result.id;
 }
 
+/**
+ * Resolve a list of image references (external https URLs and/or media library
+ * ids) to media ids, importing external URLs as needed. Order is preserved so
+ * the caller can treat the first entry as the main image.
+ */
+async function resolveMediaReferences(
+  images: readonly string[],
+  context: ToolExecutionContext | undefined,
+  label: string
+) {
+  const mediaIds: string[] = [];
+
+  for (let index = 0; index < images.length; index += 1) {
+    const mediaId = await resolveMediaReference(
+      images[index],
+      context,
+      `${label} image ${index + 1}`
+    );
+
+    if (mediaId) {
+      mediaIds.push(mediaId);
+    }
+  }
+
+  return mediaIds;
+}
+
+/**
+ * Replace a product's gallery by writing the `product_media` join table
+ * DIRECTLY. We must NOT route this through updateProduct /
+ * upsert_product_with_variants: that is a full product rewrite that (because it
+ * re-serializes the whole row) would wipe the product's variants, clear its
+ * scheduled sale window and custom canonical, re-round-trip prices (corrupting
+ * zero-decimal currencies), and hard-delete the previous images from storage.
+ * Images live in a separate join table, so touch only that.
+ */
+async function replaceProductMediaRows(params: {
+  mediaIds: readonly string[];
+  productId: string | number;
+  supabase: SupabaseLike;
+}) {
+  // Dedupe: product_media's PK is (product_id, media_id); a repeated id would
+  // violate it and leave the product with no images after the delete.
+  const uniqueMediaIds = [...new Set(params.mediaIds)];
+
+  const { error: deleteError } = await params.supabase
+    .from('product_media')
+    .delete()
+    .eq('product_id', params.productId);
+
+  if (deleteError) {
+    throw new Error(
+      `Could not clear the product's existing images: ${serializeError(deleteError)}`
+    );
+  }
+
+  if (uniqueMediaIds.length > 0) {
+    const { error: insertError } = await params.supabase.from('product_media').insert(
+      uniqueMediaIds.map((media_id, mediaIndex) => ({
+        media_id,
+        product_id: params.productId,
+        sort_order: mediaIndex,
+      }))
+    );
+
+    if (insertError) {
+      throw new Error(`Could not save the product images: ${serializeError(insertError)}`);
+    }
+  }
+
+  return uniqueMediaIds;
+}
+
 function normalizePublicSlug(slug: unknown) {
   return typeof slug === 'string' ? slug.trim().replace(/^\/+|\/+$/g, '') : '';
 }
@@ -1197,7 +1316,20 @@ function summarizeCmsMutationPreview(toolName: string, preview: Record<string, u
   }
 
   if (toolName === 'create_cms_product') {
-    return `Create ${status || 'draft'} product "${title || slug || 'Untitled'}"${slug ? ` at slug "${slug}"` : ''}.`;
+    // Spell out images/body so a partial plan is obvious BEFORE the user
+    // confirms — the confirm turn executes this call and nothing else.
+    const imageCount = readPreviewNumber(preview, 'imageCount');
+    const productBlockCount = readPreviewNumber(preview, 'blockCount');
+    const extras = [
+      imageCount ? pluralize(imageCount, 'image') : null,
+      productBlockCount
+        ? pluralize(productBlockCount, 'description block')
+        : readPreviewNumber(preview, 'descriptionLength')
+          ? 'a full description'
+          : null,
+    ].filter(Boolean);
+
+    return `Create ${status || 'draft'} product "${title || slug || 'Untitled'}"${slug ? ` at slug "${slug}"` : ''}${extras.length ? ` with ${extras.join(' and ')}` : ''}.`;
   }
 
   if (toolName === 'update_cms_item_field') {
@@ -1350,8 +1482,14 @@ function mergeJsonRecords(
 }
 
 function assertBlockBelongsToCurrentContext(block: any, pageContext: CortexAiPageContext) {
+  // Products own "Product Description Blocks" via blocks.product_id, keyed by
+  // uuid rather than the bigint ids pages and posts use.
   if (pageContext.contentType === 'product') {
-    throw new Error('Products do not have page/post content blocks in this editor context.');
+    if (String(block.product_id ?? '') !== String(getStringEntityId(pageContext))) {
+      throw new Error(`Block ${block.id} does not belong to the current product being edited.`);
+    }
+
+    return;
   }
 
   const parentId = getNumericEntityId(pageContext);
@@ -2752,8 +2890,9 @@ async function resolveCreateTranslationGroup(params: {
 
 async function insertContentBlocks(params: {
   blocks: Array<{ block_type: BlockType; content: Record<string, unknown>; order: number }>;
-  contentType: 'page' | 'post';
-  itemId: number;
+  contentType: CmsContentType;
+  // Products are uuid-keyed; pages and posts are bigint-keyed.
+  itemId: number | string;
   languageId: number;
   supabase: SupabaseLike;
 }) {
@@ -2761,6 +2900,8 @@ async function insertContentBlocks(params: {
     return [];
   }
 
+  // blocks has a check_exactly_one_parent constraint: exactly one of page_id,
+  // post_id, product_id may be set.
   const blockRows = params.blocks.map((block, index) => ({
     block_type: block.block_type,
     content: block.content,
@@ -2768,6 +2909,7 @@ async function insertContentBlocks(params: {
     order: block.order ?? index,
     page_id: params.contentType === 'page' ? params.itemId : null,
     post_id: params.contentType === 'post' ? params.itemId : null,
+    product_id: params.contentType === 'product' ? params.itemId : null,
   }));
   const { data, error } = await params.supabase.from('blocks').insert(blockRows).select('*');
 
@@ -2781,11 +2923,16 @@ async function insertContentBlocks(params: {
 }
 
 async function rollbackCreatedCmsItem(params: {
-  contentType: 'page' | 'post';
-  itemId: number;
+  contentType: CmsContentType;
+  itemId: number | string;
   supabase: SupabaseLike;
 }) {
-  const table = params.contentType === 'page' ? 'pages' : 'posts';
+  const table =
+    params.contentType === 'page'
+      ? 'pages'
+      : params.contentType === 'post'
+        ? 'posts'
+        : 'products';
 
   await params.supabase.from(table).delete().eq('id', params.itemId);
 }
@@ -3356,11 +3503,16 @@ export async function executeReadCurrentCmsItem(
 
   let blocks: ReturnType<typeof summarizeBlockRow>[] = [];
 
-  if (parsed.includeBlocks && pageContext.contentType !== 'product') {
-    const blockParentColumn = pageContext.contentType === 'page' ? 'page_id' : 'post_id';
+  if (parsed.includeBlocks) {
+    const blockParentColumn =
+      pageContext.contentType === 'page'
+        ? 'page_id'
+        : pageContext.contentType === 'post'
+          ? 'post_id'
+          : 'product_id';
     const { data: blockRows, error: blocksError } = await supabase
       .from('blocks')
-      .select('id, page_id, post_id, language_id, block_type, content, order')
+      .select('id, page_id, post_id, product_id, language_id, block_type, content, order')
       .eq(blockParentColumn, entityId);
 
     if (blocksError) {
@@ -3585,7 +3737,7 @@ export async function executeUpdateContentBlock(
   const pageContext = getCurrentCmsContext(context);
   const { data: block, error: blockError } = await supabase
     .from('blocks')
-    .select('id, page_id, post_id, language_id, block_type, content, order')
+    .select('id, page_id, post_id, product_id, language_id, block_type, content, order')
     .eq('id', parsed.blockId)
     .single();
 
@@ -3663,16 +3815,19 @@ export async function executeInsertContentBlock(
   const supabase = getSupabase(context);
   const target = await resolveCmsTarget(parsed, context);
 
-  if (target.contentType === 'product') {
-    throw new Error('Products do not have page/post content blocks in this editor context.');
-  }
-
-  const itemId = Number(target.item.id);
-  const parentColumn = target.contentType === 'page' ? 'page_id' : 'post_id';
+  // Products have their own "Product Description Blocks" (blocks.product_id),
+  // uuid-keyed rather than bigint-keyed like pages/posts.
+  const itemId = target.contentType === 'product' ? target.item.id : Number(target.item.id);
+  const parentColumn =
+    target.contentType === 'page'
+      ? 'page_id'
+      : target.contentType === 'post'
+        ? 'post_id'
+        : 'product_id';
   const loadBlocks = async () => {
     const { data, error } = await supabase
       .from('blocks')
-      .select('id, page_id, post_id, language_id, block_type, content, order')
+      .select('id, page_id, post_id, product_id, language_id, block_type, content, order')
       .eq(parentColumn, itemId);
 
     if (error) {
@@ -3782,6 +3937,7 @@ export async function executeInsertContentBlock(
       order: latestOrder,
       page_id: target.contentType === 'page' ? itemId : null,
       post_id: target.contentType === 'post' ? itemId : null,
+      product_id: target.contentType === 'product' ? itemId : null,
     })
     .select('id, block_type, order')
     .single();
@@ -3814,7 +3970,7 @@ export async function executeUpdateSectionColumnBlock(
   const pageContext = getCurrentCmsContext(context);
   const { data: parentBlock, error: blockError } = await supabase
     .from('blocks')
-    .select('id, page_id, post_id, language_id, block_type, content, order')
+    .select('id, page_id, post_id, product_id, language_id, block_type, content, order')
     .eq('id', parsed.parentBlockId)
     .single();
 
@@ -4203,16 +4359,48 @@ function buildGeneratedSku(title: string, slug: string) {
     .toUpperCase();
 }
 
+/**
+ * Coerce whatever a model produced for a product body into a valid editor
+ * document. Models — especially cheap ones — reliably emit HTML but frequently
+ * get nested editor JSON wrong, so every plausible shape is accepted rather than
+ * thrown back: an HTML/text string, a bare array of nodes, `{ content: [...] }`
+ * without the `doc` type, or a correct document. Only genuinely unusable input
+ * raises, and the message tells the model exactly what to send instead.
+ */
 function validateProductDescriptionJson(value: unknown) {
-  if (value === undefined) {
+  if (value === undefined || value === null) {
     return undefined;
   }
 
-  const validation = getEditorBlockDocumentSchema().safeParse(value);
+  // The single most common model output: an HTML fragment (or plain prose).
+  if (typeof value === 'string') {
+    return editorDocumentFromHtml(value) ?? undefined;
+  }
+
+  // A bare node array, or a document missing its `type: 'doc'` wrapper.
+  const candidate = Array.isArray(value)
+    ? { content: value, type: 'doc' }
+    : isPlainJsonRecord(value) && value['type'] !== 'doc' && Array.isArray(value['content'])
+      ? { ...value, type: 'doc' }
+      : value;
+
+  const validation = getEditorBlockDocumentSchema().safeParse(candidate);
 
   if (!validation.success) {
+    // A single-node object such as { type: 'paragraph', content: [...] }.
+    if (isPlainJsonRecord(value) && typeof value['type'] === 'string') {
+      const wrapped = getEditorBlockDocumentSchema().safeParse({
+        content: [value],
+        type: 'doc',
+      });
+
+      if (wrapped.success) {
+        return wrapped.data;
+      }
+    }
+
     throw new Error(
-      `Product description_json failed editor document validation: ${validation.error.issues
+      `Product description_json must be an editor document like { "type": "doc", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "..." } ] } ] }, or simply an HTML string. Received: ${validation.error.issues
         .map((issue) => issue.message)
         .join('; ')}`
     );
@@ -4221,11 +4409,38 @@ function validateProductDescriptionJson(value: unknown) {
   return validation.data;
 }
 
+/**
+ * Resolve the product body from either input: `description_html` (preferred —
+ * a plain string a model can always produce under a strict tool schema) or
+ * `description_json`. HTML wins when both are supplied and the JSON is empty.
+ */
+function resolveProductDescription(input: {
+  description_html?: string;
+  description_json?: unknown;
+}) {
+  const hasBlocks = (document: { content?: unknown } | null | undefined) =>
+    Boolean(document && Array.isArray(document.content) && document.content.length > 0);
+
+  const fromJson = validateProductDescriptionJson(input.description_json);
+
+  if (hasBlocks(fromJson)) {
+    return fromJson;
+  }
+
+  const fromHtml = input.description_html ? editorDocumentFromHtml(input.description_html) : null;
+
+  // Never store an empty document: `{ type: 'doc', content: [] }` passes
+  // validation but renders as a blank slab AND suppresses the storefront's
+  // "no description" fallback. Undefined leaves the column null instead.
+  return hasBlocks(fromHtml) ? fromHtml : undefined;
+}
+
 export async function executeCreateCmsProduct(input: CreateCmsProductInput, context?: ToolExecutionContext) {
   const parsed = createCmsProductInputSchema.parse(input);
   const supabase = getSupabase(context);
   const language = await getDefaultLanguageRecord(supabase, parsed.languageCode);
   const slug = slugify(parsed.slug || parsed.title);
+  const blocks = normalizeCreateBlocks(parsed.blocks, undefined, undefined, context);
   const duplicate = await assertUniqueSlug({
     contentType: 'product',
     languageId: language.id,
@@ -4254,7 +4469,7 @@ export async function executeCreateCmsProduct(input: CreateCmsProductInput, cont
     parsed.product_type === 'digital' && parsed.payment_provider === 'freemius';
   const trialPeriodDays = isFreemiusProduct ? parsed.trial_period_days : 0;
   const productPayload = productSchema.parse({
-    description_json: validateProductDescriptionJson(parsed.description_json),
+    description_json: resolveProductDescription(parsed),
     freemius_plan_id: parsed.freemius_plan_id || '',
     freemius_product_id: parsed.freemius_product_id || '',
     is_taxable: parsed.is_taxable,
@@ -4282,11 +4497,17 @@ export async function executeCreateCmsProduct(input: CreateCmsProductInput, cont
     variation_attributes: [],
     variants: [],
   });
+  const images = parsed.images ?? [];
   const confirmation = getConfirmationPreview({
     action: 'CREATE PRODUCT',
     context,
-    payload: { item: productPayload, tool: 'create_cms_product' },
+    payload: { blocks, images, item: productPayload, tool: 'create_cms_product' },
     preview: {
+      blockCount: blocks.length,
+      descriptionLength: productPayload.description_json
+        ? JSON.stringify(productPayload.description_json).length
+        : 0,
+      imageCount: images.length,
       languageCode: language.code,
       price: productPayload.price,
       sku: productPayload.sku,
@@ -4303,10 +4524,48 @@ export async function executeCreateCmsProduct(input: CreateCmsProductInput, cont
     return confirmation;
   }
 
-  const product = await createEcommerceProduct(supabase as any, productPayload);
+  // Import external image URLs into the media library BEFORE creating the row so
+  // createProduct can persist product_media in its own canonical path. A bad
+  // image URL must not cost the user the product and its copied body, so image
+  // failures are reported rather than thrown.
+  let mediaIds: string[] = [];
+  let imageError: string | null = null;
+
+  if (images.length > 0) {
+    try {
+      mediaIds = [...new Set(await resolveMediaReferences(images, context, parsed.title))];
+
+      if (mediaIds.length === 0) {
+        throw new Error('None of the provided images could be resolved to a media item.');
+      }
+    } catch (error) {
+      imageError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  const product = await createEcommerceProduct(supabase as any, {
+    ...productPayload,
+    // First entry is the main product image; the rest become the gallery in order.
+    product_media: mediaIds.map((media_id) => ({ media_id })),
+  });
 
   if (!product?.id) {
     throw new Error('Failed to create product.');
+  }
+
+  // "Product Description Blocks" — the same block vocabulary pages/posts use,
+  // parented by blocks.product_id and rendered by ProductDetailsBlockRenderer.
+  try {
+    await insertContentBlocks({
+      blocks,
+      contentType: 'product',
+      itemId: product.id,
+      languageId: language.id,
+      supabase,
+    });
+  } catch (error) {
+    await rollbackCreatedCmsItem({ contentType: 'product', itemId: product.id, supabase });
+    throw error;
   }
 
   revalidateCurrentCmsSurfaces(
@@ -4317,9 +4576,12 @@ export async function executeCreateCmsProduct(input: CreateCmsProductInput, cont
   context?.revalidatePath?.('/cms/products');
 
   return {
+    blockCount: blocks.length,
     contentType: 'product',
     editPath: getCreateEditPath('product', product.id),
     entityId: product.id,
+    imageCount: mediaIds.length,
+    ...(imageError ? { imageError } : {}),
     mutationExecuted: true,
     slug,
     success: true,
@@ -4865,6 +5127,8 @@ async function executeActionPlanChild(
       return executeUpdateNavigationBar(action.input, context);
     case 'update_section_column_block':
       return executeUpdateSectionColumnBlock(action.input, context);
+    case 'set_content_images':
+      return executeSetContentImages(action.input, context);
   }
 }
 
@@ -4899,16 +5163,113 @@ function withActionPlanTranslationGroup(
   } as z.infer<typeof cmsActionPlanActionSchema>;
 }
 
+function planCreateContentType(
+  tool: 'create_cms_page' | 'create_cms_post' | 'create_cms_product'
+): CmsContentType {
+  return tool === 'create_cms_page' ? 'page' : tool === 'create_cms_post' ? 'post' : 'product';
+}
+
+/**
+ * Point a set_content_images action at an item an earlier action in the same
+ * plan just created, so "create the product, then give it this image" works as
+ * one confirmed plan. An explicit entityId always wins.
+ */
+function withActionPlanImageTarget(
+  action: z.infer<typeof cmsActionPlanActionSchema>,
+  createdItemsBySlug: Map<string, { contentType: CmsContentType; entityId: string | number }>,
+  lastCreatedItem: { contentType: CmsContentType; entityId: string | number } | null
+) {
+  if (action.tool !== 'set_content_images') {
+    return action;
+  }
+
+  const imageInput = action.input as {
+    contentType?: CmsContentType;
+    entityId?: string | number;
+    slug?: string;
+  };
+
+  if (imageInput.entityId !== undefined) {
+    return action;
+  }
+
+  const created = imageInput.slug
+    ? createdItemsBySlug.get(
+        `${imageInput.contentType || 'product'}:${slugify(imageInput.slug)}`
+      )
+    : lastCreatedItem;
+
+  if (!created) {
+    return action;
+  }
+
+  return {
+    ...action,
+    input: {
+      ...imageInput,
+      contentType: created.contentType,
+      entityId: created.entityId,
+    },
+  } as z.infer<typeof cmsActionPlanActionSchema>;
+}
+
 export async function executeCmsActionPlan(
   input: z.input<typeof executeCmsActionPlanInputSchema>,
   context?: ToolExecutionContext
 ) {
   const parsed = executeCmsActionPlanInputSchema.parse(input);
 
+  // An item created earlier in the same plan does not exist yet while the plan
+  // is being previewed, so a later set_content_images that targets it cannot be
+  // resolved against the database. Track what this plan will create and preview
+  // those image actions from the plan itself instead of failing the whole plan.
+  const plannedCreateSlugs = new Set(
+    parsed.actions
+      .filter(
+        (action) =>
+          action.tool === 'create_cms_page' ||
+          action.tool === 'create_cms_post' ||
+          action.tool === 'create_cms_product'
+      )
+      .map((action) => {
+        const createInput = action.input as { slug?: string; title?: string };
+
+        return `${planCreateContentType(action.tool)}:${slugify(createInput.slug || createInput.title || '')}`;
+      })
+  );
+
+  const targetsAPlannedCreate = (action: z.infer<typeof cmsActionPlanActionSchema>) => {
+    if (action.tool !== 'set_content_images') {
+      return false;
+    }
+
+    const imageInput = action.input as { contentType?: string; slug?: string };
+
+    // No explicit target at all -> it will inherit the item this plan created.
+    if (!imageInput.slug) {
+      return plannedCreateSlugs.size > 0;
+    }
+
+    return plannedCreateSlugs.has(
+      `${imageInput.contentType || 'product'}:${slugify(imageInput.slug)}`
+    );
+  };
+
   if (!context?.skipConfirmation) {
     const actionSummaries: string[] = [];
 
     for (const action of parsed.actions) {
+      if (targetsAPlannedCreate(action)) {
+        const imageInput = action.input as { images: string[]; slug?: string };
+
+        actionSummaries.push(
+          `Set ${pluralize(imageInput.images.length, 'image')} on the ${
+            imageInput.slug ? `"${imageInput.slug}"` : 'new'
+          } item created in this plan.`
+        );
+        continue;
+      }
+
       const result = await executeActionPlanChild(action, {
         ...context,
         latestUserMessage: null,
@@ -4964,9 +5325,18 @@ export async function executeCmsActionPlan(
   let editPath: string | null = null;
   let redirectPath: string | null = null;
   const translationGroupsByCreateTool: Partial<Record<'create_cms_page' | 'create_cms_post' | 'create_cms_product', string>> = {};
+  const createdItemsBySlug = new Map<
+    string,
+    { contentType: CmsContentType; entityId: string | number }
+  >();
+  let lastCreatedItem: { contentType: CmsContentType; entityId: string | number } | null = null;
 
   for (const [index, action] of parsed.actions.entries()) {
-    const actionToExecute = withActionPlanTranslationGroup(action, translationGroupsByCreateTool);
+    const actionToExecute = withActionPlanImageTarget(
+      withActionPlanTranslationGroup(action, translationGroupsByCreateTool),
+      createdItemsBySlug,
+      lastCreatedItem
+    );
     const output = await executeActionPlanChild(actionToExecute, childContext);
 
     results.push({ output, tool: actionToExecute.tool });
@@ -4987,12 +5357,29 @@ export async function executeCmsActionPlan(
       }
 
       if (
-        (actionToExecute.tool === 'create_cms_page' ||
-          actionToExecute.tool === 'create_cms_post' ||
-          actionToExecute.tool === 'create_cms_product') &&
-        typeof record.translationGroupId === 'string'
+        actionToExecute.tool === 'create_cms_page' ||
+        actionToExecute.tool === 'create_cms_post' ||
+        actionToExecute.tool === 'create_cms_product'
       ) {
-        translationGroupsByCreateTool[actionToExecute.tool] = record.translationGroupId;
+        if (typeof record.translationGroupId === 'string') {
+          translationGroupsByCreateTool[actionToExecute.tool] = record.translationGroupId;
+        }
+
+        // Remember what we just created so a later set_content_images in this
+        // same plan can attach images to it.
+        if (record.entityId !== undefined && record.entityId !== null) {
+          const contentType = planCreateContentType(actionToExecute.tool);
+          const createdItem = {
+            contentType,
+            entityId: record.entityId as string | number,
+          };
+
+          lastCreatedItem = createdItem;
+
+          if (typeof record.slug === 'string') {
+            createdItemsBySlug.set(`${contentType}:${record.slug}`, createdItem);
+          }
+        }
       }
 
       if (record.success === false || record.unsupported === true) {
@@ -5104,12 +5491,333 @@ function decodeHtmlEntitiesToText(value: string) {
     .trim();
 }
 
-function extractReadableTextFromHtml(html: string, maxChars: number) {
+function decodeHtmlEntitiesInUrl(value: string) {
+  return value
+    .trim()
+    .replace(/&amp;/gi, '&')
+    .replace(/&#38;/g, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'");
+}
+
+// Only bitmap formats a media library can actually store. SVG is excluded on
+// purpose: site logos/icons are overwhelmingly SVG, and importing one as a
+// product's main image is never what the user meant.
+const CONTENT_IMAGE_EXTENSION_RE = /\.(avif|gif|jpe?g|png|webp)(?:[?#]|$)/i;
+
+// Chrome that appears on nearly every page and is never the subject image.
+const CHROME_IMAGE_HINT_RE =
+  /(?:^|[/_-])(?:sprite|icon|favicon|logo|placeholder|pixel|spacer|blank|avatar|badge|flag|loader|spinner|1x1|transparent|watermark|payment|visa|mastercard|paypal|amex|social|share|facebook|twitter|instagram|youtube|pinterest|linkedin)(?:[/_.-]|$)/i;
+
+function absolutizeImageUrl(value: string | undefined | null, baseUrl: string) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const decoded = decodeHtmlEntitiesInUrl(value);
+
+  if (!decoded || decoded.startsWith('data:')) {
+    return null;
+  }
+
+  try {
+    const resolved = new URL(decoded, baseUrl);
+
+    if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') {
+      return null;
+    }
+
+    return resolved.toString();
+  } catch {
+    return null;
+  }
+}
+
+// "a.jpg 400w, b.jpg 1200w" / "a.jpg 1x, b.jpg 2x" -> the highest-resolution
+// candidate, which is the one worth importing.
+function pickLargestSrcsetCandidate(srcset: string) {
+  let best: { url: string; weight: number } | null = null;
+
+  for (const entry of srcset.split(',')) {
+    const parts = entry.trim().split(/\s+/);
+    const url = parts[0];
+
+    if (!url) {
+      continue;
+    }
+
+    const descriptor = parts[1] || '';
+    const widthMatch = descriptor.match(/^(\d+(?:\.\d+)?)w$/i);
+    const densityMatch = descriptor.match(/^(\d+(?:\.\d+)?)x$/i);
+    const weight = widthMatch
+      ? Number(widthMatch[1])
+      : densityMatch
+        ? Number(densityMatch[1]) * 1000
+        : 1;
+
+    if (!best || weight > best.weight) {
+      best = { url, weight };
+    }
+  }
+
+  return best?.url ?? null;
+}
+
+function readTagAttribute(tag: string, attribute: string) {
+  const match = tag.match(
+    new RegExp(`\\b${attribute}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i')
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  return match[1] ?? match[2] ?? match[3] ?? null;
+}
+
+function collectJsonLdImageUrls(html: string, baseUrl: string) {
+  const productImages: string[] = [];
+  const otherImages: string[] = [];
+
+  const pushImageValue = (value: unknown, target: string[]) => {
+    if (typeof value === 'string') {
+      const absolute = absolutizeImageUrl(value, baseUrl);
+
+      if (absolute) {
+        target.push(absolute);
+      }
+
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        pushImageValue(entry, target);
+      }
+
+      return;
+    }
+
+    if (value && typeof value === 'object') {
+      pushImageValue((value as { url?: unknown }).url, target);
+      pushImageValue((value as { contentUrl?: unknown }).contentUrl, target);
+    }
+  };
+
+  const walk = (node: unknown, depth: number) => {
+    if (depth > 8 || !node || typeof node !== 'object') {
+      return;
+    }
+
+    if (Array.isArray(node)) {
+      for (const entry of node) {
+        walk(entry, depth + 1);
+      }
+
+      return;
+    }
+
+    const record = node as Record<string, unknown>;
+    const rawType = record['@type'];
+    const types = (Array.isArray(rawType) ? rawType : [rawType])
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.toLowerCase());
+    // schema.org Product is the strongest possible signal on a shop page.
+    const isProduct = types.some(
+      (entry) => entry === 'product' || entry === 'productgroup' || entry === 'itempage'
+    );
+
+    if ('image' in record) {
+      pushImageValue(record['image'], isProduct ? productImages : otherImages);
+    }
+
+    for (const value of Object.values(record)) {
+      walk(value, depth + 1);
+    }
+  };
+
+  const blocks = html.matchAll(
+    /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
+  );
+
+  for (const block of blocks) {
+    const raw = (block[1] || '').trim();
+
+    if (!raw) {
+      continue;
+    }
+
+    try {
+      walk(JSON.parse(raw), 0);
+    } catch {
+      // A malformed JSON-LD block is common in the wild; skip it silently and
+      // fall back to the og:/<img> passes below.
+    }
+  }
+
+  return [...productImages, ...otherImages];
+}
+
+// Path segments that mark a downscaled derivative rather than the real asset.
+const THUMBNAIL_PATH_HINT_RE = /(?:^|[/_-])(?:thumbnails?|thumbs?|small|mini)(?:[/_.-]|$)/i;
+
+function imageBasenameKey(url: string) {
+  try {
+    const { pathname } = new URL(url);
+    const file = decodeURIComponent(pathname.slice(pathname.lastIndexOf('/') + 1));
+
+    return file.toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Index full-resolution images the page links to directly, keyed by file name.
+ * The near-universal shop/lightbox pattern (Fancybox, PhotoSwipe, WooCommerce…)
+ * renders a downscaled <img> next to an <a href> pointing at the original —
+ * and such sites often declare the thumbnail as their og:image too. Mapping
+ * them lets us upgrade a thumbnail to the real asset using ONLY URLs that
+ * literally appear on the page; nothing is guessed or rewritten by hand.
+ */
+function collectLinkedFullSizeImages(html: string, baseUrl: string) {
+  const byBasename = new Map<string, string>();
+
+  for (const match of html.matchAll(/<a\b[^>]*>/gi)) {
+    const absolute = absolutizeImageUrl(readTagAttribute(match[0], 'href'), baseUrl);
+
+    if (
+      !absolute ||
+      !CONTENT_IMAGE_EXTENSION_RE.test(absolute) ||
+      THUMBNAIL_PATH_HINT_RE.test(absolute) ||
+      CHROME_IMAGE_HINT_RE.test(absolute)
+    ) {
+      continue;
+    }
+
+    const key = imageBasenameKey(absolute);
+
+    if (key && !byBasename.has(key)) {
+      byBasename.set(key, absolute);
+    }
+  }
+
+  return byBasename;
+}
+
+function extractImageUrlsFromHtml(html: string, baseUrl: string) {
+  // Ranked best-first: structured product data, then social preview metadata,
+  // then in-body <img> tags. The first entry becomes `mainImage`.
+  const ranked: string[] = [...collectJsonLdImageUrls(html, baseUrl)];
+
+  const metaPatterns = [
+    /<meta\b[^>]*\b(?:property|name)\s*=\s*["'](?:og:image:secure_url|og:image:url|og:image)["'][^>]*>/gi,
+    /<meta\b[^>]*\b(?:property|name)\s*=\s*["'](?:twitter:image:src|twitter:image)["'][^>]*>/gi,
+    /<meta\b[^>]*\bitemprop\s*=\s*["']image["'][^>]*>/gi,
+    /<link\b[^>]*\brel\s*=\s*["']image_src["'][^>]*>/gi,
+  ];
+
+  for (const pattern of metaPatterns) {
+    for (const match of html.matchAll(pattern)) {
+      const tag = match[0];
+      const absolute = absolutizeImageUrl(
+        readTagAttribute(tag, 'content') || readTagAttribute(tag, 'href'),
+        baseUrl
+      );
+
+      if (absolute) {
+        ranked.push(absolute);
+      }
+    }
+  }
+
+  const bodyImages: string[] = [];
+
+  for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
+    const tag = match[0];
+    const srcset = readTagAttribute(tag, 'srcset') || readTagAttribute(tag, 'data-srcset');
+    // Try every candidate in order and keep the first that resolves. Lazy-loading
+    // themes ship a data: URI placeholder in src and park the real URL in a
+    // data-* attribute, so a rejected src must fall through, not skip the tag.
+    const candidates = [
+      srcset ? pickLargestSrcsetCandidate(srcset) : null,
+      readTagAttribute(tag, 'src'),
+      readTagAttribute(tag, 'data-src'),
+      readTagAttribute(tag, 'data-original'),
+      readTagAttribute(tag, 'data-lazy-src'),
+      readTagAttribute(tag, 'data-image'),
+    ];
+
+    let absolute: string | null = null;
+
+    for (const candidate of candidates) {
+      absolute = absolutizeImageUrl(candidate, baseUrl);
+
+      if (absolute) {
+        break;
+      }
+    }
+
+    if (!absolute || CHROME_IMAGE_HINT_RE.test(absolute)) {
+      continue;
+    }
+
+    // Skip declared thumbnails; a product hero is rarely under ~200px.
+    const width = Number(readTagAttribute(tag, 'width'));
+
+    if (Number.isFinite(width) && width > 0 && width < 200) {
+      continue;
+    }
+
+    bodyImages.push(absolute);
+  }
+
+  const looksLikeImage = (url: string) => CONTENT_IMAGE_EXTENSION_RE.test(url);
+  // Extension-less CDN URLs (…/image/upload/abc123) are real images too, so keep
+  // them — just after the ones we can positively identify.
+  ranked.push(...bodyImages.filter(looksLikeImage), ...bodyImages.filter((url) => !looksLikeImage(url)));
+
+  const fullSizeByBasename = collectLinkedFullSizeImages(html, baseUrl);
+  const upgradeThumbnail = (url: string) => {
+    if (!THUMBNAIL_PATH_HINT_RE.test(url)) {
+      return url;
+    }
+
+    const key = imageBasenameKey(url);
+
+    return (key && fullSizeByBasename.get(key)) || url;
+  };
+
+  const seen = new Set<string>();
+  const images: string[] = [];
+
+  for (const rawUrl of ranked) {
+    const url = upgradeThumbnail(rawUrl);
+
+    if (seen.has(url)) {
+      continue;
+    }
+
+    seen.add(url);
+    images.push(url);
+
+    if (images.length >= 12) {
+      break;
+    }
+  }
+
+  return { images, mainImage: images[0] ?? null };
+}
+
+function extractReadableTextFromHtml(html: string, maxChars: number, baseUrl: string) {
   const cleaned = html
     .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
     .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, ' ')
     .replace(/<svg\b[\s\S]*?<\/svg>/gi, ' ');
+  // Run image extraction on the RAW html: JSON-LD lives inside a <script> tag
+  // that `cleaned` has already stripped.
+  const { images, mainImage } = extractImageUrlsFromHtml(html, baseUrl);
 
   const titleMatch = html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
   const descriptionMatch =
@@ -5127,6 +5835,8 @@ function extractReadableTextFromHtml(html: string, maxChars: number) {
   return {
     description: descriptionMatch ? decodeHtmlEntitiesToText(descriptionMatch[1]) : '',
     headings,
+    images,
+    mainImage,
     text: bodyText.slice(0, maxChars),
     title: titleMatch ? decodeHtmlEntitiesToText(titleMatch[1]) : '',
     truncated: bodyText.length > maxChars,
@@ -5206,7 +5916,7 @@ export async function executeFetchUrlContent(input: FetchUrlContentInput) {
     const raw = await response.text();
     const boundedRaw =
       raw.length > FETCH_URL_CONTENT_MAX_BYTES ? raw.slice(0, FETCH_URL_CONTENT_MAX_BYTES) : raw;
-    const extracted = extractReadableTextFromHtml(boundedRaw, parsed.maxChars);
+    const extracted = extractReadableTextFromHtml(boundedRaw, parsed.maxChars, finalUrl);
 
     if (!extracted.text && !extracted.title) {
       return { message: 'The URL returned no readable text content.', success: false, url: parsed.url };
@@ -5216,6 +5926,12 @@ export async function executeFetchUrlContent(input: FetchUrlContentInput) {
       description: extracted.description,
       finalUrl,
       headings: extracted.headings,
+      // Ranked best-first (schema.org Product image > og:image > in-body <img>).
+      // `mainImage` is the page's subject image and can be passed straight into
+      // create_cms_product `images` / feature_image_id — it is imported into the
+      // media library automatically.
+      images: extracted.images,
+      mainImage: extracted.mainImage,
       success: true,
       text: extracted.text,
       title: extracted.title,
@@ -6034,33 +6750,65 @@ export async function executeTranslatePage(
   return { ...(created as Record<string, unknown>), isTranslation: true, languageCode: targetLanguage.code };
 }
 
-const setContentImagesInputSchema = z.strictObject({
-  images: z.array(z.string().trim().min(1).max(2048)).min(1).max(12),
-});
-type SetContentImagesInput = z.infer<typeof setContentImagesInputSchema>;
-
 /**
  * Set the feature image (pages/posts) or the ordered image gallery (products)
- * for the CURRENT CMS item. Each entry may be an existing media library id or an
+ * for a CMS item. Each entry may be an existing media library id or an
  * external image URL (imported automatically). The first entry is the feature /
  * main image. For pages/posts only the first entry is used (they have a single
  * feature image); for products every entry becomes a product_media row in order.
+ *
+ * The target is the current edit context by default, but an explicit
+ * contentType + slug/entityId/title targets any item — so this works from the
+ * dashboard with no page open (e.g. right after create_cms_product).
  */
 export async function executeSetContentImages(
   input: SetContentImagesInput,
   context?: ToolExecutionContext
 ) {
   const parsed = setContentImagesInputSchema.parse(input);
-  const pageContext = getCurrentCmsContext(context);
+  const hasExplicitTarget =
+    parsed.entityId !== undefined || Boolean(parsed.slug) || Boolean(parsed.title);
   const supabase = getSupabase(context);
-  const entityId = getCmsEntityId(pageContext);
+  let pageContext: CortexAiPageContext;
+  let entityId: string | number;
+
+  if (hasExplicitTarget) {
+    const resolved = await resolveCmsTarget(
+      {
+        contentType: parsed.contentType,
+        entityId: parsed.entityId,
+        slug: parsed.slug,
+        title: parsed.title,
+      },
+      context
+    );
+    const item = resolved.item as Record<string, unknown>;
+
+    // Use the resolved row's id verbatim. Coercing it to a string would break
+    // integer-keyed tables (pages/posts) while being a no-op for uuid products.
+    entityId = item['id'] as string | number;
+    pageContext = {
+      contentType: resolved.contentType,
+      entityId,
+      slug: typeof item['slug'] === 'string' ? item['slug'] : '',
+      title: typeof item['title'] === 'string' ? item['title'] : '',
+    } as CortexAiPageContext;
+  } else {
+    pageContext = getCurrentCmsContext(context);
+    entityId = getCmsEntityId(pageContext);
+  }
   const label = pageContext.title || pageContext.slug || 'current item';
   const isProduct = pageContext.contentType === 'product';
 
   const confirmation = getConfirmationPreview({
     action: 'SET IMAGES',
     context,
-    payload: { images: parsed.images, tool: 'set_content_images' },
+    payload: {
+      contentType: pageContext.contentType,
+      entityId: String(entityId),
+      images: parsed.images,
+      tool: 'set_content_images',
+    },
     preview: {
       contentType: pageContext.contentType,
       imageCount: parsed.images.length,
@@ -6081,31 +6829,13 @@ export async function executeSetContentImages(
   }
 
   // Resolve every reference to a media id, importing external URLs as needed.
-  const mediaIds: string[] = [];
-  for (let index = 0; index < parsed.images.length; index += 1) {
-    const mediaId = await resolveMediaReference(
-      parsed.images[index],
-      context,
-      `${label} image ${index + 1}`
-    );
-
-    if (mediaId) {
-      mediaIds.push(mediaId);
-    }
-  }
+  const mediaIds = await resolveMediaReferences(parsed.images, context, label);
 
   if (mediaIds.length === 0) {
     throw new Error('None of the provided images could be resolved to a media item.');
   }
 
   if (isProduct) {
-    // Set the product's image gallery by writing product_media DIRECTLY. We must
-    // NOT route this through updateProduct / upsert_product_with_variants: that is
-    // a full product rewrite that (because it re-serializes the whole row) would
-    // wipe the product's variants, clear its scheduled sale window and custom
-    // canonical, re-round-trip prices (corrupting zero-decimal currencies), and
-    // hard-delete the previous images from storage. Images live in a separate
-    // join table, so touch only that.
     const { data: product, error: productError } = await supabase
       .from('products')
       .select('id, slug, language_id, title')
@@ -6118,32 +6848,11 @@ export async function executeSetContentImages(
       );
     }
 
-    // Dedupe: product_media's PK is (product_id, media_id); a repeated id would
-    // violate it and leave the product with no images after the delete.
-    const uniqueMediaIds = [...new Set(mediaIds)];
-
-    const { error: deleteError } = await supabase
-      .from('product_media')
-      .delete()
-      .eq('product_id', entityId);
-
-    if (deleteError) {
-      throw new Error(
-        `Could not clear the product's existing images: ${serializeError(deleteError)}`
-      );
-    }
-
-    const { error: insertError } = await supabase.from('product_media').insert(
-      uniqueMediaIds.map((media_id, mediaIndex) => ({
-        media_id,
-        product_id: entityId,
-        sort_order: mediaIndex,
-      }))
-    );
-
-    if (insertError) {
-      throw new Error(`Could not save the product images: ${serializeError(insertError)}`);
-    }
+    const uniqueMediaIds = await replaceProductMediaRows({
+      mediaIds,
+      productId: entityId,
+      supabase,
+    });
 
     revalidateCurrentCmsSurfaces(
       context,
@@ -6223,7 +6932,7 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
     }),
     fetch_url_content: tool({
       description:
-        'Fetch the readable content (title, meta description, headings, and body text) of an external web page so you can base new CMS content on it. Read-only, no confirmation. Use this first whenever the user references an external URL to copy, adapt, or draw inspiration from, e.g. "rewrite my home page based on https://example.com".',
+        'Fetch an external web page and return its title, meta description, headings, body text, AND its images: `mainImage` (the page\'s subject image — schema.org Product image, else og:image, else the best in-body <img>) plus a ranked `images` list, all as absolute URLs. Read-only, no confirmation. Use this first whenever the user references an external URL to copy, adapt, clone, or draw inspiration from. To reuse the source page\'s image, pass `mainImage` straight into create_cms_product `images` or a page/post `feature_image_id` — it is imported into the media library automatically. Never invent an image URL: if `mainImage` is null, the page had none.',
       execute: (input) => executeFetchUrlContent(input),
       inputSchema: fetchUrlContentInputSchema,
       strict: true,
@@ -6251,7 +6960,7 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
     }),
     set_content_images: tool({
       description:
-        "Set the feature image for the CURRENT page or post, or the image gallery for the CURRENT product. Pass `images`: a list of image URLs (e.g. `url` values returned by search_stock_photos) and/or existing media library IDs. External URLs are imported into the media library automatically — NEVER put an image URL directly into feature_image_id. The FIRST image becomes the feature image (pages/posts) or the main product image (products); for a product the remaining images become its gallery in order (this REPLACES the product's current images). Requires an open page/post/product. Mutating: first returns a confirmation phrase; only applies after exact confirmation.",
+        "Set the feature image for a page or post, or the image gallery for a product. Pass `images`: a list of image URLs (e.g. `mainImage` from fetch_url_content or `url` values from search_stock_photos) and/or existing media library IDs. External URLs are imported into the media library automatically — NEVER put an image URL directly into feature_image_id. The FIRST image becomes the feature image (pages/posts) or the main product image (products); for a product the remaining images become its gallery in order (this REPLACES the product's current images). Targets the currently open page/post/product by default; to target any other item (for example a product you just created from the dashboard) pass contentType plus slug, entityId, or title — no open editor needed. Mutating: first returns a confirmation phrase; only applies after exact confirmation.",
       execute: (input) => executeSetContentImages(input, context),
       inputSchema: setContentImagesInputSchema,
       strict: true,
@@ -6272,7 +6981,7 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
     }),
     create_cms_product: tool({
       description:
-        'Create a new draft-capable product. Defaults missing product fields safely: physical Stripe product, generated SKU, price 0, stock 0, taxable, draft. For translations, pass translationGroupId from the source product context. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
+        'Create a new draft-capable product, complete with its images and its body copy in ONE call. Pass `images` to set the main product image and gallery (external https URLs are imported into the media library automatically — use `mainImage` from fetch_url_content to reuse a source page\'s photo). Pass `blocks` to build the product\'s "Product Description Blocks" — the SAME block vocabulary and section-based design rules as create_cms_page, rendered on the public product page. This is the richest product body and is what you should produce whenever the user asks to copy or write real product content. Also pass `short_description` for the one-line summary shown on product cards. `description_html` is a plain-HTML fallback body used only when no blocks are supplied. Defaults missing fields safely: physical Stripe product, generated SKU, price 0, stock 0, taxable, draft. `price` is in major units (25 = $25.00). For translations, pass translationGroupId from the source product context. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
       execute: (input) => executeCreateCmsProduct(input, context),
       inputSchema: createCmsProductInputSchema,
       strict: true,

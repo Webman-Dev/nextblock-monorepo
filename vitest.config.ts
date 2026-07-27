@@ -33,6 +33,8 @@ export default defineConfig({
       { find: /^@nextblock-cms\/ui\/(.*)$/, replacement: path.resolve(__dirname, './libs/ui/src/lib/$1') },
       { find: /^@nextblock-cms\/ecommerce\/(.*)$/, replacement: path.resolve(__dirname, './libs/ecommerce/src/lib/$1') },
       { find: /^@nextblock-cms\/editor\/(.*)$/, replacement: path.resolve(__dirname, './libs/editor/src/$1') },
+      // Mirrors the "@nextblock-cms/utils/*" mapping in tsconfig.base.json.
+      { find: /^@nextblock-cms\/utils\/(.*)$/, replacement: path.resolve(__dirname, './libs/utils/src/lib/$1') },
       { find: /^@\/(.*)$/, replacement: path.resolve(__dirname, './apps/nextblock/$1') },
     ],
   },

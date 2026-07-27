@@ -187,7 +187,17 @@ try {
   // Run with the nx daemon OFF: the persistent daemon accumulates memory across the
   // sequential per-lib builds in `release:all` and was OOM-killing the bundler ("cannot
   // allocate memory"). Daemon-off recomputes the graph per invocation and frees it on exit.
-  run(buildCommand, { cwd: workspaceRoot, env: { ...process.env, NX_DAEMON: 'false' } });
+  //
+  // ...and with plugin ISOLATION off too. Daemon-off makes every nx invocation fork a
+  // worker process per plugin, which then waits on a socket handshake ("load" message)
+  // that nx hard-times-out at 10s. Mid-`release:all` — machine already loaded from the
+  // preceding lib builds — that handshake intermittently misses the window and the run
+  // dies with "Plugin worker ... exited unexpectedly" / "Failed to load 1 default Nx
+  // plugin(s)". Loading plugins in-process removes the fork, the socket, and the timeout.
+  run(buildCommand, {
+    cwd: workspaceRoot,
+    env: { ...process.env, NX_DAEMON: 'false', NX_ISOLATE_PLUGINS: 'false' },
+  });
 
   if (!fs.existsSync(distDir)) {
     throw new Error(`Build output not found at ${distDir}`);

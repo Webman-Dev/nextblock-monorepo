@@ -61,13 +61,54 @@ function run(command) {
   execSync(command, { stdio: 'inherit', shell: true, cwd: workspaceRoot });
 }
 
+// An explicit semver stamps every package to the same version, so "already on npm at that
+// version" is knowable up front. Bump keywords (patch/minor/...) resolve per-package at
+// release-lib time, so we can't pre-check them.
+const isExplicitVersion = /^\d+\.\d+\.\d+([-+].+)?$/.test(versionSpec);
+
+function publishedVersion(name) {
+  try {
+    return execSync(`npm view ${name} version`, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return null; // never published, or the registry is unreachable — let the real step decide
+  }
+}
+
+// npm refuses to republish an existing version, so a mid-chain failure used to strand the
+// run: re-running died immediately on the packages that HAD gone out. Skip those instead,
+// which makes `release:all <same version>` a safe resume.
+const alreadyPublished = new Set(
+  isExplicitVersion
+    ? LIBS.filter((lib) => publishedVersion(pkgName(lib)) === versionSpec)
+    : [],
+);
+
+// A skipped lib still has to carry the target version locally: release-lib.js resolves
+// sibling `workspace:*` deps by reading libs/<name>/package.json, so a stale version there
+// would publish downstream packages pointing at the wrong sibling range.
+function stampLocalVersion(lib) {
+  const pkgPath = path.join(workspaceRoot, 'libs', lib, 'package.json');
+  const raw = fs.readFileSync(pkgPath, 'utf8');
+  const pkg = JSON.parse(raw);
+  if (pkg.version === versionSpec) return;
+  pkg.version = versionSpec;
+  const trailingNewline = raw.endsWith('\n') ? '\n' : '';
+  fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + trailingNewline);
+  console.log(`  ↳ stamped libs/${lib}/package.json to ${versionSpec} (not republished)`);
+}
+
 console.log(
   `\n🚀 release:all → "${versionSpec}"${dryRun ? '   (DRY RUN — plan only, nothing changed or published)' : ''}`,
 );
 console.log('\nPlan (publish order, current → target):');
 for (const lib of LIBS) {
+  const status = alreadyPublished.has(lib) ? '   (already on npm — skip)' : '';
   console.log(
-    `  ${pkgName(lib).padEnd(26)} ${String(readVersion(`libs/${lib}/package.json`)).padEnd(10)} → ${versionSpec}`,
+    `  ${pkgName(lib).padEnd(26)} ${String(readVersion(`libs/${lib}/package.json`)).padEnd(10)} → ${versionSpec}${status}`,
   );
 }
 console.log(
@@ -83,6 +124,10 @@ console.log(
 if (dryRun) {
   console.log('\nDRY RUN — would run:');
   for (const lib of LIBS) {
+    if (alreadyPublished.has(lib)) {
+      console.log(`  (skip ${pkgName(lib)} — ${versionSpec} already published)`);
+      continue;
+    }
     console.log(`  node tools/scripts/release-lib.js ${lib} ${versionSpec}`);
   }
   console.log(`  node tools/scripts/release-cli.js ${versionSpec}`);
@@ -107,6 +152,11 @@ try {
 
 try {
   for (const lib of LIBS) {
+    if (alreadyPublished.has(lib)) {
+      console.log(`\n⏭  ${pkgName(lib)}@${versionSpec} is already on npm — skipping.`);
+      stampLocalVersion(lib);
+      continue;
+    }
     run(`node tools/scripts/release-lib.js ${lib} ${versionSpec}`);
   }
   // Also stamps root + template (apps/nextblock) + create-nextblock, syncs the template,
