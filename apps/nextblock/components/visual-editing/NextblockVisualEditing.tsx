@@ -490,13 +490,25 @@ function getProductFieldEditorComponent(target: VisualEditingProductFieldTarget)
 }
 
 export function NextblockVisualEditing() {
-  const router = useRouter();
   const pathname = usePathname();
 
-  // If we are on a CMS edit or admin page, hide the frontend toolbar entirely to prevent overlap.
+  // Hide the frontend toolbar on CMS/admin routes. This MUST stay a thin wrapper
+  // that renders the real toolbar as a child rather than early-returning after the
+  // toolbar's hooks: this component is mounted in the root layout and persists
+  // across client navigations, so if the ~25 hooks below lived here, navigating
+  // from a public page (where they all run while editing a draft) into /cms would
+  // drop every hook at once — a rules-of-hooks violation that throws mid-navigation
+  // and forces a full page reload. Mounting/unmounting a child is safe; changing a
+  // component's own hook count between renders is not.
   if (pathname?.startsWith("/cms")) {
     return null;
   }
+
+  return <VisualEditingToolbar />;
+}
+
+function VisualEditingToolbar() {
+  const router = useRouter();
 
   const [hoverTarget, setHoverTarget] = useState<HoverTarget | null>(null);
   const [activeInfo, setActiveInfo] = useState<NextblockVisualEditInfo | null>(null);
