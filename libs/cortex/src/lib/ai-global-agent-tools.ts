@@ -1124,6 +1124,75 @@ async function replaceProductMediaRows(params: {
   return uniqueMediaIds;
 }
 
+/**
+ * Mirror a live product write into the product's open draft, if it has one.
+ *
+ * The product editor keeps its working copy in `product_drafts`: the edit page
+ * renders `product_drafts.blocks` instead of the live rows whenever a draft
+ * exists, and publishing deletes every live block for the product and reinserts
+ * that snapshot. Cortex writes product content live, so a live-only write is
+ * invisible in the editor and is destroyed by the next publish. Keeping both
+ * stores in agreement is what stops an agent edit from silently disappearing.
+ *
+ * Returns false when the product has no open draft (the common case).
+ */
+async function patchOpenProductDraft(params: {
+  patch: (draft: { blocks: any[]; meta: Record<string, unknown> }) => {
+    blocks?: any[];
+    meta?: Record<string, unknown>;
+  };
+  productId: string | number | null | undefined;
+  supabase: SupabaseLike;
+}) {
+  if (!params.productId) {
+    return false;
+  }
+
+  const { data: draft, error } = await params.supabase
+    .from('product_drafts')
+    .select('id, blocks, meta')
+    .eq('product_id', params.productId)
+    .maybeSingle();
+
+  // No draft (or no draft storage at all in an older database) — nothing to sync.
+  if (error || !draft) {
+    return false;
+  }
+
+  const next = params.patch({
+    blocks: Array.isArray(draft.blocks) ? cloneJsonValue(draft.blocks) : [],
+    meta: isPlainJsonRecord(draft.meta) ? cloneJsonValue(draft.meta) : {},
+  });
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+  if (next.blocks) {
+    update['blocks'] = next.blocks;
+  }
+
+  if (next.meta) {
+    update['meta'] = next.meta;
+  }
+
+  if (Object.keys(update).length === 1) {
+    return false;
+  }
+
+  const { error: updateError } = await params.supabase
+    .from('product_drafts')
+    .update(update)
+    .eq('id', draft.id);
+
+  if (updateError) {
+    throw new Error(
+      `The product was updated, but its open draft could not be kept in sync: ${serializeError(
+        updateError
+      )}. Publishing that draft would undo this change — publish or discard it in the product editor first.`
+    );
+  }
+
+  return true;
+}
+
 function normalizePublicSlug(slug: unknown) {
   return typeof slug === 'string' ? slug.trim().replace(/^\/+|\/+$/g, '') : '';
 }
@@ -3794,6 +3863,18 @@ export async function executeUpdateContentBlock(
     throw new Error(`Failed to update block ${parsed.blockId}: ${serializeError(updateError)}`);
   }
 
+  await patchOpenProductDraft({
+    patch: ({ blocks }) => ({
+      blocks: blocks.map((draftBlock: any) =>
+        String(draftBlock?.id) === String(parsed.blockId)
+          ? { ...draftBlock, content: nextContent }
+          : draftBlock
+      ),
+    }),
+    productId: block.product_id,
+    supabase,
+  });
+
   void maybeTriggerStockPhotoDownloads([{ content: nextContent }], supabase);
 
   revalidateCurrentCmsSurfaces(context, pageContext);
@@ -3946,6 +4027,32 @@ export async function executeInsertContentBlock(
     throw new Error(`Failed to insert content block: ${serializeError(insertError)}`);
   }
 
+  if (target.contentType === 'product') {
+    await patchOpenProductDraft({
+      patch: ({ blocks }) => ({
+        blocks: [
+          ...blocks.map((draftBlock: any) =>
+            Number(draftBlock?.order) >= latestOrder
+              ? { ...draftBlock, order: Number(draftBlock.order) + 1 }
+              : draftBlock
+          ),
+          {
+            block_type: normalizedBlock.block_type,
+            content: normalizedBlock.content,
+            id: insertedBlock.id,
+            language_id: target.item.language_id,
+            order: latestOrder,
+            page_id: null,
+            post_id: null,
+            product_id: itemId,
+          },
+        ].sort((a: any, b: any) => Number(a.order) - Number(b.order)),
+      }),
+      productId: itemId,
+      supabase,
+    });
+  }
+
   void maybeTriggerStockPhotoDownloads([normalizedBlock], supabase);
 
   revalidateCurrentCmsSurfaces(context, targetContext);
@@ -4092,6 +4199,18 @@ export async function executeUpdateSectionColumnBlock(
       `Failed to update parent block ${parsed.parentBlockId}: ${serializeError(updateError)}`
     );
   }
+
+  await patchOpenProductDraft({
+    patch: ({ blocks }) => ({
+      blocks: blocks.map((draftBlock: any) =>
+        String(draftBlock?.id) === String(parsed.parentBlockId)
+          ? { ...draftBlock, content: nextParentContent }
+          : draftBlock
+      ),
+    }),
+    productId: parentBlock.product_id,
+    supabase,
+  });
 
   revalidateCurrentCmsSurfaces(context, pageContext);
 
@@ -6850,6 +6969,25 @@ export async function executeSetContentImages(
 
     const uniqueMediaIds = await replaceProductMediaRows({
       mediaIds,
+      productId: entityId,
+      supabase,
+    });
+
+    // An open draft carries its own product_media list, and publishing feeds it
+    // straight back through updateProduct — which would restore the old gallery.
+    await patchOpenProductDraft({
+      patch: ({ meta }) =>
+        Array.isArray(meta['product_media'])
+          ? {
+              meta: {
+                ...meta,
+                product_media: uniqueMediaIds.map((media_id, mediaIndex) => ({
+                  media_id,
+                  sort_order: mediaIndex,
+                })),
+              },
+            }
+          : {},
       productId: entityId,
       supabase,
     });

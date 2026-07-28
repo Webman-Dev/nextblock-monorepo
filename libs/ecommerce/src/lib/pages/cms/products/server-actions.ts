@@ -54,6 +54,85 @@ export async function createProductAction(data: ProductFormValues) {
   redirect('/cms/products');
 }
 
+/**
+ * Persist the product form's debounced autosave into `product_drafts` without
+ * ever overwriting the draft's block snapshot.
+ *
+ * `product_drafts.blocks` is the working copy the product editor renders (see
+ * `app/cms/products/[id]/edit/page.tsx`) and the exact list that publishing
+ * writes back over the live `blocks` rows. The column defaults to `'[]'`, so
+ * creating the row with a bare upsert made every existing description block
+ * vanish from the editor the first time the form autosaved — and deleted them
+ * for good on the next publish. Seed the snapshot from the live blocks when the
+ * draft is created, and only ever touch `meta` afterwards.
+ */
+async function saveProductDraftMeta(
+  supabase: ReturnType<typeof createClient>,
+  productId: string,
+  authorId: string,
+  meta: ProductFormValues
+) {
+  const metaUpdate = {
+    author_id: authorId,
+    meta: meta as any,
+    updated_at: new Date().toISOString(),
+  };
+  const updateExistingDraft = async () => {
+    const { error } = await supabase
+      .from('product_drafts')
+      .update(metaUpdate)
+      .eq('product_id', productId);
+
+    if (error) {
+      throw new Error(`Failed to save product draft: ${error.message}`);
+    }
+  };
+
+  const { data: existingDraft, error: readError } = await supabase
+    .from('product_drafts')
+    .select('id')
+    .eq('product_id', productId)
+    .maybeSingle();
+
+  if (readError) {
+    throw new Error(`Failed to read product draft: ${readError.message}`);
+  }
+
+  if (existingDraft) {
+    await updateExistingDraft();
+    return;
+  }
+
+  const { data: liveBlocks, error: blocksError } = await supabase
+    .from('blocks')
+    .select(
+      'id, page_id, post_id, product_id, language_id, block_type, content, order, created_at, updated_at'
+    )
+    .eq('product_id', productId)
+    .order('order', { ascending: true });
+
+  if (blocksError) {
+    throw new Error(`Failed to read product blocks: ${blocksError.message}`);
+  }
+
+  const { error: insertError } = await supabase.from('product_drafts').insert({
+    ...metaUpdate,
+    blocks: (liveBlocks ?? []) as any,
+    product_id: productId,
+  });
+
+  if (insertError) {
+    // 23505: a concurrent autosave created the draft first. Its snapshot is
+    // already seeded, so fall back to a meta-only update rather than failing.
+    if (insertError.code === '23505') {
+      await updateExistingDraft();
+      return;
+    }
+
+    throw new Error(`Failed to save product draft: ${insertError.message}`);
+  }
+}
+
 export async function updateProductAction(id: string, data: ProductFormValues) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -73,21 +152,7 @@ export async function updateProductAction(id: string, data: ProductFormValues) {
     (currencies || []).map((currency) => normalizeCurrencyRecord(currency))
   );
 
-  const { error: upsertError } = await supabase
-    .from('product_drafts')
-    .upsert(
-      {
-        product_id: id,
-        author_id: user.id,
-        meta: sanitizedData as any,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'product_id' }
-    );
-
-  if (upsertError) {
-    throw new Error(`Failed to save product draft: ${upsertError.message}`);
-  }
+  await saveProductDraftMeta(supabase, id, user.id, sanitizedData);
 
   // NOTE: do NOT revalidate the edit route here. This is a debounced autosave
   // that only writes a draft; revalidating refetches the page and re-initializes

@@ -168,6 +168,7 @@ type MockDatabase = {
   navigation_items: MockRow[];
   pages: MockRow[];
   posts: MockRow[];
+  product_drafts: MockRow[];
   product_media: MockRow[];
   product_variants: MockRow[];
   products: MockRow[];
@@ -357,6 +358,7 @@ function createMockSupabase(overrides?: Partial<MockDatabase>) {
     ],
     pages: [],
     posts: [],
+    product_drafts: [],
     product_media: [],
     product_variants: [],
     products: [],
@@ -1863,6 +1865,172 @@ describe('Cortex AI global agent tool executors', () => {
       status: 'active',
       title: 'Omega Oil',
     });
+  });
+
+  it('update_content_block mirrors a product edit into the open product draft', async () => {
+    const { database, supabase } = createMockSupabase({
+      blocks: [
+        {
+          block_type: 'text',
+          content: { html_content: '<p>Old description</p>' },
+          id: 41,
+          language_id: 1,
+          order: 0,
+          page_id: null,
+          post_id: null,
+          product_id: 'prod-1',
+        },
+      ],
+      // The product editor is open, so its draft — not the live rows — is what
+      // the editor renders and what publishing writes back over the live blocks.
+      product_drafts: [
+        {
+          blocks: [
+            {
+              block_type: 'text',
+              content: { html_content: '<p>Old description</p>' },
+              id: 41,
+              language_id: 1,
+              order: 0,
+              product_id: 'prod-1',
+            },
+          ],
+          id: 1,
+          meta: { slug: 'chanca-piedra', title: 'Chanca Piedra' },
+          product_id: 'prod-1',
+        },
+      ],
+      products: [
+        { id: 'prod-1', language_id: 1, slug: 'chanca-piedra', title: 'Chanca Piedra' },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeUpdateContentBlock,
+      {
+        blockId: 41,
+        blockType: 'text',
+        content: { html_content: '<p>New description</p>' },
+      },
+      {
+        pageContext: { contentType: 'product', entityId: 'prod-1' },
+        revalidatePath: () => undefined,
+        supabase,
+      }
+    );
+
+    expect(result).toMatchObject({ blockId: 41, mutationExecuted: true, success: true });
+    expect(database.blocks[0].content).toEqual({ html_content: '<p>New description</p>' });
+    // Without this the edit would be invisible in the editor and destroyed the
+    // moment the draft is published.
+    expect(database.product_drafts[0].blocks).toEqual([
+      expect.objectContaining({
+        content: { html_content: '<p>New description</p>' },
+        id: 41,
+      }),
+    ]);
+  });
+
+  it('insert_content_block adds the new product block to the open product draft', async () => {
+    const { database, supabase } = createMockSupabase({
+      blocks: [
+        {
+          block_type: 'text',
+          content: { html_content: '<p>Intro</p>' },
+          id: 41,
+          language_id: 1,
+          order: 0,
+          page_id: null,
+          post_id: null,
+          product_id: 'prod-1',
+        },
+      ],
+      product_drafts: [
+        {
+          blocks: [
+            {
+              block_type: 'text',
+              content: { html_content: '<p>Intro</p>' },
+              id: 41,
+              language_id: 1,
+              order: 0,
+              product_id: 'prod-1',
+            },
+          ],
+          id: 1,
+          meta: { slug: 'chanca-piedra', title: 'Chanca Piedra' },
+          product_id: 'prod-1',
+        },
+      ],
+      products: [
+        { id: 'prod-1', language_id: 1, slug: 'chanca-piedra', title: 'Chanca Piedra' },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeInsertContentBlock,
+      {
+        block: {
+          blockType: 'text',
+          content: { html_content: '<p>Directions</p>' },
+        },
+        contentType: 'product',
+        entityId: 'prod-1',
+        position: 'end',
+      },
+      { revalidatePath: () => undefined, supabase }
+    );
+
+    expect(result).toMatchObject({ contentType: 'product', mutationExecuted: true, success: true });
+    expect(database.blocks).toHaveLength(2);
+    expect(database.product_drafts[0].blocks).toEqual([
+      expect.objectContaining({ id: 41, order: 0 }),
+      expect.objectContaining({
+        content: { html_content: '<p>Directions</p>' },
+        order: 1,
+        product_id: 'prod-1',
+      }),
+    ]);
+  });
+
+  it('set_content_images refreshes the gallery held by an open product draft', async () => {
+    const { database, supabase } = createMockSupabase({
+      product_drafts: [
+        {
+          blocks: [],
+          id: 1,
+          meta: {
+            price: 25,
+            product_media: [{ media_id: 'old-media-1', sort_order: 0 }],
+            sku: 'CHANCAPIEDRA',
+            slug: 'chanca-piedra',
+          },
+          product_id: 'prod-1',
+        },
+      ],
+      product_media: [{ media_id: 'old-media-1', product_id: 'prod-1', sort_order: 0 }],
+      products: [
+        { id: 'prod-1', language_id: 1, slug: 'chanca-piedra', title: 'Chanca Piedra' },
+      ],
+    });
+
+    const result = await executeConfirmed(
+      executeSetContentImages,
+      { images: ['https://images.pexels.com/photos/1/a.jpeg'] },
+      {
+        importExternalImage: async () => ({ id: 'new-media-1' }),
+        pageContext: { contentType: 'product', entityId: 'prod-1' },
+        revalidatePath: () => undefined,
+        supabase,
+      }
+    );
+
+    expect(result).toMatchObject({ imageCount: 1, mutationExecuted: true, success: true });
+    // Publishing the draft feeds meta straight back through updateProduct, which
+    // would otherwise restore the gallery this call just replaced.
+    expect((database.product_drafts[0].meta as any).product_media).toEqual([
+      { media_id: 'new-media-1', sort_order: 0 },
+    ]);
   });
 
   it('set_content_images targets a product by slug with no CMS page context open', async () => {
