@@ -18,7 +18,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenuButtonTrigger,
   DropdownMenuSeparator,
 } from "@nextblock-cms/ui";
 import type { Database } from "@nextblock-cms/db";
@@ -126,12 +126,10 @@ export default async function CmsLanguagesListPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button id={`lang-trigger-${lang.id}`} variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Language actions</span>
-                        </Button>
-                      </DropdownMenuTrigger>
+                      <DropdownMenuButtonTrigger id={`lang-trigger-${lang.id}`}>
+                        <MoreHorizontal className="h-4 w-4" />
+                        <span className="sr-only">Language actions</span>
+                      </DropdownMenuButtonTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild>
                           <Link href={`/cms/settings/languages/${lang.id}/edit`} className="flex items-center cursor-pointer">

@@ -23,13 +23,31 @@ export const AddToCartButton = ({ product, className, quantity }: AddToCartButto
   const store = useCart((state) => state);
   const { t } = useTranslations();
   const { activeCurrencyCode } = useCurrency();
+  const isDigital = isDigitalProduct(product);
   const requiresVariantSelection =
-    Boolean(product.has_variants) && !product.variant_id && !isDigitalProduct(product);
+    Boolean(product.has_variants) && !product.variant_id && !isDigital;
+  // Digital products have no inventory, and a null/undefined stock means the
+  // product is not inventory-tracked — mirrors the cart store's stock guard.
+  const isOutOfStock =
+    !isDigital && typeof product.stock === 'number' && product.stock <= 0;
 
   if (requiresVariantSelection) {
     return (
       <Button asChild className={className}>
         <Link href={`/product/${product.slug}`}>Select Options</Link>
+      </Button>
+    );
+  }
+
+  if (isOutOfStock) {
+    const outOfStockLabel = t('ecommerce.out_of_stock');
+
+    return (
+      <Button disabled className={className}>
+        <ShoppingCart className="mr-2 h-4 w-4" />
+        {outOfStockLabel === 'ecommerce.out_of_stock'
+          ? 'Out of stock'
+          : outOfStockLabel}
       </Button>
     );
   }

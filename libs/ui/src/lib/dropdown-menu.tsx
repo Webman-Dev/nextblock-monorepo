@@ -3,12 +3,37 @@
 import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronRight, Circle } from "lucide-react";
+import type { VariantProps } from "class-variance-authority";
 
 import { cn } from "@nextblock-cms/utils";
+import { buttonVariants } from "./button";
 
 const DropdownMenu = DropdownMenuPrimitive.Root;
 
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
+
+/**
+ * A trigger that already looks like a `Button`, without `asChild`.
+ *
+ * Prefer this over `<DropdownMenuTrigger asChild><Button/></DropdownMenuTrigger>`
+ * in Server Components: React Flight can hand the slotted child to Radix's `Slot`
+ * as an unresolved lazy reference, which throws "Primitive.button failed to slot
+ * onto its children" (radix-ui/primitives#3776, #3780). Rendering the classes on
+ * the trigger itself keeps `Slot` out of the path entirely, and it takes only
+ * serializable props so it is safe to render from the server.
+ */
+const DropdownMenuButtonTrigger = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger> &
+    VariantProps<typeof buttonVariants>
+>(({ className, variant = "ghost", size = "icon", ...props }, ref) => (
+  <DropdownMenuPrimitive.Trigger
+    ref={ref}
+    className={cn(buttonVariants({ variant, size }), className)}
+    {...props}
+  />
+));
+DropdownMenuButtonTrigger.displayName = "DropdownMenuButtonTrigger";
 
 const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 
@@ -184,6 +209,7 @@ DropdownMenuShortcut.displayName = "DropdownMenuShortcut";
 export {
   DropdownMenu,
   DropdownMenuTrigger,
+  DropdownMenuButtonTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuCheckboxItem,

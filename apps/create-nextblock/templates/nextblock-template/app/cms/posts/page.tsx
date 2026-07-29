@@ -18,7 +18,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenuButtonTrigger,
   DropdownMenuSeparator,
 } from "@nextblock-cms/ui";
 // deletePost server action is now used by DeletePostButtonClient
@@ -175,12 +175,10 @@ export default async function CmsPostsListPage(props: CmsPostsListPageProps) {
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button id={`post-trigger-${post.id}`} variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                           <span className="sr-only">Post actions for {post.title}</span>
-                        </Button>
-                      </DropdownMenuTrigger>
+                      <DropdownMenuButtonTrigger id={`post-trigger-${post.id}`}>
+                        <MoreHorizontal className="h-4 w-4" />
+                        <span className="sr-only">Post actions for {post.title}</span>
+                      </DropdownMenuButtonTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild>
                           <Link href={`/cms/posts/${post.id}/edit`} className="flex items-center cursor-pointer">

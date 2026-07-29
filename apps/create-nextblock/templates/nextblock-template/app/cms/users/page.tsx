@@ -17,7 +17,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenuButtonTrigger,
 } from "@nextblock-cms/ui";
 import type { Database } from "@nextblock-cms/db";
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui";
@@ -167,12 +167,10 @@ export default async function CmsUsersListPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button id={`user-trigger-${authUser.id}`} variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">User actions</span>
-                        </Button>
-                      </DropdownMenuTrigger>
+                      <DropdownMenuButtonTrigger id={`user-trigger-${authUser.id}`}>
+                        <MoreHorizontal className="h-4 w-4" />
+                        <span className="sr-only">User actions</span>
+                      </DropdownMenuButtonTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild>
                           <Link href={`/cms/users/${authUser.id}/edit`} className="flex items-center">

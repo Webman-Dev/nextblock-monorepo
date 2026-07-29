@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenuButtonTrigger,
   ViewLiveButton,
 } from '@nextblock-cms/ui';
 import ProductFormClientShell from '../../ProductFormClientShell';
@@ -244,15 +244,17 @@ export default async function EditProductPage({
 
           {additionalCreateLanguages.length > 0 && product.translation_group_id ? (
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button id={`create-translation-trigger-${product.id}`} variant="outline" size="sm">
-                  Create Translation
-                  <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-[10px]">
-                    {additionalCreateLanguages.length}
-                  </Badge>
-                  <ChevronDown className="ml-2 h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
+              <DropdownMenuButtonTrigger
+                id={`create-translation-trigger-${product.id}`}
+                variant="outline"
+                size="sm"
+              >
+                Create Translation
+                <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-[10px]">
+                  {additionalCreateLanguages.length}
+                </Badge>
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </DropdownMenuButtonTrigger>
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuLabel>Missing Languages</DropdownMenuLabel>
                 <DropdownMenuSeparator />

@@ -14,7 +14,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenuButtonTrigger,
   DropdownMenuSeparator,
 } from '@nextblock-cms/ui'
 import { getActiveLogoId, getLogos, getSiteSeoSettings } from './actions'
@@ -131,11 +131,9 @@ export default async function CmsLogosListPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button id={`logo-trigger-${logo.id}`} variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
+                        <DropdownMenuButtonTrigger id={`logo-trigger-${logo.id}`}>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </DropdownMenuButtonTrigger>
                         <DropdownMenuContent align="end">
                           {logo.id !== activeLogoId ? (
                             <>
