@@ -228,20 +228,35 @@ export async function getProducts(
   {
     page = 1,
     limit = 10,
+    offset,
     search = '',
     languageId,
     categoryId,
+    categoryIds,
+    productIds,
+    translationGroupIds,
     status = 'active',
   }: {
     page?: number;
+    /** Rows per page. `0` (or less) returns every match, with no range applied. */
     limit?: number;
+    /** Explicit row offset, overriding the one derived from `page`. */
+    offset?: number;
     search?: string;
     languageId?: number;
+    /** Legacy single-category filter. Superseded by `categoryIds`, which wins when both are set. */
     categoryId?: string;
+    /** Products in ANY of these categories. */
+    categoryIds?: string[];
+    /** Restrict to an explicit set of product ids (hand-picked selections). */
+    productIds?: string[];
+    /** Restrict to products belonging to these translation groups. */
+    translationGroupIds?: string[];
     status?: 'active' | 'draft' | 'archived' | 'all';
   } = {}
 ) {
-  const start = (page - 1) * limit;
+  const isPaged = limit > 0;
+  const start = typeof offset === 'number' ? Math.max(0, offset) : (page - 1) * limit;
   const end = start + limit - 1;
 
   let query = supabase
@@ -250,8 +265,12 @@ export async function getProducts(
       'id, title, average_rating, total_reviews, sku, upc, price, prices, sale_price, sale_prices, sale_start_at, sale_end_at, scheduled_price, scheduled_prices, scheduled_price_at, is_taxable, product_type, payment_provider, short_description, stock, status, slug, language_id, translation_group_id, freemius_product_id, freemius_plan_id, trial_period_days, trial_requires_payment_method, product_media(media(file_path, object_key)), product_variants(id, price, prices, sale_price, sale_prices, sale_start_at, sale_end_at, scheduled_price, scheduled_prices, scheduled_price_at), freemius_plans(id, name, title, freemius_pricing(id, license_quota, api_monthly_price, api_annual_price, api_lifetime_price, override_monthly_price, override_annual_price, override_lifetime_price, is_active)), product_categories(category:categories(id, name, slug, description, name_translations, description_translations))',
       { count: 'exact' }
     )
-    .range(start, end)
     .order('created_at', { ascending: false });
+
+  // An unlimited caller (limit <= 0) wants every match, so no range is applied.
+  if (isPaged) {
+    query = query.range(start, end);
+  }
 
   // Storefront reads default to active-only so draft and archived products never
   // appear in public blocks such as the product grid. CMS/admin callers pass
@@ -264,25 +283,52 @@ export async function getProducts(
     query = query.eq('language_id', languageId);
   }
 
-  if (categoryId) {
+  if (productIds) {
+    if (productIds.length === 0) {
+      return { data: [], error: null, count: 0 };
+    }
+    query = query.in('id', productIds);
+  }
+
+  if (translationGroupIds) {
+    if (translationGroupIds.length === 0) {
+      return { data: [], error: null, count: 0 };
+    }
+    query = query.in('translation_group_id', translationGroupIds);
+  }
+
+  // `categoryIds` is the multi-select form; `categoryId` is the pre-multi-select
+  // field kept for blocks saved before it existed.
+  const resolvedCategoryIds = categoryIds?.length
+    ? categoryIds
+    : categoryId
+      ? [categoryId]
+      : [];
+
+  if (resolvedCategoryIds.length > 0) {
     const { data: productCategoryRows, error: categoryError } = await supabase
       .from('product_categories' as any)
       .select('product_id')
-      .eq('category_id', categoryId);
+      .in('category_id', resolvedCategoryIds);
 
     if (categoryError) {
       return { data: [], error: categoryError, count: 0 };
     }
 
-    const productIds = (productCategoryRows || [])
-      .map((row: any) => row.product_id)
-      .filter(Boolean);
+    // A product in two selected categories comes back twice; `.in` needs it once.
+    const categoryProductIds = Array.from(
+      new Set(
+        (productCategoryRows || [])
+          .map((row: any) => row.product_id)
+          .filter(Boolean)
+      )
+    );
 
-    if (productIds.length === 0) {
+    if (categoryProductIds.length === 0) {
       return { data: [], error: null, count: 0 };
     }
 
-    query = query.in('id', productIds);
+    query = query.in('id', categoryProductIds);
   }
 
   if (search) {

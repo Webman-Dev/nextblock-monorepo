@@ -491,13 +491,13 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
     type: "product_grid",
     label: "Product Grid",
     icon: "ShoppingBag", // Lucide icon
-    initialContent: { type: 'latest', limit: 6 } as ProductGridBlockContent,
+    initialContent: { type: 'latest', limit: 6, showPagination: false } as ProductGridBlockContent,
     editorComponentFilename: "ProductGridBlockEditor.tsx", // Assuming standard naming
     rendererComponentFilename: "ProductGridBlockRenderer.tsx", // Assuming mapping to ProductGridBlock.tsx handled by renderer map not shown here, or we need to ensure the renderer map uses the file we created. The prompt implies creating the file in `lib/blocks` serves as the component. I will assume the system maps it.
     schema: ProductGridBlockSchema,
     documentation: {
-        description: 'Displays a grid of products.',
-        useCases: ['Homepage featured products', 'Category pages']
+        description: 'Displays a grid of products: the latest ones, everything in one or more categories, or a hand-picked list.',
+        useCases: ['Homepage featured products', 'Category pages', 'Curated collections']
     }
   },
 

@@ -16,6 +16,8 @@ import {
 } from "@nextblock-cms/ui";
 import { Search, X, Package } from 'lucide-react';
 import { blockRegistry, BlockType } from '../../../../lib/blocks/blockRegistry';
+import { isEcommerceBlockType } from '../../../../lib/blocks/blockTypes';
+import { useEcommerceActive } from '../../components/EcommerceActiveContext';
 import BlockTypeCard from './BlockTypeCard';
 
 interface BlockTypeSelectorProps {
@@ -25,7 +27,8 @@ interface BlockTypeSelectorProps {
   allowedBlockTypes?: BlockType[];
 }
 
-const CATEGORIES = ["All", "Layout", "Content", "Media", "Interactive", "E-commerce", "Custom"];
+const ECOMMERCE_CATEGORY = "E-commerce";
+const CATEGORIES = ["All", "Layout", "Content", "Media", "Interactive", ECOMMERCE_CATEGORY, "Custom"];
 
 const getBlockCategory = (type: string, isCustomSlug?: boolean): string => {
   if (isCustomSlug) {
@@ -50,7 +53,7 @@ const getBlockCategory = (type: string, isCustomSlug?: boolean): string => {
     case 'cart':
     case 'checkout':
     case 'product_details':
-      return 'E-commerce';
+      return ECOMMERCE_CATEGORY;
     default:
       return 'Content';
   }
@@ -65,6 +68,9 @@ const BlockTypeSelector: React.FC<BlockTypeSelectorProps> = ({
   const [searchQuery, setSearchQuery] = React.useState('');
   const [activeCategory, setActiveCategory] = React.useState('All');
   const [customDefs, setCustomDefs] = React.useState<any[]>([]);
+  // Store blocks are only offered when the ecommerce package is activated. The
+  // context defaults to false outside the CMS layout, so this fails closed.
+  const isEcommerceActive = useEcommerceActive();
 
   // Reset state and fetch custom blocks when modal is opened
   React.useEffect(() => {
@@ -93,10 +99,16 @@ const BlockTypeSelector: React.FC<BlockTypeSelectorProps> = ({
     onOpenChange(false);
   };
 
+  const visibleCategories = React.useMemo(
+    () => CATEGORIES.filter((category) => category !== ECOMMERCE_CATEGORY || isEcommerceActive),
+    [isEcommerceActive]
+  );
+
   const blockDefs = React.useMemo(() => {
     const coreDefs = Object.values(blockRegistry).filter(
       (blockDef) =>
-        !allowedBlockTypes || allowedBlockTypes.includes(blockDef.type)
+        (!allowedBlockTypes || allowedBlockTypes.includes(blockDef.type)) &&
+        (isEcommerceActive || !isEcommerceBlockType(blockDef.type))
     );
 
     const mappedCustomDefs = customDefs.map((def) => ({
@@ -114,7 +126,7 @@ const BlockTypeSelector: React.FC<BlockTypeSelectorProps> = ({
     }));
 
     return [...coreDefs, ...mappedCustomDefs];
-  }, [allowedBlockTypes, customDefs]);
+  }, [allowedBlockTypes, customDefs, isEcommerceActive]);
 
   // Memoized filter and search results to prevent re-calculations during key strokes
   const filteredBlockDefs = React.useMemo(() => {
@@ -174,7 +186,7 @@ const BlockTypeSelector: React.FC<BlockTypeSelectorProps> = ({
 
             {/* Category Filter Tabs */}
             <div className="flex flex-wrap gap-1.5 pb-3 border-b border-border">
-              {CATEGORIES.map((category) => (
+              {visibleCategories.map((category) => (
                 <button
                   key={category}
                   type="button"

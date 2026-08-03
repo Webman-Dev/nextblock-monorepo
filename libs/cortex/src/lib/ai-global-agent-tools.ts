@@ -853,9 +853,13 @@ const fallbackBlockSchemas: Record<BlockType, z.ZodTypeAny> = {
   product_details: z.object({}),
   product_grid: z.object({
     categoryId: z.string().optional(),
-    limit: z.number().min(1).max(20).default(6),
+    categoryIds: z.array(z.string()).max(20).optional(),
+    // 0 = unlimited (every match on one page).
+    limit: z.number().min(0).max(48).default(6),
+    productIds: z.array(z.string()).max(24).optional(),
+    showPagination: z.boolean().default(false),
     title: z.string().optional(),
-    type: z.enum(['latest', 'category']).default('latest'),
+    type: z.enum(['latest', 'category', 'manual']).default('latest'),
   }),
   section: sectionBlockFallbackSchema,
   testimonial: z.object({

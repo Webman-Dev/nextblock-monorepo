@@ -1,6 +1,6 @@
 {
   "name": "@nextblock-cms/editor",
-  "version": "0.13.8",
+  "version": "0.13.9",
   "main": "./index.js",
   "typings": "./index.d.ts",
   "exports": {

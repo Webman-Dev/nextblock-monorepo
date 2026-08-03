@@ -22,6 +22,7 @@ import { FeedbackModal } from "./components/FeedbackModal";
 import { CortexGlobalAgentChat } from "./components/CortexGlobalAgentChat";
 import { CortexAiPageContextProvider } from "./components/CortexAiPageContext";
 import { CortexAiActiveProvider } from "./components/CortexAiActiveContext";
+import { EcommerceActiveProvider } from "./components/EcommerceActiveContext";
 import { useAppBranding } from "../../components/AppShell";
 import { resolveMediaUrl } from "../../lib/media/resolveMediaUrl";
 
@@ -257,6 +258,7 @@ export default function CmsClientLayout({
   return (
     <CortexAiPageContextProvider>
       <CortexAiActiveProvider isActive={isCortexAiActive}>
+      <EcommerceActiveProvider isActive={isEcommerceActive}>
     <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-slate-50 dark:bg-slate-950 md:flex-row">
       <div className="fixed bottom-4 right-4 z-[60] md:hidden">
         <Button
@@ -516,6 +518,7 @@ export default function CmsClientLayout({
       )}
       {isAdmin && isCortexAiActive && <CortexGlobalAgentChat />}
     </div>
+      </EcommerceActiveProvider>
       </CortexAiActiveProvider>
     </CortexAiPageContextProvider>
   )
