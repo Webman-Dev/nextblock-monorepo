@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@nextblock-cms/db/server';
 import {
   createEmailChallenge,
+  getEmailResendCooldownSeconds,
   issueTwoFactorVerifiedCookie,
   verifyEmailChallenge,
 } from '../../../lib/auth/twoFactor';
@@ -15,6 +16,7 @@ import {
   getCookieValue,
 } from '../../../lib/auth/cookies';
 import { sendTwoFactorCodeEmail } from '../../actions/twoFactorEmail';
+import { isEmailConfigured } from '../../../lib/config/email-settings';
 
 function safeRedirect(path?: string): string {
   return path && path.startsWith('/') && !path.startsWith('//') ? path : '/cms/dashboard';
@@ -85,7 +87,25 @@ export async function resendEmailCode() {
   } = await supabase.auth.getUser();
   if (!user?.email) return { error: 'No email address is associated with your account.' };
 
+  // No transport means the code can never arrive; say so rather than claiming it was sent.
+  if (!(await isEmailConfigured())) {
+    return {
+      error:
+        'This site has no email server configured, so a code cannot be sent. Contact your administrator.',
+    };
+  }
+
+  const wait = await getEmailResendCooldownSeconds(user.id);
+  if (wait > 0) {
+    return { error: `A code was just sent. Please wait ${wait}s before requesting another.` };
+  }
+
   const code = await createEmailChallenge(user.id);
-  await sendTwoFactorCodeEmail(user.email, code);
+  try {
+    await sendTwoFactorCodeEmail(user.email, code);
+  } catch (sendError) {
+    console.error('Failed to send 2FA email code:', sendError);
+    return { error: 'The mail server rejected the message. Please try again in a moment.' };
+  }
   return { success: true, message: `A new code is on its way to ${user.email}.` };
 }

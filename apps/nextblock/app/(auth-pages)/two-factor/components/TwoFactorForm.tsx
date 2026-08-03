@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { unstable_rethrow } from 'next/navigation';
 import { Alert, AlertDescription, Button, Input, Label, Spinner } from '@nextblock-cms/ui';
 import { resendEmailCode, verifyEmailCode, verifyTotpChallenge } from '../actions';
+
+/** Matches the security panel: relays queue, so parking the button beats spamming it. */
+const RESEND_COOLDOWN_SECONDS = 30;
 
 interface TwoFactorFormProps {
   type: 'totp' | 'email';
@@ -24,6 +27,13 @@ export default function TwoFactorForm({
   const [info, setInfo] = useState<string | null>(
     type === 'email' && pendingEmailCode ? `Enter the code we sent to ${email}.` : null,
   );
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((seconds) => seconds - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
   const submit = (codeToSubmit: string = code) => {
     if (codeToSubmit.length !== 6) return;
@@ -48,13 +58,17 @@ export default function TwoFactorForm({
   };
 
   const resend = () => {
+    if (cooldown > 0) return;
     setError(null);
     setInfo(null);
     startTransition(async () => {
       try {
         const result = await resendEmailCode();
         if (result?.error) setError(result.error);
-        else if (result?.message) setInfo(result.message);
+        else if (result?.message) {
+          setInfo(result.message);
+          setCooldown(RESEND_COOLDOWN_SECONDS);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not send a code.');
       }
@@ -116,14 +130,24 @@ export default function TwoFactorForm({
       </form>
 
       {type === 'email' && (
-        <button
-          type="button"
-          onClick={resend}
-          disabled={isPending}
-          className="mt-4 w-full text-center text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
-        >
-          {pendingEmailCode ? 'Resend code' : 'Send me a code'}
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={resend}
+            disabled={isPending || cooldown > 0}
+            className="mt-4 w-full text-center text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:no-underline disabled:opacity-50"
+          >
+            {cooldown > 0
+              ? `Resend available in ${cooldown}s`
+              : pendingEmailCode
+                ? 'Resend code'
+                : 'Send me a code'}
+          </button>
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            Codes can take a minute to arrive. If you request another, the earlier one still
+            works — enter whichever reaches you first.
+          </p>
+        </>
       )}
     </div>
   );

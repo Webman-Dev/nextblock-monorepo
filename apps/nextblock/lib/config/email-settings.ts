@@ -170,14 +170,46 @@ export async function saveEmailSettings(input: SaveEmailSettingsInput): Promise<
       throw new Error('Failed to save email credentials.');
     }
   }
+
+  // The mailer memoizes the resolved transport config; make the new values live now.
+  invalidateEmailConfigCache();
+}
+
+// Resolving SMTP costs two service-role reads plus an AES decrypt of each secret, and
+// transactional email (2FA codes especially) is latency-sensitive. The values only change
+// when an admin saves the form, so memoize briefly and bust the cache on save.
+const CONFIG_CACHE_TTL_MS = 60_000;
+let configCache: { value: ResolvedEmailConfig | null; expiresAt: number } | null = null;
+
+/** Drop the memoized SMTP config so the next resolve re-reads the DB. */
+export function invalidateEmailConfigCache(): void {
+  configCache = null;
+}
+
+/**
+ * Cheap "can this instance actually send mail right now?" check for UI gating. Never
+ * logs — an unconfigured instance is an expected state here, not an error condition.
+ */
+export async function isEmailConfigured(): Promise<boolean> {
+  return (await resolveEmailServerConfig({ silent: true })) !== null;
 }
 
 /**
  * Resolve the full SMTP transport config, DB-first with an env fallback. Uses the
  * service-role client so it works from any context (the secret row is ADMIN-only under
  * RLS). Returns null when host/user/pass/from cannot be resolved from either source.
+ *
+ * Memoized for CONFIG_CACHE_TTL_MS; pass `silent` when "not configured" is an expected
+ * answer (UI gating) rather than a misconfiguration worth warning about.
  */
-export async function resolveEmailServerConfig(): Promise<ResolvedEmailConfig | null> {
+export async function resolveEmailServerConfig(
+  options: { silent?: boolean } = {},
+): Promise<ResolvedEmailConfig | null> {
+  const cached = configCache;
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
   let pub: EmailPublicSettings = DEFAULT_EMAIL_PUBLIC_SETTINGS;
   let secret: Record<string, unknown> = {};
 
@@ -201,12 +233,15 @@ export async function resolveEmailServerConfig(): Promise<ResolvedEmailConfig | 
   const pass = resolveConfigValue(tryDecryptWithEnvKey(secret['pass']), 'SMTP_PASS');
 
   if (!host || !port || !user || !pass || !fromEmail) {
-    console.warn('Email is not configured (CMS or SMTP_* env). Outbound email will not be sent.');
+    if (!options.silent) {
+      console.warn('Email is not configured (CMS or SMTP_* env). Outbound email will not be sent.');
+    }
+    configCache = { value: null, expiresAt: Date.now() + CONFIG_CACHE_TTL_MS };
     return null;
   }
 
   const portNumber = Number(port);
-  return {
+  const resolved: ResolvedEmailConfig = {
     host,
     port: portNumber,
     // Honor the CMS toggle; fall back to the SMTPS convention (465 ⇒ implicit TLS).
@@ -214,4 +249,6 @@ export async function resolveEmailServerConfig(): Promise<ResolvedEmailConfig | 
     auth: { user, pass },
     from: fromName ? `"${fromName}" <${fromEmail}>` : fromEmail,
   };
+  configCache = { value: resolved, expiresAt: Date.now() + CONFIG_CACHE_TTL_MS };
+  return resolved;
 }

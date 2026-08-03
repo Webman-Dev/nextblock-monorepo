@@ -3,6 +3,7 @@
 
 import { createClient } from '@nextblock-cms/db/server';
 import { revalidatePath } from 'next/cache';
+import type { SettingsActionResult } from '../../../../lib/cms/action-result';
 
 export type CopyrightSettings = {
   [key: string]: string;
@@ -50,13 +51,15 @@ export async function getCopyrightSettings(): Promise<CopyrightSettings> {
   return data.value as CopyrightSettings;
 }
 
-export async function updateCopyrightSettings(formData: FormData) {
+export async function updateCopyrightSettings(
+  formData: FormData,
+): Promise<SettingsActionResult> {
   const supabase = createClient();
 
   // Check if user is an admin
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    throw new Error('You must be logged in to update settings.');
+    return { ok: false, error: 'You must be logged in to update settings.' };
   }
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
@@ -65,7 +68,7 @@ export async function updateCopyrightSettings(formData: FormData) {
     .single();
 
   if (profileError || !profile || !['ADMIN', 'WRITER'].includes(profile.role)) {
-    throw new Error('You do not have permission to perform this action.');
+    return { ok: false, error: 'You do not have permission to perform this action.' };
   }
 
   const newSettings: CopyrightSettings = {};
@@ -82,7 +85,7 @@ export async function updateCopyrightSettings(formData: FormData) {
 
   if (error) {
     console.error('Error updating copyright settings:', error);
-    throw new Error('Failed to update copyright settings.');
+    return { ok: false, error: 'Failed to update copyright settings.' };
   }
 
   // Persist the footer attribution toggle. The client always submits an explicit
@@ -94,11 +97,11 @@ export async function updateCopyrightSettings(formData: FormData) {
 
   if (attributionError) {
     console.error('Error updating footer attribution setting:', attributionError);
-    throw new Error('Failed to update footer attribution setting.');
+    return { ok: false, error: 'Failed to update footer attribution setting.' };
   }
 
   // Revalidate the root layout to reflect changes immediately across the site.
   revalidatePath('/', 'layout');
 
-  return { success: true, message: 'Copyright settings updated successfully.' };
+  return { ok: true, message: 'Copyright settings updated successfully.' };
 }

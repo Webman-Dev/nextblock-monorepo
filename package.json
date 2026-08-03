@@ -1,6 +1,6 @@
 {
   "name": "@nextblock/source",
-  "version": "0.13.7",
+  "version": "0.13.8",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -57,10 +57,10 @@
     "deploy:supabase": "node tools/scripts/deploy-supabase.js",
     "generate:sandbox": "npx tsx tools/scripts/generate-sandbox-reset.ts",
     "generate:migrations-bundle": "npx tsx tools/scripts/generate-migrations-bundle.ts",
-    "verify:cortex-ai-routing": "npx tsx --tsconfig=tsconfig.base.json apps/nextblock/scripts/verify-cortex-ai-routing.ts",
-    "verify:cortex-ai-generate-blocks": "npx tsx --tsconfig=tsconfig.base.json apps/nextblock/scripts/verify-cortex-ai-generate-blocks.ts",
-    "verify:cortex-ai-global-tools": "npx tsx --tsconfig=tsconfig.base.json apps/nextblock/scripts/verify-cortex-ai-global-tools.ts",
-    "verify:cortex-ai-build-widget": "npx tsx --tsconfig tsconfig.base.json apps/nextblock/scripts/verify-cortex-ai-build-widget.tsx",
+    "verify:cortex-ai-routing": "npx tsx --tsconfig=tsconfig.base.json --conditions=react-server apps/nextblock/scripts/verify-cortex-ai-routing.ts",
+    "verify:cortex-ai-generate-blocks": "npx tsx --tsconfig=tsconfig.base.json --conditions=react-server apps/nextblock/scripts/verify-cortex-ai-generate-blocks.ts",
+    "verify:cortex-ai-global-tools": "npx tsx --tsconfig=tsconfig.base.json --conditions=react-server apps/nextblock/scripts/verify-cortex-ai-global-tools.ts",
+    "verify:cortex-ai-build-widget": "npx tsx --tsconfig tsconfig.base.json --conditions=react-server apps/nextblock/scripts/verify-cortex-ai-build-widget.tsx",
     "verify:editor-block-schema": "npx tsx apps/nextblock/scripts/validate-editor-block-schema.ts",
     "sandbox:reset": "node tools/scripts/reset-sandbox.js",
     "stripe": "stripe listen --forward-to localhost:4200/api/webhooks/stripe",

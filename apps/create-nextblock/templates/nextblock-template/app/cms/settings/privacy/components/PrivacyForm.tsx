@@ -46,7 +46,7 @@ export default function PrivacyForm({ initialSettings }: PrivacyFormProps) {
     startTransition(async () => {
       try {
         const result = await updatePrivacySettings(formData);
-        setMessage({ success: result.message });
+        setMessage(result.ok ? { success: result.message } : { error: result.error });
       } catch (error) {
         setMessage({
           error: error instanceof Error ? error.message : 'An unknown error occurred.',

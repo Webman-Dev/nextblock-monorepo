@@ -15,7 +15,8 @@ export default function GlobalCssForm({ initialCss }: { initialCss: string }) {
     setIsSubmitting(true);
     try {
       const res = await updateGlobalCss(css);
-      toast.success(res.message);
+      if (res.ok) toast.success(res.message);
+      else toast.error(res.error);
     } catch (err: any) {
       toast.error(err.message || 'An error occurred.');
     } finally {

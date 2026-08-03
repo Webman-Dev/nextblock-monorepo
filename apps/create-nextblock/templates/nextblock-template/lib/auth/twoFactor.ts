@@ -16,20 +16,32 @@ const EMAIL_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const TWO_FACTOR_SESSION_TTL_SECONDS = 12 * 60 * 60; // 12 hours
 
 /**
- * Create and persist a hashed 6-digit email code and return the RAW code so the
- * caller can email it. Prior unconsumed codes for the user are invalidated.
+ * How many of a user's most recent codes stay usable at once.
+ *
+ * Relays (SMTP2GO, SES, …) do not preserve send order and can take minutes to deliver, so
+ * a user who clicks "resend" often receives the ORIGINAL code first. Hard-invalidating on
+ * every request made that first-arriving code fail — the classic "the code you emailed me
+ * doesn't work" loop. Keeping a short window of concurrently valid codes removes the race;
+ * the guess surface stays bounded because only this many are ever checked and all of them
+ * die on first successful use (and after EMAIL_CODE_TTL_MS regardless).
+ */
+const MAX_LIVE_EMAIL_CODES = 3;
+
+/**
+ * Minimum gap between user-requested codes. Deliberately shorter than the UI countdown so a
+ * normal user never sees the server refusal — the client timer is a courtesy that a crafted
+ * request ignores, and this is what actually bounds how fast one session can drive the mailer.
+ */
+const RESEND_COOLDOWN_MS = 20_000;
+
+/**
+ * Create and persist a hashed 6-digit email code and return the RAW code so the caller can
+ * email it. Earlier codes are deliberately left alive — see MAX_LIVE_EMAIL_CODES. Kept to a
+ * single round trip: this sits directly in front of the SMTP handoff on a click path.
  */
 export async function createEmailChallenge(userId: string): Promise<string> {
   const code = generateNumericCode(6);
   const svc = getServiceRoleSupabaseClient();
-  const nowIso = new Date().toISOString();
-
-  // Invalidate any earlier pending codes so only the newest one works.
-  await svc
-    .from('email_2fa_challenges')
-    .update({ consumed_at: nowIso })
-    .eq('user_id', userId)
-    .is('consumed_at', null);
 
   await svc.from('email_2fa_challenges').insert({
     user_id: userId,
@@ -38,6 +50,27 @@ export async function createEmailChallenge(userId: string): Promise<string> {
   });
 
   return code;
+}
+
+/**
+ * Seconds the caller must wait before another code may be requested, or 0 when a send is
+ * allowed. Considers consumed rows too — this measures time since the last SEND, not since
+ * the last still-usable code.
+ */
+export async function getEmailResendCooldownSeconds(userId: string): Promise<number> {
+  const svc = getServiceRoleSupabaseClient();
+  const { data } = await svc
+    .from('email_2fa_challenges')
+    .select('created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  const latest = data?.[0]?.created_at;
+  if (!latest) return 0;
+  const elapsed = Date.now() - new Date(latest).getTime();
+  if (!Number.isFinite(elapsed) || elapsed >= RESEND_COOLDOWN_MS) return 0;
+  return Math.ceil((RESEND_COOLDOWN_MS - elapsed) / 1000);
 }
 
 /** True when the user has an unconsumed, unexpired email code awaiting entry. */
@@ -53,7 +86,11 @@ export async function hasPendingEmailChallenge(userId: string): Promise<boolean>
   return Boolean(data && data.length > 0);
 }
 
-/** Verify a submitted email code against the newest live challenge. */
+/**
+ * Verify a submitted email code against the user's live challenges. Any of the newest
+ * MAX_LIVE_EMAIL_CODES is accepted, so a code that arrives out of order still works;
+ * anything older than that window is unreachable even though its row lingers until expiry.
+ */
 export async function verifyEmailChallenge(userId: string, code: string): Promise<boolean> {
   const trimmed = (code || '').trim();
   if (!/^\d{6}$/.test(trimmed)) return false;
@@ -67,14 +104,20 @@ export async function verifyEmailChallenge(userId: string, code: string): Promis
     .is('consumed_at', null)
     .gt('expires_at', nowIso)
     .order('created_at', { ascending: false })
-    .limit(5);
+    .limit(MAX_LIVE_EMAIL_CODES);
 
   if (!data || data.length === 0) return false;
   const candidateHash = sha256Hex(trimmed);
   const match = data.find((row) => safeEqual(row.token_hash, candidateHash));
   if (!match) return false;
 
-  await svc.from('email_2fa_challenges').update({ consumed_at: nowIso }).eq('id', match.id);
+  // Burn every live code for this user, not just the matched row: the siblings from a
+  // resend have served their purpose and must not stay redeemable after a success.
+  await svc
+    .from('email_2fa_challenges')
+    .update({ consumed_at: nowIso })
+    .eq('user_id', userId)
+    .is('consumed_at', null);
   return true;
 }
 

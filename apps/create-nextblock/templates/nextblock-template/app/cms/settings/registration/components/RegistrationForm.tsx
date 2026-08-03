@@ -27,7 +27,7 @@ export default function RegistrationForm({ initialSettings }: RegistrationFormPr
     startTransition(async () => {
       try {
         const result = await updateRegistrationSettings(formData);
-        setMessage({ success: result.message });
+        setMessage(result.ok ? { success: result.message } : { error: result.error });
       } catch (error) {
         setMessage({ error: error instanceof Error ? error.message : 'Failed to save settings.' });
       }

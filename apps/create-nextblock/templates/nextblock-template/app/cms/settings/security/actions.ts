@@ -14,6 +14,7 @@ import {
 } from '../../../../lib/privacy/types';
 import {
   createEmailChallenge,
+  getEmailResendCooldownSeconds,
   issueTwoFactorVerifiedCookie,
   clearTwoFactorVerifiedCookie,
   verifyEmailChallenge,
@@ -28,6 +29,7 @@ import {
   getSystemConfiguration,
   updateSystemConfiguration,
 } from '../../../../lib/setup/system-config';
+import { isEmailConfigured } from '../../../../lib/config/email-settings';
 
 export interface SecurityPanelData {
   email: string;
@@ -38,7 +40,19 @@ export interface SecurityPanelData {
   globalSettings: SecuritySettings;
   trustedDevices: TrustedDeviceRow[];
   autoAcceptSignups: boolean;
+  /** False when no SMTP transport resolves — the email factor cannot be offered. */
+  emailConfigured: boolean;
 }
+
+/**
+ * Every mutating action here returns this instead of throwing. Next replaces the message of
+ * an uncaught Server Action error with a generic string in production, and these messages
+ * ("that code was not valid", "only administrators can…") are exactly the ones the user has
+ * to be able to read.
+ */
+export type ActionResult =
+  | { ok: true; message: string }
+  | { ok: false; error: string; needsSmtp?: boolean };
 
 async function requireUser() {
   const supabase = createClient();
@@ -51,10 +65,37 @@ async function requireUser() {
   return { supabase, user };
 }
 
+/**
+ * Runs an action body, converting anything it throws into a readable returned result.
+ * Business-rule failures should `return` a failure directly; this is the net for the
+ * unexpected (expired session, dropped connection) so it still surfaces a real message.
+ */
+async function guard(body: () => Promise<ActionResult>): Promise<ActionResult> {
+  try {
+    return await body();
+  } catch (error) {
+    console.error('Security settings action failed:', error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Something went wrong.',
+    };
+  }
+}
+
 export async function getSecurityPanelData(): Promise<SecurityPanelData> {
   const { supabase, user } = await requireUser();
 
-  const [{ data: settings }, { data: profile }, { data: factors }] = await Promise.all([
+  // Every read here is independent, so they all go out together — awaiting them inline in
+  // the returned object would serialize the round trips behind each other on page load.
+  const [
+    { data: settings },
+    { data: profile },
+    { data: factors },
+    emailConfigured,
+    globalSettings,
+    trustedDevices,
+    systemConfig,
+  ] = await Promise.all([
     supabase
       .from('user_security_settings')
       .select('mfa_enabled, mfa_type')
@@ -62,6 +103,10 @@ export async function getSecurityPanelData(): Promise<SecurityPanelData> {
       .maybeSingle(),
     supabase.from('profiles').select('role').eq('id', user.id).single(),
     supabase.auth.mfa.listFactors(),
+    isEmailConfigured(),
+    readSecuritySettings(),
+    listTrustedDevices(user.id),
+    getSystemConfiguration(),
   ]);
 
   // listFactors().totp only contains verified TOTP factors.
@@ -73,63 +118,68 @@ export async function getSecurityPanelData(): Promise<SecurityPanelData> {
     mfaType: (settings?.mfa_type as 'totp' | 'email' | null) ?? null,
     hasVerifiedTotp,
     isAdmin: profile?.role === 'ADMIN',
-    globalSettings: await readSecuritySettings(),
-    trustedDevices: await listTrustedDevices(user.id),
-    autoAcceptSignups: (await getSystemConfiguration()).auto_accept_signups,
+    globalSettings,
+    trustedDevices,
+    autoAcceptSignups: systemConfig.auto_accept_signups,
+    emailConfigured,
   };
 }
 
 // --- Sign-up policy (admin only) ------------------------------------------------
 
-export async function updateAutoAcceptSignups(formData: FormData) {
-  const { supabase, user } = await requireUser();
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-  if (profile?.role !== 'ADMIN') {
-    throw new Error('Only administrators can change the sign-up policy.');
-  }
+export async function updateAutoAcceptSignups(formData: FormData): Promise<ActionResult> {
+  return guard(async () => {
+    const { supabase, user } = await requireUser();
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+    if (profile?.role !== 'ADMIN') {
+      return { ok: false, error: 'Only administrators can change the sign-up policy.' };
+    }
 
-  const enabled = formData.get('auto_accept_signups') === 'true';
-  await updateSystemConfiguration({ auto_accept_signups: enabled });
-  revalidatePath('/cms/settings/security');
-  return {
-    success: true,
-    message: enabled
-      ? 'New sign-ups will be auto-approved without email verification.'
-      : 'New sign-ups now require email verification.',
-  };
+    const enabled = formData.get('auto_accept_signups') === 'true';
+    await updateSystemConfiguration({ auto_accept_signups: enabled });
+    revalidatePath('/cms/settings/security');
+    return {
+      ok: true,
+      message: enabled
+        ? 'New sign-ups will be auto-approved without email verification.'
+        : 'New sign-ups now require email verification.',
+    };
+  });
 }
 
 // --- Global policy (admin only) -------------------------------------------------
 
-export async function updateGlobalSecuritySettings(formData: FormData) {
-  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
-    throw new Error('Security settings are disabled in the sandbox environment.');
-  }
-  const { supabase, user } = await requireUser();
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-  if (profile?.role !== 'ADMIN') {
-    throw new Error('Only administrators can change the global security policy.');
-  }
+export async function updateGlobalSecuritySettings(formData: FormData): Promise<ActionResult> {
+  return guard(async () => {
+    if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+      return { ok: false, error: 'Security settings are disabled in the sandbox environment.' };
+    }
+    const { supabase, user } = await requireUser();
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+    if (profile?.role !== 'ADMIN') {
+      return { ok: false, error: 'Only administrators can change the global security policy.' };
+    }
 
-  const days = Number.parseInt(formData.get('trusted_device_days')?.toString() ?? '', 10);
-  const settings: SecuritySettings = {
-    trusted_device_days: Number.isFinite(days)
-      ? Math.min(MAX_TRUSTED_DEVICE_DAYS, Math.max(MIN_TRUSTED_DEVICE_DAYS, days))
-      : 30,
-    enforce_staff_2fa: formData.get('enforce_staff_2fa') === 'true',
-  };
+    const days = Number.parseInt(formData.get('trusted_device_days')?.toString() ?? '', 10);
+    const settings: SecuritySettings = {
+      trusted_device_days: Number.isFinite(days)
+        ? Math.min(MAX_TRUSTED_DEVICE_DAYS, Math.max(MIN_TRUSTED_DEVICE_DAYS, days))
+        : 30,
+      enforce_staff_2fa: formData.get('enforce_staff_2fa') === 'true',
+    };
 
-  await saveSecuritySettings(settings);
-  revalidatePath('/cms/settings/security');
-  return { success: true, message: 'Security policy saved.' };
+    await saveSecuritySettings(settings);
+    revalidatePath('/cms/settings/security');
+    return { ok: true, message: 'Security policy saved.' };
+  });
 }
 
 // --- TOTP enrollment ------------------------------------------------------------
@@ -172,113 +222,159 @@ export async function startTotpEnrollment(): Promise<EnrollTotpResult> {
   };
 }
 
-export async function verifyTotpEnrollment(formData: FormData) {
-  const { supabase, user } = await requireUser();
-  const factorId = formData.get('factorId')?.toString() ?? '';
-  const code = (formData.get('code')?.toString() ?? '').trim();
+export async function verifyTotpEnrollment(formData: FormData): Promise<ActionResult> {
+  return guard(async () => {
+    const { supabase, user } = await requireUser();
+    const factorId = formData.get('factorId')?.toString() ?? '';
+    const code = (formData.get('code')?.toString() ?? '').trim();
 
-  if (!factorId || !/^\d{6}$/.test(code)) {
-    throw new Error('Enter the 6-digit code from your authenticator app.');
-  }
+    if (!factorId || !/^\d{6}$/.test(code)) {
+      return { ok: false, error: 'Enter the 6-digit code from your authenticator app.' };
+    }
 
-  const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
-    factorId,
+    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+      factorId,
+    });
+    if (challengeError || !challenge) {
+      return { ok: false, error: challengeError?.message ?? 'Could not start verification.' };
+    }
+
+    const { error: verifyError } = await supabase.auth.mfa.verify({
+      factorId,
+      challengeId: challenge.id,
+      code,
+    });
+    if (verifyError) {
+      return { ok: false, error: 'That code was not valid. Please try again.' };
+    }
+
+    const { error: upsertError } = await supabase.from('user_security_settings').upsert({
+      user_id: user.id,
+      mfa_enabled: true,
+      mfa_type: 'totp',
+      updated_at: new Date().toISOString(),
+    });
+    if (upsertError) {
+      return { ok: false, error: 'Verified, but failed to save your preference. Please retry.' };
+    }
+
+    revalidatePath('/cms/settings/security');
+    return { ok: true, message: 'Authenticator app enabled.' };
   });
-  if (challengeError || !challenge) {
-    throw new Error(challengeError?.message ?? 'Could not start verification.');
-  }
-
-  const { error: verifyError } = await supabase.auth.mfa.verify({
-    factorId,
-    challengeId: challenge.id,
-    code,
-  });
-  if (verifyError) {
-    throw new Error('That code was not valid. Please try again.');
-  }
-
-  const { error: upsertError } = await supabase.from('user_security_settings').upsert({
-    user_id: user.id,
-    mfa_enabled: true,
-    mfa_type: 'totp',
-    updated_at: new Date().toISOString(),
-  });
-  if (upsertError) {
-    throw new Error('Verified, but failed to save your preference. Please retry.');
-  }
-
-  revalidatePath('/cms/settings/security');
-  return { success: true, message: 'Authenticator app enabled.' };
 }
 
 // --- Email-code enrollment ------------------------------------------------------
 
-export async function sendEmailEnrollmentCode() {
-  const { user } = await requireUser();
-  if (!user.email) {
-    throw new Error('Your account has no email address on file.');
-  }
-  const code = await createEmailChallenge(user.id);
-  await sendTwoFactorCodeEmail(user.email, code, 'enable email two-factor authentication');
-  return { success: true, message: `We sent a 6-digit code to ${user.email}.` };
+export async function sendEmailEnrollmentCode(): Promise<ActionResult> {
+  return guard(async () => {
+    const { user } = await requireUser();
+    if (!user.email) {
+      return { ok: false, error: 'Your account has no email address on file.' };
+    }
+
+    // Check before minting a challenge: without a transport the code can never arrive, and
+    // an unconfigured instance should say so rather than claim an email is on its way.
+    if (!(await isEmailConfigured())) {
+      return {
+        ok: false,
+        needsSmtp: true,
+        error:
+          'Email is not configured on this site, so a code cannot be delivered. Set up SMTP first.',
+      };
+    }
+
+    const wait = await getEmailResendCooldownSeconds(user.id);
+    if (wait > 0) {
+      return {
+        ok: false,
+        error: `A code was just sent. Please wait ${wait}s before requesting another.`,
+      };
+    }
+
+    const code = await createEmailChallenge(user.id);
+    try {
+      await sendTwoFactorCodeEmail(user.email, code, 'enable email two-factor authentication');
+    } catch (sendError) {
+      console.error('Failed to send 2FA enrollment code:', sendError);
+      return {
+        ok: false,
+        error:
+          'Your mail server rejected the message. Check the SMTP settings under Settings → Email and try again.',
+      };
+    }
+
+    return { ok: true, message: `We sent a 6-digit code to ${user.email}.` };
+  });
 }
 
-export async function verifyEmailEnrollment(formData: FormData) {
-  const { supabase, user } = await requireUser();
-  const code = (formData.get('code')?.toString() ?? '').trim();
+export async function verifyEmailEnrollment(formData: FormData): Promise<ActionResult> {
+  return guard(async () => {
+    const { supabase, user } = await requireUser();
+    const code = (formData.get('code')?.toString() ?? '').trim();
 
-  const ok = await verifyEmailChallenge(user.id, code);
-  if (!ok) {
-    throw new Error('That code was incorrect or expired. Request a new one.');
-  }
+    const verified = await verifyEmailChallenge(user.id, code);
+    if (!verified) {
+      return { ok: false, error: 'That code was incorrect or expired. Request a new one.' };
+    }
 
-  const { error } = await supabase.from('user_security_settings').upsert({
-    user_id: user.id,
-    mfa_enabled: true,
-    mfa_type: 'email',
-    updated_at: new Date().toISOString(),
+    const { error } = await supabase.from('user_security_settings').upsert({
+      user_id: user.id,
+      mfa_enabled: true,
+      mfa_type: 'email',
+      updated_at: new Date().toISOString(),
+    });
+    if (error) {
+      return { ok: false, error: 'Verified, but failed to save your preference. Please retry.' };
+    }
+
+    // The user just proved control of their inbox, so this session is satisfied.
+    await issueTwoFactorVerifiedCookie(user.id);
+    revalidatePath('/cms/settings/security');
+    return { ok: true, message: 'Email verification enabled.' };
   });
-  if (error) {
-    throw new Error('Verified, but failed to save your preference. Please retry.');
-  }
-
-  // The user just proved control of their inbox, so this session is satisfied.
-  await issueTwoFactorVerifiedCookie(user.id);
-  revalidatePath('/cms/settings/security');
-  return { success: true, message: 'Email verification enabled.' };
 }
 
 // --- Disable / device management ------------------------------------------------
 
-export async function disableMfa() {
-  const { supabase, user } = await requireUser();
+export async function disableMfa(): Promise<ActionResult> {
+  return guard(async () => {
+    const { supabase, user } = await requireUser();
 
-  const { data: factors } = await supabase.auth.mfa.listFactors();
-  for (const factor of factors?.all ?? []) {
-    await supabase.auth.mfa.unenroll({ factorId: factor.id });
-  }
+    const { data: factors } = await supabase.auth.mfa.listFactors();
+    for (const factor of factors?.all ?? []) {
+      await supabase.auth.mfa.unenroll({ factorId: factor.id });
+    }
 
-  await supabase.from('user_security_settings').upsert({
-    user_id: user.id,
-    mfa_enabled: false,
-    mfa_type: null,
-    updated_at: new Date().toISOString(),
+    const { error } = await supabase.from('user_security_settings').upsert({
+      user_id: user.id,
+      mfa_enabled: false,
+      mfa_type: null,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) {
+      return {
+        ok: false,
+        error: 'Could not turn off two-factor authentication. Please retry.',
+      };
+    }
+
+    await revokeAllTrustedDevices(user.id);
+    await clearTwoFactorVerifiedCookie();
+
+    revalidatePath('/cms/settings/security');
+    return { ok: true, message: 'Two-factor authentication disabled.' };
   });
-
-  await revokeAllTrustedDevices(user.id);
-  await clearTwoFactorVerifiedCookie();
-
-  revalidatePath('/cms/settings/security');
-  return { success: true, message: 'Two-factor authentication disabled.' };
 }
 
-export async function revokeTrustedDeviceAction(formData: FormData) {
-  const { user } = await requireUser();
-  const id = formData.get('id')?.toString() ?? '';
-  if (!id) {
-    throw new Error('Missing device id.');
-  }
-  await revokeTrustedDevice(user.id, id);
-  revalidatePath('/cms/settings/security');
-  return { success: true, message: 'Device revoked.' };
+export async function revokeTrustedDeviceAction(formData: FormData): Promise<ActionResult> {
+  return guard(async () => {
+    const { user } = await requireUser();
+    const id = formData.get('id')?.toString() ?? '';
+    if (!id) {
+      return { ok: false, error: 'Missing device id.' };
+    }
+    await revokeTrustedDevice(user.id, id);
+    revalidatePath('/cms/settings/security');
+    return { ok: true, message: 'Device revoked.' };
+  });
 }

@@ -3,6 +3,7 @@
 import { encodedRedirect } from "@nextblock-cms/utils/server";
 import { createClient, getServiceRoleSupabaseClient } from "@nextblock-cms/db/server";
 import { headers } from "next/headers";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { resolvePostAuthRedirect } from "../lib/auth-redirects";
 import { createEmailChallenge, evaluateTwoFactor } from "../lib/auth/twoFactor";
@@ -169,13 +170,25 @@ export const signInAction = async (formData: FormData) => {
       await setSecureCookie(REMEMBER_INTENT_COOKIE, "1", 15 * 60);
     }
 
-    // Email factor: send the first code now so the challenge page has one waiting.
+    // Email factor: mint the first code now so the challenge page has one waiting. The
+    // challenge row is created synchronously because the page reads it to decide between
+    // "Resend code" and "Send me a code"; only the SMTP conversation is deferred, so the
+    // redirect isn't held behind a relay handshake that can take seconds. Delivery failure
+    // was already swallowed here — the user resends from the challenge page — so moving it
+    // off the response path costs no error reporting.
     if (evaluation.status === "email_required" && data.user.email) {
+      const recipient = data.user.email;
       try {
         const code = await createEmailChallenge(data.user.id);
-        await sendTwoFactorCodeEmail(data.user.email, code);
-      } catch (sendError) {
-        console.error("Failed to send 2FA email code:", sendError);
+        after(async () => {
+          try {
+            await sendTwoFactorCodeEmail(recipient, code);
+          } catch (sendError) {
+            console.error("Failed to send 2FA email code:", sendError);
+          }
+        });
+      } catch (challengeError) {
+        console.error("Failed to create 2FA email challenge:", challengeError);
       }
     }
 

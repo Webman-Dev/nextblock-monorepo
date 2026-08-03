@@ -3,6 +3,7 @@
 
 import { createClient } from '@nextblock-cms/db/server';
 import { revalidatePath } from 'next/cache';
+import type { SettingsActionResult } from '../../../../lib/cms/action-result';
 
 export async function getGlobalCss(): Promise<string> {
   const supabase = createClient();
@@ -33,12 +34,12 @@ export async function getGlobalCss(): Promise<string> {
   return String(data.value);
 }
 
-export async function updateGlobalCss(css: string) {
+export async function updateGlobalCss(css: string): Promise<SettingsActionResult> {
   const supabase = createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    throw new Error('You must be logged in to update settings.');
+    return { ok: false, error: 'You must be logged in to update settings.' };
   }
 
   const { data: profile, error: profileError } = await supabase
@@ -48,7 +49,7 @@ export async function updateGlobalCss(css: string) {
     .single();
 
   if (profileError || !profile || !['ADMIN', 'WRITER'].includes(profile.role)) {
-    throw new Error('You do not have permission to perform this action.');
+    return { ok: false, error: 'You do not have permission to perform this action.' };
   }
 
   const { error } = await supabase
@@ -57,9 +58,9 @@ export async function updateGlobalCss(css: string) {
 
   if (error) {
     console.error('Error updating global CSS:', error);
-    throw new Error('Failed to update CSS.');
+    return { ok: false, error: 'Failed to update CSS.' };
   }
 
   revalidatePath('/', 'layout');
-  return { success: true, message: 'Global CSS updated successfully.' };
+  return { ok: true, message: 'Global CSS updated successfully.' };
 }

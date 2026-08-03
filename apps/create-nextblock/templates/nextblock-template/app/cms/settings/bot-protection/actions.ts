@@ -3,6 +3,7 @@
 
 import { createClient } from '@nextblock-cms/db/server';
 import { revalidatePath } from 'next/cache';
+import type { SettingsActionResult } from '../../../../lib/cms/action-result';
 
 export type BotProtectionSettings = {
   provider: 'none' | 'turnstile' | 'recaptcha';
@@ -37,13 +38,15 @@ export async function getBotProtectionSettings(): Promise<BotProtectionSettings>
   };
 }
 
-export async function updateBotProtectionSettings(formData: FormData) {
+export async function updateBotProtectionSettings(
+  formData: FormData,
+): Promise<SettingsActionResult> {
   const supabase = createClient();
 
   // Verify auth and role
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    throw new Error('You must be logged in to update settings.');
+    return { ok: false, error: 'You must be logged in to update settings.' };
   }
 
   const { data: profile, error: profileError } = await supabase
@@ -53,7 +56,7 @@ export async function updateBotProtectionSettings(formData: FormData) {
     .single();
 
   if (profileError || !profile || profile.role !== 'ADMIN') {
-    throw new Error('You do not have permission to perform this action.');
+    return { ok: false, error: 'You do not have permission to perform this action.' };
   }
 
   const provider = formData.get('provider') as 'none' | 'turnstile' | 'recaptcha';
@@ -70,7 +73,7 @@ export async function updateBotProtectionSettings(formData: FormData) {
 
   if (publicError) {
     console.error('Error updating public bot protection settings:', publicError);
-    throw new Error('Failed to update bot protection settings.');
+    return { ok: false, error: 'Failed to update bot protection settings.' };
   }
 
   // Update secret settings (secretKey)
@@ -83,11 +86,11 @@ export async function updateBotProtectionSettings(formData: FormData) {
 
   if (secretError) {
     console.error('Error updating secret bot protection settings:', secretError);
-    throw new Error('Failed to update bot protection secrets.');
+    return { ok: false, error: 'Failed to update bot protection secrets.' };
   }
 
   // Revalidate root layout so scripts update instantly
   revalidatePath('/', 'layout');
 
-  return { success: true, message: 'Bot protection settings updated successfully.' };
+  return { ok: true, message: 'Bot protection settings updated successfully.' };
 }

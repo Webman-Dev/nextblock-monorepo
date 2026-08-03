@@ -50,6 +50,16 @@ type CortexAiSettingsStatus = {
   unsplashAppName: string | null;
 };
 
+/**
+ * How every action in this file reports back: the page reads `?success=` / `?error=` and
+ * renders it. These are plain `<form action={fn}>` submissions, so a return value would be
+ * discarded and a thrown error would take out the page (with its message replaced by a
+ * generic string in production).
+ *
+ * Must be called OUTSIDE the try blocks below. `redirect()` signals itself by throwing
+ * NEXT_REDIRECT, so calling this inside a `try` would have the `catch` swallow the
+ * navigation and re-redirect with the framework's digest as the user-facing message.
+ */
 function redirectWithStatus(status: 'success' | 'error', message: string): never {
   redirect(`${CORTEX_AI_SETTINGS_PATH}?${status}=${encodeURIComponent(message)}`);
 }
@@ -173,7 +183,7 @@ export async function getCortexAiSettingsStatus(): Promise<CortexAiSettingsStatu
 
 export async function saveOpenRouterApiKeyAction(formData: FormData) {
   if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
-    throw new Error('Sandbox environment cannot save keys to the database.');
+    redirectWithStatus('error', 'Sandbox environment cannot save keys to the database.');
   }
 
   try {
@@ -206,7 +216,7 @@ export async function saveOpenRouterApiKeyAction(formData: FormData) {
 
 export async function clearOpenRouterApiKeyAction() {
   if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
-    throw new Error('Sandbox environment cannot clear keys from the database.');
+    redirectWithStatus('error', 'Sandbox environment cannot clear keys from the database.');
   }
 
   try {
@@ -235,7 +245,7 @@ export async function clearOpenRouterApiKeyAction() {
 
 export async function saveStockPhotoKeysAction(formData: FormData) {
   if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
-    throw new Error('Sandbox environment cannot save keys to the database.');
+    redirectWithStatus('error', 'Sandbox environment cannot save keys to the database.');
   }
 
   try {
@@ -287,7 +297,7 @@ export async function saveStockPhotoKeysAction(formData: FormData) {
 
 export async function clearStockPhotoKeysAction() {
   if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
-    throw new Error('Sandbox environment cannot clear keys from the database.');
+    redirectWithStatus('error', 'Sandbox environment cannot clear keys from the database.');
   }
 
   try {
@@ -313,7 +323,7 @@ export async function clearStockPhotoKeysAction() {
 
 export async function saveCortexAiAgentSettingsAction(formData: FormData) {
   if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
-    throw new Error('Sandbox environment cannot save settings to the database.');
+    redirectWithStatus('error', 'Sandbox environment cannot save settings to the database.');
   }
 
   try {
@@ -357,7 +367,7 @@ export async function saveCortexAiAgentSettingsAction(formData: FormData) {
 
 export async function resetCortexAiAgentSettingsAction() {
   if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
-    throw new Error('Sandbox environment cannot change settings in the database.');
+    redirectWithStatus('error', 'Sandbox environment cannot change settings in the database.');
   }
 
   try {
@@ -383,7 +393,7 @@ export async function resetCortexAiAgentSettingsAction() {
 
 export async function saveCortexAiModelSelectionAction(formData: FormData) {
   if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
-    throw new Error('Sandbox environment cannot save model selection to the database.');
+    redirectWithStatus('error', 'Sandbox environment cannot save model selection to the database.');
   }
 
   try {
@@ -440,7 +450,7 @@ export async function saveCortexAiModelSelectionAction(formData: FormData) {
 
 export async function clearCortexAiModelSelectionAction() {
   if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
-    throw new Error('Sandbox environment cannot clear model selection from the database.');
+    redirectWithStatus('error', 'Sandbox environment cannot clear model selection from the database.');
   }
 
   try {

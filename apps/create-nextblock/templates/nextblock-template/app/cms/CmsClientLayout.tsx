@@ -496,7 +496,7 @@ export default function CmsClientLayout({
               {pageTitle}
             </h1>
             <Button asChild variant="outline" size="sm" className="shrink-0">
-              <Link href="/">
+              <Link href="/" target="_blank">
                 <ExternalLink className="h-4 w-4" />
                 <span className="hidden sm:inline">View Site</span>
               </Link>

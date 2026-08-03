@@ -33,11 +33,7 @@ export default function BotProtectionForm({ initialSettings }: BotProtectionForm
     startTransition(async () => {
       try {
         const result = await updateBotProtectionSettings(formData);
-        if (result.success) {
-          setMessage({ success: result.message });
-        } else {
-          setMessage({ error: 'An unexpected error occurred.' });
-        }
+        setMessage(result.ok ? { success: result.message } : { error: result.error });
       } catch (error) {
         setMessage({ error: error instanceof Error ? error.message : 'An unknown error occurred.' });
       }

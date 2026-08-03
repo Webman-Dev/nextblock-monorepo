@@ -52,6 +52,10 @@ export default function EmailForm({ initialSettings }: EmailFormProps) {
     startTransition(async () => {
       try {
         const result = await updateEmailSettings(formData);
+        if (!result.ok) {
+          setMessage({ error: result.error });
+          return;
+        }
         setMessage({ success: result.message });
         setUser('');
         setPass('');
@@ -68,7 +72,7 @@ export default function EmailForm({ initialSettings }: EmailFormProps) {
     startTestTransition(async () => {
       try {
         const result = await sendTestEmail(formData);
-        setMessage({ success: result.message });
+        setMessage(result.ok ? { success: result.message } : { error: result.error });
       } catch (error) {
         setMessage({ error: error instanceof Error ? error.message : 'Failed to send test email.' });
       }

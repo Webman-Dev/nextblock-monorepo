@@ -7,6 +7,7 @@ import {
   mergePrivacySettings,
 } from '../../../../lib/privacy/settings';
 import type { PrivacySettings } from '../../../../lib/privacy/types';
+import type { SettingsActionResult } from '../../../../lib/cms/action-result';
 
 export interface GoogleAnalyticsSettings {
   gtm_id: string;
@@ -23,13 +24,14 @@ export async function getGoogleAnalyticsSettings(): Promise<GoogleAnalyticsSetti
   };
 }
 
-async function assertAdmin(): Promise<void> {
+/** Null when the caller is an ADMIN, otherwise the failure to return. */
+async function adminCheck(): Promise<SettingsActionResult | null> {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    throw new Error('You must be logged in to update settings.');
+    return { ok: false, error: 'You must be logged in to update settings.' };
   }
   const { data: profile } = await supabase
     .from('profiles')
@@ -37,12 +39,16 @@ async function assertAdmin(): Promise<void> {
     .eq('id', user.id)
     .single();
   if (!profile || profile.role !== 'ADMIN') {
-    throw new Error('You do not have permission to perform this action.');
+    return { ok: false, error: 'You do not have permission to perform this action.' };
   }
+  return null;
 }
 
-export async function updateGoogleAnalyticsSettings(formData: FormData) {
-  await assertAdmin();
+export async function updateGoogleAnalyticsSettings(
+  formData: FormData,
+): Promise<SettingsActionResult> {
+  const denied = await adminCheck();
+  if (denied) return denied;
 
   // Only the analytics fields are touched; mergePrivacySettings preserves the
   // banner/corporate fields owned by the Privacy & Consent page.
@@ -52,9 +58,14 @@ export async function updateGoogleAnalyticsSettings(formData: FormData) {
     custom_scripts: formData.get('custom_scripts')?.toString() ?? '',
   };
 
-  await mergePrivacySettings(patch);
+  try {
+    await mergePrivacySettings(patch);
+  } catch (error) {
+    console.error('Failed to save Google Analytics settings:', error);
+    return { ok: false, error: 'Failed to save Google Analytics settings.' };
+  }
   // The analytics guard (GTM/GA4 + custom scripts) lives in the root layout.
   revalidatePath('/', 'layout');
 
-  return { success: true, message: 'Google Analytics settings saved.' };
+  return { ok: true, message: 'Google Analytics settings saved.' };
 }

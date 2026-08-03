@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const cacheMocks = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
+  // Reached transitively: interactions -> email -> email/branding -> site-settings, which
+  // wraps its reader in unstable_cache at module scope. Pass the loader straight through.
+  unstable_cache: vi.fn((fn: unknown) => fn),
 }));
 
 const dbServerMocks = vi.hoisted(() => ({
