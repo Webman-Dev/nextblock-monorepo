@@ -1,14 +1,14 @@
 // app/cms/blocks/components/EditableBlock.tsx
 "use client";
 
-import React, { useState, Suspense, useMemo, lazy, LazyExoticComponent, ComponentType } from 'react';
+import React, { useState, useEffect, useRef, Suspense, useMemo, lazy, LazyExoticComponent, ComponentType } from 'react';
 import type { Database } from "@nextblock-cms/db";
 import PostsGridBlockEditor from '../editors/PostsGridBlockEditor';
 
 type Block = Database['public']['Tables']['blocks']['Row'];
 import { Button, Card, CardContent, Avatar, AvatarImage, AvatarFallback } from "@nextblock-cms/ui";
 import { GripVertical, Edit2, Image as ImageIcon, MessageSquareQuote } from "lucide-react";
-import { getBlockDefinition, blockRegistry, BlockType } from '../../../../lib/blocks/blockRegistry';
+import { blockHasEditableContent, getBlockDefinition, blockRegistry, BlockType } from '../../../../lib/blocks/blockRegistry';
 import { BlockEditorModal } from './BlockEditorModal';
 import { DeleteBlockButtonClient } from './DeleteBlockButtonClient';
 import { cn } from '@nextblock-cms/utils';
@@ -23,6 +23,10 @@ export interface EditableBlockProps {
   dragHandleProps?: Record<string, any>;
   onEditNestedBlock?: (parentBlockId: string, columnIndex: number, blockIndexInColumn: number) => void;
   className?: string;
+  /** Open this block's editor as soon as it mounts — set for a just-added block. */
+  autoOpenEditor?: boolean;
+  /** Called once the auto-open has fired, so the parent can clear the flag. */
+  onAutoOpenHandled?: () => void;
 }
 
 export default function EditableBlock({
@@ -32,12 +36,15 @@ export default function EditableBlock({
   dragHandleProps,
   onEditNestedBlock,
   className,
+  autoOpenEditor,
+  onAutoOpenHandled,
 }: EditableBlockProps) {
   void onEditNestedBlock;
   // Move all hooks to the top before any conditional returns
   const [isConfigPanelOpen, setIsConfigPanelOpen] = useState(false);
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
   const [LazyEditor, setLazyEditor] = useState<LazyExoticComponent<ComponentType<any>> | ComponentType<any> | null>(null);
+  const autoOpenedRef = useRef<number | null>(null);
 
   const SectionEditor = useMemo(() => {
     if (block?.block_type === 'section') {
@@ -49,15 +56,12 @@ export default function EditableBlock({
     return null;
   }, [block?.block_type]);
 
-  // Add a guard for undefined block prop after hooks
-  if (!block) {
-    // Or some other placeholder/error display
-    return <div className="p-4 border rounded-lg bg-card shadow text-red-500">Error: Block data is missing in EditableBlock.</div>;
-  }
-
-
-
   const handleEditClick = () => {
+    // cart / checkout / product_details are context-driven: empty schema, and the
+    // editor file their registry entry names does not exist. Opening one throws.
+    if (!blockHasEditableContent(block.block_type)) {
+      return;
+    }
     if (block.block_type === 'section') {
       setIsConfigPanelOpen(prev => !prev);
     } else {
@@ -86,6 +90,22 @@ export default function EditableBlock({
       }
     }
   };
+
+  // A block the author just added opens straight into its editor — adding a
+  // heading is always followed by wanting to type one. The ref keeps it to once
+  // per block, so closing the editor (or a router refresh) does not reopen it.
+  useEffect(() => {
+    if (!autoOpenEditor || !block || autoOpenedRef.current === block.id) return;
+    autoOpenedRef.current = block.id;
+    handleEditClick();
+    onAutoOpenHandled?.();
+  }, [autoOpenEditor, block, handleEditClick, onAutoOpenHandled]);
+
+  // Add a guard for undefined block prop after hooks
+  if (!block) {
+    // Or some other placeholder/error display
+    return <div className="p-4 border rounded-lg bg-card shadow text-red-500">Error: Block data is missing in EditableBlock.</div>;
+  }
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     // If the element that was clicked, or any of its parents up to the card, is a button,
@@ -279,14 +299,22 @@ export default function EditableBlock({
        default: {
         const blockDefinition = getBlockDefinition(currentBlockType as BlockType);
         const blockLabel = blockDefinition?.label || currentBlockType;
+        const hasEditableContent = blockHasEditableContent(currentBlockType);
         const placeholder = (
           <div
-            className="py-4 flex flex-col items-center justify-center space-y-2 min-h-[80px] border border-dashed rounded-md bg-muted/20 cursor-pointer hover:border-primary"
+            className={cn(
+              "py-4 flex flex-col items-center justify-center space-y-2 min-h-[80px] border border-dashed rounded-md bg-muted/20",
+              hasEditableContent && "cursor-pointer hover:border-primary"
+            )}
             onClick={handleCardClick}
           >
             <div className="text-center">
               <p className="text-sm font-medium text-muted-foreground">{blockLabel}</p>
-              <p className="text-xs text-muted-foreground">Click edit to modify content</p>
+              <p className="text-xs text-muted-foreground">
+                {hasEditableContent
+                  ? 'Click edit to modify content'
+                  : 'Renders from the current page context — nothing to configure'}
+              </p>
             </div>
           </div>
         );
@@ -304,13 +332,14 @@ export default function EditableBlock({
 
   const isSection = block?.block_type === 'section';
   const blockDefinition = getBlockDefinition(block.block_type as BlockType);
+  const isEditable = blockHasEditableContent(block.block_type);
 
   return (
     <div
       onClick={handleCardClick}
       className={cn(
         "p-4 border rounded-lg bg-card shadow",
-        !isSection && "cursor-pointer hover:border-primary transition-colors",
+        !isSection && isEditable && "cursor-pointer hover:border-primary transition-colors",
         className
       )}
     >
@@ -322,17 +351,19 @@ export default function EditableBlock({
           <h4 className="font-semibold p-0 m-0 mb-1">{blockDefinition?.label || block.block_type}</h4>
         </div>
         <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleEditClick();
-              }}
-              aria-label={isSection ? "Toggle Section Config" : "Edit block"}
-            >
-              <Edit2 className="h-4 w-4 text-muted-foreground" />
-            </Button>
+            {isEditable && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleEditClick();
+                }}
+                aria-label={isSection ? "Toggle Section Config" : "Edit block"}
+              >
+                <Edit2 className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            )}
           <DeleteBlockButtonClient
             blockId={block.id}
             blockTitle={blockDefinition?.label || block.block_type}

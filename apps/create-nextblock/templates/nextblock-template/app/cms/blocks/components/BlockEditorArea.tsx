@@ -9,7 +9,7 @@ import type { Database, Json } from "@nextblock-cms/db";
 import { BlockType } from '../../../../lib/blocks/blockRegistry';
 
 type Block = Database["public"]["Tables"]["blocks"]["Row"];
-import { getBlockDefinition, SectionBlockContent } from '../../../../lib/blocks/blockRegistry';
+import { blockHasEditableContent, getBlockDefinition, SectionBlockContent } from '../../../../lib/blocks/blockRegistry';
 import { Button } from "@nextblock-cms/ui";
 import { PlusCircle } from "lucide-react";
 import {
@@ -113,6 +113,8 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
   const [isBlockSelectorOpen, setIsBlockSelectorOpen] = useState(false);
   const [activeBlock, setActiveBlock] = useState<Block | null>(null);
   const [insertionIndex, setInsertionIndex] = useState<number | null>(null);
+  // Id of the block that was just added, so its editor can open on its own.
+  const [autoEditBlockId, setAutoEditBlockId] = useState<number | null>(null);
   const [editingNestedBlockInfo, setEditingNestedBlockInfo] = useState<EditingNestedBlockInfo | null>(null);
   const [NestedBlockEditorComponent, setNestedBlockEditorComponent] = useState<ComponentType<any> | null>(null);
   const [tempNestedBlockContent, setTempNestedBlockContent] = useState<Json | null>(null);
@@ -377,6 +379,11 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
 
         setBlocks(finalBlocks);
         lastSavedBlocks.current = finalBlocks;
+        // Context-driven blocks (cart, checkout, …) have nothing to configure,
+        // so only jump into the editor when there is something to edit.
+        if (blockHasEditableContent(blockType)) {
+          setAutoEditBlockId(newBlock.id);
+        }
         router.refresh();
       } else {
         alert(`Error adding block: ${createResult?.error}`);
@@ -506,6 +513,8 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
                 </div>
                 <SortableBlockItem
                   block={block}
+                  autoOpenEditor={block.id === autoEditBlockId}
+                  onAutoOpenHandled={() => setAutoEditBlockId(null)}
                   onContentChange={handleContentChange}
                   onDelete={async (blockIdToDelete) => {
                     startTransition(async () => {

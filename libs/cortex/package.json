@@ -1,6 +1,6 @@
 {
   "name": "@nextblock-cms/cortex",
-  "version": "0.13.9",
+  "version": "0.13.10",
   "publishConfig": {
     "access": "public"
   },

@@ -5,7 +5,7 @@ import { cn } from '@nextblock-cms/utils';
 import { Button } from '@nextblock-cms/ui';
 import { PlusCircle, Trash2, Edit2, GripVertical, Image as ImageIcon } from "lucide-react";
 import { SectionBlockContent } from '../../../../lib/blocks/blockRegistry';
-import { availableBlockTypes, getBlockDefinition, getInitialContent, BlockType } from '../../../../lib/blocks/blockRegistry';
+import { availableBlockTypes, blockHasEditableContent, getBlockDefinition, getInitialContent, BlockType } from '../../../../lib/blocks/blockRegistry';
 import { useDroppable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -415,6 +415,10 @@ export default function ColumnEditor({ columnIndex, blocks, onBlocksChange, bloc
       temp_id: `temp-${Date.now()}-${Math.random()}`
     };
     onBlocksChange([...blocks, newBlock]);
+    // Open the new block's editor straight away, matching the top-level editor.
+    if (blockHasEditableContent(selectedBlockType)) {
+      handleStartEdit(newBlock, blocks.length);
+    }
   };
 
   const handleSelectBlockType = (selectedBlockType: BlockType) => {

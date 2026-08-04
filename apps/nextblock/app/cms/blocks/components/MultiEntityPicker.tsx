@@ -5,13 +5,31 @@ import { Check, ChevronsUpDown, Loader2, Search, X } from 'lucide-react';
 import {
   Badge,
   Button,
-  Checkbox,
   Input,
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@nextblock-cms/ui';
 import { cn } from '@nextblock-cms/utils';
+
+/**
+ * A checkbox *look* without the interactive element. The whole option row is the
+ * button, and Radix's `Checkbox` renders its own `<button>` — nesting the two is
+ * invalid HTML and breaks hydration.
+ */
+function CheckIndicator({ checked }: { checked: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border border-primary transition-colors',
+        checked && 'bg-primary text-primary-foreground'
+      )}
+    >
+      {checked && <Check className="h-3 w-3" />}
+    </span>
+  );
+}
 
 export interface PickerOption {
   id: string;
@@ -179,7 +197,11 @@ export default function MultiEntityPicker({
             />
           </div>
 
-          <div className="max-h-60 overflow-y-auto p-1">
+          <div
+            role="listbox"
+            aria-multiselectable="true"
+            className="max-h-60 overflow-y-auto p-1"
+          >
             {filteredOptions.length === 0 ? (
               <p className="py-6 text-center text-xs text-muted-foreground">
                 {isLoading ? 'Loading…' : emptyMessage}
@@ -204,12 +226,7 @@ export default function MultiEntityPicker({
                       isChecked && 'bg-accent/40'
                     )}
                   >
-                    <Checkbox
-                      checked={isChecked}
-                      tabIndex={-1}
-                      aria-hidden="true"
-                      className="pointer-events-none h-3.5 w-3.5 shrink-0"
-                    />
+                    <CheckIndicator checked={isChecked} />
                     <span className="flex min-w-0 flex-col">
                       <span className="truncate font-medium">{option.label}</span>
                       {option.description && (
@@ -225,11 +242,6 @@ export default function MultiEntityPicker({
                       >
                         {option.badge}
                       </Badge>
-                    )}
-                    {isChecked && (
-                      <Check
-                        className={cn('h-3.5 w-3.5 shrink-0 text-primary', !option.badge && 'ml-auto')}
-                      />
                     )}
                   </button>
                 );

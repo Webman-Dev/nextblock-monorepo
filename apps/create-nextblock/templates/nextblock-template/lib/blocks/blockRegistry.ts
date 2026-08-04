@@ -573,8 +573,28 @@ export function getBlockDefinition(blockType: string): BlockDefinition | undefin
 }
 
 /**
+ * Whether a block type has anything for an author to configure.
+ *
+ * `cart`, `checkout` and `product_details` are context-driven: they declare an
+ * empty schema and ship no editor file at all, so opening an editor for them
+ * would show an empty dialog (and fail on the missing module). Used to decide
+ * whether adding a block should jump straight into its editor.
+ *
+ * @param blockType - The block type or custom-block slug
+ * @returns true when the block exposes editable fields
+ */
+export function blockHasEditableContent(blockType: string): boolean {
+  const definition = getBlockDefinition(blockType);
+  // Custom blocks are not in the registry; they always render a field editor.
+  if (!definition) return true;
+  const shape = (definition.schema as unknown as { shape?: Record<string, unknown> })?.shape;
+  if (!shape) return true;
+  return Object.keys(shape).length > 0;
+}
+
+/**
  * Get the initial content for a specific block type
- * 
+ *
  * @param blockType - The type of block to get initial content for
  * @returns The initial content object or undefined if block type not found
  */
