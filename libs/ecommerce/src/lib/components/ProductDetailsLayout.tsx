@@ -12,7 +12,7 @@ import { useProduct } from '../product-context';
 import { ProductGallery } from './ProductGallery';
 import { AddToCartButton } from './AddToCartButton';
 import { SubscriptionSelector } from './SubscriptionSelector';
-import { SimpleTiptapRenderer } from './SimpleTiptapRenderer';
+import { SimpleTiptapRenderer, toNoCookieEmbedSrc } from './SimpleTiptapRenderer';
 import {
   chooseInitialVariantSelections,
   findMatchingVariant,
@@ -415,7 +415,9 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
                     <div
                       className="text-lg mb-4 leading-relaxed"
                       dangerouslySetInnerHTML={{
-                        __html: product.short_description,
+                        __html:
+                          toNoCookieEmbedSrc(product.short_description) ??
+                          product.short_description,
                       }}
                     />
                   ) : visualEditingEnabled ? (

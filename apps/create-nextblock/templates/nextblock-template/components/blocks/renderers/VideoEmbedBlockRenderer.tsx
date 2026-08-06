@@ -1,6 +1,8 @@
 import React from "react";
 import type { VideoEmbedBlockContent } from '../../../lib/blocks/blockRegistry';
 import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
+import YouTubeFacade from "../../media/YouTubeFacade";
+import { parseYouTubeUrl } from "../../../lib/media/youtube";
 
 interface VideoEmbedBlockRendererProps {
   content: VideoEmbedBlockContent;
@@ -29,22 +31,16 @@ const VideoEmbedBlockRenderer: React.FC<VideoEmbedBlockRendererProps> = ({
     );
   }
 
-  // Convert YouTube URLs to embed format
-  const getEmbedUrl = (url: string) => {
-    const youtubeRegex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/;
-    const match = url.match(youtubeRegex);
-    
-    if (match) {
-      const videoId = match[1];
-      const params = new URLSearchParams();
-      if (content.autoplay) params.set('autoplay', '1');
-      if (!content.controls) params.set('controls', '0');
-      
-      return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
-    }
-    
-    return url; // Return original URL if not YouTube
-  };
+  // parseYouTubeUrl handles watch?v=, youtu.be/, /shorts/, /live/ and a pasted
+  // /embed/ URL alike -- the old regex matched only the first two and returned
+  // anything else verbatim, so YouTube's own Share > Embed string slipped through
+  // as a cookie-setting www.youtube.com frame.
+  const parsed = parseYouTubeUrl(content.url);
+  const embedParams = new URLSearchParams(parsed ? parsed.params.toString() : '');
+  if (content.controls === false) embedParams.set('controls', '0');
+  // content.autoplay is intentionally NOT applied on load: an autoplaying frame
+  // boots the YouTube player during a Lighthouse run and re-creates the Cookie
+  // issue. The facade autoplays after the user clicks, which is the same UX.
 
   return (
     <div className="my-4" {...visualEditAttributes}>
@@ -52,13 +48,23 @@ const VideoEmbedBlockRenderer: React.FC<VideoEmbedBlockRendererProps> = ({
         <h3 className="text-lg font-semibold mb-2">{content.title}</h3>
       )}
       <div className="relative aspect-video">
-        <iframe
-          src={getEmbedUrl(content.url)}
-          title={content.title || "Video"}
-          className="w-full h-full rounded-lg"
-          allowFullScreen
-          loading="lazy"
-        />
+        {parsed ? (
+          <YouTubeFacade
+            videoId={parsed.videoId}
+            title={content.title}
+            query={embedParams.toString()}
+            className="absolute inset-0 h-full w-full rounded-lg"
+          />
+        ) : (
+          <iframe
+            src={content.url}
+            title={content.title || "Video"}
+            className="w-full h-full rounded-lg"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allowFullScreen
+            loading="lazy"
+          />
+        )}
       </div>
     </div>
   );

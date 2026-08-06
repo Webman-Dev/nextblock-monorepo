@@ -10,6 +10,8 @@ import CtaWidgetRenderer from "./inline/CtaWidgetRenderer";
 import type { TextBlockContent } from "./TextBlockRenderer";
 import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
 import { SimpleTiptapRenderer } from "@nextblock-cms/ecommerce/components/SimpleTiptapRenderer";
+import { replaceYouTubeIframe } from "../../media/youtube-embed-replace";
+import { rewriteYouTubeHostsInHtml } from "../../../lib/media/youtube";
 
 interface ClientTextBlockRendererProps {
   content: TextBlockContent;
@@ -247,6 +249,11 @@ const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({
           }
         }
 
+        // Swap YouTube iframes for a click-to-play facade so no youtube.com
+        // resource loads before user interaction (Lighthouse `inspector-issues`).
+        const youTubeFacade = replaceYouTubeIframe(domNode);
+        if (youTubeFacade) return youTubeFacade;
+
         if (domNode.name === 'img') {
           return renderOptimizedCmsImage(domNode.attribs);
         } else if (domNode.attribs['fetchpriority']) {
@@ -307,7 +314,7 @@ const ClientTextBlockRenderer: React.FC<ClientTextBlockRendererProps> = ({
           className={wrapperClassName}
           {...visualEditAttributes}
         >
-          <SimpleTiptapRenderer content={normalizedHtml} />
+          <SimpleTiptapRenderer content={rewriteYouTubeHostsInHtml(normalizedHtml)} />
         </div>
       );
     } catch {

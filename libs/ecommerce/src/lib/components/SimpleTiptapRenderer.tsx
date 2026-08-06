@@ -243,7 +243,7 @@ const renderNode = (node: TiptapNode, index: number): React.ReactNode => {
 
     // ── Embeds ──────────────────────────────────────────────────
     case 'youtube': {
-      const src = node.attrs?.src as string;
+      const src = toNoCookieEmbedSrc(node.attrs?.src as string);
       const width = (node.attrs?.width as number) || 640;
       const height = (node.attrs?.height as number) || 480;
       return (
@@ -252,16 +252,17 @@ const renderNode = (node: TiptapNode, index: number): React.ReactNode => {
             src={src}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
+            loading="lazy"
             className="absolute inset-0 w-full h-full"
           />
         </div>
       );
     }
     case 'iframe': {
-      const src = node.attrs?.src as string;
+      const src = toNoCookieEmbedSrc(node.attrs?.src as string);
       return (
         <div key={index} className="my-4 overflow-hidden rounded-lg" style={{ aspectRatio: '16/9' }}>
-          <iframe src={src} allowFullScreen className="w-full h-full border-0" />
+          <iframe src={src} allowFullScreen loading="lazy" className="w-full h-full border-0" />
         </div>
       );
     }
@@ -279,6 +280,20 @@ const renderNode = (node: TiptapNode, index: number): React.ReactNode => {
   }
 };
 
+/**
+ * Rewrite YouTube embed hosts to the privacy-enhanced domain.
+ *
+ * libs/* cannot import apps/nextblock (enforce-module-boundaries), so this is a
+ * local copy of rewriteYouTubeHostsInHtml from apps/nextblock/lib/media/youtube.ts.
+ * The app renders these surfaces through a click-to-play facade; this is the
+ * fallback for standalone consumers of the published lib.
+ */
+export const toNoCookieEmbedSrc = (src: string | undefined): string | undefined =>
+  src?.replace(
+    /(?:https?:)?\/\/(?:www\.|m\.|music\.)?youtube\.com\/embed\//gi,
+    'https://www.youtube-nocookie.com/embed/'
+  );
+
 // ── Public component ────────────────────────────────────────────
 export const SimpleTiptapRenderer: React.FC<SimpleTiptapRendererProps> = ({ content, className }) => {
   if (!content) return null;
@@ -295,7 +310,12 @@ export const SimpleTiptapRenderer: React.FC<SimpleTiptapRendererProps> = ({ cont
       }
     }
     // Render as pure HTML
-    return <div className={className} dangerouslySetInnerHTML={{ __html: content }} />;
+    return (
+      <div
+        className={className}
+        dangerouslySetInnerHTML={{ __html: toNoCookieEmbedSrc(content) ?? content }}
+      />
+    );
   }
 
   // 2. Handle TipTap JSON structure

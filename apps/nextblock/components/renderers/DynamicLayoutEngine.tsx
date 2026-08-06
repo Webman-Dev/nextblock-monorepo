@@ -1,7 +1,10 @@
 import React from 'react';
+import parse from 'html-react-parser';
 import type { CustomBlockDefinition, CustomBlockField, CustomBlockLayoutNode } from '@nextblock-cms/utils';
 
 import { resolveMediaUrl } from '../../lib/media/resolveMediaUrl';
+import { embedSafeParserOptions } from '../media/youtube-embed-replace';
+import { rewriteYouTubeHostsInHtml } from '../../lib/media/youtube';
 
 export const DYNAMIC_LAYOUT_ENGINE_CACHE_TAG = 'dynamic-layout-engine';
 export const DYNAMIC_LAYOUT_ENGINE_MAX_DEPTH = 64;
@@ -309,10 +312,14 @@ function renderTextField({
   const element = requestedElement === 'img' ? 'span' : requestedElement;
 
   if (field.type === 'rich-text' && typeof value === 'string') {
-    return React.createElement(element, {
-      className,
-      dangerouslySetInnerHTML: { __html: value || node.emptyFallback || '' },
-    });
+    // Parsed rather than injected raw so YouTube iframes become click-to-play
+    // facades; the host rewrite is the fallback for anything left as raw markup.
+    const richTextHtml = value || node.emptyFallback || '';
+    return React.createElement(
+      element,
+      { className },
+      parse(rewriteYouTubeHostsInHtml(richTextHtml), embedSafeParserOptions)
+    );
   }
 
   const displayValue =
