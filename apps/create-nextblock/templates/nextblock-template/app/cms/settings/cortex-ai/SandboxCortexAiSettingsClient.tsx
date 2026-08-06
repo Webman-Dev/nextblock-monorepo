@@ -18,19 +18,23 @@ import {
 } from '@nextblock-cms/ui';
 import {
   AlertTriangle,
-  BrainCircuit,
+  Brain,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Cpu,
-  KeyRound,
-  ServerCog,
-  ShieldCheck,
-  Trash2,
+  ImageIcon,
   Info,
+  KeyRound,
+  Lock,
+  SlidersHorizontal,
+  Trash2,
 } from 'lucide-react';
 import {
   createCortexAiStoredModelSelection,
   type CortexAiStoredModelSelection,
 } from '@nextblock-cms/cortex/client';
+import type { CortexAiAgentSettings } from '@nextblock-cms/cortex';
 
 const CORTEX_AI_SANDBOX_KEY_LOCAL_STORAGE = 'cortex_ai_sandbox_openrouter_api_key';
 const CORTEX_AI_SANDBOX_MODEL_LOCAL_STORAGE = 'cortex_ai_sandbox_openrouter_model_selection';
@@ -58,27 +62,31 @@ type SandboxCortexAiSettingsClientProps = {
   hasEnvOpenRouterKey: boolean;
   maskedEnvOpenRouterKey: string | null;
   modelCatalogError: string | null;
+  activeStockProvider: 'pexels' | 'unsplash' | null;
+  hasStoredPexelsKey: boolean;
+  maskedStoredPexelsKey: string | null;
+  hasStoredUnsplashKey: boolean;
+  maskedStoredUnsplashKey: string | null;
+  hasEnvPexelsKey: boolean;
+  hasEnvUnsplashKey: boolean;
+  unsplashAppName: string | null;
+  agentSettings: CortexAiAgentSettings;
 };
 
+function formatTokenPrice(value: string | undefined) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return null;
+  if (amount === 0) return '$0';
+  const perMillion = amount * 1_000_000;
+  return `$${perMillion < 0.01 ? perMillion.toFixed(4) : perMillion.toFixed(2)}`;
+}
+
 function formatModelPricing(pricing: Record<string, string>) {
-  const amount = Number(pricing.prompt);
-  const completionAmount = Number(pricing.completion);
-
-  if (!Number.isFinite(amount) || !Number.isFinite(completionAmount)) {
-    return 'Pricing varies';
-  }
-
-  if (amount === 0 && completionAmount === 0) {
-    return 'Free';
-  }
-
-  const formatPrice = (val: number) => {
-    if (val === 0) return '$0';
-    const perMillion = val * 1_000_000;
-    return `$${perMillion < 0.01 ? perMillion.toFixed(4) : perMillion.toFixed(2)}`;
-  };
-
-  return `${formatPrice(amount)}/1M input - ${formatPrice(completionAmount)}/1M output`;
+  const promptPrice = formatTokenPrice(pricing.prompt);
+  const completionPrice = formatTokenPrice(pricing.completion);
+  if (promptPrice === '$0' && completionPrice === '$0') return 'Free';
+  if (promptPrice && completionPrice) return `${promptPrice}/1M input - ${completionPrice}/1M output`;
+  return 'Pricing varies';
 }
 
 function getMaskedKey(key: string) {
@@ -90,12 +98,70 @@ function notifyCortexAiSettingsChanged() {
   window.dispatchEvent(new Event(CORTEX_AI_SETTINGS_CHANGED_EVENT));
 }
 
+function StatusPill({
+  label,
+  value,
+  active,
+  detail,
+}: {
+  label: string;
+  value: string;
+  active: boolean;
+  detail?: string | null;
+}) {
+  return (
+    <div className="flex min-w-[8rem] flex-col gap-1 rounded-md border bg-muted/30 px-3 py-2">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <div className="flex items-center gap-2">
+        <span className={`h-2 w-2 rounded-full ${active ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+        <span className="text-sm font-medium">{value}</span>
+      </div>
+      {detail && <span className="truncate font-mono text-[11px] text-muted-foreground">{detail}</span>}
+    </div>
+  );
+}
+
+// Sandbox mirrors the production layout, but every server-backed setting is
+// read-only: the settings actions refuse to write to the shared sandbox DB, and
+// only the OpenRouter key + model have a per-visitor override channel
+// (localStorage -> x-sandbox-openrouter-* headers).
+function ReadOnlyRow({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail?: string | null;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2">
+      <span className="text-xs font-medium">{label}</span>
+      <div className="flex items-center gap-2 text-right">
+        <span className="text-xs text-muted-foreground">{value}</span>
+        {detail && <span className="font-mono text-[11px] text-muted-foreground">{detail}</span>}
+      </div>
+    </div>
+  );
+}
+
 export function SandboxCortexAiSettingsClient({
   compatibleModels,
   isPackageActive,
   hasEnvOpenRouterKey,
   maskedEnvOpenRouterKey,
   modelCatalogError,
+  activeStockProvider,
+  hasStoredPexelsKey,
+  maskedStoredPexelsKey,
+  hasStoredUnsplashKey,
+  maskedStoredUnsplashKey,
+  hasEnvPexelsKey,
+  hasEnvUnsplashKey,
+  unsplashAppName,
+  agentSettings,
 }: SandboxCortexAiSettingsClientProps) {
   const [mounted, setMounted] = useState(false);
   const [sandboxKey, setSandboxKey] = useState<string | null>(null);
@@ -103,6 +169,7 @@ export function SandboxCortexAiSettingsClient({
   const [inputValue, setInputValue] = useState('');
   const [modelInput, setModelInput] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     try {
@@ -165,11 +232,11 @@ export function SandboxCortexAiSettingsClient({
     if (!selectedModel) return;
 
     try {
-      // Map to the shape createCortexAiStoredModelSelection expects, or something similar.
-      // createCortexAiStoredModelSelection needs a specific shape but we can mimic it.
-      // We pass the raw model data to it.
       const storedSelection = createCortexAiStoredModelSelection(selectedModel as any);
-      window.localStorage.setItem(CORTEX_AI_SANDBOX_MODEL_LOCAL_STORAGE, JSON.stringify(storedSelection));
+      window.localStorage.setItem(
+        CORTEX_AI_SANDBOX_MODEL_LOCAL_STORAGE,
+        JSON.stringify(storedSelection)
+      );
       setSandboxModel(storedSelection);
       notifyCortexAiSettingsChanged();
       setSuccessMessage('Sandbox Cortex AI model selection saved to your browser.');
@@ -199,7 +266,7 @@ export function SandboxCortexAiSettingsClient({
   const selectedModelIsInCatalog = compatibleModels.some(
     (model) => model.id === sandboxModel?.modelId
   );
-  
+
   const modelOptions =
     sandboxModel && !selectedModelIsInCatalog
       ? [
@@ -215,7 +282,7 @@ export function SandboxCortexAiSettingsClient({
           ...compatibleModels,
         ]
       : compatibleModels;
-      
+
   const canSelectModel = !!sandboxKey && compatibleModels.length > 0;
   const maskedSandboxKey = sandboxKey ? getMaskedKey(sandboxKey) : null;
   const isKeyDirty = inputValue.trim().length > 0;
@@ -227,16 +294,35 @@ export function SandboxCortexAiSettingsClient({
     description: `${model.id} - ${formatModelPricing(model.pricing as any)}`,
   }));
 
+  const keySourceValue = sandboxKey ? 'Sandbox BYOK' : hasEnvOpenRouterKey ? 'Environment' : 'None';
+  // Ordered by preference (Pexels primary, Unsplash fallback). Configured = a
+  // stored DB key OR an env var for that provider.
+  const configuredStockProviders = [
+    hasStoredPexelsKey || hasEnvPexelsKey ? { name: 'Pexels', stored: hasStoredPexelsKey } : null,
+    hasStoredUnsplashKey || hasEnvUnsplashKey
+      ? { name: 'Unsplash', stored: hasStoredUnsplashKey }
+      : null,
+  ].filter(Boolean) as Array<{ name: string; stored: boolean }>;
+  const stockValue =
+    configuredStockProviders.length > 0
+      ? configuredStockProviders.map((provider) => provider.name).join(' + ')
+      : 'Off';
+
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 px-6 py-8">
-      <div>
-        <div className="flex items-center gap-3">
-          <BrainCircuit className="h-7 w-7 text-primary" />
-          <h1 className="text-2xl font-semibold">NextBlock Cortex AI (Sandbox)</h1>
+    <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6">
+      <div className="flex items-center gap-2.5">
+        <Brain className="h-6 w-6 text-primary" />
+        <div>
+          <h1 className="text-xl font-semibold leading-tight">
+            NextBlock Cortex AI{' '}
+            <Badge variant="secondary" className="ml-1 align-middle font-normal">
+              Sandbox
+            </Badge>
+          </h1>
+          <p className="text-xs text-muted-foreground">
+            Manage the OpenRouter model key used by Cortex AI in your own browser session.
+          </p>
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Manage premium activation and the OpenRouter key used by Cortex AI in your local browser environment.
-        </p>
       </div>
 
       {successMessage && (
@@ -247,143 +333,84 @@ export function SandboxCortexAiSettingsClient({
         </Alert>
       )}
 
-      <Alert variant="warning" className="bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800">
+      {/* Compact status strip */}
+      <div className="flex flex-wrap gap-2">
+        <StatusPill
+          label="Package"
+          value={isPackageActive ? 'Active' : 'Inactive'}
+          active={isPackageActive}
+        />
+        <StatusPill
+          label="Model key"
+          value={keySourceValue}
+          active={Boolean(sandboxKey) || hasEnvOpenRouterKey}
+          detail={maskedSandboxKey || maskedEnvOpenRouterKey}
+        />
+        <StatusPill
+          label="Model"
+          value={sandboxModel ? sandboxModel.name : 'Free registry'}
+          active={Boolean(sandboxModel)}
+        />
+        <StatusPill
+          label="Stock photos"
+          value={stockValue}
+          active={Boolean(activeStockProvider)}
+        />
+      </div>
+
+      <Alert
+        variant="warning"
+        className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+      >
         <Info className="h-4 w-4" />
-        <AlertTitle>Sandbox Environment Active</AlertTitle>
+        <AlertTitle>Sandbox environment active</AlertTitle>
         <AlertDescription>
-          Keys and model selections entered here are stored <strong>only in your private browser (localStorage)</strong>. They will not be saved to the database to prevent accidental leaks in the shared sandbox area.
+          The key and model you set here are stored{' '}
+          <strong>only in your own browser (localStorage)</strong> and are never written to the
+          shared sandbox database. Server-backed settings below are read-only here.
         </AlertDescription>
       </Alert>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ShieldCheck className="h-4 w-4" />
-              Package
-            </CardTitle>
-            <CardDescription>Premium access</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Badge variant={isPackageActive ? 'default' : 'outline'}>
-              {isPackageActive ? 'Active' : 'Inactive'}
-            </Badge>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ServerCog className="h-4 w-4" />
-              Environment
-            </CardTitle>
-            <CardDescription>OPENROUTER_API_KEY</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Badge variant={hasEnvOpenRouterKey ? 'default' : 'outline'}>
-              {hasEnvOpenRouterKey ? 'Configured' : 'Not set'}
-            </Badge>
-            {maskedEnvOpenRouterKey && (
-              <p className="font-mono text-xs text-muted-foreground">
-                {maskedEnvOpenRouterKey}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <KeyRound className="h-4 w-4" />
-              Sandbox BYOK
-            </CardTitle>
-            <CardDescription>Browser local storage</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Badge variant={sandboxKey ? 'default' : 'outline'}>
-              {sandboxKey ? 'Stored' : 'Empty'}
-            </Badge>
-            {maskedSandboxKey && (
-              <p className="font-mono text-xs text-muted-foreground">
-                {maskedSandboxKey}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Cpu className="h-4 w-4" />
-              Model
-            </CardTitle>
-            <CardDescription>Sandbox routing</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Badge variant={sandboxModel ? 'default' : 'outline'}>
-              {sandboxModel ? 'Selected' : 'Free registry'}
-            </Badge>
-            {sandboxModel && (
-              <>
-                <p className="text-xs font-medium">{sandboxModel.name}</p>
-                <p className="break-all font-mono text-xs text-muted-foreground">
-                  {sandboxModel.modelId}
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
       {hasEnvOpenRouterKey && !sandboxKey && (
         <Alert>
-          <ServerCog className="h-4 w-4" />
-          <AlertTitle>Sandbox free-model lock active</AlertTitle>
-          <AlertDescription>
-            Cortex AI will only use the three configured free OpenRouter models until a
-            sandbox BYOK is saved to your browser.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {hasEnvOpenRouterKey && !!sandboxKey && (
-        <Alert>
           <KeyRound className="h-4 w-4" />
-          <AlertTitle>Sandbox BYOK active</AlertTitle>
+          <AlertTitle>Free-model lock active</AlertTitle>
           <AlertDescription>
-            Cortex AI will use your browser's sandbox BYOK before the server environment key, so the
-            selected compatible OpenRouter model can run across the website for you.
+            Cortex AI will only use the configured free OpenRouter models until you save a sandbox
+            key to your browser.
           </AlertDescription>
         </Alert>
       )}
 
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between">
-          <div>
-            <CardTitle className="text-lg">OpenRouter BYOK</CardTitle>
-            <CardDescription>
-              The saved key is stored locally in your browser. It is not uploaded or saved to the database.
-            </CardDescription>
-          </div>
-          {sandboxKey && (
-            <form onSubmit={(e) => { e.preventDefault(); handleClearKey(); }}>
+      {/* OpenRouter BYOK + Model side by side */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+            <div>
+              <CardTitle className="text-base">OpenRouter key</CardTitle>
+              <CardDescription className="text-xs">
+                Saved to your browser only, never uploaded.
+              </CardDescription>
+            </div>
+            {sandboxKey && (
               <Button
-                type="submit"
-                variant="outline"
+                type="button"
+                onClick={handleClearKey}
+                variant="ghost"
                 size="sm"
-                className="text-destructive hover:text-destructive"
+                className="h-7 text-destructive hover:text-destructive"
               >
-                <Trash2 className="mr-2 h-4 w-4" />
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                 Clear
               </Button>
-            </form>
-          )}
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSaveKey}>
-            <div className="flex items-end gap-3">
-              <div className="flex-1 space-y-2">
-                <Label htmlFor="openrouter_api_key">OpenRouter API key</Label>
+            )}
+          </CardHeader>
+          <CardContent className="pt-0">
+            <form onSubmit={handleSaveKey} className="flex items-end gap-2">
+              <div className="flex-1 space-y-1.5">
+                <Label htmlFor="openrouter_api_key" className="text-xs">
+                  API key
+                </Label>
                 <Input
                   id="openrouter_api_key"
                   name="openrouter_api_key"
@@ -396,72 +423,49 @@ export function SandboxCortexAiSettingsClient({
                   required
                 />
               </div>
-              <Button type="submit" disabled={!isKeyDirty}>
-                {isKeyDirty ? (
-                  <>
-                    <KeyRound className="mr-2 h-4 w-4" />
-                    Save Key to Browser
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    Saved
-                  </>
-                )}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between">
-          <div>
-            <CardTitle className="text-lg">OpenRouter Model</CardTitle>
-            <CardDescription>
-              Sandbox BYOK can use compatible text models that support structured outputs and
-              tool calling.
-            </CardDescription>
-          </div>
-          {sandboxModel && (
-            <form onSubmit={(e) => { e.preventDefault(); handleClearModel(); }}>
-              <Button
-                type="submit"
-                variant="outline"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Clear
+              <Button type="submit" disabled={!isKeyDirty} size="sm">
+                <KeyRound className="mr-1.5 h-3.5 w-3.5" />
+                Save
               </Button>
             </form>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!sandboxKey && (
-            <Alert>
-              <KeyRound className="h-4 w-4" />
-              <AlertTitle>Sandbox BYOK required</AlertTitle>
-              <AlertDescription>
-                Save an OpenRouter key to your browser before choosing a paid model.
-              </AlertDescription>
-            </Alert>
-          )}
+          </CardContent>
+        </Card>
 
-          {modelCatalogError && (
-            <Alert variant="warning">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Model catalog unavailable</AlertTitle>
-              <AlertDescription>{modelCatalogError}</AlertDescription>
-            </Alert>
-          )}
-
-          <form onSubmit={handleSaveModel}>
-            <input type="hidden" name="openrouter_model_id" value={modelInput} />
-            
-            <div className="flex items-end gap-3">
-              <div className="flex-1 space-y-2">
-                <Label htmlFor="openrouter_model_id_select">Model</Label>
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+            <div>
+              <CardTitle className="text-base">OpenRouter model</CardTitle>
+              <CardDescription className="text-xs">
+                Needs a sandbox key; supports tools + structured output.
+              </CardDescription>
+            </div>
+            {sandboxModel && (
+              <Button
+                type="button"
+                onClick={handleClearModel}
+                variant="ghost"
+                size="sm"
+                className="h-7 text-destructive hover:text-destructive"
+              >
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                Clear
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-2 pt-0">
+            {modelCatalogError && (
+              <Alert variant="warning">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Model catalog unavailable</AlertTitle>
+                <AlertDescription>{modelCatalogError}</AlertDescription>
+              </Alert>
+            )}
+            <form onSubmit={handleSaveModel} className="flex items-end gap-2">
+              <input type="hidden" name="openrouter_model_id" value={modelInput} />
+              <div className="flex-1 space-y-1.5">
+                <Label htmlFor="openrouter_model_id_select" className="text-xs">
+                  Model
+                </Label>
                 <SearchableSelect
                   options={searchableOptions}
                   value={modelInput}
@@ -469,29 +473,216 @@ export function SandboxCortexAiSettingsClient({
                   disabled={!canSelectModel}
                   placeholder="Select a compatible model..."
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {canSelectModel
-                    ? `${compatibleModels.length} compatible models available`
-                    : 'Cortex AI will use the free registry until model selection is available.'}
-                </p>
               </div>
-              <Button type="submit" disabled={!canSelectModel || !isModelDirty}>
-                {isModelDirty ? (
-                  <>
-                    <Cpu className="mr-2 h-4 w-4" />
-                    Save Model to Browser
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    Saved
-                  </>
-                )}
+              <Button type="submit" disabled={!canSelectModel || !isModelDirty} size="sm">
+                <Cpu className="mr-1.5 h-3.5 w-3.5" />
+                Save
               </Button>
+            </form>
+            <p className="text-[11px] text-muted-foreground">
+              {canSelectModel
+                ? `${compatibleModels.length} compatible models available.`
+                : 'Cortex AI uses the free registry until a sandbox key + model are set.'}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Stock photos - read-only in sandbox */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+            <ImageIcon className="h-4 w-4" />
+            Stock photos
+            {configuredStockProviders.length > 0 ? (
+              configuredStockProviders.map((provider, index) => (
+                <Badge
+                  key={provider.name}
+                  variant={index === 0 ? 'default' : 'secondary'}
+                  className="ml-0.5 font-normal"
+                >
+                  {provider.name} · {index === 0 ? 'primary' : 'fallback'}
+                  {!provider.stored && ' (env)'}
+                </Badge>
+              ))
+            ) : (
+              <Badge variant="outline" className="ml-0.5">
+                Not configured
+              </Badge>
+            )}
+            <Badge variant="outline" className="ml-auto gap-1 font-normal">
+              <Lock className="h-3 w-3" />
+              Read-only
+            </Badge>
+          </CardTitle>
+          <CardDescription className="text-xs">
+            A Pexels/Unsplash key lets Cortex insert real photos into pages. Pexels is used first;
+            Cortex automatically falls back to Unsplash if Pexels is rate-limited.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 pt-0">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-md border bg-muted/20 p-3 text-sm">
+              <p className="font-medium">What this does</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                When you ask Cortex to build or revamp a page, a stock key lets it fetch relevant,
+                high-quality photos for the hero and sections automatically — instant, zero
+                image-generation cost, and you can save any photo into your media library with one
+                click. Without a key Cortex still builds pages, but uses gradient/theme backgrounds
+                instead of photos, and it will not call the photo tool at all.
+              </p>
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                In your own NextBlock install you add these keys on this page and they are encrypted
+                into your database. In the shared sandbox they are provided by the host environment
+                and cannot be changed.
+              </p>
             </div>
-          </form>
+
+            <div className="space-y-2">
+              <ReadOnlyRow
+                label="Pexels API key"
+                value={
+                  hasStoredPexelsKey
+                    ? 'Configured (stored)'
+                    : hasEnvPexelsKey
+                      ? 'Configured (env)'
+                      : 'Not set'
+                }
+                detail={maskedStoredPexelsKey}
+              />
+              <ReadOnlyRow
+                label="Unsplash Access key"
+                value={
+                  hasStoredUnsplashKey
+                    ? 'Configured (stored)'
+                    : hasEnvUnsplashKey
+                      ? 'Configured (env)'
+                      : 'Not set'
+                }
+                detail={maskedStoredUnsplashKey}
+              />
+              <ReadOnlyRow label="Unsplash app name" value={unsplashAppName || 'Not set'} />
+              <p className="text-[11px] text-muted-foreground">
+                {configuredStockProviders.length > 0
+                  ? `Using ${configuredStockProviders.map((provider) => provider.name).join(', ')}.`
+                  : 'No provider configured in this sandbox.'}
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
+
+      {/* Advanced settings (collapsed by default) - read-only in sandbox */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((open) => !open)}
+          className="flex w-full items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-left text-sm font-medium hover:bg-muted/40"
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          Advanced settings
+          <span className="ml-auto text-xs text-muted-foreground">
+            {agentSettings.maxOutputTokens === null
+              ? 'Unlimited output'
+              : `${agentSettings.maxOutputTokens} tokens`}{' '}
+            · {agentSettings.maxSteps} steps
+          </span>
+          {showAdvanced ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+        </button>
+
+        {showAdvanced && (
+          <Card className="mt-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                Agent tuning
+                <Badge variant="outline" className="gap-1 font-normal">
+                  <Lock className="h-3 w-3" />
+                  Read-only
+                </Badge>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Controls how much room the page-building agent has. These are set by the sandbox host
+                and shared by every visitor, so they cannot be edited here.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-0">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="max_output_tokens" className="text-xs">
+                    Max output tokens per step
+                  </Label>
+                  <Input
+                    id="max_output_tokens"
+                    type="text"
+                    value={
+                      agentSettings.maxOutputTokens === null
+                        ? 'Unlimited'
+                        : String(agentSettings.maxOutputTokens)
+                    }
+                    readOnly
+                    disabled
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    The per-step output budget. Range 256–200,000, or Unlimited. Default 16,000.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="max_steps" className="text-xs">
+                    Max tool steps
+                  </Label>
+                  <Input
+                    id="max_steps"
+                    type="text"
+                    value={String(agentSettings.maxSteps)}
+                    readOnly
+                    disabled
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Range 2–100 tool-call rounds. Default 8; each step is one model call.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="temperature" className="text-xs">
+                    Temperature
+                  </Label>
+                  <Input
+                    id="temperature"
+                    type="text"
+                    value={String(agentSettings.temperature)}
+                    readOnly
+                    disabled
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Range 0–2. Cortex default 0.1 (low = reliable; most models default higher).
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="response_timeout_seconds" className="text-xs">
+                    Response timeout (seconds)
+                  </Label>
+                  <Input
+                    id="response_timeout_seconds"
+                    type="text"
+                    value={String(Math.round(agentSettings.responseTimeoutMs / 1000))}
+                    readOnly
+                    disabled
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Range 15–600s. Default 120; aborts only after this long with no activity.
+                  </p>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Applies to the global page-building agent. Editable on a self-hosted install.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }

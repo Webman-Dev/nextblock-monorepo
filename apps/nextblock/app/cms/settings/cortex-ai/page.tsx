@@ -57,6 +57,15 @@ export default async function CortexAiSettingsPage({
         hasEnvOpenRouterKey={status.hasEnvOpenRouterKey}
         maskedEnvOpenRouterKey={status.maskedEnvOpenRouterKey}
         modelCatalogError={modelCatalogError}
+        activeStockProvider={status.activeStockProvider}
+        hasStoredPexelsKey={status.hasStoredPexelsKey}
+        maskedStoredPexelsKey={status.maskedStoredPexelsKey}
+        hasStoredUnsplashKey={status.hasStoredUnsplashKey}
+        maskedStoredUnsplashKey={status.maskedStoredUnsplashKey}
+        hasEnvPexelsKey={status.hasEnvPexelsKey}
+        hasEnvUnsplashKey={status.hasEnvUnsplashKey}
+        unsplashAppName={status.unsplashAppName}
+        agentSettings={status.agentSettings}
       />
     );
   }
