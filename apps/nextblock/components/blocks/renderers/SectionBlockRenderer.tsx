@@ -379,6 +379,9 @@ async function renderNestedBlock({
       parentBlockIndex={parentBlockIndex}
       botProtectionPublic={botProtectionPublic}
       scriptNonce={scriptNonce}
+      // Hero sections also carry LCP-eligible media in dynamically loaded
+      // renderers (e.g. video_embed's poster frame), not just nested images.
+      priority={priority}
     />
   );
 }

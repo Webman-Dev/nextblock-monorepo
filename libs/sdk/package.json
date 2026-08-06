@@ -1,6 +1,6 @@
 {
   "name": "@nextblock-cms/sdk",
-  "version": "0.13.11",
+  "version": "0.13.12",
   "type": "module",
   "main": "./index.js",
   "types": "./index.d.ts",

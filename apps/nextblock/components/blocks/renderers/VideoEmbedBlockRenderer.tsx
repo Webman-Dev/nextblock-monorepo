@@ -8,12 +8,15 @@ interface VideoEmbedBlockRendererProps {
   content: VideoEmbedBlockContent;
   languageId: number;
   visualEditAttributes?: VisualEditAttributes;
+  /** Set for hero / first-position blocks so the poster is preloaded (LCP). */
+  priority?: boolean;
 }
 
 const VideoEmbedBlockRenderer: React.FC<VideoEmbedBlockRendererProps> = ({
   content,
   languageId,
   visualEditAttributes,
+  priority = false,
 }) => {
   void languageId;
   if (!content.url) {
@@ -54,6 +57,7 @@ const VideoEmbedBlockRenderer: React.FC<VideoEmbedBlockRendererProps> = ({
             title={content.title}
             query={embedParams.toString()}
             className="absolute inset-0 h-full w-full rounded-lg"
+            priority={priority}
           />
         ) : (
           <iframe

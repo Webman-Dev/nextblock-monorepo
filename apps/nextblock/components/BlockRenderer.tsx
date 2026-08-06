@@ -188,6 +188,10 @@ async function renderLoadedBlock({
       parentBlockIndex={blockIndex}
       botProtectionPublic={botProtectionPublic}
       scriptNonce={scriptNonce}
+      // The first top-level block is above the fold, so its media is the LCP
+      // candidate. Renderers that own an image (video_embed's poster frame)
+      // use this to preload instead of lazy-loading it.
+      priority={blockIndex === 0}
     />
   );
 }

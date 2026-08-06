@@ -76,6 +76,24 @@ export function rewriteYouTubeHostsInHtml(html: string): string {
   );
 }
 
-export function youTubePosterUrl(videoId: string, quality: 'maxres' | 'hq' = 'maxres'): string {
+export type YouTubePosterQuality = 'maxres' | 'hq';
+
+/**
+ * Intrinsic size of each poster variant. maxresdefault is 16:9 but is not
+ * uploaded for every video; hqdefault always exists and is 4:3 (the frame is
+ * letterboxed inside it), which is why the facade object-covers the poster.
+ */
+export const YOUTUBE_POSTER_DIMENSIONS: Record<
+  YouTubePosterQuality,
+  { width: number; height: number }
+> = {
+  maxres: { width: 1280, height: 720 },
+  hq: { width: 480, height: 360 },
+};
+
+export function youTubePosterUrl(
+  videoId: string,
+  quality: YouTubePosterQuality = 'maxres'
+): string {
   return `https://i.ytimg.com/vi/${videoId}/${quality === 'maxres' ? 'maxresdefault' : 'hqdefault'}.jpg`;
 }

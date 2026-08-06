@@ -203,6 +203,12 @@ function getRemotePatterns() {
     { protocol: 'https', hostname: '**.r2.dev', pathname: '/**' },
     { protocol: 'https', hostname: '**.r2.cloudflarestorage.com', pathname: '/**' },
     { protocol: 'https', hostname: '**.supabase.co', pathname: '/**' },
+    // YouTube poster frames for the click-to-play facade
+    // (components/media/YouTubeFacade.tsx). Serving them through the optimizer
+    // turns a ~205 KiB third-party JPEG with a 2h TTL into a same-origin
+    // AVIF/WebP at the displayed size — the facade poster is frequently the LCP.
+    { protocol: 'https', hostname: 'i.ytimg.com', pathname: '/vi/**' },
+    { protocol: 'https', hostname: 'img.youtube.com', pathname: '/vi/**' },
   );
 
   // Add R2 Bucket URL if authenticated
