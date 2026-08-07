@@ -260,10 +260,12 @@ export default function SecurityPanel({ data }: { data: SecurityPanelData }) {
                     mode === 'totp' ? 'border-primary ring-1 ring-primary' : ''
                   }`}
                 >
-                  <p className="font-medium text-sm">Authenticator App (TOTP)</p>
-                  <p className="text-xs text-slate-500">
+                  <span className="block font-medium text-sm">
+                    Authenticator App (TOTP)
+                  </span>
+                  <span className="block text-xs text-slate-500">
                     Scan a QR code with Google Authenticator, 1Password, Authy, etc.
-                  </p>
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -274,19 +276,19 @@ export default function SecurityPanel({ data }: { data: SecurityPanelData }) {
                     mode === 'email' ? 'border-primary ring-1 ring-primary' : ''
                   }`}
                 >
-                  <p className="font-medium text-sm">
+                  <span className="block font-medium text-sm">
                     Secure Email Code
                     {!emailAvailable && (
                       <Badge variant="secondary" className="ml-2 align-middle text-[10px]">
                         Needs SMTP
                       </Badge>
                     )}
-                  </p>
-                  <p className="text-xs text-slate-500">
+                  </span>
+                  <span className="block text-xs text-slate-500">
                     {emailAvailable
                       ? 'Receive a 6-digit code at your account email each time you sign in.'
                       : 'Unavailable until an email (SMTP) server is configured for this site.'}
-                  </p>
+                  </span>
                 </button>
               </div>
 
