@@ -47,10 +47,6 @@
     "node_modules",
     "jest.config.ts",
     "**/*.spec.ts",
-    "**/*.test.ts",
-    "../../libs/**/*.spec.ts",
-    "../../libs/**/*.spec.tsx",
-    "../../libs/**/*.test.ts",
-    "../../libs/**/*.test.tsx"
+    "**/*.test.ts"
   ]
 }

@@ -647,7 +647,10 @@ export type InsertContentBlockInput = z.infer<typeof insertContentBlockInputSche
 export type UpdateSectionColumnBlockInput = z.infer<typeof updateSectionColumnBlockInputSchema>;
 export type CreateCmsPageInput = z.infer<typeof createCmsPageInputSchema>;
 export type CreateCmsPostInput = z.infer<typeof createCmsPostInputSchema>;
-export type CreateCmsProductInput = z.infer<typeof createCmsProductInputSchema>;
+// Pre-parse shape: executeCreateCmsProduct parses its own argument, so callers
+// may omit the eight .default() fields (is_taxable, payment_provider, price,
+// product_type, status, stock, trial_*) that z.infer would demand.
+export type CreateCmsProductInput = z.input<typeof createCmsProductInputSchema>;
 export type UpdateCmsItemFieldInput = z.infer<typeof updateCmsItemFieldInputSchema>;
 export type PrepareDeleteCmsItemInput = z.infer<typeof prepareDeleteCmsItemInputSchema>;
 export type DeleteCmsItemInput = z.infer<typeof deleteCmsItemInputSchema>;

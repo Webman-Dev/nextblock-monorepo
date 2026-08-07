@@ -2719,13 +2719,14 @@ describe('Cortex AI global agent tool executors', () => {
     // preview cleanly instead of failing to resolve the image target.
     const preview = (await executeCmsActionPlan(planInput as any, context)) as {
       confirmationPhrase: string;
-      preview: { actionSummaries: string[] };
+      preview: Record<string, unknown>;
       requiresConfirmation: boolean;
     };
+    const actionSummaries = preview.preview['actionSummaries'] as string[];
 
     expect(preview.requiresConfirmation).toBe(true);
-    expect(preview.preview.actionSummaries).toHaveLength(2);
-    expect(preview.preview.actionSummaries[1]).toContain('created in this plan');
+    expect(actionSummaries).toHaveLength(2);
+    expect(actionSummaries[1]).toContain('created in this plan');
     expect(database.products).toHaveLength(0);
 
     const result = await executeCmsActionPlan(planInput as any, {
