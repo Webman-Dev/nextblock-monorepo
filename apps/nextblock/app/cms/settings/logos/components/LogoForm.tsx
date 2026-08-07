@@ -136,7 +136,9 @@ export default function LogoForm({ logo, action }: LogoFormProps) {
                 width={logoDetails.width}
                 height={logoDetails.height}
                 className="rounded-md object-contain"
-                style={{ maxHeight: '200px' }}
+                // width/height auto so the CSS max-height scales both axes and
+                // keeps the intrinsic aspect ratio (next/image warns otherwise)
+                style={{ width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: '200px' }}
                 placeholder={logoDetails.blur_data_url ? 'blur' : 'empty'}
                 blurDataURL={logoDetails.blur_data_url || undefined}
               />

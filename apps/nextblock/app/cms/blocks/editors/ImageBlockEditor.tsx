@@ -157,7 +157,9 @@ export default function ImageBlockEditor({ content, onChange }: BlockEditorProps
               width={content.width}
               height={content.height}
               className="rounded-md object-contain"
-              style={{ maxHeight: '200px' }}
+              // width/height auto so the CSS max-height scales both axes and
+              // keeps the intrinsic aspect ratio (next/image warns otherwise)
+              style={{ width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: '200px' }}
               placeholder={content.blur_data_url ? "blur" : "empty"}
               blurDataURL={content.blur_data_url || undefined}
             />
@@ -175,7 +177,7 @@ export default function ImageBlockEditor({ content, onChange }: BlockEditorProps
               width={300}
               height={200}
               className="rounded-md object-contain max-h-40 block"
-              style={{ maxHeight: '200px' }}
+              style={{ width: 'auto', height: 'auto', maxWidth: '100%' }}
             />
              <Button
               type="button" variant="destructive" size="icon"

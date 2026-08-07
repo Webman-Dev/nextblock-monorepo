@@ -25,12 +25,15 @@ const badgeVariants = cva(
 );
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends React.HTMLAttributes<HTMLSpanElement>,
     VariantProps<typeof badgeVariants> {}
 
+// Rendered as a <span> (phrasing content) so a Badge stays valid inside <p>,
+// <button>, headings, and labels. A <div> here auto-closes the parent <p> in
+// the browser and produces a hydration mismatch.
 function Badge({ className, variant, ...props }: BadgeProps) {
   return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+    <span className={cn(badgeVariants({ variant }), className)} {...props} />
   );
 }
 
