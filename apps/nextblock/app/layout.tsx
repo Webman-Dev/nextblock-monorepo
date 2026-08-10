@@ -13,6 +13,12 @@ import { ConsentGatedAnalytics } from '../components/privacy/ConsentGatedAnalyti
 import { ConsentBanner } from '../components/privacy/ConsentBanner';
 import { getPrivacySettings } from '../lib/privacy/settings';
 import { DEFAULT_PRIVACY_SETTINGS } from '../lib/privacy/types';
+import {
+  activeThemeSlugs,
+  buildThemeCss,
+  defaultThemeSlug,
+  type SiteTheme,
+} from '../lib/themes/buildThemeCss';
 import { DeferredSpeedInsights } from '../components/DeferredSpeedInsights';
 import { DeferredVisualEditing } from '../components/visual-editing/DeferredVisualEditing';
 import {
@@ -169,6 +175,25 @@ const getCachedGlobalCss = unstable_cache(
   { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS }
 );
 
+const getCachedSiteThemes = unstable_cache(
+  async (): Promise<SiteTheme[]> => {
+    const supabase = createStaticSupabaseClient();
+    const { data, error } = await supabase
+      .from('site_themes')
+      .select('id, slug, name, description, icon, color_scheme, tokens, extra_css, is_system, is_default, is_active, sort_order')
+      .order('sort_order');
+
+    if (error || !data) {
+      // A missing table (pre-migration install) must not take the site down —
+      // libs/ui/src/styles/theme.css still ships a working fallback palette.
+      return [];
+    }
+    return data as unknown as SiteTheme[];
+  },
+  ['public-layout-site-themes'],
+  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS, tags: ['public-layout-site-themes'] }
+);
+
 const getCachedTranslations = unstable_cache(
   async () => {
     const supabase = createStaticSupabaseClient();
@@ -298,6 +323,7 @@ async function loadLayoutData() {
       siteTitle: 'NextBlock',
       isEcommerceActive: false,
       globalCss: '',
+      siteThemes: [] as SiteTheme[],
       privacySettings: DEFAULT_PRIVACY_SETTINGS,
       footerAttributionEnabled: true,
       rememberVisitorChoice: DEFAULT_LANGUAGE_DETECTION_SETTINGS.rememberVisitorChoice,
@@ -324,6 +350,7 @@ async function loadLayoutData() {
     currenciesResult,
     copyrightSettingsResult,
     globalCssResult,
+    siteThemesResult,
     translationsResult,
     isEcommerceActive,
     privacySettings,
@@ -336,6 +363,7 @@ async function loadLayoutData() {
       en: '(c) {year} Nextblock CMS. All rights reserved.',
     })),
     getCachedGlobalCss().catch(() => ''),
+    getCachedSiteThemes().catch(() => [] as SiteTheme[]),
     getCachedTranslations().catch(() => []),
     verifyPackageOnline('ecommerce').catch(() => false),
     getPrivacySettings().catch(() => DEFAULT_PRIVACY_SETTINGS),
@@ -369,6 +397,7 @@ async function loadLayoutData() {
   const copyrightText = templateForLocale.replace('{year}', new Date().getFullYear().toString());
 
   const globalCss = typeof globalCssResult === 'string' ? globalCssResult : '';
+  const siteThemes = Array.isArray(siteThemesResult) ? siteThemesResult : [];
   const translations = Array.isArray(translationsResult) ? translationsResult : [];
 
   const hasSupabaseEnv = isSupabaseConfigured();
@@ -404,6 +433,7 @@ async function loadLayoutData() {
     siteTitle,
     isEcommerceActive,
     globalCss,
+    siteThemes,
     privacySettings,
     footerAttributionEnabled,
     rememberVisitorChoice: languageDetectionSettings.rememberVisitorChoice,
@@ -486,10 +516,25 @@ export default async function RootLayout({
     siteTitle,
     isEcommerceActive,
     globalCss,
+    siteThemes,
     privacySettings,
     footerAttributionEnabled,
     rememberVisitorChoice,
   } = await loadLayoutData();
+  // Themes are rendered server-side into <head> so the palette is correct on the
+  // very first paint, before next-themes' blocking script adds the html class.
+  const themeCss = buildThemeCss(siteThemes);
+  const themeSlugs = activeThemeSlugs(siteThemes);
+  const initialTheme = defaultThemeSlug(siteThemes);
+  const themeCatalog = siteThemes
+    .filter((theme) => theme.is_active)
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((theme) => ({
+      slug: theme.slug,
+      name: theme.name,
+      icon: theme.icon,
+      colorScheme: theme.color_scheme,
+    }));
   const draft = await draftMode();
   // GTM container id comes solely from the privacy settings row (site_settings).
   // There is intentionally no NEXT_PUBLIC_GTM_ID env fallback — analytics is
@@ -517,6 +562,7 @@ export default async function RootLayout({
     <html lang={serverDeterminedLocale} suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {themeCss && <style id="nb-theme-tokens" dangerouslySetInnerHTML={{ __html: themeCss }} />}
         {globalCss && <style dangerouslySetInnerHTML={{ __html: globalCss }} />}
       </head>
       <body className="min-h-screen">
@@ -545,6 +591,9 @@ export default async function RootLayout({
           rememberVisitorChoice={rememberVisitorChoice}
           translations={translations}
           nonce={nonce}
+          themeSlugs={themeSlugs}
+          initialTheme={initialTheme}
+          themeCatalog={themeCatalog}
         >
           <ToasterProvider />
           <AppShell

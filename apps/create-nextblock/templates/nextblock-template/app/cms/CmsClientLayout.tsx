@@ -228,7 +228,7 @@ export default function CmsClientLayout({
   // Fallback for general /cms/settings if no more specific language path matches
   else if (pathname.startsWith("/cms/settings/logos")) pageTitle = "Branding";
   else if (pathname.startsWith("/cms/settings/copyright")) pageTitle = "Copyright Settings";
-  else if (pathname.startsWith("/cms/settings/global-css")) pageTitle = "Global CSS Settings";
+  else if (pathname.startsWith("/cms/settings/global-css")) pageTitle = "Themes & CSS";
   else if (pathname.startsWith("/cms/settings/extra-translations")) pageTitle = "Extra Translations";
   else if (pathname.startsWith("/cms/settings/backup-restore")) pageTitle = "Backup And Restore";
   else if (pathname.startsWith("/cms/settings/currencies")) pageTitle = "Currency Settings";
@@ -422,7 +422,7 @@ export default function CmsClientLayout({
                       Copyright
                     </NavItem>
                     <NavItem href="/cms/settings/global-css" icon={Paintbrush} isActive={pathname.startsWith("/cms/settings/global-css")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                      Global CSS
+                      Themes &amp; CSS
                     </NavItem>
                     <NavItem href="/cms/settings/privacy" icon={Cookie} isActive={pathname.startsWith("/cms/settings/privacy")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Privacy &amp; Consent

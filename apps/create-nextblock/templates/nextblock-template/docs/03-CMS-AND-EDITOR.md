@@ -200,3 +200,80 @@ contract lives in `libs/sdk` and is documented in
 
 If you are changing how blocks work inside the CMS, start here. If you are
 designing a reusable third-party block contract, start with the SDK doc.
+
+## Themes and Colour
+
+### Editable site themes
+
+Themes are rows in `site_themes`, edited at **/cms/settings/global-css**. An
+ADMIN can recolour any theme, create new ones, duplicate, reorder, hide, set the
+site default, and delete non-system themes.
+
+The pipeline is:
+
+1. `app/layout.tsx` reads the table through a cached `getCachedSiteThemes()`
+   (tag `public-layout-site-themes`).
+2. `lib/themes/buildThemeCss.ts` renders each row to a `:root.<slug> { ... }`
+   rule, injected as a `<style id="nb-theme-tokens">` in `<head>` — before the
+   Global CSS box, so custom CSS can still override a theme.
+3. `app/providers.tsx` feeds the slug list and default to `next-themes`, and
+   `context/ThemeCatalogContext.tsx` carries names + icons to the switcher.
+
+`libs/ui/src/styles/theme.css` remains as the fallback palette for standalone
+consumers of the published `@nextblock-cms/ui` package. Generated rules use
+`:root.<slug>` (specificity 0,2,0) so they always beat that file's `.dark` /
+`.vibrant` rules (0,1,0) regardless of stylesheet order.
+
+### Token storage
+
+Colour tokens are stored as **bare HSL triplets** (`"222 47% 11%"`), not hex,
+because `libs/ui/tailwind.config.js` composes them as `hsl(var(--primary))` and
+appends alpha as `hsl(var(--primary) / 0.5)` — only a bare triplet supports
+that. `lib/themes/tokenColor.ts` converts to and from the hex the colour picker
+speaks. The allowed token list lives in `lib/themes/tokens.ts`; anything not on
+it is dropped on save, and values are shape-checked, because the result is
+interpolated into a `<style>` tag.
+
+Per-theme `extra_css` is emitted **nested inside** the theme rule, so authors
+write `& h1 { ... }` and scoping is automatic. `sanitizeExtraCss()` strips `<`
+and unbalanced `}` so it cannot escape the rule or close the style element.
+
+### Known limitation: `dark:` utilities under custom themes
+
+Tailwind's dark variant compiles to `.dark`, and `darkMode: ['class']` is fixed
+at build time. A custom theme with `color_scheme: 'dark'` recolours every token
+and sets CSS `color-scheme`, but does **not** activate `dark:` utilities — the
+same behaviour the shipped `.vibrant` theme has always had.
+
+It cannot be fixed by mapping the theme to two classes: `next-themes` applies
+its value with a single `classList.add(value)`, and `DOMTokenList.add` throws
+`InvalidCharacterError` on a string containing a space. Wiring `dark:` to a data
+attribute would require a pre-hydration script mirroring next-themes' own.
+
+Verify the database → CSS path without booting the app:
+
+```bash
+npm run verify:site-themes
+```
+
+### Block text colour
+
+`apps/nextblock/lib/blocks/blockColors.ts` is the single source of truth for
+block text colour, shared by `HeadingBlockRenderer`, `EditableBlock` and
+`ColumnEditor` so the CMS preview cannot drift from the live page.
+
+A stored value is either a **theme token** keyword (`"primary"` — follows the
+theme) or a **literal CSS colour** (`"#FF8800"` — fixed). Tokens render as a
+static Tailwind class; literals render as an inline `style`. `resolveTextColor()`
+returns `{ className?, style? }` and falls back to `{}` for anything it does not
+recognise, so a hand-edited value degrades to the inherited colour instead of
+emitting a bogus class.
+
+Class names here are written as **complete literals**. Tailwind v4 ignores the
+`safelist` key in the legacy JS config — `libs/ui/tailwind.config.js` still
+carries one, but v4 never reads it, so a class exists only if the scanner finds
+the whole string in a source file.
+
+The editor control is `ColorField` from `libs/ui`, which offers the theme tokens
+and a custom picker (hex, alpha, screen eyedropper, recent colours) with a live
+WCAG contrast badge measured against the section background.

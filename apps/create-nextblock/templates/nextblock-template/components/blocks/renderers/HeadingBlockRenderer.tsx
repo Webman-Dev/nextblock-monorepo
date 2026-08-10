@@ -1,5 +1,6 @@
 import React from "react";
 import type { HeadingBlockContent } from '../../../lib/blocks/blockRegistry';
+import { resolveTextAlign, resolveTextColor } from '../../../lib/blocks/blockColors';
 import type { VisualEditAttributes } from "../../../lib/visual-editing/types";
 
 interface HeadingBlockRendererProps {
@@ -23,19 +24,15 @@ const HeadingBlockRenderer: React.FC<HeadingBlockRendererProps> = ({
       : 2;
   const Tag: React.ElementType = `h${level}`;
   
-  let alignmentClass = "";
-  if (content.textAlign) {
-    alignmentClass = `text-${content.textAlign}`;
-  }
+  const alignmentClass = resolveTextAlign(content.textAlign);
+  const { className: colorClass, style: colorStyle } = resolveTextColor(content.textColor);
 
-  let colorClass = "";
-  if (content.textColor) {
-    colorClass = `text-${content.textColor}`;
-  }
+  const combinedClasses = ["my-6 font-bold container mx-auto", alignmentClass, colorClass]
+    .filter(Boolean)
+    .join(" ");
 
-  const combinedClasses = `my-6 font-bold container mx-auto ${alignmentClass} ${colorClass}`.trim();
   return (
-    <Tag className={combinedClasses} {...visualEditAttributes}>
+    <Tag className={combinedClasses} style={colorStyle} {...visualEditAttributes}>
       {content.text_content}
     </Tag>
   );

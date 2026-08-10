@@ -9,6 +9,7 @@ type Block = Database['public']['Tables']['blocks']['Row'];
 import { Button, Card, CardContent, Avatar, AvatarImage, AvatarFallback } from "@nextblock-cms/ui";
 import { GripVertical, Edit2, Image as ImageIcon, MessageSquareQuote } from "lucide-react";
 import { blockHasEditableContent, getBlockDefinition, blockRegistry, BlockType } from '../../../../lib/blocks/blockRegistry';
+import { resolveTextAlign, resolveTextColor } from '../../../../lib/blocks/blockColors';
 import { BlockEditorModal } from './BlockEditorModal';
 import { DeleteBlockButtonClient } from './DeleteBlockButtonClient';
 import { cn } from '@nextblock-cms/utils';
@@ -161,9 +162,7 @@ export default function EditableBlock({
        case 'heading': {
           const content = (block.content || {}) as any;
           const level = content.level || 1;
-          const headingAlign = content.textAlign || 'left';
-          const textColor = content.textColor || 'foreground';
-          
+
           const sizeClasses: Record<number, string> = {
             1: "text-4xl font-extrabold",
             2: "text-3xl font-bold",
@@ -173,25 +172,20 @@ export default function EditableBlock({
             6: "text-base font-semibold",
           };
 
-          const colorClasses: Record<string, string> = {
-             primary: "text-primary",
-             secondary: "text-secondary",
-             accent: "text-accent",
-             destructive: "text-destructive",
-             muted: "text-muted-foreground",
-             background: "text-background",
-             foreground: "text-foreground"
-          };
+          // Shared with HeadingBlockRenderer so the preview cannot drift.
+          const { className: colorClass, style: colorStyle } = resolveTextColor(content.textColor);
 
           return (
              <div className="py-2">
-                  <div className={cn(
-                     "w-full leading-tight",
-                     sizeClasses[level] || sizeClasses[1],
-                     colorClasses[textColor] || "text-foreground",
-                     headingAlign === 'center' && 'text-center',
-                     headingAlign === 'right' && 'text-right'
-                  )}>
+                  <div
+                     style={colorStyle}
+                     className={cn(
+                        "w-full leading-tight",
+                        sizeClasses[level] || sizeClasses[1],
+                        colorClass ?? (colorStyle ? undefined : "text-foreground"),
+                        resolveTextAlign(content.textAlign)
+                     )}
+                  >
                      {content.text_content || <span className="text-muted-foreground italic text-sm font-normal">Empty heading</span>}
                   </div>
              </div>

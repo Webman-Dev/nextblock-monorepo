@@ -6,6 +6,7 @@ import { Button } from '@nextblock-cms/ui';
 import { PlusCircle, Trash2, Edit2, GripVertical, Image as ImageIcon } from "lucide-react";
 import { SectionBlockContent } from '../../../../lib/blocks/blockRegistry';
 import { availableBlockTypes, blockHasEditableContent, getBlockDefinition, getInitialContent, BlockType } from '../../../../lib/blocks/blockRegistry';
+import { resolveTextAlign, resolveTextColor } from '../../../../lib/blocks/blockColors';
 import { useDroppable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -136,9 +137,8 @@ function SortableColumnBlock({ block, index, columnIndex, onEdit, onDelete, bloc
       case 'heading': {
          const content = block.content as any;
          const level = content.level || 1;
-         const headingAlign = content.textAlign || 'left';
          const textColor = content.textColor || 'foreground';
-         
+
          const sizeClasses: Record<number, string> = {
            1: "text-4xl font-extrabold",
            2: "text-3xl font-bold",
@@ -148,32 +148,27 @@ function SortableColumnBlock({ block, index, columnIndex, onEdit, onDelete, bloc
            6: "text-base font-semibold",
          };
 
-         const colorClasses: Record<string, string> = {
-            primary: "text-primary",
-            secondary: "text-secondary",
-            accent: "text-accent",
-            destructive: "text-destructive",
-            muted: "text-muted-foreground",
-            background: "text-background",
-            foreground: "text-foreground"
-         };
-
-         // Override for dark background if color is basic
-         let appliedColorClass = colorClasses[textColor] || "text-foreground";
-         if (isDarkBackground) {
+         // Shared with HeadingBlockRenderer so the preview cannot drift.
+         const { className: resolvedColorClass, style: colorStyle } = resolveTextColor(textColor);
+         let appliedColorClass = resolvedColorClass ?? (colorStyle ? undefined : "text-foreground");
+         // A custom colour is literal — only the theme tokens get the dark-surface
+         // legibility override, since only they are ambiguous against it.
+         if (isDarkBackground && !colorStyle) {
             if (textColor === 'foreground') appliedColorClass = 'text-white/90';
             if (textColor === 'muted') appliedColorClass = 'text-white/70';
          }
 
          return (
             <div className="flex gap-3">
-                 <div className={cn(
-                    "w-full leading-tight",
-                    sizeClasses[level] || sizeClasses[1],
-                    appliedColorClass,
-                    headingAlign === 'center' && 'text-center',
-                    headingAlign === 'right' && 'text-right'
-                 )}>
+                 <div
+                    style={colorStyle}
+                    className={cn(
+                       "w-full leading-tight",
+                       sizeClasses[level] || sizeClasses[1],
+                       appliedColorClass,
+                       resolveTextAlign(content.textAlign)
+                    )}
+                 >
                     {content.text_content || <span className={cn("text-muted-foreground font-normal text-sm italic", isDarkBackground && "text-white/50")}>Empty heading</span>}
                  </div>
             </div>

@@ -15,6 +15,7 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
 import { AuthProvider } from '../context/AuthContext';
 import { LanguageProvider, useLanguage } from '../context/LanguageContext';
 import { CurrentContentProvider } from '../context/CurrentContentContext';
+import { ThemeCatalogProvider } from '../context/ThemeCatalogContext';
 import { DeferredCartTranslator } from '../components/DeferredCartTranslator';
 import { CurrencyProvider } from '@nextblock-cms/ecommerce/CurrencyProvider';
 import { TranslationsProvider } from '@nextblock-cms/utils';
@@ -46,8 +47,19 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
     initialDefaultLanguage,
     rememberVisitorChoice,
     translations,
-    nonce
+    nonce,
+    themeSlugs,
+    initialTheme,
+    themeCatalog,
   } = props;
+
+  // Themes come from the site_themes table. Fall back to the three that ship in
+  // libs/ui/src/styles/theme.css if the table is empty or unreachable, so the
+  // switcher never renders an empty list.
+  const resolvedThemes: string[] =
+    Array.isArray(themeSlugs) && themeSlugs.length > 0 ? themeSlugs : ['light', 'dark', 'vibrant'];
+  const resolvedDefault: string =
+    typeof initialTheme === 'string' && resolvedThemes.includes(initialTheme) ? initialTheme : 'light';
 
   return (
     <AuthProvider serverUser={serverUser} serverProfile={serverProfile}>
@@ -67,13 +79,13 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
             <TranslationBridge translations={translations}>
               <ThemeProvider
                 attribute="class"
-                defaultTheme="light"
+                defaultTheme={resolvedDefault}
                 enableSystem
                 disableTransitionOnChange
                 nonce={nonce}
-                themes={['light', 'dark', 'vibrant']}
+                themes={resolvedThemes}
               >
-                {children}
+                <ThemeCatalogProvider themes={themeCatalog}>{children}</ThemeCatalogProvider>
               </ThemeProvider>
             </TranslationBridge>
           </CurrentContentProvider>

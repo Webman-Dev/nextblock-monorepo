@@ -1,6 +1,6 @@
 {
   "name": "@nextblock/source",
-  "version": "0.14.2",
+  "version": "0.14.4",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -56,6 +56,7 @@
     "test-create": "node apps/create-nextblock/bin/create-nextblock.js",
     "deploy:supabase": "node tools/scripts/deploy-supabase.js",
     "generate:sandbox": "npx tsx tools/scripts/generate-sandbox-reset.ts",
+    "verify:site-themes": "npx tsx --tsconfig=tsconfig.base.json apps/nextblock/scripts/verify-site-themes.ts",
     "generate:migrations-bundle": "npx tsx tools/scripts/generate-migrations-bundle.ts",
     "verify:cortex-ai-routing": "npx tsx --tsconfig=tsconfig.base.json --conditions=react-server apps/nextblock/scripts/verify-cortex-ai-routing.ts",
     "verify:cortex-ai-generate-blocks": "npx tsx --tsconfig=tsconfig.base.json --conditions=react-server apps/nextblock/scripts/verify-cortex-ai-generate-blocks.ts",
