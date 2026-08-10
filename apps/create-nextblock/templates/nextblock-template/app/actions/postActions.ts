@@ -2,6 +2,7 @@
 
 import { cache } from 'react';
 import { createClient } from '@nextblock-cms/db/server';
+import { buildPublishedAtOrFilter } from '@nextblock-cms/utils';
 import { revalidatePath } from 'next/cache';
 import type { Database } from '@nextblock-cms/db';
 import type { PostWithMediaDimensions } from '../../components/blocks/types';
@@ -105,6 +106,8 @@ async function fetchPublishedPostsPage(languageId: number, page: number, limit: 
       { count: 'exact' }
     )
     .eq('status', 'published')
+    // Without this a scheduled post is listed here while its own URL 404s.
+    .or(buildPublishedAtOrFilter())
     .eq('language_id', languageId)
     .order('published_at', { ascending: false })
     .range(offset, offset + limit - 1);

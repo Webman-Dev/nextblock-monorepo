@@ -30,6 +30,7 @@ type Post = Database['public']['Tables']['posts']['Row'] & { feature_image_url?:
 import LanguageFilterSelect from "../components/LanguageFilterSelect";
 import DeletePostButtonClient from "./components/DeletePostButtonClient"; // Import the new client component
 import { ContentTransferControls } from "../import-export/ContentTransferControls";
+import VisibilityBadge from "../components/VisibilityBadge";
 
 async function getPostsWithDetails(filterLanguageId?: number): Promise<{ post: Post; languageCode: string }[]> {
   const supabase = createClient();
@@ -154,19 +155,11 @@ export default async function CmsPostsListPage(props: CmsPostsListPageProps) {
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        post.status === "published" ? "default" :
-                        post.status === "draft" ? "secondary" : "destructive"
-                      }
-                      className={
-                        post.status === "published" ? "bg-green-100 text-green-700 dark:bg-green-700/30 dark:text-green-300 dark:border-green-700/50" :
-                        post.status === "draft" ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-700/30 dark:text-yellow-300 dark:border-yellow-700/50" :
-                        "bg-slate-100 text-slate-700 dark:bg-slate-700/30 dark:text-slate-300 dark:border-slate-600"
-                      }
-                    >
-                      {post.status.charAt(0).toUpperCase() + post.status.slice(1)}
-                    </Badge>
+                    <VisibilityBadge
+                      type="post"
+                      status={post.status}
+                      publishedAt={post.published_at}
+                    />
                   </TableCell>
                   <TableCell><Badge variant="outline" className="dark:border-slate-600">{languageCode}</Badge></TableCell>
                   <TableCell className="text-muted-foreground text-xs hidden md:table-cell">/article/{post.slug}</TableCell>

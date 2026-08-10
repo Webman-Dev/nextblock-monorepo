@@ -4,6 +4,7 @@ import type { Database } from '@nextblock-cms/db/types';
 import type { ProductFormValues } from './product-schema';
 import { syncSharedInventoryForSavedProduct } from './shared-inventory';
 import { normalizeCurrencyCode } from '@nextblock-cms/utils/utils';
+import { buildPublishedAtOrFilter } from '@nextblock-cms/utils';
 
 // Helper to convert dollars to cents
 const toCents = (dollars: number) => Math.round(dollars * 100);
@@ -905,7 +906,11 @@ export async function fetchTranslatedProductsForCartInternal(
       translation_group_id
     `)
     .eq('language_id', language.id)
-    .eq('status', 'active');
+    .eq('status', 'active')
+    // Scheduled products (a future published_at) stay out of the catalog until
+    // their go-live moment. PostgREST ANDs successive `or=` params, so this
+    // composes safely with the caller-supplied filters below.
+    .or(buildPublishedAtOrFilter());
 
   if (filters.length > 0) {
     query = query.or(filters.join(','));

@@ -8,6 +8,7 @@ import {
   resolveTranslatedText,
 } from '@nextblock-cms/ecommerce';
 import { getSsgSupabaseClient, verifyPackageOnline } from '@nextblock-cms/db/server';
+import { LIVE_STATUS, buildPublishedAtOrFilter, isPubliclyVisible } from '@nextblock-cms/utils';
 import { notFound } from 'next/navigation';
 import { Metadata } from 'next';
 import { draftMode, cookies, headers } from 'next/headers';
@@ -124,7 +125,16 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   const { data: product } = await getProductBySlug(supabase, slug, preferredLocale);
   const productRecord = product as any;
 
-  if (!productRecord || productRecord.status !== 'active') return { title: 'Product Not Found' };
+  if (
+    !productRecord ||
+    !isPubliclyVisible({
+      status: productRecord.status,
+      publishedAt: productRecord.published_at,
+      liveStatus: LIVE_STATUS.product,
+    })
+  ) {
+    return { title: 'Product Not Found' };
+  }
   
   // Resolve image URL for OG Image
   let imageUrl = undefined;
@@ -147,6 +157,8 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
       .select('language_id, slug')
       .eq('translation_group_id', productRecord.translation_group_id)
       .eq('status', 'active')
+      // Never advertise a scheduled translation via hreflang.
+      .or(buildPublishedAtOrFilter())
   ]);
 
   const { data: languages } = languagesResult;
@@ -225,11 +237,23 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const { data: product } = await getProductBySlug(supabase, slug, preferredLocale);
   let productRecord = product as any;
 
-  if (!productRecord || productRecord.status !== 'active') {
+  const draft = await draftMode();
+
+  // Draft mode is how the CMS previews a product before it is public, so it must
+  // reach draft and scheduled rows — everyone else only sees active products whose
+  // go-live moment has passed.
+  if (
+    !productRecord ||
+    (!draft.isEnabled &&
+      !isPubliclyVisible({
+        status: productRecord.status,
+        publishedAt: productRecord.published_at,
+        liveStatus: LIVE_STATUS.product,
+      }))
+  ) {
     notFound();
   }
 
-  const draft = await draftMode();
   const visualEditingEnabled =
     draft.isEnabled || process.env.NEXTBLOCK_VISUAL_EDITING_ENABLED === 'true';
 

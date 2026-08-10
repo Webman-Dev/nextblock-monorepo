@@ -21,7 +21,6 @@ import { useHotkeys } from '../../../../hooks/use-hotkeys';
 import FeatureImageField from "../../components/FeatureImageField";
 
 type Page = Database['public']['Tables']['pages']['Row'];
-type PageStatus = Database['public']['Enums']['page_status'];
 type Language = Database['public']['Tables']['languages']['Row'];
 // Remove: import { getActiveLanguagesClientSide } from "@nextblock-cms/db";
 
@@ -76,7 +75,6 @@ export default function PageForm({
     // If no languages are available, default to an empty string
     return "";
   });
-  const [status, setStatus] = useState<PageStatus>(page?.status || "draft");
   const [metaTitle, setMetaTitle] = useState(page?.meta_title || "");
   const [metaDescription, setMetaDescription] = useState(
     page?.meta_description || ""
@@ -118,7 +116,6 @@ export default function PageForm({
     setTitle(page.title || "");
     setSlug(page.slug || "");
     setLanguageId(page.language_id?.toString() || "");
-    setStatus(page.status || "draft");
     setMetaTitle(page.meta_title || "");
     setMetaDescription(page.meta_description || "");
     setCustomCanonical(page.custom_canonical || "");
@@ -131,7 +128,6 @@ export default function PageForm({
     page?.meta_description,
     page?.meta_title,
     page?.slug,
-    page?.status,
     page?.title,
     page?.updated_at,
   ]);
@@ -156,7 +152,6 @@ export default function PageForm({
       formData.append("title", title);
       formData.append("slug", slug);
       formData.append("language_id", languageId);
-      formData.append("status", status);
       formData.append("meta_title", metaTitle);
       formData.append("meta_description", metaDescription);
       formData.append("custom_canonical", customCanonical);
@@ -214,7 +209,6 @@ export default function PageForm({
       title !== (page?.title || "") ||
       slug !== (page?.slug || "") ||
       languageId !== (page?.language_id?.toString() || "") ||
-      status !== (page?.status || "draft") ||
       metaTitle !== (page?.meta_title || "") ||
       metaDescription !== (page?.meta_description || "") ||
       customCanonical !== (page?.custom_canonical || "") ||
@@ -227,7 +221,9 @@ export default function PageForm({
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [title, slug, languageId, status, metaTitle, metaDescription, featureImageId, page, isEditing]);
+    // customCanonical belongs here too: hasChanges checks it, so leaving it out
+    // meant editing only the canonical URL never scheduled a save.
+  }, [title, slug, languageId, metaTitle, metaDescription, customCanonical, featureImageId, page, isEditing]);
 
   // Removed languagesLoading from this condition
   if (authLoading) {
@@ -304,8 +300,10 @@ export default function PageForm({
           </p>
         </div>
 
-        {/* Language */}
-        <div className="md:col-span-2 flex flex-col gap-1">
+        {/* Language. Visibility deliberately lives in the top bar, not here: this
+            form autosaves into the Live Draft on every keystroke, and publishing
+            must never be a side effect of editing settings. */}
+        <div className="md:col-span-4 flex flex-col gap-1">
           <Label htmlFor="language_id" className="text-xs font-medium">Language</Label>
           {availableLanguages.length > 0 ? (
             <Select
@@ -329,26 +327,6 @@ export default function PageForm({
           ) : (
             <p className="text-xs text-muted-foreground py-2 leading-none">No languages available.</p>
           )}
-        </div>
-
-        {/* Status */}
-        <div className="md:col-span-2 flex flex-col gap-1">
-          <Label htmlFor="status" className="text-xs font-medium">Status</Label>
-          <Select
-            name="status"
-            value={status}
-            onValueChange={(value) => setStatus(value as PageStatus)}
-            required
-          >
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="Select status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="published">Published</SelectItem>
-              <SelectItem value="archived">Archived</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
       </div>
 

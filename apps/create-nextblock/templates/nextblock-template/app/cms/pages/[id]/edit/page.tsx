@@ -20,7 +20,13 @@ interface PageWithBlocks extends Page {
   translation_group_id: string;
 }
 
-async function getPageDataWithBlocks(id: number): Promise<{ page: PageWithBlocks; hasDraft: boolean; liveStatus: string; liveSlug: string } | null> {
+async function getPageDataWithBlocks(id: number): Promise<{
+  page: PageWithBlocks;
+  hasDraft: boolean;
+  liveStatus: string;
+  liveSlug: string;
+  livePublishedAt: string | null;
+} | null> {
   const supabase = createClient();
   const { data: pageData, error: pageError } = await supabase
     .from("pages")
@@ -64,7 +70,9 @@ async function getPageDataWithBlocks(id: number): Promise<{ page: PageWithBlocks
       title: (draft.meta.title as string) ?? pageWithBlocks.title,
       slug: (draft.meta.slug as string) ?? pageWithBlocks.slug,
       language_id: (draft.meta.language_id as number) ?? pageWithBlocks.language_id,
-      status: (draft.meta.status as any) ?? pageWithBlocks.status,
+      // `status`/`published_at` are intentionally NOT overlaid: visibility lives on
+      // the row, so the editor must show what is actually live — not what a stale
+      // draft remembers. Older drafts may still carry those keys.
       meta_title: (draft.meta.meta_title as string) ?? pageWithBlocks.meta_title,
       meta_description: (draft.meta.meta_description as string) ?? pageWithBlocks.meta_description,
       blocks: draft.blocks as any[],
@@ -74,10 +82,11 @@ async function getPageDataWithBlocks(id: number): Promise<{ page: PageWithBlocks
   return {
     page: pageWithBlocks,
     hasDraft,
-    // The LIVE row's status/slug (before the draft overlay above) — the "View
-    // Live" button must reflect what is actually published, not the draft.
+    // The LIVE row's visibility/slug — the top-bar control and the "View Live"
+    // link must reflect what is actually published, never the draft.
     liveStatus: pageData.status as string,
     liveSlug: pageData.slug as string,
+    livePublishedAt: (pageData as { published_at?: string | null }).published_at ?? null,
   };
 }
 
@@ -97,15 +106,15 @@ export default async function EditPage(props: { params: Promise<{ id: string }> 
 
   const pageDataResult = await getPageDataWithBlocks(pageId);
   if (!pageDataResult) return notFound();
-  const { page: pageWithBlocks, hasDraft, liveStatus, liveSlug } = pageDataResult;
+  const { page: pageWithBlocks, hasDraft, liveStatus, liveSlug, livePublishedAt } = pageDataResult;
 
   const allSiteLanguages = await getActiveLanguagesServerSide();
 
   const draft = await draftMode();
   const updatePageWithId = updatePage.bind(null, pageId);
   const publicPageUrl = `/${pageWithBlocks.slug}`;
-  const isLive = liveStatus === "published";
   const liveViewUrl = liveSlug === "home" ? "/" : `/${liveSlug}`;
+  const language = allSiteLanguages.find((lang) => lang.id === pageWithBlocks.language_id);
   let initialFeatureImageUrl: string | null = null;
   let initialFeatureImageId: string | null = null;
 
@@ -132,8 +141,11 @@ export default async function EditPage(props: { params: Promise<{ id: string }> 
       allSiteLanguages={allSiteLanguages}
       updatePageAction={updatePageWithId}
       publicPageUrl={publicPageUrl}
-      isLive={isLive}
+      liveStatus={liveStatus}
+      livePublishedAt={livePublishedAt}
       liveViewUrl={liveViewUrl}
+      languageCode={language?.code ?? pageWithBlocks.language_code ?? null}
+      languageName={language ? `${language.name} (${language.code.toUpperCase()})` : null}
       isDraftModeEnabled={draft.isEnabled}
       initialFeatureImageUrl={initialFeatureImageUrl}
       initialFeatureImageId={initialFeatureImageId}

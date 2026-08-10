@@ -1,6 +1,7 @@
 // app/[slug]/page.utils.ts
 import { createClient, getSsgSupabaseClient } from "@nextblock-cms/db/server";
 import type { Database } from "@nextblock-cms/db";
+import { buildPublishedAtOrFilter } from "@nextblock-cms/utils";
 import { draftMode } from "next/headers";
 import { resolveMediaUrl } from "../../lib/media/resolveMediaUrl";
 import { getContentDraft } from "../../lib/visual-editing/draft-content";
@@ -96,7 +97,7 @@ function applyDraftToPage(page: SelectedPageType, draft: ContentDraftRow): Selec
     slug: draftString(draft, "slug", page.slug),
     language_id: languageId,
     language_details: languageId === page.language_id ? page.language_details : null,
-    status: draftString(draft, "status", page.status) as PageType["status"],
+    // Visibility is never taken from a draft — it lives on the row.
     meta_title: draftNullableString(draft, "meta_title", page.meta_title),
     meta_description: draftNullableString(draft, "meta_description", page.meta_description),
     custom_canonical: draftNullableString(draft, "custom_canonical", page.custom_canonical),
@@ -280,7 +281,11 @@ export async function getPageDataBySlug(
       .order('order', { foreignTable: 'blocks', ascending: true });
 
     if (!isDraftModeEnabled) {
-      preferredQuery = preferredQuery.eq("status", "published");
+      // A future published_at means "scheduled" — withheld from the public until
+      // it passes. Preview (draft mode) deliberately ignores the schedule.
+      preferredQuery = preferredQuery
+        .eq("status", "published")
+        .or(buildPublishedAtOrFilter());
     }
 
     const { data: preferredData, error: preferredError } = await preferredQuery.maybeSingle();
@@ -298,7 +303,7 @@ export async function getPageDataBySlug(
       .order('order', { foreignTable: 'blocks', ascending: true });
 
     if (!isDraftModeEnabled) {
-      pageQuery = pageQuery.eq("status", "published");
+      pageQuery = pageQuery.eq("status", "published").or(buildPublishedAtOrFilter());
     }
 
     const { data: candidatePagesData, error: pageError } = await pageQuery;

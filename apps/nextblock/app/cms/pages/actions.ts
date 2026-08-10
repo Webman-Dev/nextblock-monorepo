@@ -43,15 +43,17 @@ export async function createPage(formData: FormData) {
     title: formData.get("title") as string,
     slug: formData.get("slug") as string,
     language_id: parseInt(formData.get("language_id") as string, 10),
-    status: formData.get("status") as PageStatus,
+    // New pages always start private. Going public is an explicit, confirmed act
+    // in the editor's top bar, never a side effect of creating something.
+    status: "draft" as PageStatus,
     meta_title: formData.get("meta_title") as string || null,
     meta_description: formData.get("meta_description") as string || null,
     custom_canonical: formData.get("custom_canonical") as string || null,
     feature_image_id: getOptionalFeatureImageId(formData),
   };
 
-  if (!rawFormData.title || !rawFormData.slug || isNaN(rawFormData.language_id) || !rawFormData.status) {
-    return encodedRedirect("error", "/cms/pages/new", "Missing required fields: title, slug, language, or status.");
+  if (!rawFormData.title || !rawFormData.slug || isNaN(rawFormData.language_id)) {
+    return encodedRedirect("error", "/cms/pages/new", "Missing required fields: title, slug, or language.");
   }
 
   const translation_group_id = formData.get("translation_group_id") as string || uuidv4();
@@ -127,26 +129,27 @@ export async function updatePage(pageId: number, formData: FormData) {
     return { error: "Original page not found or error fetching it." };
   }
 
+  // Visibility (status / published_at) is NOT part of this payload. It belongs to
+  // the top-bar control, which writes it straight to the `pages` row — so editing
+  // page settings can never publish or unpublish anything by accident.
   const rawFormData = {
     title: formData.get("title") as string,
     slug: formData.get("slug") as string,
     language_id: parseInt(formData.get("language_id") as string, 10),
-    status: formData.get("status") as PageStatus,
     meta_title: formData.get("meta_title") as string || null,
     meta_description: formData.get("meta_description") as string || null,
     custom_canonical: formData.get("custom_canonical") as string || null,
     feature_image_id: getOptionalFeatureImageId(formData),
   };
 
-  if (!rawFormData.title || !rawFormData.slug || isNaN(rawFormData.language_id) || !rawFormData.status) {
-     return { error: "Missing required fields: title, slug, language, or status." };
+  if (!rawFormData.title || !rawFormData.slug || isNaN(rawFormData.language_id)) {
+     return { error: "Missing required fields: title, slug, or language." };
   }
 
   const pageUpdateData: Partial<Omit<UpsertPagePayload, 'translation_group_id' | 'author_id'>> = {
     title: rawFormData.title,
     slug: rawFormData.slug,
     language_id: rawFormData.language_id,
-    status: rawFormData.status,
     meta_title: rawFormData.meta_title,
     meta_description: rawFormData.meta_description,
     custom_canonical: rawFormData.custom_canonical,
@@ -193,9 +196,13 @@ export async function updatePage(pageId: number, formData: FormData) {
 
 /**
  * Publish a page directly (status -> "published") so it becomes visible on the
- * live site. Used by the draft-aware "View Live" button when an admin chooses to
- * publish a still-draft page. Revalidates the public surfaces, including "/" when
- * the page belongs to the homepage translation group.
+ * live site. Revalidates the public surfaces, including "/" when the page belongs
+ * to the homepage translation group.
+ *
+ * The CMS top bar now goes through `setContentVisibility` in
+ * `app/actions/visibilityActions.ts`, which also handles scheduling and
+ * unpublishing. This remains as a simple programmatic publish for scripts and
+ * customizations.
  */
 export async function publishPage(pageId: number): Promise<{ error?: string } | void> {
   const supabase = createClient();

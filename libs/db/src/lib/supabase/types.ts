@@ -1129,6 +1129,7 @@ export type Database = {
           language_id: number
           meta_description: string | null
           meta_title: string | null
+          published_at: string | null
           slug: string
           status: Database["public"]["Enums"]["page_status"]
           title: string
@@ -1145,6 +1146,7 @@ export type Database = {
           language_id: number
           meta_description?: string | null
           meta_title?: string | null
+          published_at?: string | null
           slug: string
           status?: Database["public"]["Enums"]["page_status"]
           title: string
@@ -1161,6 +1163,7 @@ export type Database = {
           language_id?: number
           meta_description?: string | null
           meta_title?: string | null
+          published_at?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["page_status"]
           title?: string
@@ -1686,6 +1689,7 @@ export type Database = {
           price: number
           prices: Json
           product_type: string
+          published_at: string | null
           sale_end_at: string | null
           sale_price: number | null
           sale_prices: Json | null
@@ -1723,6 +1727,7 @@ export type Database = {
           price: number
           prices?: Json
           product_type: string
+          published_at?: string | null
           sale_end_at?: string | null
           sale_price?: number | null
           sale_prices?: Json | null
@@ -1760,6 +1765,7 @@ export type Database = {
           price?: number
           prices?: Json
           product_type?: string
+          published_at?: string | null
           sale_end_at?: string | null
           sale_price?: number | null
           sale_prices?: Json | null

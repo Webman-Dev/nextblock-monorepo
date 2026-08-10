@@ -84,14 +84,13 @@ function applyDraftToPost(post: any, draft: ContentDraftRow) {
     slug: draftString(draft, "slug", post.slug),
     language_id: languageId,
     languages: languageId === post.language_id ? post.languages : null,
-    status: draftString(draft, "status", post.status) as PostType["status"],
+    // Visibility is never taken from a draft — it lives on the row.
     meta_title: draftNullableString(draft, "meta_title", post.meta_title),
     meta_description: draftNullableString(draft, "meta_description", post.meta_description),
     custom_canonical: draftNullableString(draft, "custom_canonical", post.custom_canonical),
     label: draftNullableString(draft, "label", post.label),
     excerpt: draftNullableString(draft, "excerpt", post.excerpt),
     subtitle: draftNullableString(draft, "subtitle", post.subtitle),
-    published_at: draftNullableString(draft, "published_at", post.published_at),
     feature_image_id: draftNullableString(draft, "feature_image_id", post.feature_image_id),
     translation_group_id: draftString(
       draft,

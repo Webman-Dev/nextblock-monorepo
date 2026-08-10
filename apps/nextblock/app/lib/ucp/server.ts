@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { getServiceRoleSupabaseClient, verifyPackageOnline } from '@nextblock-cms/db/server';
+import { buildPublishedAtOrFilter } from '@nextblock-cms/utils';
 import {
   getDefaultCurrency,
   inferCurrencyCodeFromLocale,
@@ -1099,6 +1100,7 @@ export async function searchCatalogProducts(body: unknown, request: Request) {
     .from('products')
     .select(PRODUCT_SELECT, { count: 'exact' })
     .eq('status', 'active')
+    .or(buildPublishedAtOrFilter())
     .order('created_at', { ascending: false })
     .range(pagination.offset, pagination.offset + pagination.limit - 1);
 
@@ -1192,7 +1194,7 @@ async function selectRowsByField(
 
   let query = client.from(table).select(select).in(field, values);
   if (table === 'products') {
-    query = query.eq('status', 'active');
+    query = query.eq('status', 'active').or(buildPublishedAtOrFilter());
   }
 
   const { data } = await query;
@@ -1251,6 +1253,7 @@ async function resolveProductRowsByIdentifiers(ids: string[]): Promise<{
     .from('products')
     .select(PRODUCT_SELECT)
     .eq('status', 'active')
+    .or(buildPublishedAtOrFilter())
     .in('id', productIds);
 
   if (error) {

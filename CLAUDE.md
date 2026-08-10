@@ -105,11 +105,17 @@ Subsystems that span many files (each has a doc):
   or `db:migrate:fresh` against a shared/production database. The migration folder
   was re-baselined (2026-07): migrations `00000000000000`–`00000000000044` were squashed
   into the idempotent baseline `00000000000000`–`00000000000003` (schema / constraints+indexes
-  / security+grants / seed), which is the schema source of truth; the next new migration is
-  `00000000000004`. Existing DBs already have `000`–`003` in history, so the baseline never
-  replays on them — a one-time history trim (`DELETE FROM supabase_migrations.schema_migrations
-  WHERE version > '00000000000003'`) reconciles prod/sandbox. Read `AGENTS.md` and
-  `docs/04`/`docs/05` before touching migrations.
+  / security+grants / seed), which is the schema source of truth. Existing DBs already have
+  `000`–`003` in history, so the baseline never replays on them — a one-time history trim
+  (`DELETE FROM supabase_migrations.schema_migrations WHERE version > '00000000000003'`)
+  reconciles prod/sandbox. Read `AGENTS.md` and `docs/04`/`docs/05` before touching migrations.
+
+  **`00000000000004` was where that cleanup ended, not where the folder still starts.**
+  Everything from `004` onward is an ordinary incremental migration appended since the
+  re-baseline, and they'll be squashed into the baseline again at the next cleanup. So don't
+  trust a hardcoded "next migration is N" anywhere in the docs — **list the folder and take
+  the number after the highest file on disk.** (`AGENTS.md` and `docs/04` still repeat the
+  stale `004`; fix them when you next touch either.)
 
 - **After schema/seed changes**, regenerate types and the sandbox payload:
   `npm run db:types`, then `npm run generate:sandbox` (writes

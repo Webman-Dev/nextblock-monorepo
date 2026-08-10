@@ -1,4 +1,5 @@
 import { getSsgSupabaseClient } from '@nextblock-cms/db/server';
+import { buildPublishedAtOrFilter } from '@nextblock-cms/utils';
 import { getHomepageTranslationGroupId } from './homepage';
 
 /**
@@ -164,7 +165,8 @@ export async function fetchAllPublishedPages(): Promise<SitemapEntry[]> {
       supabase
         .from('pages')
         .select('slug, updated_at, language_id, translation_group_id')
-        .eq('status', 'published'),
+        .eq('status', 'published')
+        .or(buildPublishedAtOrFilter()),
       fetchLanguageMap(supabase),
       getHomepageTranslationGroupId(supabase),
     ]);
@@ -200,13 +202,12 @@ export async function fetchAllPublishedPages(): Promise<SitemapEntry[]> {
 export async function fetchAllPublishedPosts(): Promise<SitemapEntry[]> {
   const supabase = getSsgSupabaseClient();
   try {
-    const nowIso = new Date().toISOString();
     const [{ data: posts, error }, languageMap] = await Promise.all([
       supabase
         .from('posts')
         .select('slug, updated_at, language_id, translation_group_id')
         .eq('status', 'published')
-        .or(`published_at.is.null,published_at.lte.${nowIso}`),
+        .or(buildPublishedAtOrFilter()),
       fetchLanguageMap(supabase),
     ]);
 
@@ -238,7 +239,8 @@ export async function fetchAllActiveProducts(): Promise<SitemapEntry[]> {
       supabase
         .from('products')
         .select('slug, updated_at, created_at, language_id, translation_group_id')
-        .eq('status', 'active'),
+        .eq('status', 'active')
+        .or(buildPublishedAtOrFilter()),
       fetchLanguageMap(supabase),
     ]);
 

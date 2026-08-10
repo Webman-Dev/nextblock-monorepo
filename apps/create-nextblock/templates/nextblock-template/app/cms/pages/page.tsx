@@ -34,6 +34,7 @@ type Page = Database["public"]["Tables"]["pages"]["Row"];
 import LanguageFilterSelect from "../components/LanguageFilterSelect";
 import DeletePageButtonClient from "./components/DeletePageButtonClient"; // Import the client component
 import { ContentTransferControls } from "../import-export/ContentTransferControls";
+import VisibilityBadge from "../components/VisibilityBadge";
 
 async function getPagesWithDetails(
   filterLanguageId?: number
@@ -172,25 +173,11 @@ export default async function CmsPagesListPage(props: CmsPagesListPageProps) {
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        page.status === "published"
-                          ? "default"
-                          : page.status === "draft"
-                            ? "secondary"
-                            : "destructive"
-                      }
-                      className={
-                        page.status === "published"
-                          ? "bg-green-100 text-green-700 dark:bg-green-700/30 dark:text-green-300 dark:border-green-700/50"
-                          : page.status === "draft"
-                            ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-700/30 dark:text-yellow-300 dark:border-yellow-700/50"
-                            : "bg-slate-100 text-slate-700 dark:bg-slate-700/30 dark:text-slate-300 dark:border-slate-600"
-                      }
-                    >
-                      {page.status.charAt(0).toUpperCase() +
-                        page.status.slice(1)}
-                    </Badge>
+                    <VisibilityBadge
+                      type="page"
+                      status={page.status}
+                      publishedAt={page.published_at}
+                    />
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="dark:border-slate-600">

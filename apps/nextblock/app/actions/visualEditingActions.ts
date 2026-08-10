@@ -172,7 +172,11 @@ async function publishPageDraft(draft: ContentDraftRow, authorId: string) {
   addStringMeta(pageUpdate, draft, "title");
   addStringMeta(pageUpdate, draft, "slug");
   addNumberMeta(pageUpdate, draft, "language_id");
-  addStringMeta(pageUpdate, draft, "status");
+  // `status`/`published_at` are deliberately NOT copied from the draft. Visibility
+  // is owned by the top-bar control (setPageVisibility) and written straight to the
+  // row; publishing a draft that still carries an old status would silently roll a
+  // page back to draft — or push one live — behind the editor's back. Older drafts
+  // may still hold those keys; they are inert.
   addNullableStringMeta(pageUpdate, draft, "meta_title");
   addNullableStringMeta(pageUpdate, draft, "meta_description");
   addNullableStringMeta(pageUpdate, draft, "custom_canonical");
@@ -217,14 +221,14 @@ async function publishPostDraft(draft: ContentDraftRow, authorId: string) {
   addStringMeta(postUpdate, draft, "title");
   addStringMeta(postUpdate, draft, "slug");
   addNumberMeta(postUpdate, draft, "language_id");
-  addStringMeta(postUpdate, draft, "status");
+  // See publishPageDraft: visibility (`status`/`published_at`) never rides along
+  // with a content draft.
   addNullableStringMeta(postUpdate, draft, "meta_title");
   addNullableStringMeta(postUpdate, draft, "meta_description");
   addNullableStringMeta(postUpdate, draft, "custom_canonical");
   addNullableStringMeta(postUpdate, draft, "label");
   addNullableStringMeta(postUpdate, draft, "excerpt");
   addNullableStringMeta(postUpdate, draft, "subtitle");
-  addNullableStringMeta(postUpdate, draft, "published_at");
   addNullableStringMeta(postUpdate, draft, "feature_image_id");
 
   const { error: postError } = await supabase

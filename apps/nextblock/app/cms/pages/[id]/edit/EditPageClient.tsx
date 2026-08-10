@@ -4,10 +4,10 @@ import Link from "next/link";
 import React from "react";
 import { Separator } from "@nextblock-cms/ui";
 import { Button } from "@nextblock-cms/ui";
-import { ViewLiveButton } from "@nextblock-cms/ui";
-import { ArrowLeft, FilePenLine } from "lucide-react";
-import { publishPage } from "../../actions";
+import { ArrowLeft, Eye, FilePenLine } from "lucide-react";
 import PageForm from "../../components/PageForm";
+import VisibilityControl from "../../../components/VisibilityControl";
+import { buildViewUrl } from "../../../../../lib/publishing/viewUrl";
 import BlockEditorArea from "../../../blocks/components/BlockEditorArea";
 import ContentLanguageSwitcher from "../../../components/ContentLanguageSwitcher";
 import CopyContentFromLanguage from "../../../components/CopyContentFromLanguage";
@@ -33,8 +33,11 @@ interface EditPageClientProps {
   allSiteLanguages: Language[];
   updatePageAction: (formData: FormData) => Promise<{ error?: string } | void>;
   publicPageUrl: string;
-  isLive: boolean;
+  liveStatus: string;
+  livePublishedAt: string | null;
   liveViewUrl: string;
+  languageCode: string | null;
+  languageName: string | null;
   isDraftModeEnabled: boolean;
   initialFeatureImageUrl?: string | null;
   initialFeatureImageId?: string | null;
@@ -47,14 +50,19 @@ export default function EditPageClient({
   allSiteLanguages,
   updatePageAction,
   publicPageUrl,
-  isLive,
+  liveStatus,
+  livePublishedAt,
   liveViewUrl,
+  languageCode,
+  languageName,
   isDraftModeEnabled,
   initialFeatureImageUrl,
   initialFeatureImageId,
   hasDraft,
 }: EditPageClientProps) {
-  const draftModeUrl = `/api/draft/start?path=${encodeURIComponent(publicPageUrl)}`;
+  const previewUrl = buildViewUrl({ path: publicPageUrl, languageCode, draft: true });
+  const liveUrl = buildViewUrl({ path: liveViewUrl, languageCode });
+  const isLive = liveStatus === "published";
 
   return (
     <UploadFolderProvider defaultFolder={`pages/${page.slug}/`}>
@@ -111,22 +119,30 @@ export default function EditPageClient({
                 allSiteLanguages={allSiteLanguages}
               />
             )}
-            <ViewLiveButton
-              href={liveViewUrl}
-              isLive={isLive}
-              label="page"
-              publishAction={() => publishPage(pageId)}
-            />
             <Button variant="secondary" asChild>
-              <a
-                href={draftModeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a href={previewUrl} target="_blank" rel="noopener noreferrer">
                 <FilePenLine className="mr-2 h-4 w-4" /> Preview
               </a>
             </Button>
+            {isLive && (
+              <Button variant="outline" asChild>
+                <a href={liveUrl} target="_blank" rel="noopener noreferrer">
+                  <Eye className="mr-2 h-4 w-4" /> View Live
+                </a>
+              </Button>
+            )}
             <RevisionHistoryButton parentType="page" parentId={pageId} />
+            <VisibilityControl
+              type="page"
+              id={pageId}
+              status={liveStatus}
+              publishedAt={livePublishedAt}
+              publicPath={liveViewUrl}
+              languageName={languageName ?? undefined}
+              translationGroupId={page.translation_group_id}
+              languages={allSiteLanguages}
+              hasDraft={hasDraft}
+            />
           </div>
         </div>
 

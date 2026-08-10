@@ -3,6 +3,7 @@ import { cookies, draftMode, headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { createClient, getSsgSupabaseClient } from '@nextblock-cms/db/server';
+import { buildPublishedAtOrFilter } from '@nextblock-cms/utils';
 import PageClientContent from './[slug]/PageClientContent';
 import { getPageDataBySlug } from './[slug]/page.utils';
 import BlockRenderer from '../components/BlockRenderer';
@@ -56,7 +57,7 @@ async function resolveHomepageData(preferredLocale: string) {
       .limit(1);
 
     if (!draft.isEnabled) {
-      siblingQuery = siblingQuery.eq('status', 'published');
+      siblingQuery = siblingQuery.eq('status', 'published').or(buildPublishedAtOrFilter());
     }
 
     const { data: sibling } = await siblingQuery.maybeSingle();
@@ -131,7 +132,8 @@ export async function generateMetadata(): Promise<Metadata> {
       .from('pages')
       .select('language_id, slug')
       .eq('translation_group_id', pageData.translation_group_id)
-      .eq('status', 'published'),
+      .eq('status', 'published')
+      .or(buildPublishedAtOrFilter()),
   ]);
 
   const { data: languages } = languagesResult;
@@ -188,7 +190,8 @@ export default async function RootPage() {
       .from('pages')
       .select('slug, languages!inner(code)')
       .eq('translation_group_id', pageData.translation_group_id)
-      .eq('status', 'published');
+      .eq('status', 'published')
+      .or(buildPublishedAtOrFilter());
 
     if (translations) {
       translations.forEach((translation: PageTranslation) => {

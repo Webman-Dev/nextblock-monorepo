@@ -3,13 +3,13 @@ import React from "react";
 import { Separator } from "@nextblock-cms/ui";
 import { createClient } from "@nextblock-cms/db/server";
 import PostForm from "../../components/PostForm";
-import { updatePost, publishPost } from "../../actions";
+import { updatePost } from "../../actions";
 import type { Database } from "@nextblock-cms/db";
 import { notFound, redirect } from "next/navigation";
 import BlockEditorArea from "../../../blocks/components/BlockEditorArea";
 import Link from "next/link";
-import { Button, ViewLiveButton } from "@nextblock-cms/ui";
-import { ArrowLeft, FilePenLine } from "lucide-react";
+import { Button } from "@nextblock-cms/ui";
+import { ArrowLeft, Eye, FilePenLine } from "lucide-react";
 import ContentLanguageSwitcher from "../../../components/ContentLanguageSwitcher";
 import { getActiveLanguagesServerSide } from "@nextblock-cms/db/server";
 import { normalizeContentDraftRow } from "../../../../../lib/visual-editing/draft-content";
@@ -19,6 +19,8 @@ import RevisionHistoryButton from "../../../revisions/RevisionHistoryButton";
 import { resolveMediaUrl } from "../../../../../lib/media/resolveMediaUrl";
 import { CortexAiPageContextRegistrar } from "../../../components/CortexAiPageContext";
 import DraftStatusActions from "../../../components/DraftStatusActions";
+import VisibilityControl from "../../../components/VisibilityControl";
+import { buildViewUrl } from "../../../../../lib/publishing/viewUrl";
 
 type PostType = Database['public']['Tables']['posts']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
@@ -30,7 +32,13 @@ interface PostWithBlocks extends PostType {
   translation_group_id: string;
 }
 
-async function getPostDataWithBlocks(id: number): Promise<{ post: PostWithBlocks; hasDraft: boolean; liveStatus: string; liveSlug: string } | null> {
+async function getPostDataWithBlocks(id: number): Promise<{
+  post: PostWithBlocks;
+  hasDraft: boolean;
+  liveStatus: string;
+  liveSlug: string;
+  livePublishedAt: string | null;
+} | null> {
   const supabase = createClient();
   const { data: postData, error: postError } = await supabase
     .from("posts")
@@ -74,13 +82,13 @@ async function getPostDataWithBlocks(id: number): Promise<{ post: PostWithBlocks
       title: (draft.meta.title as string) ?? postWithBlocks.title,
       slug: (draft.meta.slug as string) ?? postWithBlocks.slug,
       language_id: (draft.meta.language_id as number) ?? postWithBlocks.language_id,
-      status: (draft.meta.status as any) ?? postWithBlocks.status,
+      // `status`/`published_at` are intentionally NOT overlaid — see the matching
+      // note in cms/pages/[id]/edit/page.tsx. Visibility comes from the row.
       meta_title: (draft.meta.meta_title as string) ?? postWithBlocks.meta_title,
       meta_description: (draft.meta.meta_description as string) ?? postWithBlocks.meta_description,
       label: (draft.meta.label as string) ?? postWithBlocks.label,
       excerpt: (draft.meta.excerpt as string) ?? postWithBlocks.excerpt,
       subtitle: (draft.meta.subtitle as string) ?? postWithBlocks.subtitle,
-      published_at: (draft.meta.published_at as string) ?? postWithBlocks.published_at,
       feature_image_id: (draft.meta.feature_image_id as any) ?? postWithBlocks.feature_image_id,
       blocks: draft.blocks as any[],
     };
@@ -89,10 +97,11 @@ async function getPostDataWithBlocks(id: number): Promise<{ post: PostWithBlocks
   return {
     post: postWithBlocks,
     hasDraft,
-    // The LIVE row's status/slug (before the draft overlay above) — the "View
-    // Live" button must reflect what is actually published, not the draft.
+    // The LIVE row's visibility/slug — the top-bar control and the "View Live"
+    // link must reflect what is actually published, never the draft.
     liveStatus: postData.status as string,
     liveSlug: postData.slug as string,
+    livePublishedAt: (postData.published_at as string | null) ?? null,
   };
 }
 
@@ -120,7 +129,9 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
     return notFound();
   }
 
-  const { post: postWithBlocks, hasDraft, liveStatus, liveSlug } = postDataResult;
+  const { post: postWithBlocks, hasDraft, liveStatus, liveSlug, livePublishedAt } = postDataResult;
+  const language = allSiteLanguages.find((lang) => lang.id === postWithBlocks.language_id);
+  const languageCode = language?.code ?? postWithBlocks.language_code ?? null;
 
   let initialFeatureImageUrl: string | null = null;
   let initialFeatureImageIdProp: string | null = null;
@@ -144,9 +155,10 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
 
   const updatePostWithId = updatePost.bind(null, postId);
   const publicPostUrl = `/article/${postWithBlocks.slug}`;
-  const draftModeUrl = `/api/draft/start?path=${encodeURIComponent(publicPostUrl)}`;
-  const isLive = liveStatus === "published";
   const liveViewUrl = `/article/${liveSlug}`;
+  const previewUrl = buildViewUrl({ path: publicPostUrl, languageCode, draft: true });
+  const liveUrl = buildViewUrl({ path: liveViewUrl, languageCode });
+  const isLive = liveStatus === "published";
   
   return (
     <UploadFolderProvider defaultFolder={`posts/${postWithBlocks.slug}/`}>
@@ -190,19 +202,31 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
                   allSiteLanguages={allSiteLanguages}
                 />
               )}
-              <ViewLiveButton
-                href={liveViewUrl}
-                isLive={isLive}
-                label="post"
-                publishAction={publishPost.bind(null, postId)}
-              />
               <Button variant="secondary" asChild>
-                <a href={draftModeUrl} target="_blank" rel="noopener noreferrer">
+                <a href={previewUrl} target="_blank" rel="noopener noreferrer">
                   <FilePenLine className="mr-2 h-4 w-4" />
                   Preview
                 </a>
               </Button>
+              {isLive && (
+                <Button variant="outline" asChild>
+                  <a href={liveUrl} target="_blank" rel="noopener noreferrer">
+                    <Eye className="mr-2 h-4 w-4" /> View Live
+                  </a>
+                </Button>
+              )}
               <RevisionHistoryButton parentType="post" parentId={postId} />
+              <VisibilityControl
+                type="post"
+                id={postId}
+                status={liveStatus}
+                publishedAt={livePublishedAt}
+                publicPath={liveViewUrl}
+                languageName={language ? `${language.name} (${language.code.toUpperCase()})` : undefined}
+                translationGroupId={postWithBlocks.translation_group_id}
+                languages={allSiteLanguages}
+                hasDraft={hasDraft}
+              />
           </div>
         </div>
 

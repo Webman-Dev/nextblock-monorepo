@@ -1,6 +1,7 @@
 // app/[slug]/page.tsx
 import React from 'react';
 import { getSsgSupabaseClient } from "@nextblock-cms/db/server";
+import { buildPublishedAtOrFilter } from "@nextblock-cms/utils";
 import { notFound } from "next/navigation";
 import type { Metadata } from 'next';
 import PageClientContent from "./PageClientContent";
@@ -55,7 +56,8 @@ export async function generateStaticParams(): Promise<ResolvedPageParams[]> {
   const { data: pages, error } = await supabase
     .from("pages")
     .select("slug")
-    .eq("status", "published");
+    .eq("status", "published")
+    .or(buildPublishedAtOrFilter());
 
   if (error || !pages) {
     console.error("SSG: Error fetching page slugs for static params:", error);
@@ -105,6 +107,8 @@ export async function generateMetadata(
       .select('language_id, slug')
       .eq('translation_group_id', pageData.translation_group_id)
       .eq('status', 'published')
+      // Never advertise a scheduled translation via hreflang.
+      .or(buildPublishedAtOrFilter())
   ]);
 
   const { data: languages } = languagesResult;
@@ -180,7 +184,8 @@ export default async function DynamicPage({ params: paramsPromise }: PageProps) 
       .from("pages")
       .select("slug, languages!inner(code)")
       .eq("translation_group_id", pageData.translation_group_id)
-      .eq("status", "published");
+      .eq("status", "published")
+      .or(buildPublishedAtOrFilter());
 
     if (translations) {
       translations.forEach((translation: PageTranslation) => {

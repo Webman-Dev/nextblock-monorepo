@@ -1,7 +1,7 @@
 import { verifyPackageOnline, getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Eye, FilePenLine } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -11,7 +11,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuButtonTrigger,
-  ViewLiveButton,
 } from '@nextblock-cms/ui';
 import ProductFormClientShell from '../../ProductFormClientShell';
 import {
@@ -22,7 +21,6 @@ import {
   getStoreConfigStatus,
   normalizeCurrencyRecord,
   updateProductAction,
-  publishProductAction,
   getCategoriesWithCount,
   getProductCategories,
 } from '@nextblock-cms/ecommerce/server';
@@ -33,6 +31,8 @@ import {
 } from '../../productFormData';
 import { CortexAiPageContextRegistrar } from '../../../components/CortexAiPageContext';
 import BlockEditorArea from '../../../blocks/components/BlockEditorArea';
+import VisibilityControl from '../../../components/VisibilityControl';
+import { buildViewUrl } from '../../../../../lib/publishing/viewUrl';
 
 export default async function EditProductPage({
   params,
@@ -112,6 +112,17 @@ export default async function EditProductPage({
   const buildTranslationCreateHref = (languageId: number) =>
     `/cms/products/new?from_group=${product.translation_group_id}&target_lang_id=${languageId}`;
   const globalAttributes = buildGlobalAttributesForForm(globalAttributesRaw || []);
+  const productLanguage = languages.find((language) => language.id === product.language_id);
+
+  // The Status select used to sit inside ProductForm, where submitting with
+  // status "active" was blocked unless the payment provider was enabled and
+  // configured. Publishing now happens outside the form, so that guard has to
+  // travel with it — a product nobody can pay for should not reach the storefront.
+  const productProvider = product.payment_provider as 'stripe' | 'freemius' | undefined;
+  const publishBlockedReason =
+    productProvider && (!enabledProviders[productProvider] || !configStatus[productProvider].hasKeys)
+      ? `${productProvider === 'stripe' ? 'Stripe' : 'Freemius'} must be enabled and fully configured before this product can be published.`
+      : null;
 
   const { data: draftData } = await supabase
     .from('product_drafts')
@@ -270,13 +281,53 @@ export default async function EditProductPage({
           ) : null}
 
           {product.slug ? (
-            <ViewLiveButton
-              href={`/product/${product.slug}`}
-              isLive={product.status === 'active'}
-              label="product"
-              publishAction={publishProductAction.bind(null, product.id)}
-            />
+            <>
+              <Button variant="secondary" asChild>
+                <a
+                  href={buildViewUrl({
+                    path: `/product/${product.slug}`,
+                    languageCode: productLanguage?.code ?? null,
+                    draft: true,
+                  })}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <FilePenLine className="mr-2 h-4 w-4" /> Preview
+                </a>
+              </Button>
+              {product.status === 'active' ? (
+                <Button variant="outline" asChild>
+                  <a
+                    href={buildViewUrl({
+                      path: `/product/${product.slug}`,
+                      languageCode: productLanguage?.code ?? null,
+                    })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Eye className="mr-2 h-4 w-4" /> View Live
+                  </a>
+                </Button>
+              ) : null}
+            </>
           ) : null}
+
+          <VisibilityControl
+            type="product"
+            id={product.id}
+            status={product.status}
+            publishedAt={(product as { published_at?: string | null }).published_at ?? null}
+            publicPath={`/product/${product.slug}`}
+            languageName={
+              productLanguage
+                ? `${productLanguage.name} (${productLanguage.code.toUpperCase()})`
+                : undefined
+            }
+            translationGroupId={product.translation_group_id}
+            languages={languages}
+            hasDraft={hasDraft}
+            publishBlockedReason={publishBlockedReason}
+          />
         </div>
       </div>
 

@@ -20,7 +20,6 @@ import { useAuth } from '../../../../context/AuthContext';
 import FeatureImageField from "../../components/FeatureImageField";
 
 type Post = Database['public']['Tables']['posts']['Row'];
-type PageStatus = Database['public']['Enums']['page_status'];
 type Language = Database['public']['Tables']['languages']['Row'];
 import { useHotkeys } from '../../../../hooks/use-hotkeys';
 
@@ -33,28 +32,6 @@ interface PostFormProps {
   availableLanguagesProp?: Language[]; // Make optional
   initialFeatureImageUrl?: string | null;
   initialFeatureImageId?: string | null;
-}
-
-function formatDateTimeLocal(value: string | null | undefined) {
-  if (!value) {
-    return "";
-  }
-
-  try {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return "";
-    }
-
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  } catch {
-    return "";
-  }
 }
 
 export default function PostForm({
@@ -77,12 +54,8 @@ export default function PostForm({
   const [languageId, setLanguageId] = useState<string>(
     post?.language_id?.toString() || ""
   );
-  const [status, setStatus] = useState<PageStatus>(post?.status || "draft");
   const [excerpt, setExcerpt] = useState(post?.excerpt || "");
   const [subtitle, setSubtitle] = useState(post?.subtitle || "");
-  const [publishedAt, setPublishedAt] = useState<string>(() =>
-    formatDateTimeLocal(post?.published_at)
-  );
   const [metaTitle, setMetaTitle] = useState(post?.meta_title || "");
   const [metaDescription, setMetaDescription] = useState(
     post?.meta_description || ""
@@ -124,10 +97,8 @@ export default function PostForm({
     setSlug(post.slug || "");
     setLabel(post.label || "");
     setLanguageId(post.language_id?.toString() || "");
-    setStatus(post.status || "draft");
     setExcerpt(post.excerpt || "");
     setSubtitle(post.subtitle || "");
-    setPublishedAt(formatDateTimeLocal(post.published_at));
     setMetaTitle(post.meta_title || "");
     setMetaDescription(post.meta_description || "");
     setCustomCanonical(post.custom_canonical || "");
@@ -141,9 +112,7 @@ export default function PostForm({
     post?.language_id,
     post?.meta_description,
     post?.meta_title,
-    post?.published_at,
     post?.slug,
-    post?.status,
     post?.subtitle,
     post?.title,
     post?.updated_at,
@@ -181,10 +150,8 @@ export default function PostForm({
       formData.append("slug", slug);
       formData.append("language_id", languageId);
       formData.append("label", label);
-      formData.append("status", status);
       formData.append("excerpt", excerpt);
       formData.append("subtitle", subtitle);
-      formData.append("published_at", publishedAt);
       formData.append("meta_title", metaTitle);
       formData.append("meta_description", metaDescription);
       formData.append("custom_canonical", customCanonical);
@@ -235,17 +202,13 @@ export default function PostForm({
       return;
     }
 
-    const dbPublishedAt = formatDateTimeLocal(post?.published_at);
-
     const hasChanges =
       title !== (post?.title || "") ||
       slug !== (post?.slug || "") ||
       label !== (post?.label || "") ||
       languageId !== (post?.language_id?.toString() || "") ||
-      status !== (post?.status || "draft") ||
       excerpt !== (post?.excerpt || "") ||
       subtitle !== (post?.subtitle || "") ||
-      publishedAt !== dbPublishedAt ||
       metaTitle !== (post?.meta_title || "") ||
       metaDescription !== (post?.meta_description || "") ||
       customCanonical !== (post?.custom_canonical || "") ||
@@ -263,10 +226,8 @@ export default function PostForm({
     slug,
     label,
     languageId,
-    status,
     excerpt,
     subtitle,
-    publishedAt,
     metaTitle,
     metaDescription,
     customCanonical,
@@ -345,34 +306,16 @@ export default function PostForm({
           )}
         </div>
 
-        {/* Status */}
-        <div className="md:col-span-2 flex flex-col gap-1">
-          <Label htmlFor="status" className="text-xs font-medium">Status</Label>
-          <Select name="status" value={status} onValueChange={(value) => setStatus(value as PageStatus)} required>
-            <SelectTrigger className="h-9"><SelectValue placeholder="Select status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="published">Published</SelectItem>
-              <SelectItem value="archived">Archived</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
       </div>
 
-      {/* Row 2: Label + Published At */}
+      {/* Row 2: Label. Visibility and the go-live date live in the top bar — this
+          form autosaves into the Live Draft, and publishing must never be a side
+          effect of editing post settings. */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        {/* Label */}
         <div className="md:col-span-6 flex flex-col gap-1">
           <Label htmlFor="label" className="text-xs font-medium">Label</Label>
           <Input id="label" name="label" value={label} onChange={(e) => setLabel(e.target.value)} className="h-9" placeholder="e.g. Architecture" />
           <p className="text-[10px] text-muted-foreground leading-tight">Short pill text shown on the article hero and post cards.</p>
-        </div>
-
-        {/* Published At */}
-        <div className="md:col-span-6 flex flex-col gap-1">
-          <Label htmlFor="published_at" className="text-xs font-medium">Published At (Optional)</Label>
-          <Input id="published_at" name="published_at" type="datetime-local" value={publishedAt} onChange={(e) => setPublishedAt(e.target.value)} className="h-9" />
-          <p className="text-[10px] text-muted-foreground leading-tight">Leave blank to publish immediately when status is &apos;Published&apos;.</p>
         </div>
       </div>
 

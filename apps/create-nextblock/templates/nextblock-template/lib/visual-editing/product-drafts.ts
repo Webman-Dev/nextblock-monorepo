@@ -382,7 +382,23 @@ export async function publishProductVisualEditingDraft(
       (typeof draft.meta.sku === "string" || typeof draft.meta.price === "number");
 
     if (hasFullProductFormValues) {
-      await updateProduct(auth.supabase as any, productId, draft.meta as any);
+      // Visibility belongs to the row, not the draft: `upsert_product_with_variants`
+      // takes `status` as a required field, so publishing a draft that still carries
+      // an old status would move the product in or out of the storefront behind the
+      // editor's back. Pin it to whatever is live right now. (`published_at` is not
+      // part of the RPC payload, so the schedule survives untouched.)
+      const { data: liveProduct } = await (auth.supabase as any)
+        .from("products")
+        .select("status")
+        .eq("id", productId)
+        .maybeSingle();
+
+      const metaWithLiveVisibility = {
+        ...(draft.meta as any),
+        status: liveProduct?.status ?? (draft.meta as any)?.status,
+      };
+
+      await updateProduct(auth.supabase as any, productId, metaWithLiveVisibility);
       if ((draft.meta as any)?.payment_provider === "freemius") {
         try {
           await syncProductSaleCouponToFreemius({

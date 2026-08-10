@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { getSsgSupabaseClient, verifyPackageOnline } from '@nextblock-cms/db/server';
+import { buildPublishedAtOrFilter } from '@nextblock-cms/utils';
 import { resolveMediaUrl } from '../media/resolveMediaUrl';
 import { getHomepageTranslationGroupId } from '../../app/lib/homepage';
 import type {
@@ -348,6 +349,7 @@ async function fetchPages(languageId: number | null): Promise<SearchCandidate[]>
     `
     )
     .eq('status', 'published')
+    .or(buildPublishedAtOrFilter())
     .order('updated_at', { ascending: false })
     .limit(CANDIDATE_LIMIT);
 
@@ -487,6 +489,7 @@ async function fetchProducts(languageId: number | null): Promise<SearchCandidate
     `
     )
     .eq('status', 'active')
+    .or(buildPublishedAtOrFilter())
     .order('updated_at', { ascending: false })
     .limit(CANDIDATE_LIMIT);
 

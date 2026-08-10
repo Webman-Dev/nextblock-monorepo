@@ -941,21 +941,9 @@ export function ProductForm({
               <Label htmlFor="custom_canonical" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Canonical URL (optional)</Label>
               <Input id="custom_canonical" {...register('custom_canonical')} placeholder="Blank = self-referencing. Absolute https://… URL or /relative path to override." className="h-8 text-sm" />
             </div>
-            {isEdit && (
-              <div className="lg:col-span-2 col-span-2 space-y-1">
-                <Label htmlFor="status" className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Status</Label>
-                <Select onValueChange={(val) => setValue('status', val as any, { shouldDirty: true })} value={watch('status')}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="archived">Archived</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            {/* Visibility lives in the editor's top bar, not here: this form
+                autosaves into the product draft, and publishing a product must
+                never be a side effect of editing its details. */}
           </div>
         </FormSection>
 
@@ -1173,19 +1161,9 @@ export function ProductForm({
  
         {!isEdit && (
           <div className="rounded-lg border bg-card p-3 px-4 shadow-sm flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider leading-none">Status</span>
-              <Select onValueChange={(val) => setValue('status', val as any)} value={watch('status')}>
-                <SelectTrigger className="h-8 w-[110px] text-sm">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              New products start as a draft. Publish it from the top bar once it&apos;s ready.
+            </p>
             <Button disabled={isSubmitting} type="submit" size="sm" className="h-8 text-sm px-5">
               {isSubmitting ? 'Saving...' : 'Save Changes'}
             </Button>

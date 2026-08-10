@@ -14,8 +14,12 @@ import { encodedRedirect } from "@nextblock-cms/utils/server"; // Ensure this is
 
 /**
  * Publish a post directly (status -> "published") so it becomes visible on the
- * live site. Used by the draft-aware "View Live" button when an admin chooses to
- * publish a still-draft post.
+ * live site.
+ *
+ * The CMS top bar now goes through `setContentVisibility` in
+ * `app/actions/visibilityActions.ts`, which also handles scheduling and
+ * unpublishing. This remains as a simple programmatic publish for scripts and
+ * customizations.
  */
 export async function publishPost(postId: number): Promise<{ error?: string } | void> {
   const supabase = createClient();
@@ -75,32 +79,26 @@ export async function createPost(formData: FormData) {
     slug: formData.get("slug") as string,
     language_id: parseInt(formData.get("language_id") as string, 10),
     label: formData.get("label") as string || null,
-    status: formData.get("status") as PageStatus,
+    // New posts always start private; going public is an explicit act in the
+    // editor's top bar, never a side effect of creating something.
+    status: "draft" as PageStatus,
     excerpt: formData.get("excerpt") as string || null,
     subtitle: formData.get("subtitle") as string || null,
-    published_at: formData.get("published_at") as string || null,
     meta_title: formData.get("meta_title") as string || null,
     meta_description: formData.get("meta_description") as string || null,
     custom_canonical: formData.get("custom_canonical") as string || null,
     feature_image_id: featureImageId_create,
   };
 
-  if (!rawFormData.title || !rawFormData.slug || isNaN(rawFormData.language_id) || !rawFormData.status) {
-    return encodedRedirect("error", "/cms/posts/new", "Missing required fields: title, slug, language, or status.");
-  }
-
-  let publishedAtISO: string | null = null;
-  if (rawFormData.published_at) {
-    const parsedDate = new Date(rawFormData.published_at);
-    if (!isNaN(parsedDate.getTime())) publishedAtISO = parsedDate.toISOString();
-    else publishedAtISO = rawFormData.published_at;
+  if (!rawFormData.title || !rawFormData.slug || isNaN(rawFormData.language_id)) {
+    return encodedRedirect("error", "/cms/posts/new", "Missing required fields: title, slug, or language.");
   }
 
   const newTranslationGroupId = uuidv4();
 
   const postData: UpsertPostPayload = {
     ...rawFormData,
-    published_at: publishedAtISO,
+    published_at: null,
     author_id: user.id,
     translation_group_id: newTranslationGroupId,
     feature_image_id: rawFormData.feature_image_id,
@@ -196,33 +194,26 @@ export async function updatePost(postId: number, formData: FormData) {
     featureImageId_update = featureImageIdStr_update;
   }
 
+  // Visibility (status / published_at) is NOT part of this payload — see the note
+  // in cms/pages/actions.ts updatePage. The top-bar control owns it.
   const rawFormData = {
     title: formData.get("title") as string,
     slug: formData.get("slug") as string,
     language_id: existingPost.language_id, // Use existing post's language_id
     label: formData.get("label") as string || null,
-    status: formData.get("status") as PageStatus,
     excerpt: formData.get("excerpt") as string || null,
     subtitle: formData.get("subtitle") as string || null,
-    published_at: formData.get("published_at") as string || null,
     meta_title: formData.get("meta_title") as string || null,
     meta_description: formData.get("meta_description") as string || null,
     custom_canonical: formData.get("custom_canonical") as string || null,
     feature_image_id: featureImageId_update,
   };
 
-  if (!rawFormData.title || !rawFormData.slug || isNaN(rawFormData.language_id) || !rawFormData.status) {
-     return { error: "Missing required fields: title, slug, language, or status." };
+  if (!rawFormData.title || !rawFormData.slug || isNaN(rawFormData.language_id)) {
+     return { error: "Missing required fields: title, slug, or language." };
   }
   if (rawFormData.language_id !== existingPost.language_id) {
       return { error: "Changing the language of an existing post version is not allowed. Create a new translation instead." };
-  }
-
-  let publishedAtISO: string | null = null;
-  if (rawFormData.published_at) {
-    const parsedDate = new Date(rawFormData.published_at);
-    if (!isNaN(parsedDate.getTime())) publishedAtISO = parsedDate.toISOString();
-    else publishedAtISO = rawFormData.published_at;
   }
 
   const postUpdateData: Partial<Omit<UpsertPostPayload, 'translation_group_id' | 'author_id'>> = {
@@ -232,8 +223,6 @@ export async function updatePost(postId: number, formData: FormData) {
     label: rawFormData.label,
     excerpt: rawFormData.excerpt,
     subtitle: rawFormData.subtitle,
-    status: rawFormData.status,
-    published_at: publishedAtISO,
     meta_title: rawFormData.meta_title,
     meta_description: rawFormData.meta_description,
     custom_canonical: rawFormData.custom_canonical,
