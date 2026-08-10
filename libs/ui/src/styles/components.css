@@ -314,3 +314,68 @@
     flex-grow: 0;
   }
 }
+
+/*─────────────────────────────────────────────────────────────────────────────
+  ColorField — skins react-colorful to match the design system.
+
+  Deliberately NOT inside `@layer components`. react-colorful injects its own
+  stylesheet (`.react-colorful { width: 200px; height: 200px }`) into <head> as
+  plain, unlayered CSS, and in the cascade unlayered rules beat every layered
+  rule no matter how specific. Inside a layer these overrides were ignored and
+  the picker kept its intrinsic 200px width, overflowing its grid column.
+  Unlayered + a two-class selector wins cleanly.
+
+  Plain CSS rather than Tailwind arbitrary variants because react-colorful's BEM
+  class names contain double underscores, which Tailwind rewrites into spaces.
+─────────────────────────────────────────────────────────────────────────────*/
+.nb-color-picker {
+  min-width: 0;
+}
+
+.nb-color-picker .react-colorful {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  font: inherit;
+  user-select: none;
+  touch-action: none;
+}
+
+.nb-color-picker .react-colorful__saturation {
+  height: 7rem;
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid hsl(var(--border));
+  border-bottom: 1px solid hsl(var(--border));
+  cursor: crosshair;
+}
+
+.nb-color-picker .react-colorful__hue,
+.nb-color-picker .react-colorful__alpha {
+  height: 0.7rem;
+  width: 100%;
+  margin-top: 0.4rem;
+  border-radius: 9999px;
+}
+
+.nb-color-picker .react-colorful__interactive {
+  outline: none;
+}
+
+.nb-color-picker .react-colorful__interactive:focus-visible .react-colorful__pointer {
+  box-shadow:
+    0 0 0 2px hsl(var(--background)),
+    0 0 0 4px hsl(var(--ring));
+}
+
+.nb-color-picker .react-colorful__pointer {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-width: 2px;
+}
+
+.nb-color-picker .react-colorful__hue .react-colorful__pointer,
+.nb-color-picker .react-colorful__alpha .react-colorful__pointer {
+  width: 0.8rem;
+  height: 0.8rem;
+}

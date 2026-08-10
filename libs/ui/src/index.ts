@@ -4,6 +4,7 @@ export * from './lib/button';
 export * from './lib/card';
 export * from './lib/checkbox';
 export * from './lib/ColorPicker';
+export * from './lib/ColorField';
 export * from './lib/ConfirmationDialog';
 export * from './lib/CustomSelectWithInput';
 export * from './lib/dialog';

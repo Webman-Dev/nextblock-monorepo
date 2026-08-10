@@ -835,7 +835,21 @@ const fallbackBlockSchemas: Record<BlockType, z.ZodTypeAny> = {
   heading: z.object({
     level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]),
     textAlign: z.enum(['left', 'center', 'right', 'justify']).optional(),
-    textColor: z.enum(['primary', 'secondary', 'accent', 'muted', 'destructive', 'background']).optional(),
+    // Mirrors TextColorSchema in apps/nextblock/lib/blocks/blockRegistry.ts —
+    // a theme token, or a literal CSS colour from the block editor's picker.
+    // libs/* cannot import from the app, so the union is restated here.
+    textColor: z
+      .union([
+        z.enum(['foreground', 'primary', 'secondary', 'accent', 'muted', 'destructive', 'background']),
+        z
+          .string()
+          .regex(
+            /^(#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})|rgba?\([^)]+\)|hsla?\([^)]+\))$/i,
+            'Must be a hex, rgb(a) or hsl(a) colour',
+          ),
+      ])
+      .optional()
+      .describe('Prefer a theme token so the heading adapts to dark mode; use a CSS colour only when the brand requires an exact value'),
     text_content: z.string(),
   }),
   image: z.object({

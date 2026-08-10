@@ -12,3 +12,4 @@ export {
   utils,
 } from './lib/utils';
 export * from './lib/nextblock-packages';
+export * from './lib/color';

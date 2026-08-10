@@ -2,6 +2,7 @@ import { z } from '../zod-config';
 import { TestimonialBlockConfig, TestimonialBlockContent } from '../../components/blocks/TestimonialBlock';
 import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSchema, FeaturedProductBlockContent, CartBlockSchema, CartBlockContent, CheckoutBlockSchema, CheckoutBlockContent, ProductDetailsBlockSchema, ProductDetailsBlockContent } from './ecommerce-block-schemas';
 import { availableBlockTypes, type BlockType } from './blockTypes';
+import { CSS_COLOR_PATTERN, TEXT_COLOR_TOKENS } from './blockColors';
 export { availableBlockTypes, type BlockType } from './blockTypes';
 
 /**
@@ -19,11 +20,26 @@ export const TextBlockSchema = z.object({
 });
 export type TextBlockContent = z.infer<typeof TextBlockSchema>;
 
+/**
+ * A text colour is either a theme token (keeps following the theme and dark
+ * mode) or a literal CSS colour from the colour picker. Existing rows only ever
+ * hold tokens, so widening the union is backward compatible.
+ * See `./blockColors` for the token -> class mapping used at render time.
+ */
+export const TextColorSchema = z
+  .union([
+    z.enum(TEXT_COLOR_TOKENS),
+    z.string().regex(CSS_COLOR_PATTERN, 'Must be a hex, rgb(a) or hsl(a) colour'),
+  ])
+  .describe(
+    `A theme token (${TEXT_COLOR_TOKENS.join(', ')}) or a custom CSS colour such as "#FF8800", "rgba(255,136,0,0.8)" or "hsl(28, 100%, 50%)"`,
+  );
+
 export const HeadingBlockSchema = z.object({
   level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]).describe('Heading level (1-6)'),
   text_content: z.string().describe('The text content of the heading'),
   textAlign: z.enum(['left', 'center', 'right', 'justify']).optional().describe('Text alignment'),
-  textColor: z.enum(['primary', 'secondary', 'accent', 'muted', 'destructive', 'background']).optional().describe('Color of the heading text'),
+  textColor: TextColorSchema.optional().describe('Color of the heading text'),
 });
 export type HeadingBlockContent = z.infer<typeof HeadingBlockSchema>;
 
