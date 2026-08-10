@@ -4,6 +4,8 @@ import type { Json } from "@nextblock-cms/db";
 import { createClient, getServiceRoleSupabaseClient } from "@nextblock-cms/db/server";
 import { updateProduct, syncProductSaleCouponToFreemius } from "@nextblock-cms/ecommerce/server";
 import { getCurrentUserCanEdit, normalizeDraftBlocks } from "./draft-content";
+import { getFullProductContent } from "../../app/cms/revisions/utils";
+import { createProductRevision } from "../../app/cms/revisions/service";
 import {
   formatVisualEditingError,
   requireVisualEditingEditableUser,
@@ -377,6 +379,10 @@ export async function publishProductVisualEditingDraft(
     }
 
     const draft = normalizeProductDraftRow(data);
+
+    // Captured before any write, so the revision records the real before/after pair.
+    const previousContent = await getFullProductContent(productId);
+
     const hasFullProductFormValues =
       draft.meta &&
       (typeof draft.meta.sku === "string" || typeof draft.meta.price === "number");
@@ -461,6 +467,25 @@ export async function publishProductVisualEditingDraft(
       }
     }
 
+    // The product row and its blocks are already live at this point, so a failed revision
+    // is reported as a warning rather than aborting: returning early here would leave the
+    // draft row undeleted and the storefront un-revalidated.
+    let revisionWarning: string | null = null;
+    const nextContent = await getFullProductContent(productId);
+    if (previousContent && nextContent) {
+      const revision = await createProductRevision(
+        productId,
+        auth.user.id,
+        previousContent,
+        nextContent
+      );
+      if ("error" in revision) {
+        revisionWarning = revision.error;
+      }
+    } else {
+      revisionWarning = "the product content could not be read back";
+    }
+
     const { error: deleteError } = await (auth.supabase as any)
       .from("product_drafts")
       .delete()
@@ -475,6 +500,10 @@ export async function publishProductVisualEditingDraft(
       revalidateVisualEditingPath(getProductPublicPath(slug));
     }
     revalidateVisualEditingPath(`/cms/products/${productId}/edit`);
+
+    if (revisionWarning) {
+      return { success: true, warning: `Published, but history was not recorded: ${revisionWarning}` };
+    }
 
     return { success: true };
   } catch (error) {

@@ -18,13 +18,20 @@ const cacheMocks = vi.hoisted(() => ({
 
 vi.mock("next/cache", () => cacheMocks);
 vi.mock("server-only", () => ({}));
-vi.mock("../cms/revisions/utils", () => ({
+const revisionMocks = vi.hoisted(() => ({
+  createPageRevision: vi.fn(),
+  createPostRevision: vi.fn(),
   getFullPageContent: vi.fn(),
   getFullPostContent: vi.fn(),
 }));
+
+vi.mock("../cms/revisions/utils", () => ({
+  getFullPageContent: revisionMocks.getFullPageContent,
+  getFullPostContent: revisionMocks.getFullPostContent,
+}));
 vi.mock("../cms/revisions/service", () => ({
-  createPageRevision: vi.fn(),
-  createPostRevision: vi.fn(),
+  createPageRevision: revisionMocks.createPageRevision,
+  createPostRevision: revisionMocks.createPostRevision,
 }));
 vi.mock("../../lib/visual-editing/draft-content", () => draftContentMocks);
 vi.mock("../../lib/visual-editing/product-drafts", () => ({
@@ -175,5 +182,78 @@ describe("visual editing server actions", () => {
 
     expect(result).toEqual({ error: "No draft exists for this content." });
     expect(from).toHaveBeenCalledWith("content_drafts");
+  });
+
+  describe("publishing a page draft", () => {
+    const previousContent = { meta: { title: "Before" }, blocks: [] };
+    const nextContent = { meta: { title: "After" }, blocks: [] };
+
+    /**
+     * Publishing is the only path that writes the live tables, so it is also the only
+     * place a page/post revision gets recorded. The chain here mirrors the real one:
+     * read the draft, update the row, swap the blocks, delete the draft.
+     */
+    function mockPublishChain() {
+      const chain: any = {
+        delete: vi.fn(() => chain),
+        eq: vi.fn(() => chain),
+        error: null,
+        insert: vi.fn(() => chain),
+        maybeSingle: vi.fn().mockResolvedValue({ data: baseDraft, error: null }),
+        select: vi.fn(() => chain),
+        update: vi.fn(() => chain),
+      };
+      const from = vi.fn(() => chain);
+      draftContentMocks.getCurrentUserCanEdit.mockResolvedValue({
+        canEdit: true,
+        supabase: { from },
+        user: { id: "user-1" },
+      });
+      return { chain, from };
+    }
+
+    it("records a revision from the pre-publish state", async () => {
+      mockPublishChain();
+      revisionMocks.getFullPageContent
+        .mockResolvedValueOnce(previousContent)
+        .mockResolvedValueOnce(nextContent);
+      revisionMocks.createPageRevision.mockResolvedValue({
+        recorded: true,
+        success: true,
+        version: 2,
+      });
+
+      const result = await publishVisualEditingDraft("page", 2);
+
+      expect(result).toEqual({ success: true });
+      expect(revisionMocks.createPageRevision).toHaveBeenCalledWith(
+        2,
+        "user-1",
+        previousContent,
+        nextContent
+      );
+    });
+
+    it("still completes the publish when the revision fails, and warns instead of erroring", async () => {
+      const { chain } = mockPublishChain();
+      revisionMocks.getFullPageContent
+        .mockResolvedValueOnce(previousContent)
+        .mockResolvedValueOnce(nextContent);
+      revisionMocks.createPageRevision.mockResolvedValue({
+        error: "Failed to insert page revision: permission denied",
+      });
+
+      const result = await publishVisualEditingDraft("page", 2);
+
+      // The page row and its blocks are already live at this point. Aborting would strand
+      // the draft row and leave the public route un-revalidated, which is worse than a
+      // missing history entry — so this is a partial success, not a failure.
+      expect(result).toMatchObject({
+        success: true,
+        warning: expect.stringContaining("history was not recorded"),
+      });
+      expect(chain.delete).toHaveBeenCalled();
+      expect(cacheMocks.revalidatePath).toHaveBeenCalledWith("/about");
+    });
   });
 });

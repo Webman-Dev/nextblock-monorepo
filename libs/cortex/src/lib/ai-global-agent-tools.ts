@@ -48,6 +48,24 @@ type ImportExternalImageFn = (input: {
   altText?: string;
 }) => Promise<{ id: string } | { error: string }>;
 
+/**
+ * Records a revision for a live CMS write the agent is about to make.
+ *
+ * Two-phase so this lib never has to know the revision format: `capture` snapshots the
+ * current state and returns it opaquely, `commit` diffs that baseline against whatever the
+ * write left behind. Injected by the app — the revision service is a server action holding
+ * the snapshot shape, the diff cadence and the version bookkeeping, and forking it in here
+ * would give NextBlock two revision writers that drift apart.
+ *
+ * Absent in tests/CLI, in which case writes proceed unrecorded exactly as before.
+ */
+type RecordRevisionFn = (input: {
+  baseline?: unknown;
+  contentType: CmsContentType;
+  entityId: number | string;
+  phase: 'capture' | 'commit';
+}) => Promise<unknown>;
+
 type ToolExecutionContext = {
   actorUserId?: string | null;
   cortexAiApiKey?: string | null;
@@ -55,11 +73,48 @@ type ToolExecutionContext = {
   importExternalImage?: ImportExternalImageFn;
   latestUserMessage?: string | null;
   pageContext?: CortexAiPageContext | null;
+  recordRevision?: RecordRevisionFn;
   revalidatePath?: RevalidateFn;
   skipConfirmation?: boolean;
   supabase?: SupabaseLike;
   validateBlockContent?: BlockContentValidator;
 };
+
+/**
+ * Snapshot the current state of a CMS item before the agent overwrites it.
+ *
+ * Never throws: a revision that cannot be recorded must not block the edit the user asked
+ * for. Returns undefined when no recorder is injected or the capture failed, which makes
+ * the matching commitCmsRevision call a no-op.
+ */
+async function captureCmsRevision(
+  context: ToolExecutionContext | undefined,
+  contentType: CmsContentType,
+  entityId: number | string
+): Promise<unknown> {
+  if (!context?.recordRevision) return undefined;
+  try {
+    return await context.recordRevision({ contentType, entityId, phase: 'capture' });
+  } catch (error) {
+    console.error('Cortex AI: failed to capture revision baseline', error);
+    return undefined;
+  }
+}
+
+/** Commit the revision opened by captureCmsRevision. Never throws — see above. */
+async function commitCmsRevision(
+  context: ToolExecutionContext | undefined,
+  contentType: CmsContentType,
+  entityId: number | string,
+  baseline: unknown
+): Promise<void> {
+  if (!context?.recordRevision || baseline === undefined) return;
+  try {
+    await context.recordRevision({ baseline, contentType, entityId, phase: 'commit' });
+  } catch (error) {
+    console.error('Cortex AI: failed to record revision', error);
+  }
+}
 
 const SEARCH_DOCUMENTATION_TIMEOUT_MS = 10000;
 
@@ -3774,6 +3829,8 @@ export async function executeUpdateCurrentCmsFields(
     return confirmation;
   }
 
+  const revisionBaseline = await captureCmsRevision(context, pageContext.contentType, entityId);
+
   // A feature image supplied as an external URL (e.g. a stock photo) must be
   // imported into the media library first — feature_image_id is a UUID FK.
   if (typeof updatePayload.feature_image_id === 'string') {
@@ -3805,6 +3862,8 @@ export async function executeUpdateCurrentCmsFields(
       `Failed to update current ${pageContext.contentType}: ${serializeError(error)}`
     );
   }
+
+  await commitCmsRevision(context, pageContext.contentType, entityId, revisionBaseline);
 
   revalidateCurrentCmsSurfaces(context, pageContext, item.slug);
 
@@ -3870,6 +3929,12 @@ export async function executeUpdateContentBlock(
     return confirmation;
   }
 
+  const revisionBaseline = await captureCmsRevision(
+    context,
+    pageContext.contentType,
+    getCmsEntityId(pageContext)
+  );
+
   const { data: updatedBlock, error: updateError } = await supabase
     .from('blocks')
     .update({
@@ -3883,6 +3948,13 @@ export async function executeUpdateContentBlock(
   if (updateError || !updatedBlock) {
     throw new Error(`Failed to update block ${parsed.blockId}: ${serializeError(updateError)}`);
   }
+
+  await commitCmsRevision(
+    context,
+    pageContext.contentType,
+    getCmsEntityId(pageContext),
+    revisionBaseline
+  );
 
   await patchOpenProductDraft({
     patch: ({ blocks }) => ({
@@ -4016,6 +4088,8 @@ export async function executeInsertContentBlock(
     .filter((block: any) => Number(block.order) >= latestOrder)
     .sort((a: any, b: any) => Number(b.order) - Number(a.order));
 
+  const revisionBaseline = await captureCmsRevision(context, target.contentType, itemId);
+
   for (const block of blocksToShift) {
     const { error } = await supabase
       .from('blocks')
@@ -4073,6 +4147,8 @@ export async function executeInsertContentBlock(
       supabase,
     });
   }
+
+  await commitCmsRevision(context, target.contentType, itemId, revisionBaseline);
 
   void maybeTriggerStockPhotoDownloads([normalizedBlock], supabase);
 
@@ -4205,6 +4281,12 @@ export async function executeUpdateSectionColumnBlock(
     return confirmation;
   }
 
+  const revisionBaseline = await captureCmsRevision(
+    context,
+    pageContext.contentType,
+    getCmsEntityId(pageContext)
+  );
+
   const { data: updatedParentBlock, error: updateError } = await supabase
     .from('blocks')
     .update({
@@ -4232,6 +4314,13 @@ export async function executeUpdateSectionColumnBlock(
     productId: parentBlock.product_id,
     supabase,
   });
+
+  await commitCmsRevision(
+    context,
+    pageContext.contentType,
+    getCmsEntityId(pageContext),
+    revisionBaseline
+  );
 
   revalidateCurrentCmsSurfaces(context, pageContext);
 
@@ -4958,6 +5047,12 @@ export async function executeUpdateCmsItemField(
     return confirmation;
   }
 
+  const revisionBaseline = await captureCmsRevision(
+    context,
+    target.contentType,
+    target.item.id
+  );
+
   if (target.contentType === 'product') {
     // Patch ONLY the requested column on the products row. We deliberately do NOT
     // route single-field product edits through the ecommerce updateProduct /
@@ -4993,6 +5088,8 @@ export async function executeUpdateCmsItemField(
       },
       product.slug
     );
+
+    await commitCmsRevision(context, 'product', product.id, revisionBaseline);
 
     return {
       contentType: 'product',
@@ -5044,6 +5141,8 @@ export async function executeUpdateCmsItemField(
     },
     item.slug
   );
+
+  await commitCmsRevision(context, target.contentType, item.id, revisionBaseline);
 
   return {
     contentType: target.contentType,
@@ -7036,6 +7135,10 @@ export async function executeSetContentImages(
     };
   }
 
+  // Product images live in product_media, which is outside the revision snapshot
+  // (content, not commerce state) — so only the page/post feature image is recorded.
+  const revisionBaseline = await captureCmsRevision(context, pageContext.contentType, entityId);
+
   const table = pageContext.contentType === 'page' ? 'pages' : 'posts';
   const { data: item, error } = await supabase
     .from(table)
@@ -7050,6 +7153,8 @@ export async function executeSetContentImages(
   if (error || !item) {
     throw new Error(`Failed to set the feature image: ${serializeError(error)}`);
   }
+
+  await commitCmsRevision(context, pageContext.contentType, entityId, revisionBaseline);
 
   revalidateCurrentCmsSurfaces(context, pageContext, item.slug);
 

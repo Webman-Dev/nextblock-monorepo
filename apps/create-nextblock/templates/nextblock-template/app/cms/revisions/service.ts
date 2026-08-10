@@ -4,468 +4,546 @@
 import { createClient } from "@nextblock-cms/db/server";
 import type { Json } from "@nextblock-cms/db";
 import { compare, applyPatch } from 'fast-json-patch';
-import type { FullPageContent, FullPostContent } from './utils';
+import {
+  PAGE_META_COLUMNS,
+  POST_META_COLUMNS,
+  PRODUCT_META_COLUMNS,
+  buildRestoreMetaUpdate,
+  getFullPageContent,
+  getFullPostContent,
+  getFullProductContent,
+} from './utils';
+import type {
+  AnyFullContent,
+  FullPageContent,
+  FullPostContent,
+  FullProductContent,
+} from './utils';
 
+/** A full snapshot is stored whenever this many versions have accumulated since the last one. */
+const SNAPSHOT_INTERVAL = 20;
 
-function shouldCreateSnapshot(currentVersion: number): boolean {
-  // Create a snapshot every 20 revisions
-  return currentVersion % 20 === 0;
+export type RevisionParentType = 'page' | 'post' | 'product';
+
+export type RevisionResult =
+  | { success: true; version: number; recorded: boolean }
+  | { error: string };
+
+export type RestoreResult =
+  | { success: true; version: number }
+  | { error: string };
+
+export type ReconstructResult<T> =
+  | { success: true; content: T }
+  | { error: string };
+
+/**
+ * Everything that differs between pages, posts and products. Keeping one implementation
+ * behind this table is deliberate: the previous copy-per-entity version had drifted so far
+ * that the page and post restore paths no longer agreed on which columns they wrote.
+ */
+interface RevisionSpec {
+  parentTable: 'pages' | 'posts' | 'products';
+  revisionTable: 'page_revisions' | 'post_revisions' | 'product_revisions';
+  parentColumn: 'page_id' | 'post_id' | 'product_id';
+  metaColumns: readonly string[];
+  label: string;
+  draft: { table: 'content_drafts'; parentType: 'page' | 'post' } | { table: 'product_drafts' };
 }
 
-export async function createPageRevision(
-  pageId: number,
-  authorId: string,
-  previousContent: FullPageContent,
-  newContent: FullPageContent
-) {
-  const supabase = createClient();
+const PAGE_SPEC: RevisionSpec = {
+  parentTable: 'pages',
+  revisionTable: 'page_revisions',
+  parentColumn: 'page_id',
+  metaColumns: PAGE_META_COLUMNS,
+  label: 'Page',
+  draft: { table: 'content_drafts', parentType: 'page' },
+};
 
-  // Get current version
-  const { data: page, error: pageError } = await supabase
-    .from('pages')
+const POST_SPEC: RevisionSpec = {
+  parentTable: 'posts',
+  revisionTable: 'post_revisions',
+  parentColumn: 'post_id',
+  metaColumns: POST_META_COLUMNS,
+  label: 'Post',
+  draft: { table: 'content_drafts', parentType: 'post' },
+};
+
+const PRODUCT_SPEC: RevisionSpec = {
+  parentTable: 'products',
+  revisionTable: 'product_revisions',
+  parentColumn: 'product_id',
+  metaColumns: PRODUCT_META_COLUMNS,
+  label: 'Product',
+  draft: { table: 'product_drafts' },
+};
+
+function specFor(parentType: RevisionParentType): RevisionSpec {
+  if (parentType === 'page') return PAGE_SPEC;
+  if (parentType === 'post') return POST_SPEC;
+  return PRODUCT_SPEC;
+}
+
+/** Postgres unique-violation. Concurrent saves race for the same version number. */
+const UNIQUE_VIOLATION = '23505';
+
+type Db = any;
+
+async function readParentVersion(
+  supabase: Db,
+  spec: RevisionSpec,
+  parentId: number | string
+): Promise<number | null> {
+  const { data, error } = await supabase
+    .from(spec.parentTable)
     .select('version')
-    .eq('id', pageId)
+    .eq('id', parentId)
     .single();
-  if (pageError || !page) return { error: 'Page not found' } as const;
-
-  const currentVersion = page.version ?? 1;
-  const nextVersion = currentVersion + 1;
-
-  // If we are moving to version 2, it means Version 1 was never saved (it was the initial state).
-  // We should save Version 1 now so we have a history base.
-  if (nextVersion === 2) {
-    await supabase.from('page_revisions').insert({
-      page_id: pageId,
-      author_id: authorId, // Can be current author or null
-      version: 1,
-      revision_type: 'snapshot',
-      content: previousContent as unknown as Json,
-    });
-  }
-
-  const makeSnapshot = shouldCreateSnapshot(currentVersion) || nextVersion === 2; // ensure early snapshot cadence
-
-  const revisionType: 'snapshot' | 'diff' = makeSnapshot ? 'snapshot' : 'diff';
-  const content: Json = makeSnapshot ? (newContent as unknown as Json) : (compare(previousContent, newContent) as unknown as Json);
-
-  // If it's a diff and there are no changes, skip creating revision
-  if (revisionType === 'diff' && Array.isArray(content) && content.length === 0) {
-    return { success: true as const, version: currentVersion }; // Return current version as we didn't bump
-  }
-
-  const { error: insertError } = await supabase.from('page_revisions').insert({
-    page_id: pageId,
-    author_id: authorId,
-    version: nextVersion,
-    revision_type: revisionType,
-    content,
-  });
-  if (insertError) return { error: `Failed to insert page revision: ${insertError.message}` } as const;
-
-  const { error: updateVersionError } = await supabase
-    .from('pages')
-    .update({ version: nextVersion })
-    .eq('id', pageId);
-  if (updateVersionError) return { error: `Failed to bump page version: ${updateVersionError.message}` } as const;
-
-  return { success: true as const, version: nextVersion };
+  if (error || !data) return null;
+  return (data.version as number | null) ?? 1;
 }
 
-export async function createPostRevision(
-  postId: number,
-  authorId: string,
-  previousContent: FullPostContent,
-  newContent: FullPostContent
-) {
-  const supabase = createClient();
-
-  const { data: post, error: postError } = await supabase
-    .from('posts')
-    .select('version')
-    .eq('id', postId)
-    .single();
-  if (postError || !post) return { error: 'Post not found' } as const;
-
-  const currentVersion = post.version ?? 1;
-  const nextVersion = currentVersion + 1;
-
-  if (nextVersion === 2) {
-    await supabase.from('post_revisions').insert({
-      post_id: postId,
-      author_id: authorId,
-      version: 1,
-      revision_type: 'snapshot',
-      content: previousContent as unknown as Json,
-    });
-  }
-
-  const makeSnapshot = shouldCreateSnapshot(currentVersion) || nextVersion === 2;
-
-  const revisionType: 'snapshot' | 'diff' = makeSnapshot ? 'snapshot' : 'diff';
-  const content: Json = makeSnapshot ? (newContent as unknown as Json) : (compare(previousContent, newContent) as unknown as Json);
-
-  if (revisionType === 'diff' && Array.isArray(content) && content.length === 0) {
-    return { success: true as const, version: currentVersion };
-  }
-
-  const { error: insertError } = await supabase.from('post_revisions').insert({
-    post_id: postId,
-    author_id: authorId,
-    version: nextVersion,
-    revision_type: revisionType,
-    content,
-  });
-  if (insertError) return { error: `Failed to insert post revision: ${insertError.message}` } as const;
-
-  const { error: updateVersionError } = await supabase
-    .from('posts')
-    .update({ version: nextVersion })
-    .eq('id', postId);
-  if (updateVersionError) return { error: `Failed to bump post version: ${updateVersionError.message}` } as const;
-
-  return { success: true as const, version: nextVersion };
-}
-
-export async function restorePageToVersion(pageId: number, targetVersion: number, authorId: string) {
-  const supabase = createClient();
-
-  // 1. Find latest snapshot at or before target
-  const { data: snapshot, error: snapshotError } = await supabase
-    .from('page_revisions')
-    .select('version, content, revision_type')
-    .eq('page_id', pageId)
-    .lte('version', targetVersion)
+/** The newest stored snapshot at or below `maxVersion`, or null if the chain has no base. */
+async function findBaseSnapshot(
+  supabase: Db,
+  spec: RevisionSpec,
+  parentId: number | string,
+  maxVersion: number
+): Promise<{ version: number; content: unknown } | null> {
+  const { data } = await supabase
+    .from(spec.revisionTable)
+    .select('version, content')
+    .eq(spec.parentColumn, parentId)
+    .lte('version', maxVersion)
     .eq('revision_type', 'snapshot')
     .order('version', { ascending: false })
     .limit(1)
     .maybeSingle();
+  return data ? { version: data.version as number, content: data.content } : null;
+}
 
-  let content: FullPageContent;
-  let baseVersion = 0;
+/**
+ * Guarantee the diff chain has a snapshot to replay onto.
+ *
+ * A diff is only meaningful relative to a base. The old implementation wrote that base
+ * exactly once — on the 1 -> 2 transition — and discarded the insert's error, so any page
+ * that missed that single moment (RLS rejection, a version bumped by another code path,
+ * content seeded straight into the table) accumulated diffs forever with nothing beneath
+ * them. Checking the invariant on every write instead means such a chain repairs itself on
+ * the next save.
+ */
+async function ensureBaseSnapshot(
+  supabase: Db,
+  spec: RevisionSpec,
+  parentId: number | string,
+  authorId: string | null,
+  currentVersion: number,
+  currentContent: AnyFullContent
+): Promise<{ version: number } | { error: string }> {
+  const existing = await findBaseSnapshot(supabase, spec, parentId, currentVersion);
+  if (existing) return { version: existing.version };
 
-  if (snapshot) {
-    content = snapshot.content as unknown as FullPageContent;
-    baseVersion = snapshot.version;
-  } else if (targetVersion === 1) {
-    // Fallback for missing Version 1: use empty content with current meta
-    const { data: pageMeta } = await supabase
-      .from('pages')
-      .select('title, slug, language_id, status, meta_title, meta_description, feature_image_id')
-      .eq('id', pageId)
-      .single();
-    if (!pageMeta) return { error: 'Page not found.' } as const;
-    content = {
-      meta: pageMeta,
-      blocks: [],
-    };
-    baseVersion = 1;
-  } else {
-    if (snapshotError) return { error: `Snapshot error: ${snapshotError.message}` } as const;
-    return { error: 'No snapshot found at or before target version.' } as const;
+  const { error } = await supabase.from(spec.revisionTable).insert({
+    [spec.parentColumn]: parentId,
+    author_id: authorId,
+    version: currentVersion,
+    revision_type: 'snapshot',
+    content: currentContent as unknown as Json,
+  });
+
+  if (error) {
+    // Another writer inserted this version first; theirs is just as valid a base.
+    if (error.code === UNIQUE_VIOLATION) return { version: currentVersion };
+    return { error: `Failed to record the baseline revision: ${error.message}` };
   }
 
-  // 2. Fetch diffs up to target and apply (only if we are not already at target)
-  if (baseVersion < targetVersion) {
+  return { version: currentVersion };
+}
+
+async function lastSnapshotVersion(
+  supabase: Db,
+  spec: RevisionSpec,
+  parentId: number | string
+): Promise<number> {
+  const { data } = await supabase
+    .from(spec.revisionTable)
+    .select('version')
+    .eq(spec.parentColumn, parentId)
+    .eq('revision_type', 'snapshot')
+    .order('version', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data?.version as number | undefined) ?? 0;
+}
+
+/**
+ * Record the transition from `previousContent` to `newContent` as a new revision.
+ *
+ * Returns `recorded: false` when the two states are identical — that is a successful
+ * no-op, not a failure, and it deliberately does not consume a version number.
+ */
+async function createRevisionInternal(
+  spec: RevisionSpec,
+  parentId: number | string,
+  authorId: string | null,
+  previousContent: AnyFullContent,
+  newContent: AnyFullContent,
+  client?: Db
+): Promise<RevisionResult> {
+  const supabase: Db = client ?? createClient();
+
+  const currentVersion = await readParentVersion(supabase, spec, parentId);
+  if (currentVersion === null) return { error: `${spec.label} not found` };
+
+  // Nothing changed. Checked before the snapshot decision so a no-op publish can never
+  // burn a version number or write a redundant full snapshot.
+  const ops = compare(previousContent as object, newContent as object);
+  if (ops.length === 0) {
+    return { success: true, version: currentVersion, recorded: false };
+  }
+
+  const base = await ensureBaseSnapshot(
+    supabase, spec, parentId, authorId, currentVersion, previousContent
+  );
+  if ('error' in base) return { error: base.error };
+
+  const nextVersion = currentVersion + 1;
+  const lastSnapshot = await lastSnapshotVersion(supabase, spec, parentId);
+
+  // A diff is only meaningful if replaying the existing chain actually reproduces the
+  // document this diff was computed against. Counting version numbers is not enough:
+  // writes that bypass the revision engine (a live-mode import, a script) change content
+  // without consuming a version, leaving a chain that looks contiguous but no longer
+  // represents the live state. Replaying it here is the only honest check — and when it
+  // disagrees, a full snapshot silently repairs the chain from this point on.
+  let makeSnapshot = nextVersion - lastSnapshot >= SNAPSHOT_INTERVAL;
+  if (!makeSnapshot) {
+    const replay = await reconstructInternal(spec, parentId, currentVersion, supabase);
+    makeSnapshot =
+      'error' in replay ||
+      compare(replay.content as object, previousContent as object).length > 0;
+  }
+
+  const insertAt = async (version: number, asSnapshot: boolean) =>
+    supabase.from(spec.revisionTable).insert({
+      [spec.parentColumn]: parentId,
+      author_id: authorId,
+      version,
+      revision_type: asSnapshot ? 'snapshot' : 'diff',
+      content: (asSnapshot ? (newContent as unknown as Json) : (ops as unknown as Json)),
+    });
+
+  let targetVersion = nextVersion;
+  let { error: insertError } = await insertAt(targetVersion, makeSnapshot);
+
+  // Whoever wins the UNIQUE(parent_id, version) insert owns that version number. If we
+  // lost the race, re-read and take the next one — but store the full document rather
+  // than the diff, because the winner has moved the chain past the base our ops assumed.
+  if (insertError?.code === UNIQUE_VIOLATION) {
+    const refreshed = await readParentVersion(supabase, spec, parentId);
+    targetVersion = (refreshed ?? currentVersion) + 1;
+    ({ error: insertError } = await insertAt(targetVersion, true));
+  }
+
+  if (insertError) {
+    return { error: `Failed to insert ${spec.label.toLowerCase()} revision: ${insertError.message}` };
+  }
+
+  // The revision row is written before the version bump on purpose: a crash between the
+  // two leaves a recoverable extra revision, whereas the old order left the parent
+  // pointing at a version that had no history behind it.
+  const { error: bumpError } = await supabase
+    .from(spec.parentTable)
+    .update({ version: targetVersion })
+    .eq('id', parentId);
+  if (bumpError) {
+    return { error: `Failed to bump ${spec.label.toLowerCase()} version: ${bumpError.message}` };
+  }
+
+  return { success: true, version: targetVersion, recorded: true };
+}
+
+/**
+ * Resolve the exact content stored at `targetVersion` by replaying diffs onto the nearest
+ * snapshot at or below it.
+ *
+ * There is deliberately no fallback for a missing baseline. The previous implementation
+ * fabricated version 1 as "current metadata plus zero blocks" whenever no snapshot existed,
+ * which made Restore delete every block on the page and report success. An honest error is
+ * the correct answer; migration 00000000000016 backfills a real baseline so the error is
+ * also rare.
+ */
+async function reconstructInternal<T extends AnyFullContent>(
+  spec: RevisionSpec,
+  parentId: number | string,
+  targetVersion: number,
+  client?: Db
+): Promise<ReconstructResult<T>> {
+  const supabase: Db = client ?? createClient();
+
+  const snapshot = await findBaseSnapshot(supabase, spec, parentId, targetVersion);
+  if (!snapshot) {
+    return {
+      error: `No stored snapshot exists at or before version ${targetVersion}, so this version cannot be reconstructed.`,
+    };
+  }
+
+  let content = snapshot.content as T;
+
+  if (snapshot.version < targetVersion) {
     const { data: diffs, error: diffsError } = await supabase
-      .from('page_revisions')
+      .from(spec.revisionTable)
       .select('version, content, revision_type')
-      .eq('page_id', pageId)
-      .gt('version', baseVersion)
+      .eq(spec.parentColumn, parentId)
+      .gt('version', snapshot.version)
       .lte('version', targetVersion)
       .order('version', { ascending: true });
-    if (diffsError) return { error: `Failed to fetch diffs: ${diffsError.message}` } as const;
+    if (diffsError) return { error: `Failed to fetch diffs: ${diffsError.message}` };
 
     for (const r of diffs || []) {
       if (r.revision_type === 'diff') {
-        const ops = r.content as any[];
-        const result = applyPatch(content as any, ops, /*validate*/ false, /*mutateDocument*/ true);
-        content = result.newDocument as unknown as FullPageContent;
+        const patchOps = r.content as unknown[];
+        if (!Array.isArray(patchOps)) {
+          return { error: `Revision history is corrupted at version ${r.version}.` };
+        }
+        try {
+          const result = applyPatch(content as object, patchOps as any, /* validate */ false, /* mutateDocument */ true);
+          content = result.newDocument as unknown as T;
+        } catch (e) {
+          return {
+            error: `Revision history is corrupted at version ${r.version}: ${e instanceof Error ? e.message : String(e)}`,
+          };
+        }
       } else {
-        content = r.content as unknown as FullPageContent;
+        content = r.content as T;
       }
     }
   }
 
-  // Determine next version number (append a new revision for restored state)
-  const { data: pageRow } = await supabase
-    .from('pages')
-    .select('version')
-    .eq('id', pageId)
-    .single();
-  const newVersion = ((pageRow?.version as number | null) ?? 1) + 1;
-
-  // 3. Apply to DB: update page meta and replace blocks; bump to newVersion
-  const { error: updatePageError } = await supabase
-    .from('pages')
-    .update({
-      title: content.meta.title,
-      slug: content.meta.slug,
-      language_id: content.meta.language_id,
-      status: content.meta.status,
-      meta_title: content.meta.meta_title,
-      meta_description: content.meta.meta_description,
-      feature_image_id: content.meta.feature_image_id,
-      version: newVersion,
-    })
-    .eq('id', pageId);
-  if (updatePageError) return { error: `Failed to update page: ${updatePageError.message}` } as const;
-
-  // delete all existing blocks for this page then reinsert
-  const { error: deleteError } = await supabase.from('blocks').delete().eq('page_id', pageId);
-  if (deleteError) return { error: `Failed to clear blocks: ${deleteError.message}` } as const;
-
-  if (content.blocks.length > 0) {
-    const toInsert = content.blocks.map(b => ({
-      page_id: pageId,
-      post_id: null,
-      language_id: b.language_id,
-      block_type: b.block_type,
-      content: b.content,
-      order: b.order,
-    }));
-    const { error: insertError } = await supabase.from('blocks').insert(toInsert);
-    if (insertError) return { error: `Failed to insert blocks: ${insertError.message}` } as const;
+  if (!content || typeof content !== 'object' || !(content as AnyFullContent).meta) {
+    return { error: `Version ${targetVersion} is missing its content payload.` };
   }
 
-  // 4. Record a new snapshot revision representing the restored state at newVersion
-  const { error: revErr } = await supabase.from('page_revisions').insert({
-    page_id: pageId,
-    author_id: authorId,
-    version: newVersion,
-    revision_type: 'snapshot',
-    content: content as unknown as Json,
-  });
-  if (revErr) return { error: `Failed to write restored revision: ${revErr.message}` } as const;
-
-  return { success: true as const };
+  return { success: true, content };
 }
 
-export async function restorePostToVersion(postId: number, targetVersion: number, authorId: string) {
-  const supabase = createClient();
-
-  const { data: snapshot, error: snapshotError } = await supabase
-    .from('post_revisions')
-    .select('version, content, revision_type')
-    .eq('post_id', postId)
-    .lte('version', targetVersion)
-    .eq('revision_type', 'snapshot')
-    .order('version', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  let content: FullPostContent;
-  let baseVersion = 0;
-
-  if (snapshot) {
-    content = snapshot.content as unknown as FullPostContent;
-    baseVersion = snapshot.version;
-  } else if (targetVersion === 1) {
-    const { data: postMeta } = await supabase
-      .from('posts')
-      .select('title, slug, language_id, status, meta_title, meta_description, label, excerpt, subtitle, published_at, feature_image_id')
-      .eq('id', postId)
-      .single();
-    if (!postMeta) return { error: 'Post not found.' } as const;
-    content = {
-      meta: postMeta,
-      blocks: [],
-    };
-    baseVersion = 1;
+async function deleteDraftFor(supabase: Db, spec: RevisionSpec, parentId: number | string) {
+  // A surviving draft row would be overlaid on top of the restored content by the editor,
+  // making the restore look like it silently failed — and the next Publish would replay the
+  // stale draft straight back over it.
+  if (spec.draft.table === 'content_drafts') {
+    await supabase
+      .from('content_drafts')
+      .delete()
+      .eq('parent_type', spec.draft.parentType)
+      .eq('parent_id', parentId);
   } else {
-    if (snapshotError) return { error: `Snapshot error: ${snapshotError.message}` } as const;
-    return { error: 'No snapshot found at or before target version.' } as const;
+    await supabase.from('product_drafts').delete().eq('product_id', parentId);
+  }
+}
+
+async function restoreInternal(
+  spec: RevisionSpec,
+  parentId: number | string,
+  targetVersion: number,
+  authorId: string | null,
+  client?: Db
+): Promise<RestoreResult> {
+  const supabase: Db = client ?? createClient();
+
+  const reconstructed = await reconstructInternal(spec, parentId, targetVersion, supabase);
+  if ('error' in reconstructed) return { error: reconstructed.error };
+  const content = reconstructed.content;
+
+  const blocks = Array.isArray(content.blocks) ? content.blocks : null;
+  if (!blocks) {
+    return { error: `Version ${targetVersion} has no block list and cannot be restored.` };
   }
 
-  if (baseVersion < targetVersion) {
-    const { data: diffs, error: diffsError } = await supabase
-      .from('post_revisions')
-      .select('version, content, revision_type')
-      .eq('post_id', postId)
-      .gt('version', baseVersion)
-      .lte('version', targetVersion)
-      .order('version', { ascending: true });
-  if (diffsError) return { error: `Failed to fetch diffs: ${diffsError.message}` } as const;
+  // Build and validate the whole block payload before touching anything, so a malformed
+  // revision cannot leave the page emptied out between the delete and the insert.
+  const blockPayload = blocks.map((b, index) => ({
+    page_id: spec.parentColumn === 'page_id' ? parentId : null,
+    post_id: spec.parentColumn === 'post_id' ? parentId : null,
+    product_id: spec.parentColumn === 'product_id' ? parentId : null,
+    language_id: b.language_id,
+    block_type: b.block_type,
+    content: b.content,
+    order: Number.isFinite(b.order) ? b.order : index,
+  }));
 
-  for (const r of diffs || []) {
-    if (r.revision_type === 'diff') {
-      const ops = r.content as any[];
-      const result = applyPatch(content as any, ops, /*validate*/ false, /*mutateDocument*/ true);
-      content = result.newDocument as unknown as FullPostContent;
-    } else {
-      content = r.content as unknown as FullPostContent;
+  if (blockPayload.some(b => typeof b.block_type !== 'string' || typeof b.language_id !== 'number')) {
+    return { error: `Version ${targetVersion} contains malformed blocks and was not restored.` };
+  }
+
+  const metaUpdate = buildRestoreMetaUpdate(
+    content.meta as unknown as Record<string, unknown>,
+    spec.metaColumns
+  );
+  if (Object.keys(metaUpdate).length === 0) {
+    return { error: `Version ${targetVersion} has no restorable metadata.` };
+  }
+
+  const { error: updateError } = await supabase
+    .from(spec.parentTable)
+    .update(metaUpdate)
+    .eq('id', parentId);
+  if (updateError) {
+    return { error: `Failed to update ${spec.label.toLowerCase()}: ${updateError.message}` };
+  }
+
+  // Kept so the block swap can be rolled back if the reinsert fails.
+  const { data: previousBlocks } = await supabase
+    .from('blocks')
+    .select('page_id, post_id, product_id, language_id, block_type, content, order')
+    .eq(spec.parentColumn, parentId)
+    .order('order', { ascending: true })
+    .order('id', { ascending: true });
+
+  const { error: deleteError } = await supabase
+    .from('blocks')
+    .delete()
+    .eq(spec.parentColumn, parentId);
+  if (deleteError) return { error: `Failed to clear blocks: ${deleteError.message}` };
+
+  if (blockPayload.length > 0) {
+    const { error: insertError } = await supabase.from('blocks').insert(blockPayload);
+    if (insertError) {
+      if (previousBlocks && previousBlocks.length > 0) {
+        await supabase.from('blocks').insert(previousBlocks);
+      }
+      return { error: `Failed to insert blocks: ${insertError.message}` };
     }
-    }
   }
 
-  // Determine next version for post
-  const { data: postRow } = await supabase
-    .from('posts')
-    .select('version')
-    .eq('id', postId)
-    .single();
-  const newVersion = ((postRow?.version as number | null) ?? 1) + 1;
+  await deleteDraftFor(supabase, spec, parentId);
 
-  const { error: updatePostError } = await supabase
-    .from('posts')
-    .update({
-      title: content.meta.title,
-      slug: content.meta.slug,
-      language_id: content.meta.language_id,
-      status: content.meta.status,
-      meta_title: content.meta.meta_title,
-      meta_description: content.meta.meta_description,
-      label: content.meta.label,
-      excerpt: content.meta.excerpt,
-      subtitle: content.meta.subtitle,
-      published_at: content.meta.published_at,
-      feature_image_id: content.meta.feature_image_id,
-      version: newVersion,
-    })
-    .eq('id', postId);
-  if (updatePostError) return { error: `Failed to update post: ${updatePostError.message}` } as const;
+  // Record the restored state as a new snapshot so history stays append-only: restoring is
+  // itself an edit, and the version you restored from remains reachable.
+  const currentVersion = (await readParentVersion(supabase, spec, parentId)) ?? 1;
+  let newVersion = currentVersion + 1;
 
-  const { error: deleteError } = await supabase.from('blocks').delete().eq('post_id', postId);
-  if (deleteError) return { error: `Failed to clear blocks: ${deleteError.message}` } as const;
+  const insertRestoreSnapshot = async (version: number) =>
+    supabase.from(spec.revisionTable).insert({
+      [spec.parentColumn]: parentId,
+      author_id: authorId,
+      version,
+      revision_type: 'snapshot',
+      content: content as unknown as Json,
+    });
 
-  if (content.blocks.length > 0) {
-    const toInsert = content.blocks.map(b => ({
-      page_id: null,
-      post_id: postId,
-      language_id: b.language_id,
-      block_type: b.block_type,
-      content: b.content,
-      order: b.order,
-    }));
-    const { error: insertError } = await supabase.from('blocks').insert(toInsert);
-    if (insertError) return { error: `Failed to insert blocks: ${insertError.message}` } as const;
+  let { error: revError } = await insertRestoreSnapshot(newVersion);
+
+  // A revision can already occupy that number — a previous publish whose version bump
+  // failed leaves exactly that shape. Take the next free one instead of swallowing the
+  // collision, which would leave the parent pointing at somebody else's document.
+  if (revError?.code === UNIQUE_VIOLATION) {
+    const refreshed = await readParentVersion(supabase, spec, parentId);
+    newVersion = Math.max(refreshed ?? newVersion, newVersion) + 1;
+    ({ error: revError } = await insertRestoreSnapshot(newVersion));
   }
 
-  const { error: revErr } = await supabase.from('post_revisions').insert({
-    post_id: postId,
-    author_id: authorId,
-    version: newVersion,
-    revision_type: 'snapshot',
-    content: content as unknown as Json,
-  });
-  if (revErr) return { error: `Failed to write restored revision: ${revErr.message}` } as const;
+  if (revError) {
+    return { error: `Restored, but failed to record the new revision: ${revError.message}` };
+  }
 
-  return { success: true as const };
+  const { error: bumpError } = await supabase
+    .from(spec.parentTable)
+    .update({ version: newVersion })
+    .eq('id', parentId);
+  if (bumpError) {
+    return { error: `Restored, but failed to bump the version: ${bumpError.message}` };
+  }
+
+  return { success: true, version: newVersion };
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export async function createPageRevision(
+  pageId: number,
+  authorId: string | null,
+  previousContent: FullPageContent,
+  newContent: FullPageContent,
+  client?: unknown
+): Promise<RevisionResult> {
+  return createRevisionInternal(PAGE_SPEC, pageId, authorId, previousContent, newContent, client);
+}
+
+export async function createPostRevision(
+  postId: number,
+  authorId: string | null,
+  previousContent: FullPostContent,
+  newContent: FullPostContent,
+  client?: unknown
+): Promise<RevisionResult> {
+  return createRevisionInternal(POST_SPEC, postId, authorId, previousContent, newContent, client);
+}
+
+export async function createProductRevision(
+  productId: string,
+  authorId: string | null,
+  previousContent: FullProductContent,
+  newContent: FullProductContent,
+  client?: unknown
+): Promise<RevisionResult> {
+  return createRevisionInternal(PRODUCT_SPEC, productId, authorId, previousContent, newContent, client);
+}
+
+export async function restorePageToVersion(pageId: number, targetVersion: number, authorId: string | null) {
+  return restoreInternal(PAGE_SPEC, pageId, targetVersion, authorId);
+}
+
+export async function restorePostToVersion(postId: number, targetVersion: number, authorId: string | null) {
+  return restoreInternal(POST_SPEC, postId, targetVersion, authorId);
+}
+
+export async function restoreProductToVersion(productId: string, targetVersion: number, authorId: string | null) {
+  return restoreInternal(PRODUCT_SPEC, productId, targetVersion, authorId);
 }
 
 export async function reconstructPageVersionContent(pageId: number, targetVersion: number) {
-  const supabase = createClient();
-
-  const { data: snapshot, error: snapshotError } = await supabase
-    .from('page_revisions')
-    .select('version, content, revision_type')
-    .eq('page_id', pageId)
-    .lte('version', targetVersion)
-    .eq('revision_type', 'snapshot')
-    .order('version', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  let content: FullPageContent;
-  let baseVersion = 0;
-
-  if (snapshot) {
-    content = snapshot.content as unknown as FullPageContent;
-    baseVersion = snapshot.version;
-  } else if (targetVersion === 1) {
-    const { data: pageMeta } = await supabase
-      .from('pages')
-      .select('title, slug, language_id, status, meta_title, meta_description, feature_image_id')
-      .eq('id', pageId)
-      .single();
-    if (!pageMeta) return { error: 'Page not found.' } as const;
-    content = {
-      meta: pageMeta,
-      blocks: [],
-    };
-    baseVersion = 1;
-  } else {
-    if (snapshotError) return { error: `Snapshot error: ${snapshotError.message}` } as const;
-    return { error: 'No snapshot found at or before target version.' } as const;
-  }
-
-  if (baseVersion < targetVersion) {
-    const { data: diffs, error: diffsError } = await supabase
-      .from('page_revisions')
-      .select('version, content, revision_type')
-      .eq('page_id', pageId)
-      .gt('version', baseVersion)
-      .lte('version', targetVersion)
-      .order('version', { ascending: true });
-  if (diffsError) return { error: `Failed to fetch diffs: ${diffsError.message}` } as const;
-
-  for (const r of diffs || []) {
-    if (r.revision_type === 'diff') {
-      const ops = r.content as any[];
-      const result = applyPatch(content as any, ops, false, true);
-      content = result.newDocument as unknown as FullPageContent;
-    } else {
-      content = r.content as unknown as FullPageContent;
-    }
-  }
-  }
-  return { success: true as const, content };
+  return reconstructInternal<FullPageContent>(PAGE_SPEC, pageId, targetVersion);
 }
 
 export async function reconstructPostVersionContent(postId: number, targetVersion: number) {
-  const supabase = createClient();
+  return reconstructInternal<FullPostContent>(POST_SPEC, postId, targetVersion);
+}
 
-  const { data: snapshot, error: snapshotError } = await supabase
-    .from('post_revisions')
-    .select('version, content, revision_type')
-    .eq('post_id', postId)
-    .lte('version', targetVersion)
-    .eq('revision_type', 'snapshot')
-    .order('version', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+export async function reconstructProductVersionContent(productId: string, targetVersion: number) {
+  return reconstructInternal<FullProductContent>(PRODUCT_SPEC, productId, targetVersion);
+}
 
-  let content: FullPostContent;
-  let baseVersion = 0;
+/**
+ * Record a revision for a live write made outside the draft pipeline — Cortex AI tools,
+ * imports, scripted edits.
+ *
+ * Two-phase so callers never have to know the snapshot shape: capture before the write,
+ * commit after it. The captured state is returned opaquely and handed straight back.
+ */
+export async function captureRevisionBaseline(
+  parentType: RevisionParentType,
+  parentId: number | string,
+  client?: unknown
+): Promise<AnyFullContent | null> {
+  const supabase = (client ?? createClient()) as any;
+  if (parentType === 'page') return getFullPageContent(Number(parentId), undefined, supabase);
+  if (parentType === 'post') return getFullPostContent(Number(parentId), undefined, supabase);
+  return getFullProductContent(String(parentId), undefined, supabase);
+}
 
-  if (snapshot) {
-    content = snapshot.content as unknown as FullPostContent;
-    baseVersion = snapshot.version;
-  } else if (targetVersion === 1) {
-    const { data: postMeta } = await supabase
-      .from('posts')
-      .select('title, slug, language_id, status, meta_title, meta_description, label, excerpt, subtitle, published_at, feature_image_id')
-      .eq('id', postId)
-      .single();
-    if (!postMeta) return { error: 'Post not found.' } as const;
-    content = {
-      meta: postMeta,
-      blocks: [],
-    };
-    baseVersion = 1;
-  } else {
-    if (snapshotError) return { error: `Snapshot error: ${snapshotError.message}` } as const;
-    return { error: 'No snapshot found at or before target version.' } as const;
-  }
-
-  if (baseVersion < targetVersion) {
-    const { data: diffs, error: diffsError } = await supabase
-      .from('post_revisions')
-      .select('version, content, revision_type')
-      .eq('post_id', postId)
-      .gt('version', baseVersion)
-      .lte('version', targetVersion)
-      .order('version', { ascending: true });
-  if (diffsError) return { error: `Failed to fetch diffs: ${diffsError.message}` } as const;
-
-  for (const r of diffs || []) {
-    if (r.revision_type === 'diff') {
-      const ops = r.content as any[];
-      const result = applyPatch(content as any, ops, false, true);
-      content = result.newDocument as unknown as FullPostContent;
-    } else {
-      content = r.content as unknown as FullPostContent;
-    }
-  }
-  }
-  return { success: true as const, content };
+export async function commitRevisionFromBaseline(
+  parentType: RevisionParentType,
+  parentId: number | string,
+  authorId: string | null,
+  baseline: AnyFullContent | null,
+  client?: unknown
+): Promise<RevisionResult> {
+  if (!baseline) return { error: 'No baseline was captured before the write.' };
+  const supabase = (client ?? createClient()) as any;
+  const next = await captureRevisionBaseline(parentType, parentId, supabase);
+  if (!next) return { error: 'Failed to read the content back after the write.' };
+  return createRevisionInternal(specFor(parentType), parentId, authorId, baseline, next, supabase);
 }

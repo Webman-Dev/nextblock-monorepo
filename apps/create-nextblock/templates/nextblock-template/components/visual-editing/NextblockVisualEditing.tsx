@@ -1018,7 +1018,10 @@ function VisualEditingToolbar() {
       return;
     }
 
-    setMessage("Draft published.");
+    // A warning means the content is live but the revision didn't record — still a
+    // publish, so the editor closes, but don't report it as a clean one.
+    const warning = result && "success" in result ? result.warning : undefined;
+    setMessage(warning ?? "Draft published.");
     hasSavedSinceOpenRef.current = false;
     closeVisualEditor();
     router.refresh();

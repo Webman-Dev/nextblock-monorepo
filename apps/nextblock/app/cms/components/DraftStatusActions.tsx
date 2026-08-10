@@ -45,8 +45,18 @@ export default function DraftStatusActions({
         );
       }
 
+      const warning = res && "success" in res ? res.warning : undefined;
+
       if (res && "error" in res && res.error) {
         toast.error(`Publish failed: ${res.error}`, { id: toastId });
+      } else if (warning) {
+        // The content IS live — only the revision failed to record. Say so plainly
+        // rather than claiming an unqualified success.
+        toast.error(warning, { id: toastId, duration: 8000 });
+        router.refresh();
+        setTimeout(() => {
+          window.location.reload();
+        }, 800);
       } else {
         toast.success("Changes published live successfully!", { id: toastId });
         router.refresh();

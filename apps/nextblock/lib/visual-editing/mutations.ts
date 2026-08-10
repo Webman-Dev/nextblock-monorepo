@@ -16,7 +16,10 @@ import type {
 } from "./types";
 
 export type VisualEditingMutationResult =
-  | { success: true }
+  // `warning` marks a partial success: the content is live, but something non-blocking
+  // afterwards failed (today, recording the revision). Callers should surface it without
+  // treating the publish as failed.
+  | { success: true; warning?: string }
   | { error: string };
 
 export function isValidParentType(value: string): value is NextblockVisualDocumentType {

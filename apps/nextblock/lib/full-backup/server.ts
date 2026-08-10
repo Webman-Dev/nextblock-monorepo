@@ -638,6 +638,7 @@ async function rewriteMediaBaseUrls(params: {
     { table: "products", idColumn: "id", columns: ["description_json", "metadata"] },
     { table: "page_revisions", idColumn: "id", columns: ["content"] },
     { table: "post_revisions", idColumn: "id", columns: ["content"] },
+    { table: "product_revisions", idColumn: "id", columns: ["content"] },
     { table: "site_settings", idColumn: "key", columns: ["value"] },
     { table: "translations", idColumn: "key", columns: ["translations"] },
   ];

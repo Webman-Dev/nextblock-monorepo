@@ -32,6 +32,7 @@ import {
 import { CortexAiPageContextRegistrar } from '../../../components/CortexAiPageContext';
 import BlockEditorArea from '../../../blocks/components/BlockEditorArea';
 import VisibilityControl from '../../../components/VisibilityControl';
+import RevisionHistoryButton from '../../../revisions/RevisionHistoryButton';
 import { buildViewUrl } from '../../../../../lib/publishing/viewUrl';
 
 export default async function EditProductPage({
@@ -311,6 +312,8 @@ export default async function EditProductPage({
               ) : null}
             </>
           ) : null}
+
+          <RevisionHistoryButton parentType="product" parentId={product.id} />
 
           <VisibilityControl
             type="product"

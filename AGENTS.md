@@ -13,8 +13,13 @@ changes must be append-only, forward-only, and non-destructive by default.
 > byte-identical to the old tree. Existing DBs already have `000`–`003` in history,
 > so both appliers skip the baseline — it never replays on live data. Each live DB
 > was reconciled once with `DELETE FROM supabase_migrations.schema_migrations WHERE
-> version > '00000000000003'`. **The append-only rule below resumes from here: the
-> next new migration is `00000000000004`. Do not re-baseline again casually.**
+> version > '00000000000003'`. **The append-only rule below resumes from here.
+> Do not re-baseline again casually.**
+>
+> `00000000000004` was where that cleanup ended, not where the folder still starts.
+> Everything from `004` onward is an ordinary incremental migration appended since.
+> **Never trust a hardcoded "next migration is N" — list
+> `libs/db/src/supabase/migrations` and take the number after the highest file on disk.**
 
 - Do not rewrite, squash, reorder, delete, or recycle existing migration files
   once they may have been applied to any shared or production database.

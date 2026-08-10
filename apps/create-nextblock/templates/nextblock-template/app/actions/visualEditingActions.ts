@@ -164,7 +164,15 @@ function addNumberMeta(
   }
 }
 
-async function publishPageDraft(draft: ContentDraftRow, authorId: string) {
+/**
+ * Applies a page draft to the live tables and records the revision.
+ *
+ * Returns a warning string when the content went live but the revision did not record —
+ * never throws for that case. Once the page row and its blocks have been rewritten, the
+ * publish has happened; aborting here would leave the draft row undeleted and the public
+ * route un-revalidated, which is strictly worse than a missing history entry.
+ */
+async function publishPageDraft(draft: ContentDraftRow, authorId: string): Promise<string | null> {
   const auth = await getCurrentUserCanEdit();
   const supabase = auth.supabase;
   const previousContent = await getFullPageContent(draft.parent_id);
@@ -208,12 +216,15 @@ async function publishPageDraft(draft: ContentDraftRow, authorId: string) {
   }
 
   const nextContent = await getFullPageContent(draft.parent_id);
-  if (previousContent && nextContent) {
-    await createPageRevision(draft.parent_id, authorId, previousContent, nextContent);
+  if (!previousContent || !nextContent) {
+    return "the page content could not be read back";
   }
+  const revision = await createPageRevision(draft.parent_id, authorId, previousContent, nextContent);
+  return "error" in revision ? revision.error : null;
 }
 
-async function publishPostDraft(draft: ContentDraftRow, authorId: string) {
+/** See publishPageDraft — same contract. */
+async function publishPostDraft(draft: ContentDraftRow, authorId: string): Promise<string | null> {
   const auth = await getCurrentUserCanEdit();
   const supabase = auth.supabase;
   const previousContent = await getFullPostContent(draft.parent_id);
@@ -257,9 +268,11 @@ async function publishPostDraft(draft: ContentDraftRow, authorId: string) {
   }
 
   const nextContent = await getFullPostContent(draft.parent_id);
-  if (previousContent && nextContent) {
-    await createPostRevision(draft.parent_id, authorId, previousContent, nextContent);
+  if (!previousContent || !nextContent) {
+    return "the post content could not be read back";
   }
+  const revision = await createPostRevision(draft.parent_id, authorId, previousContent, nextContent);
+  return "error" in revision ? revision.error : null;
 }
 
 export async function publishVisualEditingDraft(parentType: NextblockDocumentType, parentId: number) {
@@ -287,11 +300,10 @@ export async function publishVisualEditingDraft(parentType: NextblockDocumentTyp
 
     const draft = normalizeContentDraftRow(data);
 
-    if (parentType === "page") {
-      await publishPageDraft(draft, auth.user.id);
-    } else {
-      await publishPostDraft(draft, auth.user.id);
-    }
+    const revisionWarning =
+      parentType === "page"
+        ? await publishPageDraft(draft, auth.user.id)
+        : await publishPostDraft(draft, auth.user.id);
 
     const { error: deleteError } = await (auth.supabase as any)
       .from("content_drafts")
@@ -307,6 +319,10 @@ export async function publishVisualEditingDraft(parentType: NextblockDocumentTyp
       revalidateVisualEditingPath(getPublicPath(parentType, slug));
     }
     revalidateVisualEditingPath(parentType === "page" ? `/cms/pages/${parentId}/edit` : `/cms/posts/${parentId}/edit`);
+
+    if (revisionWarning) {
+      return { success: true, warning: `Published, but history was not recorded: ${revisionWarning}` };
+    }
 
     return { success: true };
   } catch (error) {

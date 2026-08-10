@@ -213,6 +213,11 @@ export default function VisibilityControl({
           router.refresh();
           return;
         }
+
+        // Partial success: the edits went live but the revision didn't record.
+        if (draftResult && "success" in draftResult && draftResult.warning) {
+          toast.error(draftResult.warning, { duration: 8000 });
+        }
       }
 
       toast.success(

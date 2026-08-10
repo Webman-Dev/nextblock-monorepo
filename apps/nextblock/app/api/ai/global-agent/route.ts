@@ -41,6 +41,11 @@ import {
 } from '@nextblock-cms/cortex';
 import { validateBlockContent } from '../../../../lib/blocks/blockRegistry';
 import { importExternalImageToMedia } from '../../../cms/media/import-external-image';
+import {
+  captureRevisionBaseline,
+  commitRevisionFromBaseline,
+} from '../../../cms/revisions/service';
+import type { AnyFullContent } from '../../../cms/revisions/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,6 +75,43 @@ async function importExternalImageForCortex(input: {
   }
 
   return { id: result.media.id };
+}
+
+/**
+ * Bridges the app's revision engine into the Cortex tool context so that content the agent
+ * writes straight to the live tables lands in Revision History like any other edit.
+ *
+ * Every AI write goes through here, including the ones inside a multi-step action plan —
+ * the callback lives on the tool context, not on the route, so it also covers the executors
+ * that run in-stream rather than via the Confirm button.
+ *
+ * `authorId` is the admin whose session authorised the request; the agent's Supabase client
+ * is service-role, so without this the revision row would land with a null author.
+ */
+function createCortexRevisionRecorder(authorId: string | null) {
+  return async function recordRevision(input: {
+    baseline?: unknown;
+    contentType: 'page' | 'post' | 'product';
+    entityId: number | string;
+    phase: 'capture' | 'commit';
+  }): Promise<unknown> {
+    if (input.phase === 'capture') {
+      return captureRevisionBaseline(input.contentType, input.entityId);
+    }
+
+    const result = await commitRevisionFromBaseline(
+      input.contentType,
+      input.entityId,
+      authorId,
+      (input.baseline ?? null) as AnyFullContent | null
+    );
+
+    if ('error' in result) {
+      console.error('Cortex AI: revision not recorded —', result.error);
+    }
+
+    return undefined;
+  };
 }
 
 const globalAgentMessageSchema = z.strictObject({
@@ -909,6 +951,7 @@ export async function POST(request: Request) {
           importExternalImage: importExternalImageForCortex,
           latestUserMessage: confirmedToolCall.confirmationPhrase,
           pageContext,
+          recordRevision: createCortexRevisionRecorder(adminAccess.userId),
           supabase: getServiceRoleSupabaseClient(),
           validateBlockContent,
         },
@@ -935,6 +978,7 @@ export async function POST(request: Request) {
           importExternalImage: importExternalImageForCortex,
           latestUserMessage,
           pageContext,
+          recordRevision: createCortexRevisionRecorder(adminAccess.userId),
           supabase: getServiceRoleSupabaseClient(),
           validateBlockContent,
         },
@@ -980,6 +1024,7 @@ export async function POST(request: Request) {
       importExternalImage: importExternalImageForCortex,
       latestUserMessage,
       pageContext,
+      recordRevision: createCortexRevisionRecorder(adminAccess.userId),
       supabase: getServiceRoleSupabaseClient(),
       validateBlockContent,
     });

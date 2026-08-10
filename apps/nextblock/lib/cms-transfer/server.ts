@@ -22,10 +22,12 @@ import {
 import {
   createPageRevision,
   createPostRevision,
+  createProductRevision,
 } from "../../app/cms/revisions/service";
 import {
   getFullPageContent,
   getFullPostContent,
+  getFullProductContent,
   type FullPageContent,
   type FullPostContent,
 } from "../../app/cms/revisions/utils";
@@ -1385,6 +1387,12 @@ async function applyProductImport(params: {
       throw new Error(`Failed to save product draft from row ${item.rowNumber}: ${error.message}`);
     }
   } else {
+    // Live mode writes the product row and its blocks directly, so it has to record a
+    // revision itself — exactly as applyContentImport does for pages and posts. Without
+    // this the content changes underneath the revision chain, and the next diff taken
+    // against it would replay onto a document that no longer matches.
+    const previousContent = await getFullProductContent(productId);
+
     const { error } = await auth.supabase
       .from("products")
       .update(toLiveProductPayload(item.meta) as any)
@@ -1407,6 +1415,11 @@ async function applyProductImport(params: {
       await syncCategoriesForTranslationGroup(auth.supabase as any, productId, item.categoryIds);
     }
     await (auth.supabase as any).from("product_drafts").delete().eq("product_id", productId);
+
+    const nextContent = await getFullProductContent(productId);
+    if (previousContent && nextContent) {
+      await createProductRevision(productId, auth.userId, previousContent, nextContent);
+    }
   }
 
   revalidatePath("/cms/products");

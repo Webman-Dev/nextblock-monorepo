@@ -261,6 +261,10 @@ const tableConfigs = {
     columns: ['id', 'page_id', 'author_id', 'version', 'revision_type', 'content', 'created_at'],
     description: 'Page revision history.',
     primaryKey: ['id'],
+    // Revision history is an audit trail. The agent may read it, but letting it rewrite or
+    // delete rows would let it erase the record of its own edits — and hand-written rows
+    // would corrupt the snapshot/diff chain the restore path replays.
+    readOnly: true,
   },
   pages: {
     columns: [
@@ -285,6 +289,15 @@ const tableConfigs = {
     columns: ['id', 'post_id', 'author_id', 'version', 'revision_type', 'content', 'created_at'],
     description: 'Post revision history.',
     primaryKey: ['id'],
+    // See page_revisions.
+    readOnly: true,
+  },
+  product_revisions: {
+    columns: ['id', 'product_id', 'author_id', 'version', 'revision_type', 'content', 'created_at'],
+    description: 'Product revision history.',
+    primaryKey: ['id'],
+    // See page_revisions.
+    readOnly: true,
   },
   posts: {
     columns: [

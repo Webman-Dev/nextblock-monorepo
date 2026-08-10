@@ -100,6 +100,7 @@ Defined primarily in `00000000000002_setup_content_tables.sql`:
 - `navigation_items`
 - `page_revisions`
 - `post_revisions`
+- `product_revisions` (added in `00000000000016`, alongside `products.version`)
 
 ### Commerce tables
 
@@ -179,8 +180,12 @@ tree. The current sequence is:
 
 Every file is fully idempotent. Existing databases already have versions
 `000`–`003` recorded, so both appliers skip the baseline — it only runs on a
-fresh/empty database. **The next new migration is `00000000000004`**, appended
-forward-only.
+fresh/empty database.
+
+`00000000000004` was the first migration appended after that re-baseline, not the
+one still to be written — the folder has grown well past it. **To find the next
+number, list `libs/db/src/supabase/migrations` and take the one after the highest
+file on disk.** Never copy a hardcoded "next is N" out of a doc.
 
 ### Production migration policy
 

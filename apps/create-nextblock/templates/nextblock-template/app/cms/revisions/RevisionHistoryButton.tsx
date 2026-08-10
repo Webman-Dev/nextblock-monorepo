@@ -12,17 +12,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@nextblock-cms/ui";
-import { listPageRevisions, listPostRevisions, restorePageVersion, restorePostVersion, comparePageVersion, comparePostVersion } from './actions';
+import {
+  listPageRevisions,
+  listPostRevisions,
+  listProductRevisions,
+  restorePageVersion,
+  restorePostVersion,
+  restoreProductVersion,
+  comparePageVersion,
+  comparePostVersion,
+  compareProductVersion,
+} from './actions';
 import { useRouter } from 'next/navigation';
 import JsonDiffView from './JsonDiffView';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'react-hot-toast';
 
-type ParentType = 'page' | 'post';
+type ParentType = 'page' | 'post' | 'product';
 
 interface RevisionHistoryButtonProps {
   parentType: ParentType;
-  parentId: number;
+  /** Pages and posts are keyed by bigint; products by uuid. */
+  parentId: number | string;
 }
 
 type RevisionItem = {
@@ -32,6 +43,28 @@ type RevisionItem = {
   created_at: string;
   author_id: string | null;
   author?: { full_name?: string | null } | null;
+  has_changes?: boolean;
+};
+
+type ListResult = { error: string } | { revisions: unknown[]; currentVersion: number | null; totalPages: number };
+type RestoreResult = { error: string } | { success: true; version: number };
+type CompareResult = { success: true; current: unknown; target: unknown } | { error: string };
+
+/**
+ * Exhaustive dispatch, one entry per parent type.
+ *
+ * Deliberately a lookup rather than an `if page / else` chain: with three parent types a
+ * bare `else` silently routes products into the post actions, which type-checks cleanly
+ * because both take an id and a version.
+ */
+const REVISION_API: Record<ParentType, {
+  list: (id: any, page: number, start?: string, end?: string) => Promise<ListResult>;
+  restore: (id: any, version: number) => Promise<RestoreResult>;
+  compare: (id: any, version: number) => Promise<CompareResult>;
+}> = {
+  page: { list: listPageRevisions, restore: restorePageVersion, compare: comparePageVersion },
+  post: { list: listPostRevisions, restore: restorePostVersion, compare: comparePostVersion },
+  product: { list: listProductRevisions, restore: restoreProductVersion, compare: compareProductVersion },
 };
 
 import { Input } from "@nextblock-cms/ui";
@@ -53,20 +86,17 @@ export default function RevisionHistoryButton({ parentType, parentId }: Revision
   const router = useRouter();
   const [compareLoading, setCompareLoading] = useState(false);
   const [activeCompareVersion, setActiveCompareVersion] = useState<number | null>(null);
+  const [restoringVersion, setRestoringVersion] = useState<number | null>(null);
   const [leftText, setLeftText] = useState<string | null>(null);
   const [rightText, setRightText] = useState<string | null>(null);
+
+  const api = REVISION_API[parentType];
 
   const loadRevisions = async (pageToLoad: number, start?: string, end?: string) => {
     setLoading(true);
     setError(null);
     try {
-      let res;
-      // Pass date range to actions
-      if (parentType === 'page') {
-        res = await listPageRevisions(parentId, pageToLoad, start, end);
-      } else {
-        res = await listPostRevisions(parentId, pageToLoad, start, end);
-      }
+      const res = await api.list(parentId, pageToLoad, start, end);
 
       if ('error' in res) {
         setError(res.error ?? 'Unknown error');
@@ -122,37 +152,35 @@ export default function RevisionHistoryButton({ parentType, parentId }: Revision
   const handleRestore = (version: number) => {
     setMessage(null);
     setError(null);
+    setRestoringVersion(version);
     startTransition(async () => {
       try {
-        const res = parentType === 'page'
-          ? await restorePageVersion(parentId, version)
-          : await restorePostVersion(parentId, version);
+        const res = await api.restore(parentId, version);
         if ('error' in res) {
           setError(res.error ?? 'Unknown error');
           toast.error(res.error ?? 'Failed to restore version');
           return;
         }
-        setMessage('Version restored successfully.');
+        setMessage(`Version ${version} restored as version ${res.version}.`);
         toast.success('Version restored successfully');
         router.refresh();
         setTimeout(() => setOpen(false), 800);
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to restore version');
         toast.error(e instanceof Error ? e.message : 'Failed to restore version');
+      } finally {
+        setRestoringVersion(null);
       }
     });
   };
 
-  type CompareResult = { success: true; current: unknown; target: unknown } | { error: string };
   const handleCompare = async (version: number) => {
     setError(null);
     setMessage(null);
     setActiveCompareVersion(version);
     setCompareLoading(true);
     try {
-      const res: CompareResult = parentType === 'page'
-        ? await comparePageVersion(parentId, version)
-        : await comparePostVersion(parentId, version);
+      const res = await api.compare(parentId, version);
       if ('error' in res) {
         setError(res.error);
         setLeftText(null);
@@ -245,25 +273,31 @@ export default function RevisionHistoryButton({ parentType, parentId }: Revision
                      </div>
 
                     <div className="flex gap-2">
-                      {!isCurrent && (
+                      {/* A row with no differences against the live content is labelled, not
+                          hidden: `invisible` left an interactive-looking blank where the
+                          buttons should be, which reads as a broken dialog. */}
+                      {!isCurrent && rev.has_changes === false && (
+                        <span className="text-xs text-muted-foreground italic px-2 self-center">Identical to current</span>
+                      )}
+                      {!isCurrent && rev.has_changes !== false && (
                         <>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => handleCompare(rev.version)} 
-                            disabled={compareLoading && activeCompareVersion === rev.version || (rev as any).has_changes === false} 
-                            className={cn("h-8 px-2 text-xs text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700", (rev as any).has_changes === false && "invisible pointer-events-none")}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCompare(rev.version)}
+                            disabled={compareLoading && activeCompareVersion === rev.version}
+                            className="h-8 px-2 text-xs text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700"
                           >
                             {compareLoading && activeCompareVersion === rev.version ? <><Spinner className="mr-1 h-3 w-3" /> compare</> : 'Compare'}
                           </Button>
-                          <Button 
-                            variant="destructive" 
-                            size="sm" 
-                            onClick={() => handleRestore(rev.version)} 
-                            disabled={isPending || (rev as any).has_changes === false} 
-                            className={cn("h-8 px-2 text-xs", (rev as any).has_changes === false && "invisible pointer-events-none")}
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleRestore(rev.version)}
+                            disabled={isPending}
+                            className="h-8 px-2 text-xs"
                           >
-                            {isPending ? <Spinner className="h-3 w-3" /> : 'Restore'}
+                            {isPending && restoringVersion === rev.version ? <Spinner className="h-3 w-3" /> : 'Restore'}
                           </Button>
                         </>
                       )}
