@@ -138,8 +138,18 @@ export const cortexWidgetLayoutNodeSchema: z.ZodType<CortexWidgetLayoutNode> = z
   ])
 );
 
+/**
+ * `context` is sized for a serialized block definition, not just a style note.
+ *
+ * `update_custom_block` regenerates a block by feeding the *existing* definition
+ * back in as context, and a definition with a dozen fields plus its layout schema
+ * runs well past a few thousand characters — the old 3000 cap made editing any
+ * non-trivial block fail validation before it ever reached the model. The route
+ * that accepts this is ADMIN/WRITER-gated, so the cap is a sanity bound rather
+ * than an abuse control; `prompt` still carries the tighter limit.
+ */
 export const cortexWidgetBuildRequestSchema = z.strictObject({
-  context: z.string().trim().max(3000).optional(),
+  context: z.string().trim().max(24000).optional(),
   modelId: z.string().trim().min(1).max(200).optional(),
   prompt: z.string().trim().min(3).max(4000),
 });

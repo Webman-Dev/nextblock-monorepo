@@ -59,17 +59,29 @@ type McpAuth = {
   source: 'admin-session' | 'localhost' | 'token';
 };
 
-async function importExternalImageForMcp(input: {
-  url: string;
-  altText?: string;
-}): Promise<{ id: string } | { error: string }> {
-  const result = await importExternalImageToMedia({ altText: input.altText, url: input.url });
+/**
+ * MCP has no cookie session, so the importer is handed the actor this request already
+ * authenticated. Without it every image import fails with "You must be signed in to
+ * import an image" — which silently strips the imagery out of any page or product
+ * built over MCP, since executors treat an import failure as non-fatal.
+ */
+function createMcpImageImporter(actorUserId: string | null) {
+  return async function importExternalImageForMcp(input: {
+    url: string;
+    altText?: string;
+  }): Promise<{ id: string } | { error: string }> {
+    const result = await importExternalImageToMedia({
+      ...(actorUserId ? { actorUserId } : {}),
+      altText: input.altText,
+      url: input.url,
+    });
 
-  if ('error' in result) {
-    return { error: result.error };
-  }
+    if ('error' in result) {
+      return { error: result.error };
+    }
 
-  return { id: result.media.id };
+    return { id: result.media.id };
+  };
 }
 
 /** Mirrors the global-agent route so MCP writes land in Revision History like any other edit. */
@@ -173,7 +185,7 @@ async function authenticateMcpRequest(request: Request): Promise<McpAuth | null>
     void touchCortexAiMcpToken(serviceClient, verification.token.id);
 
     return {
-      actorUserId: verification.token.created_by,
+      actorUserId: verification.token.created_by ?? (await resolveFallbackAdminUserId()),
       scopes: verification.scopes,
       source: 'token',
     };
@@ -186,10 +198,44 @@ async function authenticateMcpRequest(request: Request): Promise<McpAuth | null>
   }
 
   if (shouldTrustLocalMcpRequest({ hostHeader: request.headers.get('host'), settings })) {
-    return { actorUserId: null, scopes: ['read', 'write'], source: 'localhost' };
+    return {
+      actorUserId: await resolveFallbackAdminUserId(),
+      scopes: ['read', 'write'],
+      source: 'localhost',
+    };
   }
 
   return null;
+}
+
+/**
+ * Every mutating Cortex executor calls `getActorUserId()` and throws without one, so a
+ * connection with no identity behind it can read but never write. Two connections have
+ * that problem: localhost trust (nobody signed in) and a token whose creator was since
+ * deleted (`created_by` is `ON DELETE SET NULL`).
+ *
+ * Rather than advertise a `write` scope those connections cannot actually use, fall back
+ * to an ADMIN profile so the write is attributed to a real person in Revision History.
+ * This grants no new authority — reaching here already required either loopback in
+ * development or a valid admin-minted token — it only supplies the author field.
+ *
+ * `id` ordering is arbitrary but stable, which is what matters: the same fallback admin
+ * every time, so revision authorship does not jump between people run to run.
+ */
+async function resolveFallbackAdminUserId(): Promise<string | null> {
+  try {
+    const { data } = await getServiceRoleSupabaseClient()
+      .from('profiles')
+      .select('id')
+      .eq('role', 'ADMIN')
+      .order('id', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    return data?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 async function resolveAdminSessionUserId(): Promise<string | null> {
@@ -218,7 +264,7 @@ async function resolveAdminSessionUserId(): Promise<string | null> {
 function buildToolContext(auth: McpAuth): CortexMcpToolContext {
   return {
     actorUserId: auth.actorUserId,
-    importExternalImage: importExternalImageForMcp,
+    importExternalImage: createMcpImageImporter(auth.actorUserId),
     // No open editor over MCP: tools that need a target take it in their arguments
     // (`cmsTarget`, `slug`, `entityId`) rather than inheriting one from a UI.
     pageContext: null,

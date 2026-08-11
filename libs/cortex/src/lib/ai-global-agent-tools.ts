@@ -241,12 +241,35 @@ export const cortexAiPageContextSchema = z.strictObject({
   translationGroupId: z.string().trim().min(1).max(120).nullable().optional(),
 });
 
+const cmsContentTypeSchema = z.enum(['page', 'post', 'product']);
+const cmsTargetInputSchema = z.strictObject({
+  contentType: cmsContentTypeSchema.optional(),
+  entityId: z.union([z.number().int().positive(), z.string().trim().min(1).max(120)]).optional(),
+  slug: z.string().trim().min(1).max(300).optional(),
+  title: z.string().trim().min(1).max(300).optional(),
+});
+
+/**
+ * Names the item an "current item" tool acts on when there is no open editor.
+ *
+ * The dashboard agent inherits its target from the editor the user has open. An MCP
+ * client has no editor, so without this every tool below is unreachable from an
+ * external host. Optional everywhere, so in-app calls are unchanged.
+ */
+const cmsTargetOverrideSchema = cmsTargetInputSchema
+  .optional()
+  .describe(
+    'Names the page, post, or product to act on when no CMS editor is open (MCP clients). Pass contentType plus one of slug, entityId, or title. Ignored when an editor is already open.'
+  );
+
 export const readCurrentCmsItemInputSchema = z.strictObject({
+  cmsTarget: cmsTargetOverrideSchema,
   includeBlockContent: z.boolean().default(false),
   includeBlocks: z.boolean().default(true),
 });
 
 export const updateCurrentCmsFieldsInputSchema = z.strictObject({
+  cmsTarget: cmsTargetOverrideSchema,
   fields: z
     .strictObject({
       // Accepts an HTML string as well as an editor document — see
@@ -270,24 +293,19 @@ export const updateCurrentCmsFieldsInputSchema = z.strictObject({
 export const updateContentBlockInputSchema = z.strictObject({
   blockId: z.number().int().positive(),
   blockType: z.enum(availableCortexAiBlockTypes).optional(),
+  cmsTarget: cmsTargetOverrideSchema,
   content: z.record(z.string(), z.unknown()),
 });
 
 export const updateSectionColumnBlockInputSchema = z.strictObject({
   blockIndex: z.number().int().min(0),
   blockType: z.enum(availableCortexAiBlockTypes).optional(),
+  cmsTarget: cmsTargetOverrideSchema,
   columnIndex: z.number().int().min(0),
   content: z.record(z.string(), z.unknown()),
   parentBlockId: z.number().int().positive(),
 });
 
-const cmsContentTypeSchema = z.enum(['page', 'post', 'product']);
-const cmsTargetInputSchema = z.strictObject({
-  contentType: cmsContentTypeSchema.optional(),
-  entityId: z.union([z.number().int().positive(), z.string().trim().min(1).max(120)]).optional(),
-  slug: z.string().trim().min(1).max(300).optional(),
-  title: z.string().trim().min(1).max(300).optional(),
-});
 const createCmsBlockInputSchema = z.strictObject({
   blockType: z.enum(availableCortexAiBlockTypes),
   content: z.record(z.string(), z.unknown()),
@@ -2103,6 +2121,50 @@ async function resolveCmsTarget(
   };
 }
 
+/**
+ * Resolve the item an "current item" editing tool should act on.
+ *
+ * Two ways in. The dashboard passes `pageContext`, taken from the editor the user
+ * has open. An MCP client has no editor — the transport hands the model a tool call
+ * and nothing else — so it names the item with `cmsTarget` instead, the same
+ * contentType/slug/entityId/title shape the already-targetable tools accept.
+ *
+ * `pageContext` wins when both exist, so in-app behaviour is untouched and a stale
+ * `cmsTarget` can never redirect an edit away from the open editor.
+ */
+async function resolveEditingCmsContext(
+  target: z.infer<typeof cmsTargetInputSchema> | undefined,
+  context?: ToolExecutionContext
+): Promise<CortexAiPageContext> {
+  const parsed = cortexAiPageContextSchema.safeParse(context?.pageContext);
+
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  const hasTarget =
+    target !== undefined &&
+    (target.entityId !== undefined || Boolean(target.slug) || Boolean(target.title));
+
+  if (!hasTarget) {
+    throw new Error(
+      'No current CMS page context is available. Open a page, post, or product edit screen, or pass `cmsTarget` naming the item — contentType plus one of slug, entityId, or title.'
+    );
+  }
+
+  const resolved = await resolveCmsTarget(target, context);
+  const item = resolved.item as Record<string, unknown>;
+
+  return {
+    contentType: resolved.contentType,
+    // Verbatim: coercing would break integer-keyed pages/posts while being a no-op
+    // for uuid-keyed products.
+    entityId: item['id'] as string | number,
+    slug: typeof item['slug'] === 'string' ? item['slug'] : '',
+    title: typeof item['title'] === 'string' ? item['title'] : '',
+  } as CortexAiPageContext;
+}
+
 async function insertNavigationItem(params: {
   item: NavigationItemInput;
   languageId: number;
@@ -3626,7 +3688,7 @@ export async function executeReadCurrentCmsItem(
 ) {
   const parsed = readCurrentCmsItemInputSchema.parse(input);
   const supabase = getSupabase(context);
-  const pageContext = getCurrentCmsContext(context);
+  const pageContext = await resolveEditingCmsContext(parsed.cmsTarget, context);
   const entityId = getCmsEntityId(pageContext);
   const table =
     pageContext.contentType === 'page'
@@ -3797,7 +3859,7 @@ export async function executeUpdateCurrentCmsFields(
 ) {
   const parsed = updateCurrentCmsFieldsInputSchema.parse(input);
   const supabase = getSupabase(context);
-  const pageContext = getCurrentCmsContext(context);
+  const pageContext = await resolveEditingCmsContext(parsed.cmsTarget, context);
   const entityId = getCmsEntityId(pageContext);
   const updatePayload = buildCurrentCmsFieldUpdate(parsed.fields, pageContext);
   const updatedFields = Object.keys(updatePayload);
@@ -3883,7 +3945,7 @@ export async function executeUpdateContentBlock(
 ) {
   const parsed = updateContentBlockInputSchema.parse(input);
   const supabase = getSupabase(context);
-  const pageContext = getCurrentCmsContext(context);
+  const pageContext = await resolveEditingCmsContext(parsed.cmsTarget, context);
   const { data: block, error: blockError } = await supabase
     .from('blocks')
     .select('id, page_id, post_id, product_id, language_id, block_type, content, order')
@@ -4171,7 +4233,7 @@ export async function executeUpdateSectionColumnBlock(
 ) {
   const parsed = updateSectionColumnBlockInputSchema.parse(input);
   const supabase = getSupabase(context);
-  const pageContext = getCurrentCmsContext(context);
+  const pageContext = await resolveEditingCmsContext(parsed.cmsTarget, context);
   const { data: parentBlock, error: blockError } = await supabase
     .from('blocks')
     .select('id, page_id, post_id, product_id, language_id, block_type, content, order')
@@ -4888,12 +4950,73 @@ async function buildProductColumnUpdate(
   return { [field]: value };
 }
 
+/** Fields whose executor checks demand a real `number`. */
+const NUMERIC_CMS_FIELD_NAMES = new Set([
+  'language_id',
+  'price',
+  'sale_price',
+  'stock',
+  'trial_period_days',
+]);
+
+/** Fields whose executor checks demand a real `boolean`. */
+const BOOLEAN_CMS_FIELD_NAMES = new Set(['is_taxable', 'trial_requires_payment_method']);
+
+/**
+ * Coerce string-encoded scalars for fields that require a number or boolean.
+ *
+ * `value` is `z.any()`, which serializes to an untyped `{}` in the JSON Schema MCP
+ * puts on the wire — so an external client has no type to marshal against and
+ * commonly sends `"29.99"` or `"true"` where the executor demands `29.99` / `true`.
+ * Without this, setting a price, stock level, or boolean flag is simply impossible
+ * over MCP, for no safety gain: the range and integer checks downstream still run
+ * against the coerced value.
+ *
+ * Deliberately conservative — only unambiguous conversions happen. Anything else is
+ * returned untouched so the existing validation still raises its own error rather
+ * than this silently inventing a value.
+ */
+function coerceScalarCmsFieldValue(field: string, value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmed = value.trim();
+
+  if (NUMERIC_CMS_FIELD_NAMES.has(field)) {
+    if (trimmed.toLowerCase() === 'null') {
+      return null;
+    }
+
+    if (trimmed === '') {
+      return value;
+    }
+
+    const parsed = Number(trimmed);
+
+    return Number.isFinite(parsed) ? parsed : value;
+  }
+
+  if (BOOLEAN_CMS_FIELD_NAMES.has(field)) {
+    const lowered = trimmed.toLowerCase();
+
+    if (lowered === 'true') {
+      return true;
+    }
+
+    if (lowered === 'false') {
+      return false;
+    }
+  }
+
+  return value;
+}
+
 function buildSingleFieldUpdatePayload(
   input: UpdateCmsItemFieldInput,
   target: { contentType: CmsContentType; item: any }
 ) {
   const field = normalizeFieldName(input.field);
-  const value = field === 'status' ? normalizeStatusValue(target.contentType, input.value) : input.value;
   const aliases: Record<string, string> = {
     description: 'description_json',
     feature_image: 'feature_image_id',
@@ -4914,6 +5037,12 @@ function buildSingleFieldUpdatePayload(
     type: 'product_type',
   };
   const normalizedField = aliases[field] || field;
+  // 'status' carries no alias, so resolving the alias first does not change which
+  // branch this takes — it only lets the coercion see the real column name.
+  const value =
+    normalizedField === 'status'
+      ? normalizeStatusValue(target.contentType, input.value)
+      : coerceScalarCmsFieldValue(normalizedField, input.value);
 
   if (target.contentType !== 'product') {
     const pagePostFields = target.contentType === 'page' ? PAGE_FIELD_NAMES : POST_FIELD_NAMES;
@@ -6751,6 +6880,226 @@ export async function executeRewritePageDraft(
 }
 
 // ---------------------------------------------------------------------------
+// publish_content_draft: the other half of the Live Draft lifecycle.
+//
+// rewrite_page_draft/generate_jsonb_layout stage a draft and stop, because in the
+// dashboard a human clicks Publish. An MCP client has no such button, so a page
+// built over MCP used to be stranded in content_drafts with no tool able to release
+// it — which makes "build me a site" impossible to finish in one pass. This applies
+// the draft to the live tables with the same semantics as the editor's Publish.
+// ---------------------------------------------------------------------------
+
+export const publishContentDraftInputSchema = z.strictObject({
+  action: z
+    .enum(['publish', 'discard'])
+    .default('publish')
+    .describe('"publish" applies the draft to the live page/post; "discard" deletes it and leaves the live content untouched.'),
+  contentType: z.enum(['page', 'post']).optional(),
+  entityId: z.union([z.number().int().positive(), z.string().trim().min(1).max(120)]).optional(),
+  slug: z.string().trim().min(1).max(300).optional(),
+  title: z.string().trim().min(1).max(300).optional(),
+});
+
+export type PublishContentDraftInput = z.infer<typeof publishContentDraftInputSchema>;
+
+/** Draft meta keys copied onto the live row, mirroring the editor's Publish exactly. */
+const DRAFT_META_REQUIRED_STRING_KEYS = ['title', 'slug'] as const;
+const DRAFT_META_NULLABLE_STRING_KEYS = [
+  'custom_canonical',
+  'feature_image_id',
+  'meta_description',
+  'meta_title',
+] as const;
+
+export async function executePublishContentDraft(
+  input: PublishContentDraftInput,
+  context?: ToolExecutionContext
+) {
+  const parsed = publishContentDraftInputSchema.parse(input);
+  const supabase = getSupabase(context);
+  const pageContext = await resolveEditingCmsContext(
+    {
+      ...(parsed.contentType ? { contentType: parsed.contentType } : {}),
+      ...(parsed.entityId !== undefined ? { entityId: parsed.entityId } : {}),
+      ...(parsed.slug ? { slug: parsed.slug } : {}),
+      ...(parsed.title ? { title: parsed.title } : {}),
+    },
+    context
+  );
+
+  if (pageContext.contentType === 'product') {
+    throw new Error(
+      'publish_content_draft supports pages and posts. Product drafts live in product_drafts and are published from the product editor.'
+    );
+  }
+
+  const parentType = pageContext.contentType;
+  const parentId = getNumericEntityId(pageContext);
+  const table = parentType === 'page' ? 'pages' : 'posts';
+
+  const { data: draftRow, error: draftError } = await supabase
+    .from('content_drafts')
+    .select('*')
+    .eq('parent_type', parentType)
+    .eq('parent_id', parentId)
+    .maybeSingle();
+
+  if (draftError) {
+    throw new Error(`Failed to read the draft: ${serializeError(draftError)}`);
+  }
+
+  if (!draftRow) {
+    return {
+      contentType: parentType,
+      entityId: parentId,
+      message: `No Live Draft exists for ${parentType} "${pageContext.title || pageContext.slug}". Nothing to ${parsed.action}.`,
+      mutationExecuted: false,
+      success: false,
+    };
+  }
+
+  const label = pageContext.title || pageContext.slug || `${parentType} ${parentId}`;
+  const confirmation = getConfirmationPreview({
+    action: parsed.action === 'publish' ? 'PUBLISH DRAFT' : 'DISCARD DRAFT',
+    context,
+    payload: { action: parsed.action, contentType: parentType, entityId: String(parentId) },
+    preview: {
+      contentType: parentType,
+      slug: pageContext.slug,
+      summary:
+        parsed.action === 'publish'
+          ? `Publish the Live Draft for ${parentType} "${label}", replacing its live blocks. A revision snapshot is saved first, so this is reversible from Revision History.`
+          : `Discard the Live Draft for ${parentType} "${label}". The live content is left untouched.`,
+      title: pageContext.title,
+    },
+    subject: `${parentType}-${parentId}-draft`,
+  });
+
+  if (confirmation) {
+    return confirmation;
+  }
+
+  const draftMeta = (draftRow['meta'] ?? {}) as Record<string, unknown>;
+  const draftBlocks = Array.isArray(draftRow['blocks']) ? (draftRow['blocks'] as any[]) : [];
+
+  if (parsed.action === 'discard') {
+    const { error: discardError } = await supabase
+      .from('content_drafts')
+      .delete()
+      .eq('id', draftRow['id']);
+
+    if (discardError) {
+      throw new Error(`Failed to discard the draft: ${serializeError(discardError)}`);
+    }
+
+    revalidateCurrentCmsSurfaces(context, pageContext, pageContext.slug);
+
+    return {
+      action: 'discard',
+      contentType: parentType,
+      entityId: parentId,
+      mutationExecuted: true,
+      success: true,
+    };
+  }
+
+  const baseline = await captureCmsRevision(context, parentType, parentId);
+
+  const rowUpdate: Record<string, unknown> = {};
+
+  for (const key of DRAFT_META_REQUIRED_STRING_KEYS) {
+    const value = draftMeta[key];
+
+    if (typeof value === 'string' && value.trim()) {
+      rowUpdate[key] = value.trim();
+    }
+  }
+
+  for (const key of DRAFT_META_NULLABLE_STRING_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(draftMeta, key)) {
+      const value = draftMeta[key];
+      rowUpdate[key] = typeof value === 'string' && value.trim() ? value.trim() : null;
+    }
+  }
+
+  // `status` and `published_at` are deliberately NOT copied. Visibility is owned by
+  // the editor's own control and written straight to the row; a draft staged before
+  // a visibility change still carries the old status, and copying it would silently
+  // unpublish a live page (or publish a private one) behind the operator's back.
+
+  if (Object.keys(rowUpdate).length > 0) {
+    const { error: metaError } = await supabase.from(table).update(rowUpdate).eq('id', parentId);
+
+    if (metaError) {
+      throw new Error(`Failed to apply the draft metadata: ${serializeError(metaError)}`);
+    }
+  }
+
+  const parentColumn = parentType === 'page' ? 'page_id' : 'post_id';
+  const { error: clearError } = await supabase.from('blocks').delete().eq(parentColumn, parentId);
+
+  if (clearError) {
+    throw new Error(`Failed to clear the live blocks: ${serializeError(clearError)}`);
+  }
+
+  const languageId =
+    Number(draftMeta['language_id']) ||
+    Number(pageContext.languageId) ||
+    Number(draftBlocks[0]?.language_id) ||
+    0;
+
+  if (draftBlocks.length > 0) {
+    const blockRows = draftBlocks.map((block, index) => ({
+      block_type: block?.block_type,
+      content: block?.content ?? {},
+      language_id: Number(block?.language_id) || languageId,
+      order: Number.isFinite(block?.order) ? block.order : index,
+      page_id: parentType === 'page' ? parentId : null,
+      post_id: parentType === 'post' ? parentId : null,
+      product_id: null,
+    }));
+
+    const { error: insertError } = await supabase.from('blocks').insert(blockRows);
+
+    if (insertError) {
+      throw new Error(`Failed to publish the draft blocks: ${serializeError(insertError)}`);
+    }
+  }
+
+  // Past the point of no return: the live content has already been rewritten, so a
+  // failure from here on is reported as a warning rather than thrown. Aborting would
+  // leave the draft row in place and the public route stale — strictly worse.
+  await commitCmsRevision(context, parentType, parentId, baseline);
+
+  const { error: cleanupError } = await supabase
+    .from('content_drafts')
+    .delete()
+    .eq('id', draftRow['id']);
+
+  const publishedSlug =
+    typeof rowUpdate['slug'] === 'string' ? (rowUpdate['slug'] as string) : pageContext.slug;
+
+  revalidateCurrentCmsSurfaces(
+    context,
+    { ...pageContext, slug: publishedSlug },
+    publishedSlug ?? undefined
+  );
+
+  return {
+    action: 'publish',
+    blockCount: draftBlocks.length,
+    contentType: parentType,
+    entityId: parentId,
+    mutationExecuted: true,
+    slug: publishedSlug,
+    success: true,
+    ...(cleanupError
+      ? { warning: `Published, but the draft row was not removed: ${serializeError(cleanupError)}` }
+      : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // translate_page: create a linked target-language copy of the current page/post.
 // The tool copies the source structure + images verbatim and applies a compact
 // source->target TEXT map the agent supplies, so translating is one small tool
@@ -6836,6 +7185,7 @@ function translateBlockContent(
 }
 
 export const translatePageInputSchema = z.strictObject({
+  cmsTarget: cmsTargetOverrideSchema,
   targetLanguageCode: z
     .string()
     .trim()
@@ -6863,7 +7213,7 @@ export async function executeTranslatePage(
   context?: ToolExecutionContext
 ) {
   const parsed = translatePageInputSchema.parse(input);
-  const pageContext = getCurrentCmsContext(context);
+  const pageContext = await resolveEditingCmsContext(parsed.cmsTarget, context);
 
   if (pageContext.contentType === 'product') {
     throw new Error('translate_page supports pages and posts only.');
@@ -7182,7 +7532,7 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
     }),
     read_current_cms_item: tool({
       description:
-        'Read the CMS item currently being edited. Requires pageContext and returns page/post/product metadata plus page/post block summaries or content.',
+        'Read a CMS item: page/post/product metadata plus page/post block summaries or content. Defaults to the item currently open in the CMS editor; with no editor open (MCP clients) pass `cmsTarget` with contentType plus slug, entityId, or title. Read-only.',
       execute: (input) => executeReadCurrentCmsItem(input, context),
       inputSchema: readCurrentCmsItemInputSchema,
       strict: true,
@@ -7208,6 +7558,13 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
       inputSchema: searchStockPhotosInputSchema,
       strict: true,
     }),
+    publish_content_draft: tool({
+      description:
+        'Publish (or discard) the Live Draft staged on a page or post by generate_jsonb_layout / rewrite_page_draft. Publishing applies the draft blocks and metadata to the live record and snapshots a revision first, so it is reversible from Revision History; visibility (status/published_at) is never changed. Use this to finish a build that staged a draft — without it the new layout stays invisible on the public site. Target the record with contentType plus slug, entityId, or title. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
+      execute: (input) => executePublishContentDraft(input, context),
+      inputSchema: publishContentDraftInputSchema,
+      strict: true,
+    }),
     rewrite_page_draft: tool({
       description:
         'Replace ALL blocks of an existing page or post with a brand-new set of blocks, staged as a Live Draft (content_drafts) that the user previews before publishing. Use this for whole-page redesigns/rewrites such as "rewrite my home page with 5 sections". Provide the complete new list of top-level blocks in `blocks` (usually section blocks for a landing/home page, each with nested heading/text/button blocks). Nothing goes live until the user publishes the draft, and publishing auto-creates a revision snapshot so the change is reversible. Mutating: first returns a confirmation phrase; only stages the draft after the user replies with the exact phrase.',
@@ -7217,7 +7574,7 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
     }),
     translate_page: tool({
       description:
-        'Translate the CURRENT page or post into another language. This copies the source page\'s entire structure, layout, and images automatically and links the new page to the original as a translation — you ONLY supply the text translations. Provide targetLanguageCode (e.g. "fr") and a `translations` map of every visible source string to its translation (headings, paragraph text, button labels, image alt text, captions, form labels). Do NOT rebuild the layout or call search_stock_photos for a translation. Requires an open page/post. Mutating: first returns a confirmation phrase; only creates the translation after exact confirmation.',
+        'Translate the CURRENT page or post into another language. This copies the source page\'s entire structure, layout, and images automatically and links the new page to the original as a translation — you ONLY supply the text translations. Provide targetLanguageCode (e.g. "fr") and a `translations` map of every visible source string to its translation (headings, paragraph text, button labels, image alt text, captions, form labels). Do NOT rebuild the layout or call search_stock_photos for a translation. Targets the open page/post by default; with no editor open (MCP clients) pass `cmsTarget` with contentType plus slug, entityId, or title. Mutating: first returns a confirmation phrase; only creates the translation after exact confirmation.',
       execute: (input) => executeTranslatePage(input, context),
       inputSchema: translatePageInputSchema,
       strict: true,
@@ -7273,7 +7630,7 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
     }),
     update_content_block: tool({
       description:
-        'Update the JSON content of an existing top-level page/post block that belongs to the current CMS edit context. Content is merged with the existing block before validation. For section blocks, add nested blocks with content.append_block or content.append_blocks using objects like { block_type: "button", content: { text: "Contact Us", url: "/contact" } }; existing column_blocks and layout fields are preserved. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
+        'Update the JSON content of an existing top-level page/post block. The block must belong to the item being edited — the open CMS editor, or the item named by `cmsTarget` (contentType plus slug, entityId, or title) when no editor is open, as with MCP clients. Content is merged with the existing block before validation. For section blocks, add nested blocks with content.append_block or content.append_blocks using objects like { block_type: "button", content: { text: "Contact Us", url: "/contact" } }; existing column_blocks and layout fields are preserved. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
       execute: (input) => executeUpdateContentBlock(input, context),
       inputSchema: updateContentBlockInputSchema,
       strict: true,
@@ -7308,7 +7665,7 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
     }),
     update_section_column_block: tool({
       description:
-        'Update the content of one existing nested block inside a section block that belongs to the current CMS edit context. This tool must not change the nested block type. To add a new nested block, update the parent section with update_content_block and preserve existing column_blocks. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
+        'Update the content of one existing nested block inside a section block. The parent section must belong to the item being edited — the open CMS editor, or the item named by `cmsTarget` (contentType plus slug, entityId, or title) when no editor is open, as with MCP clients. This tool must not change the nested block type. To add a new nested block, update the parent section with update_content_block and preserve existing column_blocks. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
       execute: (input) => executeUpdateSectionColumnBlock(input, context),
       inputSchema: updateSectionColumnBlockInputSchema,
       strict: true,

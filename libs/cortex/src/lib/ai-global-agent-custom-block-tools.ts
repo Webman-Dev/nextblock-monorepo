@@ -87,6 +87,42 @@ function summarizeDefinition(definition: any) {
   };
 }
 
+/** Keep the regeneration context inside `cortexWidgetBuildRequestSchema`'s bound. */
+const MAX_EXISTING_DEFINITION_CONTEXT = 24000;
+
+/**
+ * Describe the block being edited to the generator.
+ *
+ * The layout schema is the bulky part, and it is also the part the model can
+ * reconstruct from the field list and the edit prompt. So when the full definition
+ * would overflow the context bound, drop the layout and keep the fields — a
+ * regenerated layout is a far better outcome than a hard validation failure, which
+ * is what an oversized definition used to produce.
+ */
+function buildExistingDefinitionContext(existing: {
+  fields?: unknown;
+  layout_schema?: unknown;
+  name?: string | null;
+}): string {
+  const preamble = `You are editing an existing custom block named "${existing.name ?? 'Untitled'}". Keep its overall purpose and only apply the requested changes.`;
+  const full = `${preamble} Existing definition: ${JSON.stringify({
+    fields: existing.fields,
+    layout_schema: existing.layout_schema,
+    name: existing.name,
+  })}`;
+
+  if (full.length <= MAX_EXISTING_DEFINITION_CONTEXT) {
+    return full;
+  }
+
+  const withoutLayout = `${preamble} Existing fields: ${JSON.stringify({
+    fields: existing.fields,
+    name: existing.name,
+  })} (The existing layout was too large to include — rebuild a layout that renders these fields.)`;
+
+  return withoutLayout.slice(0, MAX_EXISTING_DEFINITION_CONTEXT);
+}
+
 function buildWidgetGenerationParams(input: { prompt: string; context?: string }, context?: CustomBlockToolContext) {
   const apiKey = context?.cortexAiApiKey || undefined;
   return {
@@ -198,9 +234,7 @@ export async function executeUpdateCustomBlock(
     const generation = await generateCortexWidgetDefinition(
       buildWidgetGenerationParams(
         {
-          context: `You are editing an existing custom block named "${existing.name}". Keep its overall purpose and only apply the requested changes. Existing definition: ${JSON.stringify(
-            { fields: existing.fields, layout_schema: existing.layout_schema, name: existing.name }
-          )}`,
+          context: buildExistingDefinitionContext(existing),
           prompt: input.prompt,
         },
         context

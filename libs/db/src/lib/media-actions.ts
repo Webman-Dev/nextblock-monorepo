@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "./supabase/server";
+import { createClient, getServiceRoleSupabaseClient } from "./supabase/server";
 import { revalidatePath } from "next/cache";
 import type { Database } from "./supabase/types";
 import { encodedRedirect } from "@nextblock-cms/utils/server";
@@ -25,19 +25,38 @@ export async function recordMediaUpload(payload: {
   r2Variants: ImageVariant[];
   originalImageDetails: ImageVariant;
   blurDataUrl?: string;
+  /**
+   * Uploader for callers that have no cookie session — the MCP server, which
+   * authenticates by bearer token instead. When set, the row is written with the
+   * service-role client and attributed to this user rather than to `auth.getUser()`.
+   *
+   * This grants no new authority: the role check below still runs against the
+   * supplied id, so a non-ADMIN/WRITER actor is rejected exactly as a cookie
+   * session would be. The caller is responsible for having authenticated them.
+   */
+  actorUserId?: string;
 }, returnJustData?: boolean): Promise<{ success: true; data: Media } | { error: string } | void>  {
-  const supabase = createClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const actorUserId = payload.actorUserId;
+  const supabase = actorUserId ? getServiceRoleSupabaseClient() : createClient();
+  let uploaderId: string;
 
-  if (authError || !user) {
-    if (returnJustData) return { error: "User not authenticated for media record." };
-    return encodedRedirect("error", "/cms/media", "User not authenticated for media record.");
+  if (actorUserId) {
+    uploaderId = actorUserId;
+  } else {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      if (returnJustData) return { error: "User not authenticated for media record." };
+      return encodedRedirect("error", "/cms/media", "User not authenticated for media record.");
+    }
+
+    uploaderId = user.id;
   }
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")
-    .eq("id", user.id)
+    .eq("id", uploaderId)
     .single();
   if (!profile || !["ADMIN", "WRITER"].includes(profile.role)) {
     if (returnJustData) return { error: "Forbidden: Insufficient permissions to record media." };
@@ -83,7 +102,7 @@ export async function recordMediaUpload(payload: {
       : null);
 
   const mediaData: Omit<Media, 'id' | 'created_at' | 'updated_at'> & { uploader_id: string } = {
-    uploader_id: user.id,
+    uploader_id: uploaderId,
     file_name: payload.fileName,
     object_key: primaryVariant.objectKey,
     file_path: primaryVariant.objectKey,

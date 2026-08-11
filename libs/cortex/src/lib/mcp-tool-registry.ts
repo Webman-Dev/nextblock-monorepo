@@ -49,6 +49,7 @@ export const CORTEX_MCP_TOOL_KINDS = {
   insert_content_block: 'write',
   list_custom_blocks: 'read',
   prepare_delete_cms_item: 'read',
+  publish_content_draft: 'write',
   read_current_cms_item: 'read',
   read_database_records: 'read',
   rewrite_page_draft: 'write',

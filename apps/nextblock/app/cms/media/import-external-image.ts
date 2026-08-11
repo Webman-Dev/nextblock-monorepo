@@ -6,7 +6,7 @@ import "server-only";
 import sharp from "sharp";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 
-import { createClient } from "@nextblock-cms/db/server";
+import { createClient, getServiceRoleSupabaseClient } from "@nextblock-cms/db/server";
 import { recordMediaUpload } from "@nextblock-cms/db";
 import { getS3Client } from "@nextblock-cms/utils/server";
 
@@ -93,15 +93,28 @@ function slugifyFileBase(value: string): string {
 }
 
 /**
- * Download an external image (e.g. an AI-inserted stock photo) and persist it into the
- * NextBlock media library (R2 or Supabase Storage) so it becomes a permanent, optimized
- * asset the page no longer hotlinks. ADMIN/WRITER only.
+ * Establish the ADMIN/WRITER this import is attributed to.
+ *
+ * Two paths: a cookie session (the dashboard) or an explicitly supplied actor (the
+ * MCP server, which has already authenticated the caller by bearer token). Both
+ * end at the same role check, so the second is a different way to *identify* the
+ * uploader, not a way to skip authorization.
  */
-export async function importExternalImageToMedia(input: {
-  url: string;
-  altText?: string;
-  fileName?: string;
-}): Promise<ImportExternalImageResult> {
+async function resolveImportActorId(actorUserId?: string): Promise<{ id: string } | { error: string }> {
+  if (actorUserId) {
+    const { data: profile } = await getServiceRoleSupabaseClient()
+      .from("profiles")
+      .select("role")
+      .eq("id", actorUserId)
+      .single();
+
+    if (!profile || !["ADMIN", "WRITER"].includes(profile.role)) {
+      return { error: "You do not have permission to import media." };
+    }
+
+    return { id: actorUserId };
+  }
+
   const supabase = createClient();
   const {
     data: { user },
@@ -116,6 +129,34 @@ export async function importExternalImageToMedia(input: {
   if (!profile || !["ADMIN", "WRITER"].includes(profile.role)) {
     return { error: "You do not have permission to import media." };
   }
+
+  return { id: user.id };
+}
+
+/**
+ * Download an external image (e.g. an AI-inserted stock photo) and persist it into the
+ * NextBlock media library (R2 or Supabase Storage) so it becomes a permanent, optimized
+ * asset the page no longer hotlinks. ADMIN/WRITER only.
+ */
+export async function importExternalImageToMedia(input: {
+  url: string;
+  altText?: string;
+  fileName?: string;
+  /**
+   * Uploader for callers with no cookie session — the MCP server authenticates by
+   * bearer token, so `auth.getUser()` finds nobody and every import would fail with
+   * "You must be signed in". The role check below still runs against this id, so it
+   * confers no authority the caller did not already establish.
+   */
+  actorUserId?: string;
+}): Promise<ImportExternalImageResult> {
+  const uploaderId = await resolveImportActorId(input.actorUserId);
+
+  if ("error" in uploaderId) {
+    return { error: uploaderId.error };
+  }
+
+  const userId = uploaderId.id;
 
   let target: URL;
 
@@ -233,7 +274,7 @@ export async function importExternalImageToMedia(input: {
           Bucket: bucket,
           ContentType: resolvedContentType,
           Key: objectKey,
-          Metadata: { "uploader-user-id": user.id },
+          Metadata: { "uploader-user-id": userId },
         })
       );
     }
@@ -258,6 +299,10 @@ export async function importExternalImageToMedia(input: {
 
   const record = await recordMediaUpload(
     {
+      // Carried through so the media row is attributed to the same actor the role
+      // check above passed — without it the recorder falls back to the cookie
+      // session and fails for MCP callers after the upload has already happened.
+      actorUserId: input.actorUserId,
       blurDataUrl: blurDataUrl || undefined,
       description: altText || undefined,
       fileName,
