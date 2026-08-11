@@ -756,6 +756,45 @@ export type Database = {
           },
         ]
       }
+      mcp_access_tokens: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          last_used_at: string | null
+          name: string
+          revoked_at: string | null
+          scopes: string[]
+          token_hash: string
+          token_prefix: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          last_used_at?: string | null
+          name: string
+          revoked_at?: string | null
+          scopes?: string[]
+          token_hash: string
+          token_prefix: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          last_used_at?: string | null
+          name?: string
+          revoked_at?: string | null
+          scopes?: string[]
+          token_hash?: string
+          token_prefix?: string
+        }
+        Relationships: []
+      }
       media: {
         Row: {
           blur_data_url: string | null
@@ -1593,6 +1632,51 @@ export type Database = {
           },
         ]
       }
+      product_revisions: {
+        Row: {
+          author_id: string | null
+          content: Json
+          created_at: string
+          id: number
+          product_id: string
+          revision_type: Database["public"]["Enums"]["revision_type"]
+          version: number
+        }
+        Insert: {
+          author_id?: string | null
+          content: Json
+          created_at?: string
+          id?: number
+          product_id: string
+          revision_type: Database["public"]["Enums"]["revision_type"]
+          version: number
+        }
+        Update: {
+          author_id?: string | null
+          content?: Json
+          created_at?: string
+          id?: number
+          product_id?: string
+          revision_type?: Database["public"]["Enums"]["revision_type"]
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_revisions_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_revisions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_variants: {
         Row: {
           created_at: string | null
@@ -1709,6 +1793,7 @@ export type Database = {
           trial_requires_payment_method: boolean
           upc: string | null
           updated_at: string | null
+          version: number
         }
         Insert: {
           average_rating?: number
@@ -1747,6 +1832,7 @@ export type Database = {
           trial_requires_payment_method?: boolean
           upc?: string | null
           updated_at?: string | null
+          version?: number
         }
         Update: {
           average_rating?: number
@@ -1785,6 +1871,7 @@ export type Database = {
           trial_requires_payment_method?: boolean
           upc?: string | null
           updated_at?: string | null
+          version?: number
         }
         Relationships: [
           {

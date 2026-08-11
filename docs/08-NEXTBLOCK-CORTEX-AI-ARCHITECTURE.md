@@ -1060,6 +1060,157 @@ Unsplash has strict usage rules; Pexels' license is permissive (attribution opti
 - `importExternalImageToMedia` (`apps/nextblock/app/cms/media/import-external-image.ts`, ADMIN/WRITER) downloads an external image (SSRF-guarded, 15MB/15s caps), measures it with `sharp`, generates a blur placeholder, uploads to R2/Supabase Storage via the shared storage provider, and records it with `recordMediaUpload`. Returns `{ media_id, object_key, width, height, url, blur_data_url }`.
 - Editor UX: `ImageBlockEditor` and `BackgroundSelector` accept a pasted image URL and show a **Save to media library** action that swaps the external URL for a permanent optimized media reference (or the author can replace it with their own uploaded asset).
 
+## MCP Server (external client access)
+
+Cortex AI is dual-access. Alongside the in-app BYOK path (dashboard chat + inline
+editor), the same tool registry is exposed over the **Model Context Protocol** at
+`/api/mcp`, so Claude Code, Claude Desktop, Cursor, and VS Code can operate the CMS
+from inside the editor.
+
+### Files
+
+| File | Purpose |
+| --- | --- |
+| `libs/cortex/src/lib/mcp-server.ts` | Transport-agnostic JSON-RPC 2.0 engine. No `next` imports, so it is unit-testable. |
+| `libs/cortex/src/lib/mcp-tool-registry.ts` | Zod→JSON Schema conversion, read/write scope table, MCP-contract aliases, tool dispatch, resources, prompts. |
+| `libs/cortex/src/lib/mcp-tokens.ts` | Token mint/hash/verify, MCP settings resolver, localhost-trust rules. |
+| `libs/cortex/src/lib/mcp-server.test.ts` | 33 tests across tokens, registry, and protocol. |
+| `apps/nextblock/app/api/mcp/route.ts` | Streamable HTTP shim + hybrid auth + tool-context construction. |
+| `apps/nextblock/app/cms/settings/cortex-ai/mcp-actions.ts` | Admin server actions: settings, mint, revoke. |
+| `apps/nextblock/app/cms/settings/cortex-ai/McpServerSettingsCard.tsx` | Settings UI + copy-paste client config. |
+| `apps/nextblock/app/cms/settings/cortex-ai/require-admin.ts` | Shared admin gate (also used by `actions.ts`). |
+| `libs/db/src/supabase/migrations/00000000000017_cortex_ai_mcp_server.sql` | `mcp_access_tokens` table + `cortex_ai_mcp_settings` RLS. |
+
+### Protocol decisions
+
+**Hand-rolled, not `@modelcontextprotocol/sdk`.** The needed surface (initialize,
+tools/list, tools/call, resources/*, prompts/*, ping) is small and declarative. The v1
+SDK pulls in `express`, `cors`, `hono`, and `@hono/node-server` — heavy transitive
+weight for a publishable lib whose only peer dependency is `next` — and its default
+`StreamableHTTPServerTransport` is built on Node `IncomingMessage`/`ServerResponse`
+rather than the Web `Request`/`Response` an App Router handler receives.
+
+**Dual-era.** The spec forked: `2026-07-28` is stateless (no `initialize`, no session
+id, protocol metadata in a per-request `_meta` envelope), while everything through
+`2025-11-25` is handshake-based. As of 2026-08 every shipping client is legacy-era, so
+that path must work; the modern path is detected and served too. Because the server is
+stateless either way, supporting both costs nothing.
+
+Deliberate behaviours, each of which breaks a real client if changed:
+
+- **Notifications get `202 Accepted` with an empty body.** Returning a JSON-RPC
+  envelope for a message with no `id` desyncs strict clients.
+- **GET returns `405`.** The server never initiates requests or pushes unsolicited
+  notifications, so there is no stream to open. The spec explicitly allows 405 here.
+- **401 carries a bare `WWW-Authenticate: Bearer`.** Adding a `resource_metadata`
+  parameter (or serving `/.well-known/oauth-protected-resource`) advertises RFC 9728
+  OAuth discovery, and Claude Code responds by starting an OAuth flow that dead-ends
+  against a static-token server.
+- **Tool failures are `isError: true` on a *successful* result**, not JSON-RPC errors.
+  Only unknown-tool and scope denial use the error channel, because those are the
+  faults a model cannot fix by retrying with different arguments.
+- **`inputSchema` is always a JSON Schema object** with `$schema` stripped (MCP defines
+  the dialect; some clients reject the extra key). Converted with `io: 'input'` so
+  `.default()` fields stay optional.
+- **Array bodies are rejected.** JSON-RPC batching was removed in `2025-06-18`.
+- **`Origin` is validated when present** (DNS-rebinding defence, a spec MUST) and
+  answered with 403. Native clients send no Origin, so absence is allowed.
+
+### Authentication
+
+Three accepted paths, in priority order, all gated behind
+`verifyPackageOnline('cortex-ai')` and the `enabled` setting:
+
+1. **Bearer token** from `public.mcp_access_tokens` — what every external client uses.
+2. **Authenticated ADMIN cookie session** — lets the dashboard reach the endpoint
+   without minting a token.
+3. **Loopback in development** — only when `allowLocalhostWithoutToken` is on *and*
+   `NODE_ENV !== 'production'`. Behind a proxy the `Host` header is attacker-
+   controllable, so localhost trust is a development affordance only.
+
+Tokens are stored as **SHA-256 hashes**; the plaintext (`nbmcp_` + 256 bits base64url)
+is shown once at mint time and is unrecoverable. This differs from the OpenRouter BYOK
+key on purpose: that key must be handed back to OpenRouter, so it needs a reversible
+envelope, whereas an MCP token only ever needs to be *compared*. `token_prefix` is a
+non-secret display fragment. Revocation is a tombstone (`revoked_at`), which keeps the
+hash in the unique index so the same value can never be re-minted.
+
+The minted token is returned through a **server action return value**, never a redirect
+query string — a `?success=<token>` would land in browser history, the referrer header,
+and the server access log.
+
+### Scopes
+
+`CORTEX_MCP_TOOL_KINDS` classifies all 29 registry tools as `read` or `write`. A
+read-only token does not merely get refused on a write — the mutating tools are absent
+from its `tools/list` entirely, aliases included.
+
+The table is **exhaustive by construction**: `assertCortexMcpToolCoverage` compares its
+keys against the live factory output, and a unit test fails if they diverge. An
+unclassified tool is *withheld*, never defaulted to `read`, so adding a tool to the
+agent without classifying it is a loud failure rather than a silent hole.
+
+### Confirmation is skipped over MCP
+
+The in-app two-phase confirm matches a phrase in the user's *next chat message*, which
+has no analogue in MCP — there is no channel to carry a human phrase back between a
+tool call and its result. Every MCP host already gates tool calls behind its own
+approval UI, so leaving it on would just make every mutating tool return a preview
+forever. The real control is the token scope. `ToolExecutionContext.skipConfirmation`
+is therefore `true` for all MCP calls.
+
+### MCP-contract tool names
+
+Five names are exposed as aliases forwarding to existing executors, so external clients
+get the documented contract without forking tested code. The canonical names remain
+listed too, and each alias description begins with "Alias of `<canonical>`" so a model
+does not call both.
+
+| MCP name | Forwards to |
+| --- | --- |
+| `get_database_schema` | `describe_database_schema` |
+| `generate_jsonb_layout` | `rewrite_page_draft` (stages a Live Draft; nothing goes live unpublished) |
+| `query_site_analytics` | `fetch_ecommerce_stats` |
+| `update_site_navigation` | `update_navigation_bar` |
+| `search_stock_media` | `search_stock_photos` |
+
+### Resources and prompts
+
+Resources: `cortex://schema/database`, `cortex://schema/blocks`,
+`cortex://schema/custom-blocks`. Prompts: `build-page`, `clone-from-url`,
+`translate-content`.
+
+### Settings and client configuration
+
+`/cms/settings/cortex-ai` gains an "MCP server access" card: enable/disable, localhost
+trust, token mint/revoke, and copy-paste config for all four clients. **The server is
+disabled by default** — it is a remote write surface onto live content, so it must be
+an explicit opt-in.
+
+Client config differs in ways that silently no-op if copied wrong, which is why the UI
+generates each one rather than documenting a single snippet:
+
+- **Claude Code** — `mcpServers`, and `"type": "http"` is *required* (a `url` with no
+  `type` is a hard error that skips the server).
+- **Cursor** — `mcpServers`, infers transport from `url`, no `type` needed.
+- **VS Code** — top-level `servers`, **not** `mcpServers`, and prompts for the token
+  via `inputs` rather than storing it.
+- **Claude Desktop** — `claude_desktop_config.json` is stdio-only, so a remote server
+  needs either the Connectors UI (which dials out from Anthropic's cloud, so localhost
+  and firewalled sites will not connect) or the `mcp-remote` stdio bridge.
+
+### Related hardening
+
+`read_database_records` previously filtered only `cortex_ai_openrouter_api_key` from
+`site_settings`. The `isSensitiveKey` heuristic inspects *column names*, and a
+site_settings row is `{ key, value }` — neither name trips it, so the stock-photo and
+payment/email secret rows passed through. That was low-risk while the tool was
+dashboard-only; exposing it to remote MCP clients widened it. `ai-global-agent-db-tools.ts`
+now carries `PROTECTED_SITE_SETTING_KEYS`, redacted on read and refused on write.
+
+`mcp_access_tokens` is deliberately **absent** from `tableConfigs`, so the generic DB
+tools cannot read token hashes or insert rows.
+
 ## Advanced Agent Settings
 
 The global agent's model limits are admin-tunable from `/cms/settings/cortex-ai` (collapsible "Advanced settings"), stored as a non-secret JSON `site_settings` row `cortex_ai_agent_settings` and read by the route via `resolveCortexAiAgentSettings(supabase)` (defaults + clamping in `normalizeCortexAiAgentSettings`, `libs/cortex/src/lib/ai-config.ts`):

@@ -27,6 +27,25 @@ const MAX_MUTATION_ROWS = 20;
 const REDACTED = '[REDACTED]';
 const PROTECTED_CORTEX_KEY = 'cortex_ai_openrouter_api_key';
 
+/**
+ * `site_settings` rows that must never reach a model, by exact key.
+ *
+ * `isSensitiveKey` catches sensitively *named columns*, but a site_settings row is
+ * shaped `{ key, value }` — neither property name trips the heuristic, so the secret
+ * rides through in `value`. These rows hold encrypted envelopes rather than plaintext,
+ * but they are still credential material and there is no reason for a tool to read
+ * them. This matters more now that `read_database_records` is reachable from external
+ * MCP clients and not only from the in-dashboard agent.
+ */
+const PROTECTED_SITE_SETTING_KEYS: ReadonlySet<string> = new Set([
+  PROTECTED_CORTEX_KEY,
+  'bot_protection_secret',
+  'cortex_ai_pexels_api_key',
+  'cortex_ai_unsplash_access_key',
+  'email_secret',
+  'payment_secret',
+]);
+
 const tableConfigs = {
   blocks: {
     columns: ['id', 'page_id', 'post_id', 'language_id', 'block_type', 'content', 'order', 'created_at', 'updated_at'],
@@ -690,13 +709,15 @@ function redactValue(value: unknown): unknown {
 
 function redactRows(rows: unknown[]) {
   return rows.map((row) => {
-    if (
-      row &&
-      typeof row === 'object' &&
-      !Array.isArray(row) &&
-      (row as Record<string, unknown>).key === PROTECTED_CORTEX_KEY
-    ) {
-      return { key: PROTECTED_CORTEX_KEY, value: REDACTED };
+    if (row && typeof row === 'object' && !Array.isArray(row)) {
+      const key = (row as Record<string, unknown>).key;
+
+      // Belt and braces: `applyFilters` already excludes the OpenRouter key at the
+      // query level, but this catches every protected key regardless of how the row
+      // was fetched.
+      if (typeof key === 'string' && PROTECTED_SITE_SETTING_KEYS.has(key)) {
+        return { key, value: REDACTED };
+      }
     }
 
     return redactValue(row);
@@ -710,8 +731,10 @@ function assertNoProtectedSiteSetting(table: TableName, input: unknown) {
 
   const serialized = JSON.stringify(input).toLowerCase();
 
-  if (serialized.includes(PROTECTED_CORTEX_KEY)) {
-    throw new Error('The Cortex AI OpenRouter API key site setting is protected.');
+  for (const protectedKey of PROTECTED_SITE_SETTING_KEYS) {
+    if (serialized.includes(protectedKey)) {
+      throw new Error(`The "${protectedKey}" site setting is protected.`);
+    }
   }
 }
 
@@ -965,7 +988,7 @@ export async function executeDescribeDatabaseSchema(
       'Use read_database_records for reads and execute_database_mutation/action_plan for writes.',
       'No auth schema access, no arbitrary SQL, no password/secret/API-key fields.',
       'profiles, user_addresses, and cortex_ai_db_mutation_audit are read-only.',
-      `site_settings.${PROTECTED_CORTEX_KEY} is protected.`,
+      `Protected site_settings keys (never readable or writable): ${[...PROTECTED_SITE_SETTING_KEYS].sort().join(', ')}.`,
     ],
     success: true,
     tables,

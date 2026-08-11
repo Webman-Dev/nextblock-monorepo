@@ -72,6 +72,8 @@ type StoredCortexAiSettingsClientProps = {
   stockKeysUpdatedAt: string | null;
   unsplashAppName: string | null;
   agentSettings: CortexAiAgentSettings;
+  /** Slot for server-rendered cards (currently the MCP server access card). */
+  children?: React.ReactNode;
   successMessage?: string;
   errorMessage?: string;
 };
@@ -142,6 +144,7 @@ export function StoredCortexAiSettingsClient({
   hasEnvUnsplashKey,
   unsplashAppName,
   agentSettings,
+  children,
   successMessage,
   errorMessage,
 }: StoredCortexAiSettingsClientProps) {
@@ -495,6 +498,9 @@ export function StoredCortexAiSettingsClient({
           </div>
         </CardContent>
       </Card>
+
+      {/* MCP server access — rendered by the server page so it can read token state. */}
+      {children}
 
       {/* Advanced settings (collapsed by default) */}
       <div>

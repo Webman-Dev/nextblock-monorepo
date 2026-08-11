@@ -329,6 +329,46 @@ describe('Cortex AI generic database tools', () => {
     expect(settings.rows).toEqual([{ key: 'site_name', value: { en: 'NextBlock' } }]);
   });
 
+  it('redacts every protected site_settings key, not just the OpenRouter one', async () => {
+    const { supabase } = createMockSupabase({
+      site_settings: [
+        { key: 'site_name', value: { en: 'NextBlock' } },
+        { key: 'cortex_ai_pexels_api_key', value: { ciphertext: 'abc', iv: 'def' } },
+        { key: 'cortex_ai_unsplash_access_key', value: { ciphertext: 'ghi', iv: 'jkl' } },
+        { key: 'payment_secret', value: 'sk_live_should_never_appear' },
+      ],
+    });
+
+    const settings = await executeReadDatabaseRecords({ table: 'site_settings' }, { supabase });
+    const serialized = JSON.stringify(settings.rows);
+
+    expect(serialized).not.toContain('ciphertext');
+    expect(serialized).not.toContain('sk_live_should_never_appear');
+    expect(settings.rows).toEqual([
+      { key: 'site_name', value: { en: 'NextBlock' } },
+      { key: 'cortex_ai_pexels_api_key', value: '[REDACTED]' },
+      { key: 'cortex_ai_unsplash_access_key', value: '[REDACTED]' },
+      { key: 'payment_secret', value: '[REDACTED]' },
+    ]);
+  });
+
+  it('refuses to write any protected site_settings key', async () => {
+    const { supabase } = createMockSupabase();
+
+    for (const key of [
+      'cortex_ai_pexels_api_key',
+      'cortex_ai_unsplash_access_key',
+      'payment_secret',
+    ]) {
+      await expect(
+        executeDatabaseMutation(
+          { operation: 'insert', rows: [{ key, value: 'x' }], table: 'site_settings' },
+          { supabase }
+        )
+      ).rejects.toThrow('is protected');
+    }
+  });
+
   it('previews and confirms a mutation before changing rows and writing an audit record', async () => {
     const { database, supabase } = createMockSupabase();
     const input = {

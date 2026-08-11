@@ -20,9 +20,20 @@ changes must be append-only, forward-only, and non-destructive by default.
 > Everything from `004` onward is an ordinary incremental migration appended since.
 > **Never trust a hardcoded "next migration is N" — list
 > `libs/db/src/supabase/migrations` and take the number after the highest file on disk.**
+>
+> Then confirm that number is actually free: `npm run db:migrate:check` prints the
+> pending list and flags versions recorded remotely with no local file. **Supabase
+> matches history by version only, never by content**, so a file reusing a recorded
+> version is skipped in total silence. If you write a migration and the check says
+> `Pending: 0`, your file will never run — renumber it.
 
 - Do not rewrite, squash, reorder, delete, or recycle existing migration files
   once they may have been applied to any shared or production database.
+- `npm run db:migrate:check` is read-only *by construction* — it runs only
+  `supabase migration list`. It used to run `supabase link --yes` plus
+  `db push --dry-run`, and on 2026-08-10 that applied a migration to production
+  while printing "No database changes were applied". Do not reintroduce either
+  call on the check path; see `docs/04` → "Why `db:migrate:check` is read-only".
 - Add a new migration file under `libs/db/src/supabase/migrations` for each
   production schema/data change.
 - Never use `db:reset`, `sandbox:reset`, `db:push:sandbox`, or a fresh baseline

@@ -3,7 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
-import { createClient, verifyPackageOnline } from '@nextblock-cms/db/server';
+import { verifyPackageOnline } from '@nextblock-cms/db/server';
+
+import { requireAdminSupabaseClient as requireAdminAccess } from './require-admin';
 
 import {
   CORTEX_AI_AGENT_SETTINGS_DEFAULTS,
@@ -65,25 +67,7 @@ function redirectWithStatus(status: 'success' | 'error', message: string): never
 }
 
 async function requireAdminSupabaseClient() {
-  const supabase = createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    throw new Error('You must be logged in to manage Cortex AI settings.');
-  }
-
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-
-  if (profileError || !profile || profile.role !== 'ADMIN') {
-    throw new Error('You do not have permission to manage Cortex AI settings.');
-  }
+  const { supabase } = await requireAdminAccess();
 
   return supabase;
 }

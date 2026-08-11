@@ -198,7 +198,13 @@ production or shared database change.
   `libs/db/src/supabase/migrations` for each new schema/data change.
 - Keep migrations non-destructive by default. Avoid dropping or rewriting data
   that may include orders, users, payments, or customer records.
-- Run `npm run db:migrate:check` before `npm run db:migrate`.
+- Run `npm run db:migrate:check` before `npm run db:migrate`. **Read its pending
+  list** — do not just look for a success line. If you added a migration and the
+  check reports `Pending: 0`, that file will never run (see below).
+- **Supabase matches migration history by version only, never by content.** A file
+  whose 14-digit version is already recorded remotely is skipped in silence — no
+  error, no output. That is why the check prints the pending list and warns when a
+  version is recorded remotely with no local file behind it.
 - If an existing database lists old baseline files such as
   `00000000000000_baseline_schema.sql` as pending, do not replay them. Use
   `npm run db:migrate:repair-history:check`, then
@@ -206,6 +212,30 @@ production or shared database change.
   top file creates no tables, so auto-detection otherwise stops at `000`), then
   rerun `npm run db:migrate:check`.
 - Use `npm run db:migrate:fresh` only for a brand-new empty database.
+
+#### Why `db:migrate:check` is read-only by construction
+
+On 2026-08-10 the check applied migration `00000000000017` to the production
+project while printing `DRY RUN: migrations will *not* be pushed` and `Dry run
+complete. No database changes were applied.` The `--check` path then ran
+`supabase link --yes` followed by `supabase db push --dry-run` (Supabase CLI
+v2.107); which of the two executed the SQL was never established, and the decisive
+probe would have written a row to the production migration history.
+
+`tools/scripts/push-db-migrations.js` no longer runs either on the check path. It
+now runs only `supabase migration list` — a pure read — and derives the pending set
+by diffing local files against remote history. Consequences worth keeping:
+
+- The check links nothing. An unlinked repo is told to run `supabase link` itself
+  rather than having project state written underneath a command called "check".
+- The check needs no `SUPABASE_ACCESS_TOKEN`, because only linking did.
+- The apply path derives its baseline-replay guard from the same read instead of
+  regex-scraping `db push --dry-run` output, and returns early when nothing is
+  pending, so `db push` is never invoked without work to do.
+- `parseMigrationList` is unit-tested in `tools/scripts/push-db-migrations.test.ts`.
+
+If a future CLI upgrade tempts you back toward `db push --dry-run` for previewing:
+don't. A command named `check` must not be able to write.
 
 ### Category map
 

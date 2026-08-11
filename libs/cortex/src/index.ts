@@ -10,4 +10,7 @@ export * from './lib/ai-model-catalog';
 export * from './lib/ai-model-registry';
 export * from './lib/cortex-widget-registry';
 export * from './lib/cortex-widget-schema';
+export * from './lib/mcp-server';
+export * from './lib/mcp-tokens';
+export * from './lib/mcp-tool-registry';
 export * from './lib/zod-config';
