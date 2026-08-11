@@ -55,6 +55,18 @@ const MCP_SKIP_CONFIRMATION = true;
 
 type McpAuth = {
   actorUserId: string | null;
+  /**
+   * True when this token outlived the account that minted it (`created_by` is
+   * `ON DELETE SET NULL`), so `actorUserId` below is a stand-in rather than the
+   * principal that actually holds the credential.
+   *
+   * A stand-in is fine for *attribution* — a revision needs some author — but it
+   * must never be the basis for *authorization*, or deleting an administrator would
+   * silently promote their leftover token to whichever admin happens to sort first.
+   * Offboarding someone is exactly when their credentials should lose power, not
+   * inherit someone else's.
+   */
+  actorFromOrphanedToken: boolean;
   scopes: CortexAiMcpScope[];
   source: 'admin-session' | 'localhost' | 'token';
 };
@@ -185,6 +197,7 @@ async function authenticateMcpRequest(request: Request): Promise<McpAuth | null>
     void touchCortexAiMcpToken(serviceClient, verification.token.id);
 
     return {
+      actorFromOrphanedToken: !verification.token.created_by,
       actorUserId: verification.token.created_by ?? (await resolveFallbackAdminUserId()),
       scopes: verification.scopes,
       source: 'token',
@@ -194,11 +207,20 @@ async function authenticateMcpRequest(request: Request): Promise<McpAuth | null>
   const adminUserId = await resolveAdminSessionUserId();
 
   if (adminUserId) {
-    return { actorUserId: adminUserId, scopes: ['read', 'write'], source: 'admin-session' };
+    return {
+      actorFromOrphanedToken: false,
+      actorUserId: adminUserId,
+      scopes: ['read', 'write'],
+      source: 'admin-session',
+    };
   }
 
   if (shouldTrustLocalMcpRequest({ hostHeader: request.headers.get('host'), settings })) {
+    // Loopback trust is an explicit opt-in on a development machine, where anyone
+    // who can reach this endpoint can already read the service-role key out of
+    // .env.local. Not treated as orphaned: it grants nothing new.
     return {
+      actorFromOrphanedToken: false,
       actorUserId: await resolveFallbackAdminUserId(),
       scopes: ['read', 'write'],
       source: 'localhost',
@@ -263,6 +285,7 @@ async function resolveAdminSessionUserId(): Promise<string | null> {
 
 function buildToolContext(auth: McpAuth): CortexMcpToolContext {
   return {
+    actorFromOrphanedToken: auth.actorFromOrphanedToken,
     actorUserId: auth.actorUserId,
     importExternalImage: createMcpImageImporter(auth.actorUserId),
     // No open editor over MCP: tools that need a target take it in their arguments

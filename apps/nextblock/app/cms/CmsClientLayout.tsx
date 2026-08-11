@@ -9,7 +9,7 @@ import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
   ExternalLink, Paintbrush, Brain, TicketPercent, ShieldAlert, Folder, DatabaseBackup, Boxes, Tag,
-  ShieldCheck, Cookie, LineChart, Mail, UserPlus, SlidersHorizontal,
+  ShieldCheck, Code2, Cookie, LineChart, Mail, UserPlus, SlidersHorizontal,
 } from "lucide-react"
 import TwoFactorReminderBanner from "./components/TwoFactorReminderBanner"
 import SystemAlertsBanner, { type SystemAlertItem } from "./components/SystemAlertsBanner"
@@ -229,6 +229,7 @@ export default function CmsClientLayout({
   else if (pathname.startsWith("/cms/settings/logos")) pageTitle = "Branding";
   else if (pathname.startsWith("/cms/settings/copyright")) pageTitle = "Copyright Settings";
   else if (pathname.startsWith("/cms/settings/global-css")) pageTitle = "Themes & CSS";
+  else if (pathname.startsWith("/cms/settings/site-scripts")) pageTitle = "Site Scripts";
   else if (pathname.startsWith("/cms/settings/extra-translations")) pageTitle = "Extra Translations";
   else if (pathname.startsWith("/cms/settings/backup-restore")) pageTitle = "Backup And Restore";
   else if (pathname.startsWith("/cms/settings/currencies")) pageTitle = "Currency Settings";
@@ -423,6 +424,9 @@ export default function CmsClientLayout({
                     </NavItem>
                     <NavItem href="/cms/settings/global-css" icon={Paintbrush} isActive={pathname.startsWith("/cms/settings/global-css")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Themes &amp; CSS
+                    </NavItem>
+                    <NavItem href="/cms/settings/site-scripts" icon={Code2} isActive={pathname.startsWith("/cms/settings/site-scripts")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      Site Scripts
                     </NavItem>
                     <NavItem href="/cms/settings/privacy" icon={Cookie} isActive={pathname.startsWith("/cms/settings/privacy")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Privacy &amp; Consent

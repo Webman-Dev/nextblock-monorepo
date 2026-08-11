@@ -14,6 +14,7 @@ import { headers } from "next/headers";
 type Block = Database['public']['Tables']['blocks']['Row'];
 import SectionBlockRenderer from "./blocks/renderers/SectionBlockRenderer"; // Static import for LCP
 import ClientTextBlockRenderer from "./blocks/renderers/ClientTextBlockRenderer"; // Static import for client component
+import { addNonceToInlineScripts } from "../lib/blocks/inlineScriptNonce";
 import { getCachedCustomBlockDefinitionBySlug } from "../lib/custom-block-definitions";
 import { CachedDynamicLayoutEngine } from "./renderers/CachedDynamicLayoutEngine";
 import { resolveBlockRelations } from "../lib/resolve-block-relations";
@@ -144,13 +145,18 @@ async function renderLoadedBlock({
 
   // Keep common LCP-adjacent text blocks out of the dynamic renderer manifest.
   if (block.block_type === 'text') {
-    // Top-level text blocks bypass the server TextBlockRenderer, so resolve any
-    // merge tags (e.g. {{privacy_email}} on the Privacy/Terms pages) here.
+    // Top-level text blocks bypass the server TextBlockRenderer, so everything it
+    // would have done to the HTML has to happen here too: merge tags (e.g.
+    // {{privacy_email}} on the Privacy/Terms pages) and — because the CSP carries a
+    // nonce, which makes browsers ignore 'unsafe-inline' — the inline-script nonce.
+    // Without the latter, an inline <script> an editor wrote into a rich-text block
+    // is dropped by the browser with nothing failing server-side.
     const textContent = block.content as { html_content?: string } | null;
     const rawHtml = typeof textContent?.html_content === 'string' ? textContent.html_content : '';
-    const html = rawHtml.includes('{{')
+    const merged = rawHtml.includes('{{')
       ? await substitutePrivacyMergeTags(rawHtml)
       : rawHtml;
+    const html = addNonceToInlineScripts(merged, scriptNonce ?? '');
     return (
       <ClientTextBlockRenderer
         content={{ ...(textContent as any), html_content: html }}

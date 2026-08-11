@@ -6,7 +6,7 @@ import "server-only";
 import sharp from "sharp";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 
-import { createClient } from "@nextblock-cms/db/server";
+import { createClient, getServiceRoleSupabaseClient } from "@nextblock-cms/db/server";
 import { recordMediaUpload } from "@nextblock-cms/db";
 import { getS3Client } from "@nextblock-cms/utils/server";
 
@@ -36,6 +36,34 @@ type ImportExternalImageResult =
  * Reject local/loopback/private/link-local hosts and cloud metadata endpoints so an
  * admin-supplied URL cannot be used to probe internal infrastructure (SSRF).
  */
+/**
+ * Unwrap an IPv4-mapped IPv6 address to dotted-quad.
+ *
+ * `http://[::ffff:127.0.0.1]/` reaches loopback, but the URL parser normalises it to
+ * `::ffff:7f00:1`, which matches none of the IPv4 checks below — a working bypass of
+ * the whole blocklist. Mirrors `unwrapMappedIpv4` in
+ * libs/cortex/src/lib/ai-global-agent-tools.ts; the two blocklists are duplicated
+ * because a published lib cannot import from the app, so fix both together.
+ */
+function unwrapMappedIpv4(host: string): string | null {
+  const mapped = host.match(/^::ffff:(.+)$/i);
+
+  if (!mapped) return null;
+
+  const rest = mapped[1] as string;
+
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(rest)) return rest;
+
+  const hextets = rest.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+
+  if (!hextets) return null;
+
+  const high = Number.parseInt(hextets[1] as string, 16);
+  const low = Number.parseInt(hextets[2] as string, 16);
+
+  return [(high >> 8) & 255, high & 255, (low >> 8) & 255, low & 255].join(".");
+}
+
 function isBlockedImportHost(hostname: string): boolean {
   const host = hostname.trim().toLowerCase().replace(/\.$/, "").replace(/^\[|\]$/g, "");
 
@@ -50,8 +78,21 @@ function isBlockedImportHost(hostname: string): boolean {
     return true;
   }
 
-  if (host === "0.0.0.0" || host === "::1" || host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd")) {
+  if (
+    host === "0.0.0.0" ||
+    host === "::" ||
+    host === "::1" ||
+    host.startsWith("fe80:") ||
+    host.startsWith("fc") ||
+    host.startsWith("fd")
+  ) {
     return true;
+  }
+
+  const mappedIpv4 = unwrapMappedIpv4(host);
+
+  if (mappedIpv4) {
+    return isBlockedImportHost(mappedIpv4);
   }
 
   const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
@@ -93,15 +134,28 @@ function slugifyFileBase(value: string): string {
 }
 
 /**
- * Download an external image (e.g. an AI-inserted stock photo) and persist it into the
- * NextBlock media library (R2 or Supabase Storage) so it becomes a permanent, optimized
- * asset the page no longer hotlinks. ADMIN/WRITER only.
+ * Establish the ADMIN/WRITER this import is attributed to.
+ *
+ * Two paths: a cookie session (the dashboard) or an explicitly supplied actor (the
+ * MCP server, which has already authenticated the caller by bearer token). Both
+ * end at the same role check, so the second is a different way to *identify* the
+ * uploader, not a way to skip authorization.
  */
-export async function importExternalImageToMedia(input: {
-  url: string;
-  altText?: string;
-  fileName?: string;
-}): Promise<ImportExternalImageResult> {
+async function resolveImportActorId(actorUserId?: string): Promise<{ id: string } | { error: string }> {
+  if (actorUserId) {
+    const { data: profile } = await getServiceRoleSupabaseClient()
+      .from("profiles")
+      .select("role")
+      .eq("id", actorUserId)
+      .single();
+
+    if (!profile || !["ADMIN", "WRITER"].includes(profile.role)) {
+      return { error: "You do not have permission to import media." };
+    }
+
+    return { id: actorUserId };
+  }
+
   const supabase = createClient();
   const {
     data: { user },
@@ -116,6 +170,34 @@ export async function importExternalImageToMedia(input: {
   if (!profile || !["ADMIN", "WRITER"].includes(profile.role)) {
     return { error: "You do not have permission to import media." };
   }
+
+  return { id: user.id };
+}
+
+/**
+ * Download an external image (e.g. an AI-inserted stock photo) and persist it into the
+ * NextBlock media library (R2 or Supabase Storage) so it becomes a permanent, optimized
+ * asset the page no longer hotlinks. ADMIN/WRITER only.
+ */
+export async function importExternalImageToMedia(input: {
+  url: string;
+  altText?: string;
+  fileName?: string;
+  /**
+   * Uploader for callers with no cookie session — the MCP server authenticates by
+   * bearer token, so `auth.getUser()` finds nobody and every import would fail with
+   * "You must be signed in". The role check below still runs against this id, so it
+   * confers no authority the caller did not already establish.
+   */
+  actorUserId?: string;
+}): Promise<ImportExternalImageResult> {
+  const uploaderId = await resolveImportActorId(input.actorUserId);
+
+  if ("error" in uploaderId) {
+    return { error: uploaderId.error };
+  }
+
+  const userId = uploaderId.id;
 
   let target: URL;
 
@@ -233,7 +315,7 @@ export async function importExternalImageToMedia(input: {
           Bucket: bucket,
           ContentType: resolvedContentType,
           Key: objectKey,
-          Metadata: { "uploader-user-id": user.id },
+          Metadata: { "uploader-user-id": userId },
         })
       );
     }
@@ -258,6 +340,10 @@ export async function importExternalImageToMedia(input: {
 
   const record = await recordMediaUpload(
     {
+      // Carried through so the media row is attributed to the same actor the role
+      // check above passed — without it the recorder falls back to the cookie
+      // session and fails for MCP callers after the upload has already happened.
+      actorUserId: input.actorUserId,
       blurDataUrl: blurDataUrl || undefined,
       description: altText || undefined,
       fileName,

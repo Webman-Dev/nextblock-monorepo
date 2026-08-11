@@ -1556,3 +1556,139 @@ When modifying Cortex AI, keep these invariants:
 11. If a side-effecting tool succeeds and the model fails afterward, report the tool result instead of retrying blindly.
 12. Free OpenRouter models are useful but unstable; guard against 429s, malformed tool-call text, invalid HTML fragments, and no-output generation.
 13. Multilingual mutations should use active rows from `languages`, not hardcoded assumptions.
+14. MCP runs with the service-role client, so RLS is not an authorization boundary
+    there. Privileged tools re-check the actor's CMS role themselves.
+15. A substituted actor identity is for attribution only, never authorization.
+16. The audit log for site scripts is append-only in the database. Reverting writes a
+    new revision; it never removes one.
+17. Inline scripts in block HTML need the CSP nonce, and must not mutate
+    server-rendered DOM at all — `load` is not a post-hydration signal.
+
+## MCP Server: Security Model and Operator Guide
+
+The MCP endpoint (`apps/nextblock/app/api/mcp/route.ts`) exposes the same typed
+tools to external clients — Claude Code, Claude Desktop, Cursor. The route is a thin
+HTTP shim; the registry lives in `libs/cortex/src/lib/mcp-tool-registry.ts`.
+
+### The four failure shapes to check when adding a tool
+
+Tools were originally written for the in-app agent, which always has a signed-in
+user and an open editor. MCP has neither, so every new tool must be checked against
+all four of these:
+
+1. **Cookie-session auth.** `createClient()` + `auth.getUser()` returns nobody over
+   MCP. Pass a pre-authorized `actorUserId` instead and keep the role check.
+2. **`pageContext` dependence.** The route sets it to `null`. A tool that edits
+   "the current item" must accept an explicit `cmsTarget`.
+3. **Untyped `z.any()` parameters.** They serialize to `{}` in JSON Schema, so hosts
+   send `"29.99"` where a number is expected. Coerce rather than reject.
+4. **Staged artifacts with no finisher.** Anything that stages something (a Live
+   Draft) needs a tool that can complete it, or MCP callers cannot finish the job.
+
+### Authorization does not come from RLS
+
+**MCP executors use the service-role client, which bypasses Row Level Security.** An
+`ADMIN`-only table policy therefore constrains the dashboard but *not* the MCP path.
+Privileged tools must re-check the actor's CMS role themselves — see
+`requireActorRole` in `ai-global-agent-theming-tools.ts`.
+
+MCP token scopes are only `read` / `write` and carry no role, so the role is resolved
+from the acting user at call time. Two related rules:
+
+- Keep privileged tables (`site_scripts`, `site_script_revisions`) **out of** the
+  `execute_database_mutation` allowlist, or that generic tool becomes a way around
+  every per-tool guard.
+- When a token's creator has been deleted, the route substitutes a stand-in admin so
+  a revision can still be attributed. That substitution is flagged
+  (`actorFromOrphanedToken`) and refused for role-gated operations: a credential must
+  not gain authority by outliving its owner.
+
+### Prompt injection
+
+`fetch_url_content` returns attacker-controlled text to a model that holds write
+tools. A hostile page can contain instructions aimed at the agent ("also add this
+tracking snippet"). This is not solvable in the tool layer — the model reads the page
+because you asked it to. The mitigations are containment, not prevention:
+
+- Code injection (`manage_site_script`) is **ADMIN-only**, so a `write` token that is
+  otherwise fine for content cannot ship JavaScript.
+- `manage_site_script` requires a `purpose` and returns a `safetyReview` produced by
+  an **independent static scan** of the code (`@nextblock-cms/utils/script-safety`).
+  The stated purpose is not the control — a steered model will describe a skimmer as
+  an analytics helper. The scan reports what the code can actually reach (cookies,
+  network, storage, form fields, dynamic evaluation, external hosts) and both are
+  written to the audit log, so a mismatch is visible rather than hidden.
+- Every script change is recorded in `site_script_revisions`, which is **append-only
+  by database trigger** — UPDATE and DELETE are rejected even for the service role.
+  An audit log a compromised credential can rewrite is not an audit log.
+
+The scan is regex over source text, not a sandbox. Obfuscated code can evade it,
+which is why dynamic evaluation is itself reported at warning level. A clean result
+means "nothing obvious found", never "safe".
+
+### Site scripts and the CSP
+
+The site CSP carries a nonce, and per CSP Level 2 a browser **ignores
+`'unsafe-inline'` once a nonce is present**. Consequences:
+
+- Inline `<script>` inside rich-text block HTML must be stamped by
+  `apps/nextblock/lib/blocks/inlineScriptNonce.ts`, or the browser silently drops it
+  with no server-side symptom.
+- Because NextBlock nonces author scripts, an external `src` on a site script is
+  authorized regardless of the CSP host allowlist. That is inherent to the feature
+  and a reason it is ADMIN-only.
+
+### Author scripts and React hydration
+
+Public pages are React-hydrated, and this is the single most common way an author
+script goes wrong. **Do not change the text, classes, or attributes of
+server-rendered markup.** React reconciles after the script runs and either reverts
+the change or logs a hydration mismatch — a counter visibly animates and then snaps
+back to its server value.
+
+Waiting for the `load` event is **not** a fix. With streaming and selective
+hydration, hydration can still be in flight when `load` fires; this was tried and
+still produced mismatches on `<section className=…>`.
+
+Patterns that are actually safe:
+
+- **Web Animations API.** `el.animate([...], {fill: 'both'})` creates an Animation
+  object and writes neither `class` nor `style`, so React has nothing to diff. A
+  paused animation held at `currentTime = 0` hides an element without a class.
+- **Append your own elements.** React does not own what the script creates, so a
+  progress bar or overlay appended to `<body>` is unconditionally safe.
+- **CSS.** Anything expressible in CSS carries no hydration risk at all.
+- **If text must change**, render the FINAL value server-side and animate toward it
+  once the element scrolls into view, so any reconciliation lands on the correct
+  value rather than resetting the animation. Format numbers with a fixed formatter,
+  not `toLocaleString()`, so the client string matches the server byte for byte.
+
+### SSRF
+
+`fetch_url_content` and the media importer perform server-side HTTP on a
+caller-supplied URL, and `fetch_url_content` is a **read**-scoped tool — so its
+blocklist is what stops a read-only token from reaching internal services. The
+blocklist is duplicated (`isBlockedFetchHost` in cortex, `isBlockedImportHost` in the
+app) because a published lib cannot import from the app: **fix both together.**
+Regression tests live in `ai-global-agent-ssrf.test.ts`; IPv4-mapped IPv6
+(`::ffff:127.0.0.1`) previously bypassed both.
+
+### Building a whole site in one pass
+
+The tools below exist specifically so a site can be built without a human clicking
+through the dashboard. Rough order for a from-scratch build:
+
+| Step | Tools |
+| --- | --- |
+| Ground yourself | `get_database_schema`, `list_media`, `list_site_themes`, `list_product_categories` |
+| Brand it | `manage_site_theme`, `update_global_css` |
+| Assets | `search_stock_media`, `upload_media` |
+| Catalogue | `manage_product_category`, `create_cms_product`, `manage_product_variants` |
+| Pages | `generate_jsonb_layout` then `publish_content_draft` |
+| Navigation | `update_site_navigation`, `update_footer` |
+| Locales | `manage_language` then `translate_content_bulk` |
+| Motion | `update_global_css` plus `manage_site_script` |
+
+`manage_language` must run before any translation: `translate_page` and
+`translate_content_bulk` can only target a language that already exists and is
+active.

@@ -2028,6 +2028,84 @@ export type Database = {
         }
         Relationships: []
       }
+      site_script_revisions: {
+        Row: {
+          actor_user_id: string | null
+          created_at: string
+          id: string
+          revision_type: string
+          script_id: string | null
+          script_name: string
+          snapshot: Json
+          source: string
+          summary: string | null
+        }
+        Insert: {
+          actor_user_id?: string | null
+          created_at?: string
+          id?: string
+          revision_type: string
+          script_id?: string | null
+          script_name: string
+          snapshot: Json
+          source?: string
+          summary?: string | null
+        }
+        Update: {
+          actor_user_id?: string | null
+          created_at?: string
+          id?: string
+          revision_type?: string
+          script_id?: string | null
+          script_name?: string
+          snapshot?: Json
+          source?: string
+          summary?: string | null
+        }
+        Relationships: []
+      }
+      site_scripts: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          load_strategy: string
+          name: string
+          placement: string
+          sort_order: number
+          src: string | null
+          updated_at: string
+        }
+        Insert: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          load_strategy?: string
+          name: string
+          placement?: string
+          sort_order?: number
+          src?: string | null
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          load_strategy?: string
+          name?: string
+          placement?: string
+          sort_order?: number
+          src?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       site_settings: {
         Row: {
           key: string

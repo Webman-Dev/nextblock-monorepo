@@ -36,6 +36,34 @@ type ImportExternalImageResult =
  * Reject local/loopback/private/link-local hosts and cloud metadata endpoints so an
  * admin-supplied URL cannot be used to probe internal infrastructure (SSRF).
  */
+/**
+ * Unwrap an IPv4-mapped IPv6 address to dotted-quad.
+ *
+ * `http://[::ffff:127.0.0.1]/` reaches loopback, but the URL parser normalises it to
+ * `::ffff:7f00:1`, which matches none of the IPv4 checks below — a working bypass of
+ * the whole blocklist. Mirrors `unwrapMappedIpv4` in
+ * libs/cortex/src/lib/ai-global-agent-tools.ts; the two blocklists are duplicated
+ * because a published lib cannot import from the app, so fix both together.
+ */
+function unwrapMappedIpv4(host: string): string | null {
+  const mapped = host.match(/^::ffff:(.+)$/i);
+
+  if (!mapped) return null;
+
+  const rest = mapped[1] as string;
+
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(rest)) return rest;
+
+  const hextets = rest.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+
+  if (!hextets) return null;
+
+  const high = Number.parseInt(hextets[1] as string, 16);
+  const low = Number.parseInt(hextets[2] as string, 16);
+
+  return [(high >> 8) & 255, high & 255, (low >> 8) & 255, low & 255].join(".");
+}
+
 function isBlockedImportHost(hostname: string): boolean {
   const host = hostname.trim().toLowerCase().replace(/\.$/, "").replace(/^\[|\]$/g, "");
 
@@ -50,8 +78,21 @@ function isBlockedImportHost(hostname: string): boolean {
     return true;
   }
 
-  if (host === "0.0.0.0" || host === "::1" || host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd")) {
+  if (
+    host === "0.0.0.0" ||
+    host === "::" ||
+    host === "::1" ||
+    host.startsWith("fe80:") ||
+    host.startsWith("fc") ||
+    host.startsWith("fd")
+  ) {
     return true;
+  }
+
+  const mappedIpv4 = unwrapMappedIpv4(host);
+
+  if (mappedIpv4) {
+    return isBlockedImportHost(mappedIpv4);
   }
 
   const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);

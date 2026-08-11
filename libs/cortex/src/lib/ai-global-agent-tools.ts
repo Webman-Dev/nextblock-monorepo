@@ -1,6 +1,8 @@
 import { tool } from 'ai';
 import { createCortexDatabaseAgentTools } from './ai-global-agent-db-tools';
 import { createCortexCustomBlockTools } from './ai-global-agent-custom-block-tools';
+import { createCortexContentOpsTools } from './ai-global-agent-content-ops-tools';
+import { createCortexThemingTools } from './ai-global-agent-theming-tools';
 import { editorDocumentFromHtml } from './editor-document-from-html';
 import { z } from './zod-config';
 
@@ -74,6 +76,12 @@ type ToolExecutionContext = {
   latestUserMessage?: string | null;
   pageContext?: CortexAiPageContext | null;
   recordRevision?: RecordRevisionFn;
+  /**
+   * Set by the MCP route when a bearer token outlived the account that created it,
+   * so `actorUserId` is a substituted stand-in. Usable for attribution, never for
+   * authorization — see the role checks in ai-global-agent-theming-tools.ts.
+   */
+  actorFromOrphanedToken?: boolean;
   revalidatePath?: RevalidateFn;
   skipConfirmation?: boolean;
   supabase?: SupabaseLike;
@@ -276,7 +284,16 @@ export const updateCurrentCmsFieldsInputSchema = z.strictObject({
       // validateProductDescriptionJson.
       description_json: z.unknown().optional(),
       excerpt: z.string().max(2000).nullable().optional(),
-      feature_image_id: z.string().trim().min(1).max(2048).nullable().optional(),
+      feature_image_id: z
+    .string()
+    .trim()
+    .min(1)
+    .max(2048)
+    .nullable()
+    .optional()
+    .describe(
+      'The feature image. Accepts EITHER an existing media library id OR an external https:// image URL, which is downloaded into the media library automatically — so pass `mainImage` from fetch_url_content or a `url` from search_stock_photos straight in. Despite the name, you do not need to import the image yourself. Every page and post should get one: it is the social/OG preview image and the card thumbnail in post listings.'
+    ),
       label: z.string().max(120).nullable().optional(),
       meta_description: z.string().max(500).nullable().optional(),
       meta_title: z.string().max(160).nullable().optional(),
@@ -308,7 +325,11 @@ export const updateSectionColumnBlockInputSchema = z.strictObject({
 
 const createCmsBlockInputSchema = z.strictObject({
   blockType: z.enum(availableCortexAiBlockTypes),
-  content: z.record(z.string(), z.unknown()),
+  content: z
+    .record(z.string(), z.unknown())
+    .describe(
+      'The block content, matching that block type\'s schema. For a `text` block, `html_content` is rendered as real HTML and may include an inline <style> and an inline <script> — so you can add scroll reveals, counters, hover effects, and other motion directly in a block. Inline scripts are stamped with the site CSP nonce automatically. Three rules. (1) THE PAGE IS REACT-HYDRATED. Do not change the text, classes, or attributes of surrounding server-rendered markup: React reconciles afterwards and reverts your change (a counter animates then snaps back) or logs a hydration mismatch. Waiting for `load` is NOT sufficient — hydration can still be in flight. Safe patterns instead: animate with the Web Animations API (el.animate() touches no attribute); append your own new elements and style those; use CSS for anything CSS can do; and if you must set text, render the FINAL value server-side and only animate toward it once the element scrolls into view. (2) `on*` attributes (onclick, onload, …) are stripped, so bind with addEventListener. (3) The script runs once per full page load, not on client-side navigation — for site-wide behaviour use manage_site_script.'
+    ),
   order: z.number().int().min(0).optional(),
 });
 
@@ -335,7 +356,16 @@ export const insertContentBlockInputSchema = cmsTargetInputSchema.extend({
 export const createCmsPageInputSchema = z.strictObject({
   blocks: z.array(createCmsBlockInputSchema).max(20).optional(),
   contactEmail: z.string().email().optional(),
-  feature_image_id: z.string().trim().min(1).max(2048).nullable().optional(),
+  feature_image_id: z
+    .string()
+    .trim()
+    .min(1)
+    .max(2048)
+    .nullable()
+    .optional()
+    .describe(
+      'The feature image. Accepts EITHER an existing media library id OR an external https:// image URL, which is downloaded into the media library automatically — so pass `mainImage` from fetch_url_content or a `url` from search_stock_photos straight in. Despite the name, you do not need to import the image yourself. Every page and post should get one: it is the social/OG preview image and the card thumbnail in post listings.'
+    ),
   languageCode: z.string().trim().min(2).max(80).optional(),
   meta_description: z.string().max(500).nullable().optional(),
   meta_title: z.string().max(160).nullable().optional(),
@@ -348,7 +378,16 @@ export const createCmsPageInputSchema = z.strictObject({
 export const createCmsPostInputSchema = z.strictObject({
   blocks: z.array(createCmsBlockInputSchema).max(20).optional(),
   excerpt: z.string().max(2000).nullable().optional(),
-  feature_image_id: z.string().trim().min(1).max(2048).nullable().optional(),
+  feature_image_id: z
+    .string()
+    .trim()
+    .min(1)
+    .max(2048)
+    .nullable()
+    .optional()
+    .describe(
+      'The feature image. Accepts EITHER an existing media library id OR an external https:// image URL, which is downloaded into the media library automatically — so pass `mainImage` from fetch_url_content or a `url` from search_stock_photos straight in. Despite the name, you do not need to import the image yourself. Every page and post should get one: it is the social/OG preview image and the card thumbnail in post listings.'
+    ),
   label: z.string().max(120).nullable().optional(),
   languageCode: z.string().trim().min(2).max(80).optional(),
   meta_description: z.string().max(500).nullable().optional(),
@@ -1559,8 +1598,19 @@ function createId() {
   return globalThis.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+/**
+ * Build a URL slug, folding accents to their base letter.
+ *
+ * The NFD pass matters for every non-English site: decomposing "é" into "e" plus a
+ * combining accent lets the strip below remove only the accent, giving
+ * "demostracion". Without it the whole character failed the `[^a-z0-9-]` filter and
+ * vanished, so a Spanish page became "demostracin" and a French one "indpendant" —
+ * mangled, unsearchable URLs on exactly the content that needs them most.
+ */
 function slugify(value: string) {
   return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
     .toLowerCase()
     .trim()
     .replace(/\s+/g, '-')
@@ -5807,7 +5857,42 @@ export type FetchUrlContentInput = z.input<typeof fetchUrlContentInputSchema>;
 const FETCH_URL_CONTENT_TIMEOUT_MS = 12000;
 const FETCH_URL_CONTENT_MAX_BYTES = 2_000_000;
 
-function isBlockedFetchHost(hostname: string) {
+/**
+ * Unwrap an IPv4-mapped IPv6 address to its dotted-quad form.
+ *
+ * `http://[::ffff:127.0.0.1]/` reaches loopback just as `http://127.0.0.1/` does,
+ * but the WHATWG URL parser normalises it to `::ffff:7f00:1` — which matches none of
+ * the IPv4 private-range checks below. Without this, the mapped form is a working
+ * bypass of the entire SSRF blocklist. Decimal and hex hosts (`http://2130706433/`)
+ * need no special handling: the URL parser already normalises those to dotted-quad.
+ */
+function unwrapMappedIpv4(host: string): string | null {
+  const mapped = host.match(/^::ffff:(.+)$/i);
+
+  if (!mapped) {
+    return null;
+  }
+
+  const rest = mapped[1] as string;
+
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(rest)) {
+    return rest;
+  }
+
+  const hextets = rest.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+
+  if (!hextets) {
+    return null;
+  }
+
+  const high = Number.parseInt(hextets[1] as string, 16);
+  const low = Number.parseInt(hextets[2] as string, 16);
+
+  return [(high >> 8) & 255, high & 255, (low >> 8) & 255, low & 255].join('.');
+}
+
+/** Exported for the SSRF regression tests in ai-global-agent-ssrf.test.ts. */
+export function isBlockedFetchHost(hostname: string): boolean {
   const host = hostname.trim().toLowerCase().replace(/\.$/, '').replace(/^\[|\]$/g, '');
 
   if (
@@ -5821,8 +5906,22 @@ function isBlockedFetchHost(hostname: string) {
     return true;
   }
 
-  if (host === '0.0.0.0' || host === '::1' || host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd')) {
+  // `::` is the unspecified address and reaches loopback on most stacks.
+  if (
+    host === '0.0.0.0' ||
+    host === '::' ||
+    host === '::1' ||
+    host.startsWith('fe80:') ||
+    host.startsWith('fc') ||
+    host.startsWith('fd')
+  ) {
     return true;
+  }
+
+  const mappedIpv4 = unwrapMappedIpv4(host);
+
+  if (mappedIpv4) {
+    return isBlockedFetchHost(mappedIpv4);
   }
 
   const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
@@ -6880,6 +6979,415 @@ export async function executeRewritePageDraft(
 }
 
 // ---------------------------------------------------------------------------
+// manage_product_variants: sellable options (size, flavour, colour) for a product.
+//
+// Deliberately NOT routed through the `upsert_product_with_variants` RPC. That RPC
+// re-serializes the entire product, so calling it with a partial payload silently
+// wipes SEO fields, categories, media, and the sale schedule — the same reason the
+// product image tool writes `product_media` directly. This writes only the four
+// variant tables and the derived stock total.
+// ---------------------------------------------------------------------------
+
+export const manageProductVariantsInputSchema = z.strictObject({
+  attributes: z
+    .array(
+      z.strictObject({
+        name: z.string().trim().min(1).max(120).describe('Attribute name, e.g. "Size" or "Flavour".'),
+        terms: z
+          .array(z.string().trim().min(1).max(120))
+          .min(1)
+          .max(50)
+          .describe('Every possible value for this attribute, e.g. ["100 ml", "500 ml"].'),
+      })
+    )
+    .max(5)
+    .optional()
+    .describe(
+      'The option axes this product varies on. Attributes and terms are global and reused across products: an existing one with the same name is matched, never duplicated. Omit if the attributes already exist.'
+    ),
+  entityId: z.union([z.number().int().positive(), z.string().trim().min(1).max(120)]).optional(),
+  mode: z
+    .enum(['replace', 'append'])
+    .default('replace')
+    .describe('"replace" removes the product\'s existing variants first; "append" keeps them and adds these.'),
+  slug: z.string().trim().min(1).max(300).optional(),
+  title: z.string().trim().min(1).max(300).optional(),
+  variants: z
+    .array(
+      z.strictObject({
+        image: z
+          .string()
+          .trim()
+          .min(1)
+          .max(2048)
+          .optional()
+          .describe('Variant-specific image: an https:// URL (imported automatically) or a media library id.'),
+        options: z
+          .record(z.string(), z.string())
+          .describe('Which term this variant is, per attribute, e.g. { "Size": "500 ml" }. Every attribute must be given a value.'),
+        price: z.number().min(0).optional().describe('Price in major units (25 = $25.00). Defaults to the product price.'),
+        sale_price: z.number().min(0).nullable().optional().describe('Sale price in major units, or null for none.'),
+        sku: z.string().trim().min(1).max(120).describe('Unique SKU for this variant.'),
+        stock: z.number().int().min(0).default(0),
+        upc: z.string().trim().max(120).nullable().optional(),
+      })
+    )
+    .min(1)
+    .max(50),
+});
+
+export type ManageProductVariantsInput = z.infer<typeof manageProductVariantsInputSchema>;
+
+/** Find-or-create a global attribute and its terms, returning value -> term id. */
+async function ensureAttributeTerms(
+  supabase: SupabaseLike,
+  attribute: { name: string; terms: string[] }
+): Promise<{ attributeId: string; termIdByValue: Map<string, string> }> {
+  const attributeSlug = slugify(attribute.name);
+
+  const { data: existing } = await supabase
+    .from('product_attributes')
+    .select('id')
+    .eq('slug', attributeSlug)
+    .maybeSingle();
+
+  let attributeId = existing?.id as string | undefined;
+
+  if (!attributeId) {
+    const { data: created, error } = await supabase
+      .from('product_attributes')
+      .insert({ name: attribute.name, slug: attributeSlug })
+      .select('id')
+      .single();
+
+    if (error || !created?.id) {
+      throw new Error(`Could not create the "${attribute.name}" attribute: ${serializeError(error)}`);
+    }
+
+    attributeId = created.id as string;
+  }
+
+  const termIdByValue = new Map<string, string>();
+
+  for (let index = 0; index < attribute.terms.length; index += 1) {
+    const value = attribute.terms[index] as string;
+    const termSlug = slugify(value);
+
+    const { data: existingTerm } = await supabase
+      .from('product_attribute_terms')
+      .select('id')
+      .eq('attribute_id', attributeId)
+      .eq('slug', termSlug)
+      .maybeSingle();
+
+    if (existingTerm?.id) {
+      termIdByValue.set(value, existingTerm.id as string);
+      continue;
+    }
+
+    const { data: createdTerm, error: termError } = await supabase
+      .from('product_attribute_terms')
+      .insert({ attribute_id: attributeId, slug: termSlug, sort_order: index, value })
+      .select('id')
+      .single();
+
+    if (termError || !createdTerm?.id) {
+      throw new Error(`Could not create the "${value}" option: ${serializeError(termError)}`);
+    }
+
+    termIdByValue.set(value, createdTerm.id as string);
+  }
+
+  return { attributeId, termIdByValue };
+}
+
+export async function executeManageProductVariants(
+  input: ManageProductVariantsInput,
+  context?: ToolExecutionContext
+) {
+  const parsed = manageProductVariantsInputSchema.parse(input);
+  const supabase = getSupabase(context);
+  const target = await resolveCmsTarget(
+    {
+      contentType: 'product',
+      ...(parsed.entityId !== undefined ? { entityId: parsed.entityId } : {}),
+      ...(parsed.slug ? { slug: parsed.slug } : {}),
+      ...(parsed.title ? { title: parsed.title } : {}),
+    },
+    context
+  );
+  const product = target.item as Record<string, any>;
+  const productId = String(product['id']);
+
+  const confirmation = getConfirmationPreview({
+    action: 'SET VARIANTS',
+    context,
+    payload: { entityId: productId, mode: parsed.mode, variantCount: parsed.variants.length },
+    preview: {
+      contentType: 'product',
+      slug: product['slug'],
+      summary: `${parsed.mode === 'replace' ? 'Replace' : 'Add'} ${pluralize(
+        parsed.variants.length,
+        'variant'
+      )} on "${product['title']}". Product stock becomes the sum of variant stock.`,
+      title: product['title'],
+    },
+    subject: `product-${productId}-variants`,
+  });
+
+  if (confirmation) {
+    return confirmation;
+  }
+
+  // Resolve every option axis up front so a typo fails before anything is written.
+  const termIdByAttributeAndValue = new Map<string, Map<string, string>>();
+
+  for (const attribute of parsed.attributes ?? []) {
+    const { termIdByValue } = await ensureAttributeTerms(supabase, attribute);
+    termIdByAttributeAndValue.set(attribute.name, termIdByValue);
+  }
+
+  // Variants may reference attributes defined on an earlier call, so anything not
+  // supplied in `attributes` is looked up rather than treated as an error.
+  for (const variant of parsed.variants) {
+    for (const [attributeName, value] of Object.entries(variant.options)) {
+      if (termIdByAttributeAndValue.get(attributeName)?.has(value)) {
+        continue;
+      }
+
+      const { data: attributeRow } = await supabase
+        .from('product_attributes')
+        .select('id')
+        .eq('slug', slugify(attributeName))
+        .maybeSingle();
+
+      if (!attributeRow?.id) {
+        throw new Error(
+          `Unknown attribute "${attributeName}". Pass it in \`attributes\` with its full list of terms.`
+        );
+      }
+
+      const { data: termRow } = await supabase
+        .from('product_attribute_terms')
+        .select('id')
+        .eq('attribute_id', attributeRow.id)
+        .eq('slug', slugify(value))
+        .maybeSingle();
+
+      if (!termRow?.id) {
+        throw new Error(
+          `Unknown option "${value}" for attribute "${attributeName}". Add it to that attribute's \`terms\`.`
+        );
+      }
+
+      const existingMap = termIdByAttributeAndValue.get(attributeName) ?? new Map<string, string>();
+      existingMap.set(value, termRow.id as string);
+      termIdByAttributeAndValue.set(attributeName, existingMap);
+    }
+  }
+
+  if (parsed.mode === 'replace') {
+    const { error: clearError } = await supabase
+      .from('product_variants')
+      .delete()
+      .eq('product_id', productId);
+
+    if (clearError) {
+      throw new Error(`Could not clear the existing variants: ${serializeError(clearError)}`);
+    }
+  }
+
+  const currency = await getDefaultCurrencyCode(supabase);
+  const productPriceMinor = Number(product['price']) || 0;
+  const createdSkus: string[] = [];
+
+  for (const variant of parsed.variants) {
+    const mainMediaId = variant.image
+      ? await resolveMediaReference(variant.image, context, `${product['title']} ${variant.sku}`)
+      : null;
+
+    const { data: variantRow, error: variantError } = await supabase
+      .from('product_variants')
+      .insert({
+        main_media_id: mainMediaId,
+        price:
+          variant.price === undefined
+            ? productPriceMinor
+            : majorUnitAmountToMinor(variant.price, currency),
+        product_id: productId,
+        sale_price:
+          variant.sale_price === undefined || variant.sale_price === null
+            ? null
+            : majorUnitAmountToMinor(variant.sale_price, currency),
+        sku: variant.sku,
+        stock_quantity: variant.stock,
+        upc: variant.upc ?? null,
+      })
+      .select('id')
+      .single();
+
+    if (variantError || !variantRow?.id) {
+      throw new Error(`Could not create variant "${variant.sku}": ${serializeError(variantError)}`);
+    }
+
+    const mappingRows = Object.entries(variant.options).map(([attributeName, value]) => ({
+      attribute_term_id: termIdByAttributeAndValue.get(attributeName)?.get(value),
+      variant_id: variantRow.id,
+    }));
+
+    if (mappingRows.length > 0) {
+      const { error: mappingError } = await supabase
+        .from('variant_attribute_mapping')
+        .insert(mappingRows);
+
+      if (mappingError) {
+        throw new Error(
+          `Could not link variant "${variant.sku}" to its options: ${serializeError(mappingError)}`
+        );
+      }
+    }
+
+    createdSkus.push(variant.sku);
+  }
+
+  // Mirror the RPC: a product with variants derives its stock from them, so the
+  // storefront's availability check does not read a stale parent number.
+  const { data: allVariants } = await supabase
+    .from('product_variants')
+    .select('stock_quantity')
+    .eq('product_id', productId);
+
+  const totalStock = (allVariants ?? []).reduce(
+    (sum: number, row: any) => sum + (Number(row?.stock_quantity) || 0),
+    0
+  );
+
+  const { error: stockError } = await supabase
+    .from('products')
+    .update({ stock: totalStock })
+    .eq('id', productId);
+
+  if (stockError) {
+    throw new Error(`Variants saved, but the product stock total failed: ${serializeError(stockError)}`);
+  }
+
+  revalidateCurrentCmsSurfaces(
+    context,
+    { contentType: 'product', entityId: productId, slug: product['slug'], title: product['title'] },
+    product['slug']
+  );
+
+  return {
+    contentType: 'product',
+    entityId: productId,
+    mode: parsed.mode,
+    mutationExecuted: true,
+    skus: createdSkus,
+    slug: product['slug'],
+    success: true,
+    totalStock,
+    variantCount: createdSkus.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// translate_content_bulk: one call per LOCALE instead of one call per page.
+//
+// translate_page handles a single item, so making a 20-page site bilingual meant 20
+// round trips, each re-stating the target language. This loops the same executor and
+// keeps going when one item fails, so a single bad string map does not abandon the
+// other nineteen translations halfway through.
+// ---------------------------------------------------------------------------
+
+export const translateContentBulkInputSchema = z.strictObject({
+  items: z
+    .array(
+      z.strictObject({
+        contentType: z.enum(['page', 'post']).default('page'),
+        slug: z.string().trim().min(1).max(300).describe('Slug of the source page or post.'),
+        title: z
+          .string()
+          .trim()
+          .min(1)
+          .max(300)
+          .optional()
+          .describe('Translated title. Defaults to translating the source title.'),
+        translations: z
+          .record(z.string(), z.string())
+          .describe('Source string -> translated string for every visible string in THIS item.'),
+      })
+    )
+    .min(1)
+    .max(25),
+  targetLanguageCode: z
+    .string()
+    .trim()
+    .min(2)
+    .max(80)
+    .describe('Target language code or name, e.g. "fr". The language must already exist — create it with manage_language first.'),
+});
+
+export type TranslateContentBulkInput = z.infer<typeof translateContentBulkInputSchema>;
+
+export async function executeTranslateContentBulk(
+  input: TranslateContentBulkInput,
+  context?: ToolExecutionContext
+) {
+  const parsed = translateContentBulkInputSchema.parse(input);
+
+  const confirmation = getConfirmationPreview({
+    action: 'TRANSLATE BULK',
+    context,
+    payload: { count: parsed.items.length, language: parsed.targetLanguageCode },
+    preview: {
+      contentType: 'page',
+      summary: `Create ${parsed.targetLanguageCode} translations of ${pluralize(
+        parsed.items.length,
+        'item'
+      )}: ${parsed.items.map((item) => item.slug).join(', ')}.`,
+      title: `Bulk translate to ${parsed.targetLanguageCode}`,
+    },
+    subject: `bulk-translate-${parsed.targetLanguageCode}`,
+  });
+
+  if (confirmation) {
+    return confirmation;
+  }
+
+  const succeeded: Array<Record<string, unknown>> = [];
+  const failed: Array<{ error: string; slug: string }> = [];
+
+  for (const item of parsed.items) {
+    try {
+      const result = await executeTranslatePage(
+        {
+          cmsTarget: { contentType: item.contentType, slug: item.slug },
+          targetLanguageCode: parsed.targetLanguageCode,
+          ...(item.title ? { title: item.title } : {}),
+          translations: item.translations,
+        } as TranslatePageInput,
+        context
+      );
+
+      succeeded.push({ slug: item.slug, ...(result as Record<string, unknown>) });
+    } catch (error) {
+      // Keep going: one unusable string map should not cost the whole batch.
+      failed.push({ error: error instanceof Error ? error.message : String(error), slug: item.slug });
+    }
+  }
+
+  return {
+    failed,
+    failedCount: failed.length,
+    mutationExecuted: succeeded.length > 0,
+    success: failed.length === 0,
+    targetLanguageCode: parsed.targetLanguageCode,
+    translated: succeeded,
+    translatedCount: succeeded.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // publish_content_draft: the other half of the Live Draft lifecycle.
 //
 // rewrite_page_draft/generate_jsonb_layout stage a draft and stop, because in the
@@ -7523,6 +8031,8 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
   return {
     ...createCortexDatabaseAgentTools(context),
     ...createCortexCustomBlockTools(context),
+    ...createCortexContentOpsTools(context),
+    ...createCortexThemingTools(context),
     fetch_ecommerce_stats: tool({
       description:
         'Fetch quantitative ecommerce statistics and reports from the database. Use this to answer questions about revenue, order counts, order status counts such as pending or trial, and top-selling products over a time range. This tool is read-only and does not require confirmation.',
@@ -7556,6 +8066,20 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
         'Find relevant, free, high-quality stock photos (Unsplash/Pexels) for page imagery. Returns a list of photos each with a direct image `url`, `width`, `height`, `alt`, and `photographer`. Read-only, zero cost. Use the returned `url` directly as an image block\'s external_url or a section image background\'s image.external_url when building or revamping pages, so layouts show real photos instantly. Set orientation "landscape" for hero/section backgrounds.',
       execute: (input) => executeSearchStockPhotos(input, context),
       inputSchema: searchStockPhotosInputSchema,
+      strict: true,
+    }),
+    manage_product_variants: tool({
+      description:
+        'Give a product sellable variations — size, flavour, colour, format — each with its own SKU, price, stock, and optional image. Define the option axes in `attributes` (name plus every term) and one entry in `variants` per purchasable combination, naming its term per attribute in `options`. Attributes and terms are global and reused across products, so an existing "Size" is matched rather than duplicated. Prices are in major units (25 = $25.00). The product\'s stock becomes the sum of its variants. Use mode "replace" to rebuild the variant set, "append" to add to it. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
+      execute: (input) => executeManageProductVariants(input, context),
+      inputSchema: manageProductVariantsInputSchema,
+      strict: true,
+    }),
+    translate_content_bulk: tool({
+      description:
+        'Translate SEVERAL pages or posts into one language in a single call. Use this instead of repeating translate_page when making a site multilingual: pass the target language once and one entry per item, each with its own source-string -> translation map. Layout, blocks, and imagery are copied automatically and each copy is linked to its original as a translation. The language must exist first (manage_language). Items are processed independently, so one bad entry does not abandon the rest — check `failed` in the result. Mutating: first returns a confirmation phrase; only executes after exact confirmation.',
+      execute: (input) => executeTranslateContentBulk(input, context),
+      inputSchema: translateContentBulkInputSchema,
       strict: true,
     }),
     publish_content_draft: tool({

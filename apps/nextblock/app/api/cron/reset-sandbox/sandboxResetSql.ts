@@ -6607,6 +6607,193 @@ DROP POLICY IF EXISTS site_settings_delete_policy ON public.site_settings;
 CREATE POLICY site_settings_delete_policy ON public.site_settings FOR DELETE TO authenticated USING ((((key <> ALL (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text, 'language_detection_settings'::text, 'cortex_ai_pexels_api_key'::text, 'cortex_ai_unsplash_access_key'::text, 'cortex_ai_mcp_settings'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = ANY (ARRAY['ADMIN'::public.user_role, 'WRITER'::public.user_role]))) OR ((key = ANY (ARRAY['cortex_ai_openrouter_api_key'::text, 'bot_protection_secret'::text, 'email_secret'::text, 'payment_secret'::text, 'language_detection_settings'::text, 'cortex_ai_pexels_api_key'::text, 'cortex_ai_unsplash_access_key'::text, 'cortex_ai_mcp_settings'::text])) AND (( SELECT public.get_current_user_role() AS get_current_user_role) = 'ADMIN'::public.user_role))));
 
 
+-- >>> FROM: 00000000000018_site_scripts.sql <<<
+-- Site scripts: admin-authored JavaScript injected into every page of the public site.
+--
+-- Rich-text blocks can already carry an inline <script>, but that script belongs to
+-- one block on one page. This table is for behaviour that spans the site: chat
+-- widgets, third-party embeds, and the scroll/animation helpers that page classes
+-- rely on. Each row gets a name, an on/off switch, and a defined injection point.
+--
+-- NOT the same thing as \`site_settings.privacy_settings -> custom_scripts\`, which is
+-- a single consent-gated blob for marketing tags and only fires once a visitor
+-- accepts cookies. Rows here are functional site code and run unconditionally, so
+-- anything requiring consent belongs in that setting instead, not this table.
+--
+-- Scripts are emitted with the request's CSP nonce by the root layout, so they run
+-- under the site's existing Content-Security-Policy rather than forcing it open.
+--
+-- Security posture: this is arbitrary JavaScript on every page, so writes are
+-- ADMIN-only (WRITER is deliberately excluded, unlike most content tables) and the
+-- public may read only rows that are switched on, so a half-written draft is never
+-- served to a visitor.
+
+CREATE TABLE IF NOT EXISTS public.site_scripts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    description text,
+    -- Raw JavaScript, stored WITHOUT the surrounding <script> tag. The layout adds
+    -- the tag so the nonce and attributes are always applied by us, never by the
+    -- author. Ignored when \`src\` is set.
+    code text DEFAULT ''::text NOT NULL,
+    -- When set, an external script is loaded from this URL and \`code\` is ignored.
+    src text,
+    -- Where the tag is emitted. 'head' runs before first paint (blocking, use
+    -- sparingly); 'body_end' runs once the markup exists and is the right default
+    -- for anything that queries the DOM.
+    placement text DEFAULT 'body_end'::text NOT NULL,
+    -- Applies to external \`src\` scripts; inline code ignores it.
+    load_strategy text DEFAULT 'default'::text NOT NULL,
+    is_active boolean DEFAULT false NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT site_scripts_pkey PRIMARY KEY (id),
+    CONSTRAINT site_scripts_placement_check
+        CHECK ((placement = ANY (ARRAY['head'::text, 'body_start'::text, 'body_end'::text]))),
+    CONSTRAINT site_scripts_load_strategy_check
+        CHECK ((load_strategy = ANY (ARRAY['default'::text, 'defer'::text, 'async'::text]))),
+    -- An external script must be https so it cannot be downgraded in transit.
+    CONSTRAINT site_scripts_src_scheme_check
+        CHECK ((src IS NULL OR src ~ '^https://')),
+    -- A row has to actually do something: inline code or an external src.
+    CONSTRAINT site_scripts_has_payload_check
+        CHECK ((src IS NOT NULL OR length(btrim(code)) > 0))
+);
+
+COMMENT ON TABLE public.site_scripts IS
+    'Admin-authored JavaScript injected into the public site by the root layout, with the request CSP nonce applied. Only is_active rows are publicly readable; only ADMIN may write. Distinct from privacy_settings.custom_scripts, which is consent-gated marketing tags.';
+
+CREATE INDEX IF NOT EXISTS site_scripts_active_placement_sort_idx
+    ON public.site_scripts USING btree (is_active, placement, sort_order);
+
+DROP TRIGGER IF EXISTS set_site_scripts_updated_at ON public.site_scripts;
+CREATE TRIGGER set_site_scripts_updated_at
+    BEFORE UPDATE ON public.site_scripts
+    FOR EACH ROW EXECUTE FUNCTION public.set_current_timestamp_updated_at();
+
+ALTER TABLE public.site_scripts ENABLE ROW LEVEL SECURITY;
+
+GRANT ALL ON TABLE public.site_scripts TO anon;
+GRANT ALL ON TABLE public.site_scripts TO authenticated;
+GRANT ALL ON TABLE public.site_scripts TO service_role;
+
+-- Anonymous visitors need the active scripts to render the page. Inactive rows stay
+-- private so a half-written script is never exposed before it is switched on.
+DROP POLICY IF EXISTS "Public read active site scripts" ON public.site_scripts;
+CREATE POLICY "Public read active site scripts" ON public.site_scripts
+    FOR SELECT TO authenticated, anon USING (is_active);
+
+DROP POLICY IF EXISTS "Admins read all site scripts" ON public.site_scripts;
+CREATE POLICY "Admins read all site scripts" ON public.site_scripts
+    FOR SELECT TO authenticated
+    USING (((SELECT public.get_current_user_role()) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS "Admins insert site scripts" ON public.site_scripts;
+CREATE POLICY "Admins insert site scripts" ON public.site_scripts
+    FOR INSERT TO authenticated
+    WITH CHECK (((SELECT public.get_current_user_role()) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS "Admins update site scripts" ON public.site_scripts;
+CREATE POLICY "Admins update site scripts" ON public.site_scripts
+    FOR UPDATE TO authenticated
+    USING (((SELECT public.get_current_user_role()) = 'ADMIN'::public.user_role))
+    WITH CHECK (((SELECT public.get_current_user_role()) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS "Admins delete site scripts" ON public.site_scripts;
+CREATE POLICY "Admins delete site scripts" ON public.site_scripts
+    FOR DELETE TO authenticated
+    USING (((SELECT public.get_current_user_role()) = 'ADMIN'::public.user_role));
+
+
+-- >>> FROM: 00000000000019_site_script_revisions.sql <<<
+-- Audit trail and undo for site scripts.
+--
+-- \`site_scripts\` ships arbitrary JavaScript to every visitor, which makes it the
+-- highest-privilege write in the CMS: a bad or malicious snippet can read cookies,
+-- watch checkout forms, or phone home. Content has Revision History for exactly this
+-- reason; code needs it more, not less. Every create/update/delete writes one row
+-- here, and every row is a complete, restorable snapshot — so this table is both the
+-- log ("who shipped what, when, from where") and the undo.
+--
+-- APPEND-ONLY BY CONSTRUCTION. There are no UPDATE or DELETE policies, and the
+-- trigger below rejects both even for the service role, which otherwise bypasses
+-- RLS. An audit trail that the compromised credential can rewrite is not an audit
+-- trail. Reverting therefore writes a NEW 'revert' row rather than removing history.
+--
+-- \`script_id\` and \`actor_user_id\` are deliberately PLAIN uuids with no foreign keys:
+-- an FK with ON DELETE SET NULL would have to UPDATE this table when a script or a
+-- profile is deleted, which the append-only trigger forbids. \`script_name\` is
+-- denormalised so a deleted script is still identifiable in the log.
+
+CREATE TABLE IF NOT EXISTS public.site_script_revisions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    script_id uuid,
+    script_name text NOT NULL,
+    revision_type text NOT NULL,
+    -- Null when the actor could not be resolved (e.g. a localhost dev connection).
+    actor_user_id uuid,
+    -- Which surface made the change, so an unexpected edit can be traced back to
+    -- the dashboard or to an MCP token.
+    source text DEFAULT 'cms'::text NOT NULL,
+    summary text,
+    -- Full restorable state of the script at this revision. For 'delete' it is the
+    -- state immediately BEFORE removal, so restoring it brings the script back.
+    snapshot jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT site_script_revisions_pkey PRIMARY KEY (id),
+    CONSTRAINT site_script_revisions_type_check
+        CHECK ((revision_type = ANY (ARRAY['create'::text, 'update'::text, 'delete'::text, 'revert'::text]))),
+    CONSTRAINT site_script_revisions_source_check
+        CHECK ((source = ANY (ARRAY['cms'::text, 'mcp'::text]))),
+    CONSTRAINT site_script_revisions_snapshot_is_object_check
+        CHECK ((jsonb_typeof(snapshot) = 'object'))
+);
+
+COMMENT ON TABLE public.site_script_revisions IS
+    'Append-only audit log and undo history for site_scripts. Each row is a restorable snapshot. UPDATE and DELETE are blocked by trigger, including for the service role.';
+
+CREATE INDEX IF NOT EXISTS site_script_revisions_script_created_idx
+    ON public.site_script_revisions USING btree (script_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS site_script_revisions_created_idx
+    ON public.site_script_revisions USING btree (created_at DESC);
+
+-- Enforced in the database rather than the application so it holds for every
+-- caller, including the service-role client the MCP server uses.
+CREATE OR REPLACE FUNCTION public.prevent_site_script_revision_rewrite() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path = ''
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'site_script_revisions is append-only; % is not permitted', TG_OP
+    USING ERRCODE = 'restrict_violation';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_site_script_revisions_append_only ON public.site_script_revisions;
+CREATE TRIGGER trg_site_script_revisions_append_only
+    BEFORE UPDATE OR DELETE ON public.site_script_revisions
+    FOR EACH ROW EXECUTE FUNCTION public.prevent_site_script_revision_rewrite();
+
+ALTER TABLE public.site_script_revisions ENABLE ROW LEVEL SECURITY;
+
+GRANT SELECT, INSERT ON TABLE public.site_script_revisions TO authenticated;
+GRANT ALL ON TABLE public.site_script_revisions TO service_role;
+
+-- Read is ADMIN-only: snapshots contain the full source of scripts that may not be
+-- active yet, and the log itself reveals operational history.
+DROP POLICY IF EXISTS "Admins read site script revisions" ON public.site_script_revisions;
+CREATE POLICY "Admins read site script revisions" ON public.site_script_revisions
+    FOR SELECT TO authenticated
+    USING (((SELECT public.get_current_user_role()) = 'ADMIN'::public.user_role));
+
+DROP POLICY IF EXISTS "Admins insert site script revisions" ON public.site_script_revisions;
+CREATE POLICY "Admins insert site script revisions" ON public.site_script_revisions
+    FOR INSERT TO authenticated
+    WITH CHECK (((SELECT public.get_current_user_role()) = 'ADMIN'::public.user_role));
+
+
   -- Step D: Record the applied migrations in history (truncated in Step B) so
   -- \`npm run db:migrate:check\` reports up to date instead of listing every file as pending.
   INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES
@@ -6627,7 +6814,9 @@ CREATE POLICY site_settings_delete_policy ON public.site_settings FOR DELETE TO 
     ('00000000000014', 'site_themes'),
     ('00000000000015', 'scheduled_publishing'),
     ('00000000000016', 'product_revisions_and_revision_baseline'),
-    ('00000000000017', 'cortex_ai_mcp_server')
+    ('00000000000017', 'cortex_ai_mcp_server'),
+    ('00000000000018', 'site_scripts'),
+    ('00000000000019', 'site_script_revisions')
   ON CONFLICT (version) DO NOTHING;
 
   -- Step E: Anchor preserved profiles

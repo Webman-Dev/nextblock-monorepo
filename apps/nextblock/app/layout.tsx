@@ -19,6 +19,8 @@ import {
   defaultThemeSlug,
   type SiteTheme,
 } from '../lib/themes/buildThemeCss';
+import { SITE_SCRIPT_COLUMNS, type SiteScript } from '../lib/site-scripts/types';
+import SiteScripts from '../components/SiteScripts';
 import { DeferredSpeedInsights } from '../components/DeferredSpeedInsights';
 import { DeferredVisualEditing } from '../components/visual-editing/DeferredVisualEditing';
 import {
@@ -194,6 +196,27 @@ const getCachedSiteThemes = unstable_cache(
   { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS, tags: ['public-layout-site-themes'] }
 );
 
+const getCachedSiteScripts = unstable_cache(
+  async (): Promise<SiteScript[]> => {
+    const supabase = createStaticSupabaseClient();
+    const { data, error } = await supabase
+      .from('site_scripts')
+      .select(SITE_SCRIPT_COLUMNS)
+      .eq('is_active', true)
+      .order('sort_order');
+
+    if (error || !data) {
+      // A missing table (pre-migration install) must not take the site down — the
+      // site simply renders with no author scripts, exactly as before the feature.
+      return [];
+    }
+
+    return data as SiteScript[];
+  },
+  ['public-layout-site-scripts'],
+  { revalidate: PUBLIC_LAYOUT_REVALIDATE_SECONDS, tags: ['public-layout-site-scripts'] }
+);
+
 const getCachedTranslations = unstable_cache(
   async () => {
     const supabase = createStaticSupabaseClient();
@@ -324,6 +347,7 @@ async function loadLayoutData() {
       isEcommerceActive: false,
       globalCss: '',
       siteThemes: [] as SiteTheme[],
+      siteScripts: [] as SiteScript[],
       privacySettings: DEFAULT_PRIVACY_SETTINGS,
       footerAttributionEnabled: true,
       rememberVisitorChoice: DEFAULT_LANGUAGE_DETECTION_SETTINGS.rememberVisitorChoice,
@@ -351,6 +375,7 @@ async function loadLayoutData() {
     copyrightSettingsResult,
     globalCssResult,
     siteThemesResult,
+    siteScriptsResult,
     translationsResult,
     isEcommerceActive,
     privacySettings,
@@ -364,6 +389,7 @@ async function loadLayoutData() {
     })),
     getCachedGlobalCss().catch(() => ''),
     getCachedSiteThemes().catch(() => [] as SiteTheme[]),
+    getCachedSiteScripts().catch(() => [] as SiteScript[]),
     getCachedTranslations().catch(() => []),
     verifyPackageOnline('ecommerce').catch(() => false),
     getPrivacySettings().catch(() => DEFAULT_PRIVACY_SETTINGS),
@@ -398,6 +424,7 @@ async function loadLayoutData() {
 
   const globalCss = typeof globalCssResult === 'string' ? globalCssResult : '';
   const siteThemes = Array.isArray(siteThemesResult) ? siteThemesResult : [];
+  const siteScripts = Array.isArray(siteScriptsResult) ? siteScriptsResult : [];
   const translations = Array.isArray(translationsResult) ? translationsResult : [];
 
   const hasSupabaseEnv = isSupabaseConfigured();
@@ -434,6 +461,7 @@ async function loadLayoutData() {
     isEcommerceActive,
     globalCss,
     siteThemes,
+    siteScripts,
     privacySettings,
     footerAttributionEnabled,
     rememberVisitorChoice: languageDetectionSettings.rememberVisitorChoice,
@@ -517,6 +545,7 @@ export default async function RootLayout({
     isEcommerceActive,
     globalCss,
     siteThemes,
+    siteScripts,
     privacySettings,
     footerAttributionEnabled,
     rememberVisitorChoice,
@@ -564,8 +593,10 @@ export default async function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         {themeCss && <style id="nb-theme-tokens" dangerouslySetInnerHTML={{ __html: themeCss }} />}
         {globalCss && <style dangerouslySetInnerHTML={{ __html: globalCss }} />}
+        <SiteScripts nonce={nonce} placement="head" scripts={siteScripts} />
       </head>
       <body className="min-h-screen">
+        <SiteScripts nonce={nonce} placement="body_start" scripts={siteScripts} />
         {/* Sets window.__NEXTBLOCK_PUBLIC_ENV__ synchronously during render, before any
             descendant calls the browser Supabase client — the local-dev runtime fallback. */}
         <PublicEnvBootstrap
@@ -628,6 +659,8 @@ export default async function RootLayout({
           customScripts={privacySettings.custom_scripts}
           nonce={nonce}
         />
+        {/* Last in <body> so the DOM these snippets query is already present. */}
+        <SiteScripts nonce={nonce} placement="body_end" scripts={siteScripts} />
       </body>
     </html>
   );
