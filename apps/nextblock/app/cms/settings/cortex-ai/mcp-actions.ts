@@ -28,6 +28,22 @@ const CORTEX_AI_SETTINGS_PATH = '/cms/settings/cortex-ai';
 const MAX_TOKEN_NAME_LENGTH = 80;
 const MAX_TOKENS = 20;
 
+/**
+ * Sandbox writes are refused here, not just in the UI.
+ *
+ * The settings row and the token table are shared by every sandbox visitor, and the
+ * card is now rendered there (read-only) so people can see that MCP access exists —
+ * which means these actions are reachable from a sandbox page. A disabled checkbox is
+ * a suggestion; this is the actual boundary. Mirrors the guards in `actions.ts`.
+ */
+function sandboxRejection(what: string): { error: string; success: false } | null {
+  if (process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true') {
+    return null;
+  }
+
+  return { error: `Sandbox environment cannot ${what}.`, success: false };
+}
+
 export type McpAccessTokenSummary = {
   createdAt: string;
   expiresAt: string | null;
@@ -90,6 +106,9 @@ export async function saveMcpSettingsAction(input: {
   allowLocalhostWithoutToken: boolean;
   enabled: boolean;
 }): Promise<{ error?: string; success: boolean }> {
+  const rejected = sandboxRejection('change MCP server settings');
+  if (rejected) return rejected;
+
   try {
     const { supabase } = await requireAdminSupabaseClient();
     const value = normalizeCortexAiMcpSettings(input);
@@ -117,6 +136,9 @@ export async function createMcpAccessTokenAction(input: {
   name: string;
   scopes: CortexAiMcpScope[];
 }): Promise<{ error?: string; success: boolean; token?: string; tokenPrefix?: string }> {
+  const rejected = sandboxRejection('mint MCP access tokens');
+  if (rejected) return rejected;
+
   try {
     const { supabase, userId } = await requireAdminSupabaseClient();
 
@@ -177,6 +199,9 @@ export async function createMcpAccessTokenAction(input: {
 export async function revokeMcpAccessTokenAction(input: {
   id: string;
 }): Promise<{ error?: string; success: boolean }> {
+  const rejected = sandboxRejection('revoke MCP access tokens');
+  if (rejected) return rejected;
+
   try {
     const { supabase } = await requireAdminSupabaseClient();
     const id = String(input.id || '').trim();

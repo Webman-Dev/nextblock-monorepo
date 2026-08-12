@@ -21,7 +21,9 @@ import {
   AlertTriangle,
   Check,
   Copy,
+  Info,
   KeyRound,
+  Lock,
   Plug,
   Plus,
   Trash2,
@@ -43,6 +45,18 @@ type McpServerSettingsCardProps = {
   localMcpUrl: string;
   /** The publicly reachable endpoint, derived from NEXT_PUBLIC_URL. */
   mcpUrl: string;
+  /**
+   * Locks every control that writes (the toggles, minting, revoking) while leaving
+   * the endpoint, the client snippets, and the copy buttons fully usable.
+   *
+   * Used by the shared sandbox: a visitor must still be able to see that MCP access
+   * exists and what connecting looks like, but the settings row and the token table
+   * belong to every other visitor too. Hiding the card instead — which is what the
+   * sandbox did before this — taught evaluators that NextBlock had no MCP support.
+   */
+  readOnly?: boolean;
+  /** Explains the lock. Required in spirit whenever `readOnly` is set. */
+  readOnlyNotice?: string;
   tokens: McpAccessTokenSummary[];
 };
 
@@ -96,6 +110,8 @@ export function McpServerSettingsCard({
   enabled,
   localMcpUrl,
   mcpUrl,
+  readOnly = false,
+  readOnlyNotice,
   tokens,
 }: McpServerSettingsCardProps) {
   const router = useRouter();
@@ -213,7 +229,12 @@ export function McpServerSettingsCard({
     ? `claude mcp add --transport http nextblock ${url}`
     : `claude mcp add --transport http nextblock ${url} --header "Authorization: Bearer ${tokenForSnippet}"`;
 
+  // Belt-and-braces: the controls below are disabled in read-only mode, and the
+  // server actions refuse sandbox writes on their own. These early returns just
+  // mean a stray call from here can never even reach the network.
   function persistSettings(next: { allowLocalhostWithoutToken: boolean; enabled: boolean }) {
+    if (readOnly) return;
+
     setError(null);
     startTransition(async () => {
       const result = await saveMcpSettingsAction(next);
@@ -231,6 +252,8 @@ export function McpServerSettingsCard({
   }
 
   function handleCreateToken() {
+    if (readOnly) return;
+
     setError(null);
     setMintedToken(null);
 
@@ -255,6 +278,8 @@ export function McpServerSettingsCard({
   }
 
   function handleRevoke(id: string) {
+    if (readOnly) return;
+
     setError(null);
     startTransition(async () => {
       const result = await revokeMcpAccessTokenAction({ id });
@@ -283,6 +308,12 @@ export function McpServerSettingsCard({
                 {tokens.length} active {tokens.length === 1 ? 'token' : 'tokens'}
               </Badge>
             )}
+            {readOnly && (
+              <Badge variant="outline" className="gap-1 font-normal">
+                <Lock className="h-3 w-3" />
+                Read-only
+              </Badge>
+            )}
           </CardTitle>
           <CardDescription className="text-xs">
             Expose this CMS to external AI clients over the Model Context Protocol. Claude Code,
@@ -293,6 +324,14 @@ export function McpServerSettingsCard({
       </CardHeader>
 
       <CardContent className="space-y-4 pt-0">
+        {readOnly && readOnlyNotice && (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle>Configured per install</AlertTitle>
+            <AlertDescription className="text-xs">{readOnlyNotice}</AlertDescription>
+          </Alert>
+        )}
+
         {error && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
@@ -307,7 +346,7 @@ export function McpServerSettingsCard({
             <Checkbox
               id="mcp_enabled"
               checked={isEnabled}
-              disabled={isPending}
+              disabled={isPending || readOnly}
               onCheckedChange={(checked) => {
                 const next = checked === true;
                 setIsEnabled(next);
@@ -329,7 +368,7 @@ export function McpServerSettingsCard({
             <Checkbox
               id="mcp_allow_localhost"
               checked={allowLocalhost}
-              disabled={isPending || !isEnabled}
+              disabled={isPending || !isEnabled || readOnly}
               onCheckedChange={(checked) => {
                 const next = checked === true;
                 setAllowLocalhost(next);
@@ -397,6 +436,7 @@ export function McpServerSettingsCard({
                 id="mcp_token_name"
                 value={tokenName}
                 maxLength={80}
+                disabled={readOnly}
                 placeholder="My laptop — Claude Code"
                 onChange={(event) => setTokenName(event.target.value)}
               />
@@ -411,6 +451,7 @@ export function McpServerSettingsCard({
                 min={1}
                 max={3650}
                 value={expiresInDays}
+                disabled={readOnly}
                 placeholder="Never"
                 onChange={(event) => setExpiresInDays(event.target.value)}
               />
@@ -419,6 +460,7 @@ export function McpServerSettingsCard({
               <Checkbox
                 id="mcp_token_write"
                 checked={allowWrites}
+                disabled={readOnly}
                 onCheckedChange={(checked) => setAllowWrites(checked === true)}
               />
               <Label htmlFor="mcp_token_write" className="text-xs">
@@ -428,7 +470,7 @@ export function McpServerSettingsCard({
             <Button
               type="button"
               size="sm"
-              disabled={isPending || !tokenName.trim()}
+              disabled={isPending || readOnly || !tokenName.trim()}
               onClick={handleCreateToken}
             >
               <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -481,7 +523,7 @@ export function McpServerSettingsCard({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      disabled={isPending}
+                      disabled={isPending || readOnly}
                       className="h-7 shrink-0 text-destructive hover:text-destructive"
                       onClick={() => handleRevoke(token.id)}
                     >
@@ -504,7 +546,9 @@ export function McpServerSettingsCard({
                 ? 'No token needed: localhost trust covers this connection while the dev server runs. These snippets deliberately send no Authorization header — an invalid one would be rejected rather than falling back to localhost trust.'
                 : mintedToken
                   ? 'These snippets include the token you just created.'
-                  : `Create a token above and these snippets will fill it in; otherwise replace ${TOKEN_PLACEHOLDER}.`}
+                  : readOnly
+                    ? `This is the exact configuration you would paste on your own install, with ${TOKEN_PLACEHOLDER} standing in for the token you mint there.`
+                    : `Create a token above and these snippets will fill it in; otherwise replace ${TOKEN_PLACEHOLDER}.`}
             </p>
           </div>
 

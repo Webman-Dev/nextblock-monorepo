@@ -125,10 +125,37 @@ Known incomplete or future work:
 | `apps/nextblock/app/cms/layout.tsx` | Server layout checks package activation for ecommerce and Cortex AI. |
 | `apps/nextblock/app/cms/CmsClientLayout.tsx` | Adds Cortex AI settings nav item, wraps CMS in the page-context provider, and conditionally renders global chat. |
 | `apps/nextblock/app/cms/settings/cortex-ai/page.tsx` | Settings page for activation/key status, BYOK forms, and compatible model selection. |
+| `apps/nextblock/app/cms/settings/cortex-ai/CortexAiSettingsClient.tsx` | The single settings UI. One component for production **and** sandbox — see below. |
 | `apps/nextblock/app/cms/settings/cortex-ai/actions.ts` | Server actions for reading, saving, and clearing BYOK keys and model selections. |
 | `apps/nextblock/app/cms/dashboard/actions.ts` | Dashboard package state; checks `cortex-ai` to hide/show AI premium CTA. |
 | `apps/nextblock/components/Header.tsx` and `apps/nextblock/components/ResponsiveNav.tsx` | Hydration-safe public header controls after Radix ID mismatch fixes. |
 | `apps/nextblock/app/cms/components/FeedbackModal.tsx` | Hydration-safe feedback dialog trigger. |
+
+### One settings UI, sandbox included
+
+`page.tsx` has **one** render path. There is no sandbox variant component, and adding
+one back would re-create a bug this repo hit twice: the page used to fork into
+`StoredCortexAiSettingsClient` / `SandboxCortexAiSettingsClient`, which shared a layout
+only by copy-paste, so every redesign landed on production and silently skipped the
+sandbox — and the MCP card, mounted only on the production branch, never appeared in the
+sandbox at all.
+
+`CortexAiSettingsClient` takes `isSandbox` and follows one rule for anything the shared
+sandbox cannot do: **disable it, never hide it.** A visitor evaluating NextBlock has to be
+able to see that stock-photo keys, agent tuning, and MCP access exist and what they look
+like; a hidden control teaches them the feature does not exist. Locked cards carry a
+`Read-only` badge and say what changes on a real install.
+
+Two settings stay writable in the sandbox because they have a per-visitor channel: the
+OpenRouter key and the model selection, which live in this browser's `localStorage` and
+travel to the AI routes as `x-sandbox-openrouter-*` headers. Everything else is
+server-backed and refused by the `NEXT_PUBLIC_IS_SANDBOX` guards in `actions.ts` and
+`mcp-actions.ts` — the disabled control is the hint, those guards are the boundary.
+
+The MCP card renders in the sandbox with `readOnly`: toggles, minting, and revoking are
+disabled, and the token list is passed in empty (those rows belong to the host, and every
+sandbox visitor shares one admin login). The endpoint URL, the client picker, and the
+copy-paste snippets stay fully live, since that is the part worth showing.
 
 ## Package Activation
 

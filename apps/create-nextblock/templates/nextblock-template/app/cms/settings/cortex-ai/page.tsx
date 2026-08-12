@@ -2,10 +2,9 @@ import { headers } from 'next/headers';
 
 import { listCortexAiCompatibleOpenRouterModels } from '@nextblock-cms/cortex';
 import { getCortexAiSettingsStatus } from './actions';
-import { getMcpSettingsStatus } from './mcp-actions';
+import { CortexAiSettingsClient } from './CortexAiSettingsClient';
+import { getMcpSettingsStatus, type McpSettingsStatus } from './mcp-actions';
 import { McpServerSettingsCard } from './McpServerSettingsCard';
-import { SandboxCortexAiSettingsClient } from './SandboxCortexAiSettingsClient';
-import { StoredCortexAiSettingsClient } from './StoredCortexAiSettingsClient';
 import { redirect } from 'next/navigation';
 
 type CortexAiSettingsPageProps = {
@@ -15,16 +14,12 @@ type CortexAiSettingsPageProps = {
   }>;
 };
 
-function formatDate(value: string | null) {
-  if (!value) {
-    return null;
-  }
-
-  return new Intl.DateTimeFormat('en', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
-}
+const SANDBOX_MCP_NOTICE =
+  'This is a shared sandbox, so the switches and the token list are locked — enabling a remote ' +
+  'write surface or minting a token here would apply to every visitor at once. Everything else ' +
+  'works: the endpoint and the client snippets below are exactly what you get on your own ' +
+  'NextBlock install, where you flip the switch, mint a token, and paste the config into Claude ' +
+  'Code, Claude Desktop, Cursor, or VS Code.';
 
 /**
  * The origin an external MCP client should dial.
@@ -80,16 +75,15 @@ export default async function CortexAiSettingsPage({
     redirect('/cms/dashboard');
   }
 
+  const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
   const params: { error?: string; success?: string } = searchParams
     ? await searchParams
     : {};
-  const storedKeyUpdatedAt = formatDate(status.storedOpenRouterKeyUpdatedAt);
-  const selectedModelUpdatedAt = formatDate(status.selectedModel?.updatedAt || null);
-  const stockKeysUpdatedAt = formatDate(status.stockKeysUpdatedAt);
+
   let compatibleModels: Awaited<ReturnType<typeof listCortexAiCompatibleOpenRouterModels>> = [];
   let modelCatalogError: string | null = null;
 
-  if (status.hasStoredOpenRouterKey || process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
+  if (status.hasStoredOpenRouterKey || isSandbox) {
     try {
       compatibleModels = await listCortexAiCompatibleOpenRouterModels();
     } catch (error) {
@@ -98,44 +92,30 @@ export default async function CortexAiSettingsPage({
     }
   }
 
-  if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
-    return (
-      <SandboxCortexAiSettingsClient
-        compatibleModels={compatibleModels as any}
-        isPackageActive={status.isPackageActive}
-        hasEnvOpenRouterKey={status.hasEnvOpenRouterKey}
-        maskedEnvOpenRouterKey={status.maskedEnvOpenRouterKey}
-        modelCatalogError={modelCatalogError}
-        activeStockProvider={status.activeStockProvider}
-        hasStoredPexelsKey={status.hasStoredPexelsKey}
-        maskedStoredPexelsKey={status.maskedStoredPexelsKey}
-        hasStoredUnsplashKey={status.hasStoredUnsplashKey}
-        maskedStoredUnsplashKey={status.maskedStoredUnsplashKey}
-        hasEnvPexelsKey={status.hasEnvPexelsKey}
-        hasEnvUnsplashKey={status.hasEnvUnsplashKey}
-        unsplashAppName={status.unsplashAppName}
-        agentSettings={status.agentSettings}
-      />
-    );
-  }
-
   const [mcpStatus, siteOrigin, localOrigin] = await Promise.all([
     getMcpSettingsStatus(),
     resolveSiteOrigin(),
     resolveLocalOrigin(),
   ]);
 
+  // The sandbox sees the card, the endpoint, and the snippets — but never the token
+  // list. Those rows belong to whoever runs the sandbox, and every visitor here shares
+  // one admin login, so listing another visitor's token names would be a leak with no
+  // upside (the card is read-only anyway, so nothing in it is actionable).
+  const visibleMcpStatus: McpSettingsStatus = isSandbox
+    ? { settings: mcpStatus.settings, tokens: [] }
+    : mcpStatus;
+
   return (
-    <StoredCortexAiSettingsClient
-      compatibleModels={compatibleModels as any}
+    <CortexAiSettingsClient
+      isSandbox={isSandbox}
+      compatibleModels={compatibleModels}
       isPackageActive={status.isPackageActive}
       hasEnvOpenRouterKey={status.hasEnvOpenRouterKey}
       maskedEnvOpenRouterKey={status.maskedEnvOpenRouterKey}
       hasStoredOpenRouterKey={status.hasStoredOpenRouterKey}
       maskedStoredOpenRouterKey={status.maskedStoredOpenRouterKey}
-      storedKeyUpdatedAt={storedKeyUpdatedAt}
       selectedModel={status.selectedModel}
-      selectedModelUpdatedAt={selectedModelUpdatedAt}
       hasEncryptionKey={status.hasEncryptionKey}
       modelCatalogError={modelCatalogError}
       activeStockProvider={status.activeStockProvider}
@@ -145,19 +125,20 @@ export default async function CortexAiSettingsPage({
       maskedStoredUnsplashKey={status.maskedStoredUnsplashKey}
       hasEnvPexelsKey={status.hasEnvPexelsKey}
       hasEnvUnsplashKey={status.hasEnvUnsplashKey}
-      stockKeysUpdatedAt={stockKeysUpdatedAt}
       unsplashAppName={status.unsplashAppName}
       agentSettings={status.agentSettings}
       successMessage={params.success}
       errorMessage={params.error}
     >
       <McpServerSettingsCard
-        allowLocalhostWithoutToken={mcpStatus.settings.allowLocalhostWithoutToken}
-        enabled={mcpStatus.settings.enabled}
+        allowLocalhostWithoutToken={visibleMcpStatus.settings.allowLocalhostWithoutToken}
+        enabled={visibleMcpStatus.settings.enabled}
         localMcpUrl={`${localOrigin}/api/mcp`}
         mcpUrl={`${siteOrigin}/api/mcp`}
-        tokens={mcpStatus.tokens}
+        readOnly={isSandbox}
+        readOnlyNotice={isSandbox ? SANDBOX_MCP_NOTICE : undefined}
+        tokens={visibleMcpStatus.tokens}
       />
-    </StoredCortexAiSettingsClient>
+    </CortexAiSettingsClient>
   );
 }

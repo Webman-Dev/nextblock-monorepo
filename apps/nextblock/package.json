@@ -1,6 +1,6 @@
 {
   "name": "@nextblock-cms/template",
-  "version": "0.15.3",
+  "version": "0.15.4",
   "private": true,
   "nextblock": {
     "install": "monorepo"
