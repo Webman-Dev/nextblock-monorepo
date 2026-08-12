@@ -168,3 +168,11 @@ zero-config); a **private** repo additionally needs a `NEXTBLOCK_GITHUB_TOKEN` e
 the in-CMS conflict banner. (Only a *manually-created GitHub fork* has Actions disabled
 until you enable them on the Actions tab.) Full details — both tracks, conflict handling,
 and build-time migrations — are in [docs/13](./13-STAYING-UP-TO-DATE.md).
+
+> **This applies to the 1-click deploy specifically, not to "anything on Vercel".** The
+> sync workflow merges the NextBlock **monorepo** into your repository, so it only works
+> where your repository *is* that monorepo — a 1-click deploy, a GitHub fork, or a clone. A
+> project created with `npm create nextblock` is the flattened standalone app; deploying it
+> to Vercel does not change its shape, and NextBlock deliberately does not offer it the
+> workflow (merging `apps/`, `libs/` and `nx.json` into it would wreck it). That kind of
+> install updates with `npm run update` — see [docs/13](./13-STAYING-UP-TO-DATE.md).

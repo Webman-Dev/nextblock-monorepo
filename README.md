@@ -146,8 +146,30 @@ npm run docker:setup     # or: npm run setup → pick "Local Self-Hosted Docker 
 
 This builds and boots the full self-hosted stack (Postgres + GoTrue + PostgREST + Kong, MinIO for media, and the app) and applies migrations automatically — the only prompts are optional Turnstile and SMTP. The app runs at **http://localhost:3000** and the first sign-up becomes ADMIN (auto-confirmed, no email step). Manage it with `npm run docker:up` / `docker:down` / `docker:logs`. Full guide: [docs/11-SELF-HOSTED-DOCKER.md](./docs/11-SELF-HOSTED-DOCKER.md).
 
+### 🔄 Keeping an install up to date
+
+Whichever way NextBlock was installed, one command brings the code, the dependencies and the
+database schema forward together:
+
+```bash
+npm run update              # code + dependencies + schema
+npm run update -- --check   # report what would change; write nothing
+```
+
+- **One-click Vercel / GitHub fork / clone** — already automatic: a daily GitHub Action
+  merges upstream and Vercel redeploys. Run the command when you want it *now*.
+- **`npm create nextblock` projects** — new framework code comes from the published
+  `create-nextblock` package and is applied as a **git 3-way merge**, so your edits to
+  framework files survive and only genuine overlaps conflict. Docker installs follow it with
+  `npm run docker:up`.
+
+The automatic Action depends on your repository being this monorepo — not on where the site
+is hosted. See **[docs/13](./docs/13-STAYING-UP-TO-DATE.md)** for the full picture.
+
 ### 🛠️ Useful Commands
 
+- `npm run update` - Update code, dependencies and database schema (any install type)
+- `npm run update -- --check` - Preview an update without changing anything
 - `npx nx serve nextblock` - Start the local development server for the CMS
 - `npm run lint` - Lint the monorepo
 - `npm run db:types` - Generate Supabase types
@@ -176,6 +198,8 @@ _The template docs are copied from the root docs through the sync pipeline, so t
 | [docs/09-LIVE-DRAFT-MODE.md](./docs/09-LIVE-DRAFT-MODE.md)                         | Real-time visual editing and non-destructive draft previewing                            |
 | [docs/10-CUSTOM-BLOCKS.md](./docs/10-CUSTOM-BLOCKS.md)                             | Data-driven custom blocks: schema, CRUD, dynamic rendering, and import/export            |
 | [docs/11-SELF-HOSTED-DOCKER.md](./docs/11-SELF-HOSTED-DOCKER.md)                   | One-click local self-hosted Docker stack: Supabase engines, MinIO storage, migration runner, and how it maps to cloud |
+| [docs/12-VERCEL-DEPLOYMENT.md](./docs/12-VERCEL-DEPLOYMENT.md)                     | One-click cloud deploy, the browser setup wizard, and Supabase env-var aliases            |
+| [docs/13-STAYING-UP-TO-DATE.md](./docs/13-STAYING-UP-TO-DATE.md)                   | `npm run update` for all four installs, the daily upstream-sync Action, and how migrations reach a deployed site |
 | [docs/README.md](./docs/README.md)                                                 | Audience-based docs index                                                                |
 
 > **Under the hood note:** The migration folder under `libs/db/src/supabase/migrations` is the best source of truth for current platform capabilities.

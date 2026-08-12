@@ -6794,6 +6794,525 @@ CREATE POLICY "Admins insert site script revisions" ON public.site_script_revisi
     WITH CHECK (((SELECT public.get_current_user_role()) = 'ADMIN'::public.user_role));
 
 
+-- >>> FROM: 00000000000020_updating_article.sql <<<
+-- 00000000000020_updating_article.sql
+-- Seeds the "How Updating NextBlock Works" guide as an EN/FR twin pair, the companion
+-- to the install guide seeded in the baseline (00000000000003, slugs 'how-to-setup-nextblock'
+-- / 'comment-configurer-nextblock'). It documents the single \`npm run update\` command
+-- across all four install paths — one-click Vercel, npm create → Docker, npm create →
+-- managed cloud, and the cloned monorepo.
+--
+-- Forward-only and idempotent by construction:
+--   * posts carries UNIQUE (language_id, slug), so the inserts use ON CONFLICT DO NOTHING;
+--   * blocks has no natural unique key, so the body insert is guarded on NOT EXISTS;
+--   * ids are never hardcoded — posts.id and blocks.id are identity columns and a live
+--     database has real editor-created rows occupying the low ids the baseline used.
+--   * the feature image is looked up rather than asserted, so a site that deleted the
+--     seeded media row still gets the article (with no cover) instead of a failed migration.
+--
+-- Because the sandbox reset payload and the /setup wizard's embedded bundle are both
+-- generated FROM this directory, the article reaches a fresh install and every hourly
+-- sandbox reset with no extra wiring — regenerate them with \`npm run generate:sandbox\`
+-- and \`npm run generate:migrations-bundle\`.
+--
+-- blocks.content is JSONB written with PostgreSQL dollar-quoting (same style as 006/008)
+-- so the HTML can use ordinary single-quoted class attributes without quote doubling.
+
+DO $body$
+DECLARE
+  v_group   uuid := 'c0d3f1a2-8b47-4e19-9a52-7f6b1d4e8c30';
+  v_image   uuid;
+  v_en_post integer;
+  v_fr_post integer;
+BEGIN
+  SELECT id INTO v_image
+    FROM public.media
+   WHERE id = '641ddf75-5c90-41df-8b83-e7c298f30a6a'::uuid;
+
+  ---------------------------------------------------------------------------
+  -- English
+  ---------------------------------------------------------------------------
+  INSERT INTO public.posts (
+    language_id, author_id, title, slug, label, excerpt, subtitle, status,
+    published_at, meta_title, meta_description, feature_image_id, version,
+    translation_group_id
+  )
+  SELECT
+    1, NULL,
+    'How Updating NextBlock Works: One Command for Every Install',
+    'how-updating-works',
+    'Maintenance',
+    'However you installed NextBlock — one-click Vercel, the CLI, Docker or a git clone — a single npm run update brings the code, the dependencies and the database schema forward together.',
+    'Automatic upstream syncing on Vercel, and one command everywhere else: what npm run update does, what it never touches, and how to roll it back.',
+    'published', now(),
+    'How to Update NextBlock — One Command for Every Install',
+    'Update NextBlock in one step. npm run update pulls new code, installs dependencies and applies pending database migrations on Vercel, Docker, CLI and git-clone installs alike.',
+    v_image, 1, v_group
+  WHERE NOT EXISTS (
+    SELECT 1 FROM public.posts WHERE language_id = 1 AND slug = 'how-updating-works'
+  );
+
+  SELECT id INTO v_en_post
+    FROM public.posts
+   WHERE language_id = 1 AND slug = 'how-updating-works'
+   ORDER BY id
+   LIMIT 1;
+
+  IF v_en_post IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.blocks WHERE post_id = v_en_post
+  ) THEN
+    INSERT INTO public.blocks (post_id, language_id, block_type, content, "order")
+    VALUES (v_en_post, 1, 'text', $nben$
+{"html_content":"<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock ships improvements continuously — new blocks, editor fixes, security patches, and occasionally a database change that the new code depends on. Keeping up with all of that used to mean knowing which of the four install paths you were on. It no longer does. Every NextBlock project, however it was created, understands one command:</p>\\n\\n<div class='my-10 overflow-hidden rounded-[2rem] border border-slate-800 bg-slate-950 shadow-2xl'>\\n  <div class='flex items-center gap-2 border-b border-white/10 px-5 py-3'>\\n    <span class='h-3 w-3 rounded-full bg-red-400/70'></span>\\n    <span class='h-3 w-3 rounded-full bg-yellow-400/70'></span>\\n    <span class='h-3 w-3 rounded-full bg-green-400/70'></span>\\n    <span class='ml-3 text-xs font-mono text-slate-400'>your project</span>\\n  </div>\\n  <div class='px-6 py-8 text-center'>\\n    <p class='mt-0 mb-2 font-mono text-2xl sm:text-3xl font-semibold text-emerald-300'>npm run update</p>\\n    <p class='mb-0 text-sm text-slate-400'>Code &middot; dependencies &middot; database schema &mdash; in that order, in one step.</p>\\n  </div>\\n</div>\\n\\n<p>It figures out which kind of install it is running inside, picks the right source for new code, installs the matching dependencies, and then applies any database migrations the new version needs. If you would rather look before you leap, <code>npm run update -- --check</code> reports exactly what would change and touches nothing.</p>\\n\\n<h2 id='the-four-paths'>The four install paths, and how each one gets updates</h2>\\n<p class='text-slate-600 dark:text-slate-400'>These map one-to-one onto the four options in <a href='/article/how-to-setup-nextblock'>the install guide</a>. The command is the same everywhere; what differs is where the new code comes from.</p>\\n\\n<div class='grid gap-5 md:grid-cols-2 my-8'>\\n  <a href='#vercel' class='block rounded-[1.75rem] border border-blue-200 bg-blue-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-blue-500/20 dark:bg-blue-500/10'>\\n    <span class='flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white'>1</span>\\n    <p class='mt-4 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200'>Fully automatic</p>\\n    <h3 class='mt-2 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>One-click Vercel &amp; GitHub forks</h3>\\n    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>A daily workflow merges upstream into your repository and Vercel redeploys. You do nothing.</p>\\n  </a>\\n  <a href='#docker' class='block rounded-[1.75rem] border border-amber-200 bg-amber-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-amber-500/20 dark:bg-amber-500/10'>\\n    <span class='flex h-9 w-9 items-center justify-center rounded-full bg-amber-500 text-sm font-bold text-white'>2</span>\\n    <p class='mt-4 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200'>One command</p>\\n    <h3 class='mt-2 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>npm create nextblock &rarr; Docker</h3>\\n    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>Update, then rebuild the local stack. Your Postgres and media volumes survive untouched.</p>\\n  </a>\\n  <a href='#cloud' class='block rounded-[1.75rem] border border-violet-200 bg-violet-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-violet-500/20 dark:bg-violet-500/10'>\\n    <span class='flex h-9 w-9 items-center justify-center rounded-full bg-violet-600 text-sm font-bold text-white'>3</span>\\n    <p class='mt-4 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>One command</p>\\n    <h3 class='mt-2 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>npm create nextblock &rarr; Supabase</h3>\\n    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>New framework files come from npm; your own pages, routes and content are left alone.</p>\\n  </a>\\n  <a href='#clone' class='block rounded-[1.75rem] border border-emerald-200 bg-emerald-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-emerald-500/20 dark:bg-emerald-500/10'>\\n    <span class='flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-sm font-bold text-white'>4</span>\\n    <p class='mt-4 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>One command</p>\\n    <h3 class='mt-2 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>git clone the monorepo</h3>\\n    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>A guarded git pull or upstream merge, then dependencies and migrations. No manual steps.</p>\\n  </a>\\n</div>\\n\\n<h2 id='vercel'>1. One-click Vercel and GitHub forks &mdash; hands-off</h2>\\n<p>This path updates itself. When you deployed, NextBlock created a repository you own; the dashboard&rsquo;s <strong>Connect GitHub</strong> onboarding step installs a workflow into it that runs <strong>every day at midnight UTC</strong> and can also be triggered by hand from your repository&rsquo;s <strong>Actions</strong> tab.</p>\\n<ol class='space-y-2'>\\n  <li>The workflow merges the latest upstream NextBlock into your deploy branch.</li>\\n  <li>A clean merge is pushed to your branch, which triggers an ordinary Vercel deployment.</li>\\n  <li>During that production build, NextBlock applies any pending database migrations <em>before</em> the app is built &mdash; so new code never runs against an old schema.</li>\\n  <li>If the merge conflicts, nothing is pushed. The workflow opens a GitHub issue instead, and your CMS dashboard shows an amber banner linking straight to it. Resolve it, close the issue, and the banner clears itself.</li>\\n</ol>\\n<div class='rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 my-8 dark:border-emerald-500/20 dark:bg-emerald-500/10'>\\n  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Make the repository public</p>\\n  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>A public repository is completely zero-config. On a private one, add a <code>NEXTBLOCK_GITHUB_TOKEN</code> environment variable with read access to issues so the conflict banner still works &mdash; and note that Vercel&rsquo;s free Hobby plan refuses to auto-deploy automated commits on private repositories, so the merge would land without deploying.</p>\\n</div>\\n<p>Working on a local clone of that fork? <code>npm run update</code> does the same merge on your machine, adding an <code>upstream</code> remote if it is missing, then installs dependencies and applies migrations.</p>\\n\\n<h2 id='docker'>2. npm create nextblock &rarr; Docker &mdash; update, then rebuild</h2>\\n<p>From your project directory:</p>\\n<pre><code>npm run update\\nnpm run docker:up</code></pre>\\n<p>The first command refreshes the application, its dependencies and the schema; the second rebuilds and restarts the containers. Your database and media live in Docker volumes and are never touched by either step &mdash; <code>docker:up</code> rebuilds images, not data.</p>\\n\\n<h2 id='cloud'>3. npm create nextblock &rarr; managed Supabase &mdash; one command</h2>\\n<pre><code>npm run update\\nnpm run build\\nnpm start</code></pre>\\n<p>Your project is a standalone Next.js app, so new framework code is fetched from the published <code>create-nextblock</code> package on npm &mdash; the exact artifact your project was scaffolded from, versioned in lockstep with the release. NextBlock refreshes the files it owns, merges the new dependency versions into your <code>package.json</code>, runs <code>npm install</code>, and then applies migrations.</p>\\n<div class='rounded-3xl border border-violet-200 bg-violet-50/80 p-6 my-8 dark:border-violet-500/20 dark:bg-violet-500/10'>\\n  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Deploying to Vercel from this project</p>\\n  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>Run <code>npm run update</code> locally, commit the result, and push. Your production build applies any pending migrations on the way up, exactly as it does for one-click installs.</p>\\n</div>\\n\\n<h2 id='clone'>4. The cloned monorepo &mdash; one command</h2>\\n<pre><code>npm run update</code></pre>\\n<p>In a clone of the NextBlock repository this fast-forwards your checkout, reinstalls workspace dependencies and applies pending migrations. It refuses to run over uncommitted changes and tells you how to stash them first, so an update can never silently eat work in progress. If you have local commits, it stops and points you at <code>git pull --rebase</code> rather than guessing.</p>\\n\\n<h2 id='what-it-does'>What <code>npm run update</code> actually does</h2>\\n<ol class='space-y-2'>\\n  <li><strong>Identifies the install.</strong> Monorepo or standalone app; git-backed or npm-backed; Docker or not.</li>\\n  <li><strong>Updates the code</strong> from the right source &mdash; an upstream git merge, a fast-forward pull, or the published <code>create-nextblock</code> package.</li>\\n  <li><strong>Installs dependencies</strong> with <code>npm install</code>, so the code and the packages it imports move together.</li>\\n  <li><strong>Refreshes the migration files</strong> shipped inside <code>@nextblock-cms/db</code>, so the newest schema changes are on disk before anything is applied.</li>\\n  <li><strong>Applies pending migrations</strong>, listing them first and asking before it writes.</li>\\n  <li><strong>Clears the dashboard&rsquo;s update banner</strong> once the new version is really in place.</li>\\n</ol>\\n\\n<h3>Options</h3>\\n<div class='overflow-x-auto my-6'>\\n<table class='w-full text-left text-sm'>\\n  <thead><tr class='border-b border-slate-200 dark:border-white/10'><th class='py-3 pr-4 font-semibold'>Command</th><th class='py-3 font-semibold'>What it does</th></tr></thead>\\n  <tbody class='align-top'>\\n    <tr class='border-b border-slate-100 dark:border-white/5'><td class='py-3 pr-4'><code>npm run update</code></td><td class='py-3'>Code, dependencies and schema.</td></tr>\\n    <tr class='border-b border-slate-100 dark:border-white/5'><td class='py-3 pr-4'><code>npm run update -- --check</code></td><td class='py-3'>Report what would change. Writes nothing.</td></tr>\\n    <tr class='border-b border-slate-100 dark:border-white/5'><td class='py-3 pr-4'><code>npm run update -- --yes</code></td><td class='py-3'>Skip the confirmation prompts. Useful in CI.</td></tr>\\n    <tr class='border-b border-slate-100 dark:border-white/5'><td class='py-3 pr-4'><code>npm run update -- --db-only</code></td><td class='py-3'>Apply pending migrations and nothing else.</td></tr>\\n    <tr class='border-b border-slate-100 dark:border-white/5'><td class='py-3 pr-4'><code>npm run update -- --skip-db</code></td><td class='py-3'>Update code and dependencies, leave the database alone.</td></tr>\\n    <tr><td class='py-3 pr-4'><code>npm run update -- --force</code></td><td class='py-3'>Run even when you are already on the latest version.</td></tr>\\n  </tbody>\\n</table>\\n</div>\\n\\n<h2 id='database'>What happens to your database</h2>\\n<p>Schema changes are <strong>forward-only</strong>. NextBlock never rewrites or replays a migration that has already run: each one is applied and recorded in the same transaction, so a failure rolls back cleanly and leaves the database exactly as it was. Already-applied migrations are skipped by version, which makes re-running an update completely safe.</p>\\n<p>Migrations change <em>structure</em> &mdash; tables, columns, indexes, permissions. Your pages, posts, products, media and users are yours; the update never deletes or rewrites them.</p>\\n<div class='rounded-3xl border border-blue-200 bg-blue-50/80 p-6 my-8 dark:border-blue-500/20 dark:bg-blue-500/10'>\\n  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200'>Belt and braces</p>\\n  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>Before a big jump on a production site, take a database snapshot &mdash; Supabase does daily backups on paid plans, and you can trigger one on demand from the Supabase dashboard. Then run <code>npm run update -- --check</code> to see the pending list before you commit to it.</p>\\n</div>\\n\\n<h2 id='safety'>If something goes wrong</h2>\\n<ul class='space-y-2'>\\n  <li><strong>Standalone projects:</strong> every framework file the update replaces is copied first into a timestamped folder under <code>.nextblock-backup/</code> in your project. Nothing is deleted, so files you added yourself are never removed.</li>\\n  <li><strong>Git-backed installs:</strong> the update is an ordinary commit. <code>git log</code> shows it and <code>git revert</code> undoes it.</li>\\n  <li><strong>A conflicted merge</strong> is aborted automatically &mdash; your working tree is left exactly as it was, with instructions printed for resolving it by hand.</li>\\n  <li><strong>A failed migration</strong> rolls back. Fix the cause and re-run; nothing half-applied is left behind.</li>\\n</ul>\\n<p>If you have customised a file that NextBlock owns &mdash; something under <code>app/</code>, <code>components/</code> or <code>lib/</code> &mdash; the update will replace it and back up your version. Diff the backup afterwards to bring your change forward. Customisations that live in your own new files, in the CMS, or in <code>.env</code> are never affected.</p>\\n\\n<h2 id='knowing'>Knowing when there is something to update</h2>\\n<p>You do not have to poll. NextBlock checks in the background while you use the CMS and raises a dashboard banner when a newer version is published, telling you which version you are on and what is available. Administrators can also just run <code>npm run update -- --check</code> at any time.</p>\\n\\n<h2 id='faq'>Update FAQ</h2>\\n<h3>Will updating overwrite my content or settings?</h3>\\n<p>No. Content, media, users and settings live in your database; site configuration lives in your environment variables. The update touches application code, dependencies and schema structure only.</p>\\n<h3>Do I have to update every release?</h3>\\n<p>No, though staying close to the latest release keeps you on security fixes and makes each jump smaller. Updates apply in sequence, so skipping several versions still lands correctly.</p>\\n<h3>Can I run it in CI?</h3>\\n<p>Yes &mdash; <code>npm run update -- --yes</code> never prompts, and it exits non-zero if the schema step fails so a pipeline can catch it.</p>\\n<h3>What if my project has no database connection configured?</h3>\\n<p>Code and dependencies still update; the schema step is skipped with a warning telling you which environment variable to set. Re-run <code>npm run update -- --db-only</code> once it is configured.</p>\\n<h3>I am on the one-click Vercel deploy &mdash; do I need to run anything?</h3>\\n<p>No. That path is fully automatic. The command exists for when you want an update <em>now</em> rather than at midnight, or when you are working on a local clone.</p>\\n\\n<div class='rounded-[2rem] border border-slate-200/80 bg-slate-50 p-8 my-12 text-center dark:border-white/10 dark:bg-white/5'>\\n  <p class='mt-0 text-2xl font-semibold text-slate-900 dark:text-white'>One command, every install.</p>\\n  <p class='text-sm text-slate-600 dark:text-slate-300'>New to NextBlock? Start with the install guide &mdash; then never think about upgrades again.</p>\\n  <div class='mt-5 flex flex-wrap justify-center gap-3'>\\n    <a href='/article/how-to-setup-nextblock' class='inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white no-underline shadow-lg hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'>Read the install guide</a>\\n    <a href='https://github.com/nextblock-cms/nextblock' target='_blank' rel='noopener' class='inline-flex items-center rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 no-underline hover:border-slate-500 dark:border-white/20 dark:text-slate-200 dark:hover:border-white/50'>View on GitHub</a>\\n  </div>\\n</div>"}
+$nben$::jsonb, 0);
+  END IF;
+
+  ---------------------------------------------------------------------------
+  -- French
+  ---------------------------------------------------------------------------
+  INSERT INTO public.posts (
+    language_id, author_id, title, slug, label, excerpt, subtitle, status,
+    published_at, meta_title, meta_description, feature_image_id, version,
+    translation_group_id
+  )
+  SELECT
+    2, NULL,
+    'Les mises à jour de NextBlock : une seule commande, quelle que soit l''installation',
+    'comment-fonctionnent-les-mises-a-jour',
+    'Maintenance',
+    'Quelle que soit votre installation — Vercel en un clic, le CLI, Docker ou un git clone — une seule commande npm run update fait avancer ensemble le code, les dépendances et le schéma de base de données.',
+    'Synchronisation automatique sur Vercel, et une seule commande partout ailleurs : ce que fait npm run update, ce qu''il ne touche jamais, et comment revenir en arrière.',
+    'published', now(),
+    'Mettre à jour NextBlock — une commande pour toutes les installations',
+    'Mettez NextBlock à jour en une étape. npm run update récupère le nouveau code, installe les dépendances et applique les migrations en attente, sur Vercel, Docker, CLI et git clone.',
+    v_image, 1, v_group
+  WHERE NOT EXISTS (
+    SELECT 1 FROM public.posts
+     WHERE language_id = 2 AND slug = 'comment-fonctionnent-les-mises-a-jour'
+  );
+
+  SELECT id INTO v_fr_post
+    FROM public.posts
+   WHERE language_id = 2 AND slug = 'comment-fonctionnent-les-mises-a-jour'
+   ORDER BY id
+   LIMIT 1;
+
+  IF v_fr_post IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.blocks WHERE post_id = v_fr_post
+  ) THEN
+    INSERT INTO public.blocks (post_id, language_id, block_type, content, "order")
+    VALUES (v_fr_post, 2, 'text', $nbfr$
+{"html_content":"<p class='text-lg leading-8 text-slate-700 dark:text-slate-300'>NextBlock &eacute;volue en continu &mdash; nouveaux blocs, corrections de l'&eacute;diteur, correctifs de s&eacute;curit&eacute;, et parfois une modification de la base de donn&eacute;es dont le nouveau code d&eacute;pend. Suivre tout cela supposait autrefois de savoir laquelle des quatre m&eacute;thodes d'installation vous aviez utilis&eacute;e. Ce n'est plus le cas. Tout projet NextBlock, quelle que soit sa cr&eacute;ation, comprend une seule commande :</p>\\n\\n<div class='my-10 overflow-hidden rounded-[2rem] border border-slate-800 bg-slate-950 shadow-2xl'>\\n  <div class='flex items-center gap-2 border-b border-white/10 px-5 py-3'>\\n    <span class='h-3 w-3 rounded-full bg-red-400/70'></span>\\n    <span class='h-3 w-3 rounded-full bg-yellow-400/70'></span>\\n    <span class='h-3 w-3 rounded-full bg-green-400/70'></span>\\n    <span class='ml-3 text-xs font-mono text-slate-400'>votre projet</span>\\n  </div>\\n  <div class='px-6 py-8 text-center'>\\n    <p class='mt-0 mb-2 font-mono text-2xl sm:text-3xl font-semibold text-emerald-300'>npm run update</p>\\n    <p class='mb-0 text-sm text-slate-400'>Code &middot; d&eacute;pendances &middot; sch&eacute;ma de base de donn&eacute;es &mdash; dans cet ordre, en une seule &eacute;tape.</p>\\n  </div>\\n</div>\\n\\n<p>La commande d&eacute;termine dans quel type d'installation elle s'ex&eacute;cute, choisit la bonne source pour le nouveau code, installe les d&eacute;pendances correspondantes, puis applique les migrations dont la nouvelle version a besoin. Si vous pr&eacute;f&eacute;rez regarder avant de sauter, <code>npm run update -- --check</code> indique exactement ce qui changerait sans rien modifier.</p>\\n\\n<h2 id='the-four-paths'>Les quatre installations et leurs mises &agrave; jour</h2>\\n<p class='text-slate-600 dark:text-slate-400'>Elles correspondent une &agrave; une aux quatre options du <a href='/article/comment-configurer-nextblock'>guide d'installation</a>. La commande est la m&ecirc;me partout ; seule la provenance du nouveau code change.</p>\\n\\n<div class='grid gap-5 md:grid-cols-2 my-8'>\\n  <a href='#vercel' class='block rounded-[1.75rem] border border-blue-200 bg-blue-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-blue-500/20 dark:bg-blue-500/10'>\\n    <span class='flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white'>1</span>\\n    <p class='mt-4 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200'>Enti&egrave;rement automatique</p>\\n    <h3 class='mt-2 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>Vercel en un clic et forks GitHub</h3>\\n    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>Un workflow quotidien fusionne les nouveaut&eacute;s dans votre d&eacute;p&ocirc;t et Vercel red&eacute;ploie. Vous n'avez rien &agrave; faire.</p>\\n  </a>\\n  <a href='#docker' class='block rounded-[1.75rem] border border-amber-200 bg-amber-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-amber-500/20 dark:bg-amber-500/10'>\\n    <span class='flex h-9 w-9 items-center justify-center rounded-full bg-amber-500 text-sm font-bold text-white'>2</span>\\n    <p class='mt-4 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200'>Une commande</p>\\n    <h3 class='mt-2 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>npm create nextblock &rarr; Docker</h3>\\n    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>Mettez &agrave; jour, puis reconstruisez la pile locale. Vos volumes Postgres et m&eacute;dias restent intacts.</p>\\n  </a>\\n  <a href='#cloud' class='block rounded-[1.75rem] border border-violet-200 bg-violet-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-violet-500/20 dark:bg-violet-500/10'>\\n    <span class='flex h-9 w-9 items-center justify-center rounded-full bg-violet-600 text-sm font-bold text-white'>3</span>\\n    <p class='mt-4 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Une commande</p>\\n    <h3 class='mt-2 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>npm create nextblock &rarr; Supabase</h3>\\n    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>Les nouveaux fichiers viennent de npm ; vos pages, routes et contenus ne sont pas touch&eacute;s.</p>\\n  </a>\\n  <a href='#clone' class='block rounded-[1.75rem] border border-emerald-200 bg-emerald-50/70 p-6 no-underline transition-shadow hover:shadow-lg dark:border-emerald-500/20 dark:bg-emerald-500/10'>\\n    <span class='flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-sm font-bold text-white'>4</span>\\n    <p class='mt-4 mb-0 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Une commande</p>\\n    <h3 class='mt-2 mb-2 text-xl font-semibold text-slate-900 dark:text-white'>git clone du monorepo</h3>\\n    <p class='mb-0 text-sm leading-6 text-slate-600 dark:text-slate-300'>Un pull ou une fusion prot&eacute;g&eacute;e, puis les d&eacute;pendances et les migrations. Aucune &eacute;tape manuelle.</p>\\n  </a>\\n</div>\\n\\n<h2 id='vercel'>1. Vercel en un clic et forks GitHub &mdash; sans intervention</h2>\\n<p>Ce chemin se met &agrave; jour tout seul. Lors du d&eacute;ploiement, NextBlock a cr&eacute;&eacute; un d&eacute;p&ocirc;t qui vous appartient ; l'&eacute;tape <strong>Connect GitHub</strong> du tableau de bord y installe un workflow qui s'ex&eacute;cute <strong>chaque jour &agrave; minuit UTC</strong> et peut aussi &ecirc;tre lanc&eacute; &agrave; la demande depuis l'onglet <strong>Actions</strong> de votre d&eacute;p&ocirc;t.</p>\\n<ol class='space-y-2'>\\n  <li>Le workflow fusionne la derni&egrave;re version de NextBlock dans votre branche de d&eacute;ploiement.</li>\\n  <li>Une fusion propre est pouss&eacute;e sur votre branche, ce qui d&eacute;clenche un d&eacute;ploiement Vercel normal.</li>\\n  <li>Pendant ce build de production, NextBlock applique les migrations en attente <em>avant</em> de construire l'application &mdash; le nouveau code ne tourne donc jamais sur un ancien sch&eacute;ma.</li>\\n  <li>En cas de conflit, rien n'est pouss&eacute;. Le workflow ouvre une issue GitHub et votre tableau de bord affiche une banni&egrave;re ambre qui pointe dessus. R&eacute;solvez, fermez l'issue, et la banni&egrave;re dispara&icirc;t d'elle-m&ecirc;me.</li>\\n</ol>\\n<div class='rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 my-8 dark:border-emerald-500/20 dark:bg-emerald-500/10'>\\n  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-200'>Rendez le d&eacute;p&ocirc;t public</p>\\n  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>Un d&eacute;p&ocirc;t public ne demande aucune configuration. Sur un d&eacute;p&ocirc;t priv&eacute;, ajoutez une variable d'environnement <code>NEXTBLOCK_GITHUB_TOKEN</code> avec un acc&egrave;s en lecture aux issues pour que la banni&egrave;re de conflit fonctionne &mdash; et sachez que l'offre gratuite Hobby de Vercel refuse de d&eacute;ployer automatiquement les commits automatis&eacute;s sur un d&eacute;p&ocirc;t priv&eacute;.</p>\\n</div>\\n<p>Vous travaillez sur un clone local de ce fork ? <code>npm run update</code> effectue la m&ecirc;me fusion sur votre machine, en ajoutant le d&eacute;p&ocirc;t <code>upstream</code> s'il manque, puis installe les d&eacute;pendances et applique les migrations.</p>\\n\\n<h2 id='docker'>2. npm create nextblock &rarr; Docker &mdash; mettre &agrave; jour puis reconstruire</h2>\\n<p>Depuis le dossier de votre projet :</p>\\n<pre><code>npm run update\\nnpm run docker:up</code></pre>\\n<p>La premi&egrave;re commande met &agrave; jour l'application, ses d&eacute;pendances et le sch&eacute;ma ; la seconde reconstruit et red&eacute;marre les conteneurs. Votre base de donn&eacute;es et vos m&eacute;dias vivent dans des volumes Docker et ne sont touch&eacute;s ni par l'une ni par l'autre &mdash; <code>docker:up</code> reconstruit des images, pas des donn&eacute;es.</p>\\n\\n<h2 id='cloud'>3. npm create nextblock &rarr; Supabase g&eacute;r&eacute; &mdash; une commande</h2>\\n<pre><code>npm run update\\nnpm run build\\nnpm start</code></pre>\\n<p>Votre projet est une application Next.js autonome : le nouveau code provient donc du paquet <code>create-nextblock</code> publi&eacute; sur npm &mdash; exactement l'artefact &agrave; partir duquel votre projet a &eacute;t&eacute; g&eacute;n&eacute;r&eacute;, versionn&eacute; en phase avec la release. NextBlock rafra&icirc;chit les fichiers qui lui appartiennent, fusionne les nouvelles versions de d&eacute;pendances dans votre <code>package.json</code>, lance <code>npm install</code>, puis applique les migrations.</p>\\n<div class='rounded-3xl border border-violet-200 bg-violet-50/80 p-6 my-8 dark:border-violet-500/20 dark:bg-violet-500/10'>\\n  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700 dark:text-violet-200'>Vous d&eacute;ployez ce projet sur Vercel ?</p>\\n  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>Lancez <code>npm run update</code> en local, validez le r&eacute;sultat et poussez. Votre build de production applique les migrations en attente au passage, exactement comme pour les installations en un clic.</p>\\n</div>\\n\\n<h2 id='clone'>4. Le monorepo clon&eacute; &mdash; une commande</h2>\\n<pre><code>npm run update</code></pre>\\n<p>Dans un clone du d&eacute;p&ocirc;t NextBlock, la commande met votre copie &agrave; jour, r&eacute;installe les d&eacute;pendances du workspace et applique les migrations en attente. Elle refuse de s'ex&eacute;cuter par-dessus des modifications non valid&eacute;es et vous explique comment les mettre de c&ocirc;t&eacute; : une mise &agrave; jour ne peut donc jamais faire dispara&icirc;tre du travail en cours. Si vous avez des commits locaux, elle s'arr&ecirc;te et vous oriente vers <code>git pull --rebase</code> plut&ocirc;t que de deviner.</p>\\n\\n<h2 id='what-it-does'>Ce que fait r&eacute;ellement <code>npm run update</code></h2>\\n<ol class='space-y-2'>\\n  <li><strong>Identifie l'installation.</strong> Monorepo ou application autonome ; bas&eacute;e sur git ou sur npm ; Docker ou non.</li>\\n  <li><strong>Met &agrave; jour le code</strong> depuis la bonne source &mdash; fusion git, pull en avance rapide, ou le paquet <code>create-nextblock</code> publi&eacute;.</li>\\n  <li><strong>Installe les d&eacute;pendances</strong> avec <code>npm install</code>, pour que le code et les paquets qu'il importe avancent ensemble.</li>\\n  <li><strong>Rafra&icirc;chit les fichiers de migration</strong> livr&eacute;s dans <code>@nextblock-cms/db</code>, afin que les derni&egrave;res &eacute;volutions du sch&eacute;ma soient sur le disque avant toute application.</li>\\n  <li><strong>Applique les migrations en attente</strong>, en les listant d'abord et en demandant confirmation.</li>\\n  <li><strong>Efface la banni&egrave;re de mise &agrave; jour</strong> du tableau de bord une fois la nouvelle version r&eacute;ellement en place.</li>\\n</ol>\\n\\n<h3>Options</h3>\\n<div class='overflow-x-auto my-6'>\\n<table class='w-full text-left text-sm'>\\n  <thead><tr class='border-b border-slate-200 dark:border-white/10'><th class='py-3 pr-4 font-semibold'>Commande</th><th class='py-3 font-semibold'>Effet</th></tr></thead>\\n  <tbody class='align-top'>\\n    <tr class='border-b border-slate-100 dark:border-white/5'><td class='py-3 pr-4'><code>npm run update</code></td><td class='py-3'>Code, d&eacute;pendances et sch&eacute;ma.</td></tr>\\n    <tr class='border-b border-slate-100 dark:border-white/5'><td class='py-3 pr-4'><code>npm run update -- --check</code></td><td class='py-3'>Indique ce qui changerait. N'&eacute;crit rien.</td></tr>\\n    <tr class='border-b border-slate-100 dark:border-white/5'><td class='py-3 pr-4'><code>npm run update -- --yes</code></td><td class='py-3'>Sans confirmation. Pratique en CI.</td></tr>\\n    <tr class='border-b border-slate-100 dark:border-white/5'><td class='py-3 pr-4'><code>npm run update -- --db-only</code></td><td class='py-3'>Applique uniquement les migrations en attente.</td></tr>\\n    <tr class='border-b border-slate-100 dark:border-white/5'><td class='py-3 pr-4'><code>npm run update -- --skip-db</code></td><td class='py-3'>Met &agrave; jour le code et les d&eacute;pendances, sans toucher &agrave; la base.</td></tr>\\n    <tr><td class='py-3 pr-4'><code>npm run update -- --force</code></td><td class='py-3'>S'ex&eacute;cute m&ecirc;me si vous &ecirc;tes d&eacute;j&agrave; &agrave; jour.</td></tr>\\n  </tbody>\\n</table>\\n</div>\\n\\n<h2 id='database'>Ce qui arrive &agrave; votre base de donn&eacute;es</h2>\\n<p>Les &eacute;volutions du sch&eacute;ma sont <strong>uniquement additives</strong>. NextBlock ne r&eacute;&eacute;crit ni ne rejoue jamais une migration d&eacute;j&agrave; appliqu&eacute;e : chacune est appliqu&eacute;e et enregistr&eacute;e dans la m&ecirc;me transaction, si bien qu'un &eacute;chec est annul&eacute; proprement et laisse la base exactement dans son &eacute;tat initial. Les migrations d&eacute;j&agrave; appliqu&eacute;es sont ignor&eacute;es par num&eacute;ro de version, ce qui rend une nouvelle ex&eacute;cution totalement s&ucirc;re.</p>\\n<p>Les migrations modifient la <em>structure</em> &mdash; tables, colonnes, index, permissions. Vos pages, articles, produits, m&eacute;dias et utilisateurs vous appartiennent : la mise &agrave; jour ne les supprime ni ne les r&eacute;&eacute;crit.</p>\\n<div class='rounded-3xl border border-blue-200 bg-blue-50/80 p-6 my-8 dark:border-blue-500/20 dark:bg-blue-500/10'>\\n  <p class='mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200'>Par pr&eacute;caution</p>\\n  <p class='mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200'>Avant un grand saut sur un site en production, prenez une sauvegarde de la base &mdash; Supabase en r&eacute;alise quotidiennement sur les offres payantes, et vous pouvez en d&eacute;clencher une &agrave; la demande depuis son tableau de bord. Lancez ensuite <code>npm run update -- --check</code> pour voir la liste des migrations en attente.</p>\\n</div>\\n\\n<h2 id='safety'>En cas de probl&egrave;me</h2>\\n<ul class='space-y-2'>\\n  <li><strong>Projets autonomes :</strong> chaque fichier remplac&eacute; est d'abord copi&eacute; dans un dossier horodat&eacute; sous <code>.nextblock-backup/</code> dans votre projet. Rien n'est supprim&eacute; : les fichiers que vous avez ajout&eacute;s ne disparaissent jamais.</li>\\n  <li><strong>Installations bas&eacute;es sur git :</strong> la mise &agrave; jour est un commit ordinaire. <code>git log</code> l'affiche et <code>git revert</code> l'annule.</li>\\n  <li><strong>Une fusion en conflit</strong> est annul&eacute;e automatiquement &mdash; votre copie de travail reste intacte, avec les instructions pour r&eacute;soudre &agrave; la main.</li>\\n  <li><strong>Une migration en &eacute;chec</strong> est annul&eacute;e. Corrigez la cause et relancez : rien ne reste &agrave; moiti&eacute; appliqu&eacute;.</li>\\n</ul>\\n<p>Si vous avez personnalis&eacute; un fichier appartenant &agrave; NextBlock &mdash; sous <code>app/</code>, <code>components/</code> ou <code>lib/</code> &mdash; la mise &agrave; jour le remplacera en sauvegardant votre version. Comparez ensuite la sauvegarde pour reporter votre modification. Les personnalisations qui vivent dans vos propres fichiers, dans le CMS ou dans <code>.env</code> ne sont jamais affect&eacute;es.</p>\\n\\n<h2 id='knowing'>Savoir qu'une mise &agrave; jour est disponible</h2>\\n<p>Inutile de surveiller. NextBlock v&eacute;rifie en arri&egrave;re-plan pendant que vous utilisez le CMS et affiche une banni&egrave;re sur le tableau de bord d&egrave;s qu'une version plus r&eacute;cente est publi&eacute;e, en indiquant votre version actuelle et celle disponible. Les administrateurs peuvent aussi lancer <code>npm run update -- --check</code> &agrave; tout moment.</p>\\n\\n<h2 id='faq'>FAQ des mises &agrave; jour</h2>\\n<h3>La mise &agrave; jour va-t-elle &eacute;craser mon contenu ou mes r&eacute;glages ?</h3>\\n<p>Non. Contenus, m&eacute;dias, utilisateurs et r&eacute;glages vivent dans votre base de donn&eacute;es ; la configuration du site vit dans vos variables d'environnement. La mise &agrave; jour ne touche que le code, les d&eacute;pendances et la structure du sch&eacute;ma.</p>\\n<h3>Dois-je installer chaque version ?</h3>\\n<p>Non, mais rester proche de la derni&egrave;re version vous garantit les correctifs de s&eacute;curit&eacute; et rend chaque saut plus petit. Les migrations s'appliquent dans l'ordre : sauter plusieurs versions fonctionne malgr&eacute; tout.</p>\\n<h3>Puis-je l'ex&eacute;cuter en CI ?</h3>\\n<p>Oui &mdash; <code>npm run update -- --yes</code> ne pose aucune question et renvoie un code d'erreur si l'&eacute;tape sch&eacute;ma &eacute;choue, pour qu'un pipeline puisse le d&eacute;tecter.</p>\\n<h3>Et si aucune connexion &agrave; la base n'est configur&eacute;e ?</h3>\\n<p>Le code et les d&eacute;pendances sont tout de m&ecirc;me mis &agrave; jour ; l'&eacute;tape sch&eacute;ma est ignor&eacute;e avec un avertissement indiquant la variable d'environnement &agrave; d&eacute;finir. Relancez ensuite <code>npm run update -- --db-only</code>.</p>\\n<h3>Je suis sur le d&eacute;ploiement Vercel en un clic &mdash; dois-je lancer quelque chose ?</h3>\\n<p>Non. Ce chemin est enti&egrave;rement automatique. La commande existe pour mettre &agrave; jour <em>tout de suite</em> plut&ocirc;t qu'&agrave; minuit, ou lorsque vous travaillez sur un clone local.</p>\\n\\n<div class='rounded-[2rem] border border-slate-200/80 bg-slate-50 p-8 my-12 text-center dark:border-white/10 dark:bg-white/5'>\\n  <p class='mt-0 text-2xl font-semibold text-slate-900 dark:text-white'>Une commande, toutes les installations.</p>\\n  <p class='text-sm text-slate-600 dark:text-slate-300'>Vous d&eacute;butez avec NextBlock ? Commencez par le guide d'installation &mdash; puis oubliez les mises &agrave; jour.</p>\\n  <div class='mt-5 flex flex-wrap justify-center gap-3'>\\n    <a href='/article/comment-configurer-nextblock' class='inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white no-underline shadow-lg hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'>Lire le guide d'installation</a>\\n    <a href='https://github.com/nextblock-cms/nextblock' target='_blank' rel='noopener' class='inline-flex items-center rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 no-underline hover:border-slate-500 dark:border-white/20 dark:text-slate-200 dark:hover:border-white/50'>Voir sur GitHub</a>\\n  </div>\\n</div>"}
+$nbfr$::jsonb, 0);
+  END IF;
+END
+$body$;
+
+-- Revision baseline for the two new posts.
+--
+-- 00000000000016 back-fills a 'snapshot' revision for every post that existed WHEN IT
+-- RAN. On a fresh install migrations run in order, so 016 executes before this file and
+-- these two posts would be the only ones in the CMS without a restore point. This is the
+-- same projection as 016 section 3b, scoped to the two slugs.
+INSERT INTO public.post_revisions (post_id, author_id, version, revision_type, content)
+SELECT
+    po.id,
+    NULL::uuid,
+    po.version,
+    'snapshot'::public.revision_type,
+    jsonb_build_object(
+      'meta', jsonb_build_object(
+        'title',            po.title,
+        'slug',             po.slug,
+        'language_id',      po.language_id,
+        'status',           po.status,
+        'meta_title',       po.meta_title,
+        'meta_description', po.meta_description,
+        'custom_canonical', po.custom_canonical,
+        'published_at',     to_char(po.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'feature_image_id', po.feature_image_id,
+        'label',            po.label,
+        'excerpt',          po.excerpt,
+        'subtitle',         po.subtitle
+      ),
+      'blocks', COALESCE((
+        SELECT jsonb_agg(
+                 jsonb_build_object(
+                   'language_id', b.language_id,
+                   'block_type',  b.block_type,
+                   'content',     b.content,
+                   'order',       b."order"
+                 ) ORDER BY b."order" ASC, b.id ASC
+               )
+          FROM public.blocks b
+         WHERE b.post_id = po.id
+      ), '[]'::jsonb)
+    )
+  FROM public.posts po
+ WHERE po.slug IN ('how-updating-works', 'comment-fonctionnent-les-mises-a-jour')
+   AND NOT EXISTS (
+         SELECT 1 FROM public.post_revisions r
+          WHERE r.post_id = po.id
+            AND r.revision_type = 'snapshot'
+            AND r.version <= po.version
+       )
+ON CONFLICT (post_id, version) DO NOTHING;
+
+
+-- >>> FROM: 00000000000021_updating_article_git_merge.sql <<<
+-- 00000000000021_updating_article_git_merge.sql
+-- Corrects the "How Updating NextBlock Works" article seeded in 00000000000020.
+--
+-- That version described the standalone update as "replace the files and keep a backup
+-- under .nextblock-backup/". The updater now performs a real git 3-way merge instead:
+-- both template versions are committed into the project's own object database under
+-- refs/nextblock/{base,head}, and the diff between them is applied with \`git apply --3way\`.
+-- A developer's edits to framework files are preserved and only genuine overlaps conflict.
+-- The copy-and-back-up path survives only as the fallback for a project with no git repo,
+-- no commits, or a dirty tree.
+--
+-- 020 is already applied everywhere and never replays, so the copy is corrected here as
+-- targeted, idempotent string replacements rather than a full re-write of the body: each
+-- replace() is a no-op once the old sentence is gone, so re-running changes nothing.
+-- Data-only; no schema change.
+
+DO $body$
+DECLARE
+  v_en_post integer;
+  v_fr_post integer;
+BEGIN
+  SELECT id INTO v_en_post
+    FROM public.posts WHERE language_id = 1 AND slug = 'how-updating-works'
+   ORDER BY id LIMIT 1;
+
+  SELECT id INTO v_fr_post
+    FROM public.posts WHERE language_id = 2 AND slug = 'comment-fonctionnent-les-mises-a-jour'
+   ORDER BY id LIMIT 1;
+
+  ---------------------------------------------------------------------------
+  -- English
+  ---------------------------------------------------------------------------
+  IF v_en_post IS NOT NULL THEN
+    UPDATE public.blocks
+       SET content = jsonb_set(
+             content,
+             '{html_content}',
+             to_jsonb(
+               replace(
+                 replace(
+                   replace(
+                     content->>'html_content',
+                     -- 1. the "if something goes wrong" bullet
+                     '<li><strong>Standalone projects:</strong> every framework file the update replaces is copied first into a timestamped folder under <code>.nextblock-backup/</code> in your project. Nothing is deleted, so files you added yourself are never removed.</li>',
+                     '<li><strong>Standalone projects:</strong> the update is applied as a <strong>git 3-way merge</strong> into your working tree &mdash; nothing is committed for you. Review it with <code>git diff</code>, and undo the whole thing with <code>git reset --hard HEAD</code>. Nothing is ever deleted, so files you added yourself are never removed.</li>'
+                   ),
+                   -- 2. the "you customised a framework file" paragraph
+                   '<p>If you have customised a file that NextBlock owns &mdash; something under <code>app/</code>, <code>components/</code> or <code>lib/</code> &mdash; the update will replace it and back up your version. Diff the backup afterwards to bring your change forward. Customisations that live in your own new files, in the CMS, or in <code>.env</code> are never affected.</p>',
+                   '<p>If you have customised a file that NextBlock owns &mdash; something under <code>app/</code>, <code>components/</code> or <code>lib/</code> &mdash; <strong>your edit is kept</strong>. The update merges the upstream change into your version, and only a change that genuinely overlaps yours conflicts, with ordinary <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; ours</code> / <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt; theirs</code> markers. List them with <code>git diff --name-only --diff-filter=U</code> and resolve with <code>git checkout --theirs</code> or <code>--ours</code>. Customisations in your own files, in the CMS, or in <code>.env</code> are never touched at all.</p>'
+                 ),
+                 -- 3. the managed-cloud section
+                 '<p>Your project is a standalone Next.js app, so new framework code is fetched from the published <code>create-nextblock</code> package on npm &mdash; the exact artifact your project was scaffolded from, versioned in lockstep with the release. NextBlock refreshes the files it owns, merges the new dependency versions into your <code>package.json</code>, runs <code>npm install</code>, and then applies migrations.</p>',
+                 '<p>Your project is a standalone Next.js app with no upstream to pull from, so new framework code comes from the published <code>create-nextblock</code> package on npm &mdash; the exact artifact your project was scaffolded from, versioned in lockstep with the release. NextBlock fetches both your current version and the new one, and applies the difference between them as a <strong>git 3-way merge</strong>, so the update behaves exactly like a <code>git pull</code>: files you never touched update silently, files you customised keep your changes. It then merges the new dependency versions into your <code>package.json</code>, runs <code>npm install</code>, and applies migrations.</p><p>This needs a git repository with at least one commit and a clean working tree &mdash; commit your work before updating. Without that there is nothing to merge against, so the files are copied instead and anything replaced is kept under <code>.nextblock-backup/</code>.</p>'
+               )
+             )
+           ),
+           updated_at = now()
+     WHERE post_id = v_en_post
+       AND block_type = 'text';
+  END IF;
+
+  ---------------------------------------------------------------------------
+  -- French
+  ---------------------------------------------------------------------------
+  IF v_fr_post IS NOT NULL THEN
+    UPDATE public.blocks
+       SET content = jsonb_set(
+             content,
+             '{html_content}',
+             to_jsonb(
+               replace(
+                 replace(
+                   replace(
+                     content->>'html_content',
+                     '<li><strong>Projets autonomes :</strong> chaque fichier remplac&eacute; est d''abord copi&eacute; dans un dossier horodat&eacute; sous <code>.nextblock-backup/</code> dans votre projet. Rien n''est supprim&eacute; : les fichiers que vous avez ajout&eacute;s ne disparaissent jamais.</li>',
+                     '<li><strong>Projets autonomes :</strong> la mise &agrave; jour est appliqu&eacute;e comme une <strong>fusion git &agrave; trois voies</strong> dans votre copie de travail &mdash; rien n''est valid&eacute; &agrave; votre place. Examinez-la avec <code>git diff</code>, et annulez tout avec <code>git reset --hard HEAD</code>. Rien n''est jamais supprim&eacute; : les fichiers que vous avez ajout&eacute;s ne disparaissent jamais.</li>'
+                   ),
+                   '<p>Si vous avez personnalis&eacute; un fichier appartenant &agrave; NextBlock &mdash; sous <code>app/</code>, <code>components/</code> ou <code>lib/</code> &mdash; la mise &agrave; jour le remplacera en sauvegardant votre version. Comparez ensuite la sauvegarde pour reporter votre modification. Les personnalisations qui vivent dans vos propres fichiers, dans le CMS ou dans <code>.env</code> ne sont jamais affect&eacute;es.</p>',
+                   '<p>Si vous avez personnalis&eacute; un fichier appartenant &agrave; NextBlock &mdash; sous <code>app/</code>, <code>components/</code> ou <code>lib/</code> &mdash; <strong>votre modification est conserv&eacute;e</strong>. La mise &agrave; jour fusionne le changement amont dans votre version, et seul un changement qui chevauche r&eacute;ellement le v&ocirc;tre entre en conflit, avec les marqueurs habituels <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; ours</code> / <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt; theirs</code>. Listez-les avec <code>git diff --name-only --diff-filter=U</code> et r&eacute;solvez avec <code>git checkout --theirs</code> ou <code>--ours</code>. Les personnalisations dans vos propres fichiers, dans le CMS ou dans <code>.env</code> ne sont jamais touch&eacute;es.</p>'
+                 ),
+                 '<p>Votre projet est une application Next.js autonome : le nouveau code provient donc du paquet <code>create-nextblock</code> publi&eacute; sur npm &mdash; exactement l''artefact &agrave; partir duquel votre projet a &eacute;t&eacute; g&eacute;n&eacute;r&eacute;, versionn&eacute; en phase avec la release. NextBlock rafra&icirc;chit les fichiers qui lui appartiennent, fusionne les nouvelles versions de d&eacute;pendances dans votre <code>package.json</code>, lance <code>npm install</code>, puis applique les migrations.</p>',
+                 '<p>Votre projet est une application Next.js autonome sans d&eacute;p&ocirc;t amont &agrave; tirer : le nouveau code provient donc du paquet <code>create-nextblock</code> publi&eacute; sur npm &mdash; exactement l''artefact &agrave; partir duquel votre projet a &eacute;t&eacute; g&eacute;n&eacute;r&eacute;, versionn&eacute; en phase avec la release. NextBlock r&eacute;cup&egrave;re votre version actuelle et la nouvelle, puis applique la diff&eacute;rence entre les deux comme une <strong>fusion git &agrave; trois voies</strong> : la mise &agrave; jour se comporte donc exactement comme un <code>git pull</code> &mdash; les fichiers que vous n''avez jamais touch&eacute;s se mettent &agrave; jour silencieusement, ceux que vous avez personnalis&eacute;s conservent vos changements. Elle fusionne ensuite les nouvelles versions de d&eacute;pendances dans votre <code>package.json</code>, lance <code>npm install</code> et applique les migrations.</p><p>Cela n&eacute;cessite un d&eacute;p&ocirc;t git avec au moins un commit et une copie de travail propre &mdash; validez votre travail avant de mettre &agrave; jour. Sans cela il n''y a rien contre quoi fusionner : les fichiers sont alors copi&eacute;s et tout ce qui est remplac&eacute; est conserv&eacute; sous <code>.nextblock-backup/</code>.</p>'
+               )
+             )
+           ),
+           updated_at = now()
+     WHERE post_id = v_fr_post
+       AND block_type = 'text';
+  END IF;
+END
+$body$;
+
+
+-- >>> FROM: 00000000000022_updating_article_accuracy.sql <<<
+-- 00000000000022_updating_article_accuracy.sql
+-- Three accuracy fixes to the "How Updating NextBlock Works" article
+-- (seeded in 00000000000020, first corrected in 00000000000021).
+--
+-- 0. The merge is performed with \`git merge-file\`, not \`git apply --3way\`. The latter
+--    implies --index: it stages its result (so \`git diff\` shows the developer nothing),
+--    requires every path to be tracked (one gitignored framework path aborted the whole
+--    update), and requires the worktree to match the index. merge-file touches no git
+--    state at all. Consequently the resolution commands 021 shipped are wrong: there are
+--    no index stages, so \`git checkout --theirs/--ours\` does not apply. The conflict
+--    markers are ordinary text; \`git checkout -- <file>\` discards one file's merge.
+--
+-- 1. "A conflicted merge is aborted automatically" was true of only ONE path. The
+--    monorepo/fork path does abort and restore the tree, because the merge belongs to
+--    upstream. The standalone path deliberately LEAVES the conflict in the working tree,
+--    because it is the developer's own repository and resolving it is the whole point.
+--    The bullet now states both.
+-- 2. The Docker section claimed \`npm run update\` refreshes the schema. It does not, by
+--    design: the self-hosted stack ships its own migration runner (the \`migrate\` service
+--    in docker-compose.yml, which tracks applied versions in a different table), so the
+--    updater stages the SQL and hands off to \`npm run docker:up\` rather than applying it
+--    twice through two different trackers.
+--
+-- Same targeted, idempotent replace() approach as 021 — a no-op once the old sentence is
+-- gone. Data-only; no schema change.
+
+DO $body$
+DECLARE
+  v_en_post integer;
+  v_fr_post integer;
+BEGIN
+  SELECT id INTO v_en_post
+    FROM public.posts WHERE language_id = 1 AND slug = 'how-updating-works'
+   ORDER BY id LIMIT 1;
+
+  SELECT id INTO v_fr_post
+    FROM public.posts WHERE language_id = 2 AND slug = 'comment-fonctionnent-les-mises-a-jour'
+   ORDER BY id LIMIT 1;
+
+  IF v_en_post IS NOT NULL THEN
+    UPDATE public.blocks
+       SET content = jsonb_set(
+             content,
+             '{html_content}',
+             to_jsonb(
+               replace(
+                 replace(
+                   replace(
+                     content->>'html_content',
+                     -- 021 shipped index-based resolution commands; the merge no longer
+                     -- uses the git index, so they do not apply.
+                     '<strong>your edit is kept</strong>. The update merges the upstream change into your version, and only a change that genuinely overlaps yours conflicts, with ordinary <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; ours</code> / <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt; theirs</code> markers. List them with <code>git diff --name-only --diff-filter=U</code> and resolve with <code>git checkout --theirs</code> or <code>--ours</code>.',
+                     '<strong>your edit is kept</strong>. The update merges the upstream change into your version, and only a change that genuinely overlaps yours conflicts &mdash; the updater lists those files, and each one carries ordinary <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; your version</code> / <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt; NextBlock</code> markers. Edit them as you would any conflict, or run <code>git checkout -- &lt;file&gt;</code> to discard the merge for that one file.'
+                   ),
+                   '<li><strong>A conflicted merge</strong> is aborted automatically &mdash; your working tree is left exactly as it was, with instructions printed for resolving it by hand.</li>',
+                   '<li><strong>A conflict</strong> behaves differently by install, on purpose. On a fork or clone the upstream merge is <em>aborted</em> and your working tree is left exactly as it was. On a standalone project the conflict is <em>left in place</em> for you to resolve &mdash; it is your own repository, and that is the point &mdash; and <code>git reset --hard HEAD</code> backs the whole update out.</li>'
+                 ),
+                 '<p>The first command refreshes the application, its dependencies and the schema; the second rebuilds and restarts the containers. Your database and media live in Docker volumes and are never touched by either step &mdash; <code>docker:up</code> rebuilds images, not data.</p>',
+                 '<p>The first command updates the application and its dependencies and stages the new migrations; the second rebuilds the containers <em>and applies those migrations</em>. The self-hosted stack runs its own migration service, so the updater hands the schema step to it rather than applying the same SQL through two different trackers. Your database and media live in Docker volumes and are never touched by either command &mdash; <code>docker:up</code> rebuilds images, not data.</p>'
+               )
+             )
+           ),
+           updated_at = now()
+     WHERE post_id = v_en_post
+       AND block_type = 'text';
+  END IF;
+
+  IF v_fr_post IS NOT NULL THEN
+    UPDATE public.blocks
+       SET content = jsonb_set(
+             content,
+             '{html_content}',
+             to_jsonb(
+               replace(
+                 replace(
+                   replace(
+                     content->>'html_content',
+                     '<strong>votre modification est conserv&eacute;e</strong>. La mise &agrave; jour fusionne le changement amont dans votre version, et seul un changement qui chevauche r&eacute;ellement le v&ocirc;tre entre en conflit, avec les marqueurs habituels <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; ours</code> / <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt; theirs</code>. Listez-les avec <code>git diff --name-only --diff-filter=U</code> et r&eacute;solvez avec <code>git checkout --theirs</code> ou <code>--ours</code>.',
+                     '<strong>votre modification est conserv&eacute;e</strong>. La mise &agrave; jour fusionne le changement amont dans votre version, et seul un changement qui chevauche r&eacute;ellement le v&ocirc;tre entre en conflit &mdash; la commande liste ces fichiers, et chacun porte les marqueurs habituels <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; your version</code> / <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt; NextBlock</code>. Modifiez-les comme n''importe quel conflit, ou lancez <code>git checkout -- &lt;fichier&gt;</code> pour abandonner la fusion sur ce seul fichier.'
+                   ),
+                   '<li><strong>Une fusion en conflit</strong> est annul&eacute;e automatiquement &mdash; votre copie de travail reste intacte, avec les instructions pour r&eacute;soudre &agrave; la main.</li>',
+                   '<li><strong>Un conflit</strong> se comporte diff&eacute;remment selon l''installation, volontairement. Sur un fork ou un clone, la fusion amont est <em>annul&eacute;e</em> et votre copie de travail reste intacte. Sur un projet autonome, le conflit est <em>laiss&eacute; en place</em> pour que vous le r&eacute;solviez &mdash; c''est votre d&eacute;p&ocirc;t, et c''est tout l''int&eacute;r&ecirc;t &mdash; et <code>git reset --hard HEAD</code> annule toute la mise &agrave; jour.</li>'
+                 ),
+                 '<p>La premi&egrave;re commande met &agrave; jour l''application, ses d&eacute;pendances et le sch&eacute;ma ; la seconde reconstruit et red&eacute;marre les conteneurs. Votre base de donn&eacute;es et vos m&eacute;dias vivent dans des volumes Docker et ne sont touch&eacute;s ni par l''une ni par l''autre &mdash; <code>docker:up</code> reconstruit des images, pas des donn&eacute;es.</p>',
+                 '<p>La premi&egrave;re commande met &agrave; jour l''application et ses d&eacute;pendances et pr&eacute;pare les nouvelles migrations ; la seconde reconstruit les conteneurs <em>et applique ces migrations</em>. La pile auto-h&eacute;berg&eacute;e dispose de son propre service de migration : la mise &agrave; jour lui confie donc l''&eacute;tape sch&eacute;ma plut&ocirc;t que d''appliquer le m&ecirc;me SQL via deux suivis diff&eacute;rents. Votre base de donn&eacute;es et vos m&eacute;dias vivent dans des volumes Docker et ne sont touch&eacute;s par aucune des deux commandes &mdash; <code>docker:up</code> reconstruit des images, pas des donn&eacute;es.</p>'
+               )
+             )
+           ),
+           updated_at = now()
+     WHERE post_id = v_fr_post
+       AND block_type = 'text';
+  END IF;
+END
+$body$;
+
+
+-- >>> FROM: 00000000000023_updating_article_layout_not_host.sql <<<
+-- 00000000000023_updating_article_layout_not_host.sql
+-- Corrects the most misleading claim in the "How Updating NextBlock Works" article
+-- (seeded 00000000000020, corrected in 021 and 022): that the automatic GitHub Action is
+-- about being deployed on Vercel.
+--
+-- It is not. The upstream-sync Action merges the NextBlock MONOREPO into the repository,
+-- so it only works where the repository IS the monorepo — a Vercel 1-click deploy, a
+-- GitHub fork, or a clone. A project scaffolded by \`npm create nextblock\` is the flattened
+-- standalone app (app/, components/, lib/ at the root); merging apps/ + libs/ + nx.json
+-- into it would wreck it. Pushing that project to GitHub and deploying it on Vercel does
+-- not change its layout, so it is still a \`npm run update\` install. Docker is orthogonal:
+-- it is how you RUN a project, not what shape the repository is.
+--
+-- Also documents that a merge conflict now holds the migration step back until the
+-- conflict is resolved, so the schema never moves ahead of undecided code.
+--
+-- Targeted, idempotent replace() as in 021/022. Data-only; no schema change.
+
+DO $body$
+DECLARE
+  v_en_post integer;
+  v_fr_post integer;
+BEGIN
+  SELECT id INTO v_en_post
+    FROM public.posts WHERE language_id = 1 AND slug = 'how-updating-works'
+   ORDER BY id LIMIT 1;
+
+  SELECT id INTO v_fr_post
+    FROM public.posts WHERE language_id = 2 AND slug = 'comment-fonctionnent-les-mises-a-jour'
+   ORDER BY id LIMIT 1;
+
+  IF v_en_post IS NOT NULL THEN
+    UPDATE public.blocks
+       SET content = jsonb_set(
+             content,
+             '{html_content}',
+             to_jsonb(
+               replace(
+                 replace(
+                   replace(
+                     content->>'html_content',
+                     -- 1. The section intro: say what actually qualifies.
+                     '<p>This path updates itself. When you deployed, NextBlock created a repository you own; the dashboard&rsquo;s <strong>Connect GitHub</strong> onboarding step installs a workflow into it that runs <strong>every day at midnight UTC</strong> and can also be triggered by hand from your repository&rsquo;s <strong>Actions</strong> tab.</p>',
+                     '<p>This path updates itself. When you deployed, NextBlock created a repository you own; the dashboard&rsquo;s <strong>Connect GitHub</strong> onboarding step installs a workflow into it that runs <strong>every day at midnight UTC</strong> and can also be triggered by hand from your repository&rsquo;s <strong>Actions</strong> tab.</p>\\n<div class=''rounded-3xl border border-slate-200 bg-slate-50 p-6 my-8 dark:border-white/10 dark:bg-white/5''>\\n  <p class=''mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-slate-600 dark:text-slate-300''>What qualifies &mdash; it is the repository, not the host</p>\\n  <p class=''mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200''>The workflow merges the <strong>NextBlock monorepo</strong> into your repository, so it only works where your repository <em>is</em> that monorepo: a one-click deploy, a GitHub fork, or a clone. A project created with <code>npm create nextblock</code> is the flattened standalone app &mdash; <code>app/</code>, <code>components/</code> and <code>lib/</code> at the root &mdash; and merging <code>apps/</code>, <code>libs/</code> and <code>nx.json</code> into it would wreck it. Pushing that project to GitHub and deploying it on Vercel does not change its shape: it is still an <code>npm run update</code> install, and NextBlock will not offer it this workflow. Docker is a separate question entirely &mdash; that is how you <em>run</em> a project, not what shape its repository is.</p>\\n</div>'
+                   ),
+                   -- 2. The FAQ answer, which asked exactly the question this clarifies.
+                   '<h3>I am on the one-click Vercel deploy &mdash; do I need to run anything?</h3>\\n<p>No. That path is fully automatic. The command exists for when you want an update <em>now</em> rather than at midnight, or when you are working on a local clone.</p>',
+                   '<h3>I am on the one-click Vercel deploy &mdash; do I need to run anything?</h3>\\n<p>No. That path is fully automatic. The command exists for when you want an update <em>now</em> rather than at midnight, or when you are working on a local clone.</p>\\n<h3>I deployed to Vercel, but from <code>npm create nextblock</code>. Is that automatic too?</h3>\\n<p>No &mdash; and this is the distinction that catches people out. Automatic updates depend on your repository being the NextBlock <strong>monorepo</strong>, not on where the site is hosted. A project scaffolded by the CLI is the flattened standalone app whatever you deploy it to, so it updates with <code>npm run update</code>. You will not see the <strong>Connect GitHub</strong> step on that kind of install, because the workflow it installs would merge a completely different source tree into yours.</p>'
+                 ),
+                 -- 3. Conflicts hold the schema step.
+                 '<li><strong>A failed migration</strong> rolls back. Fix the cause and re-run; nothing half-applied is left behind.</li>',
+                 '<li><strong>A failed migration</strong> rolls back. Fix the cause and re-run; nothing half-applied is left behind.</li>\\n  <li><strong>Unresolved conflicts hold the database back.</strong> If a merge left conflicts, the update finishes the code and dependency work but <em>stops before migrating</em> &mdash; your schema never moves ahead of code you have not finished deciding on. Resolve them and run <code>npm run update</code> again to apply the migrations, or walk away with <code>git reset --hard HEAD</code>; either way the database was never touched.</li>'
+               )
+             )
+           ),
+           updated_at = now()
+     WHERE post_id = v_en_post
+       AND block_type = 'text';
+  END IF;
+
+  IF v_fr_post IS NOT NULL THEN
+    UPDATE public.blocks
+       SET content = jsonb_set(
+             content,
+             '{html_content}',
+             to_jsonb(
+               replace(
+                 replace(
+                   replace(
+                     content->>'html_content',
+                     '<p>Ce chemin se met &agrave; jour tout seul. Lors du d&eacute;ploiement, NextBlock a cr&eacute;&eacute; un d&eacute;p&ocirc;t qui vous appartient ; l''&eacute;tape <strong>Connect GitHub</strong> du tableau de bord y installe un workflow qui s''ex&eacute;cute <strong>chaque jour &agrave; minuit UTC</strong> et peut aussi &ecirc;tre lanc&eacute; &agrave; la demande depuis l''onglet <strong>Actions</strong> de votre d&eacute;p&ocirc;t.</p>',
+                     '<p>Ce chemin se met &agrave; jour tout seul. Lors du d&eacute;ploiement, NextBlock a cr&eacute;&eacute; un d&eacute;p&ocirc;t qui vous appartient ; l''&eacute;tape <strong>Connect GitHub</strong> du tableau de bord y installe un workflow qui s''ex&eacute;cute <strong>chaque jour &agrave; minuit UTC</strong> et peut aussi &ecirc;tre lanc&eacute; &agrave; la demande depuis l''onglet <strong>Actions</strong> de votre d&eacute;p&ocirc;t.</p>\\n<div class=''rounded-3xl border border-slate-200 bg-slate-50 p-6 my-8 dark:border-white/10 dark:bg-white/5''>\\n  <p class=''mt-0 text-xs font-semibold uppercase tracking-[0.22em] text-slate-600 dark:text-slate-300''>Ce qui compte : le d&eacute;p&ocirc;t, pas l''h&eacute;bergeur</p>\\n  <p class=''mt-3 mb-0 text-sm text-slate-700 dark:text-slate-200''>Le workflow fusionne le <strong>monorepo NextBlock</strong> dans votre d&eacute;p&ocirc;t : il ne fonctionne donc que si votre d&eacute;p&ocirc;t <em>est</em> ce monorepo &mdash; d&eacute;ploiement en un clic, fork GitHub ou clone. Un projet cr&eacute;&eacute; avec <code>npm create nextblock</code> est l''application autonome aplatie &mdash; <code>app/</code>, <code>components/</code> et <code>lib/</code> &agrave; la racine &mdash; et y fusionner <code>apps/</code>, <code>libs/</code> et <code>nx.json</code> le casserait. Pousser ce projet sur GitHub et le d&eacute;ployer sur Vercel ne change pas sa forme : il se met toujours &agrave; jour avec <code>npm run update</code>, et NextBlock ne lui proposera pas ce workflow. Docker est une tout autre question &mdash; c''est la fa&ccedil;on d''<em>ex&eacute;cuter</em> un projet, pas la forme de son d&eacute;p&ocirc;t.</p>\\n</div>'
+                   ),
+                   '<h3>Je suis sur le d&eacute;ploiement Vercel en un clic &mdash; dois-je lancer quelque chose ?</h3>\\n<p>Non. Ce chemin est enti&egrave;rement automatique. La commande existe pour mettre &agrave; jour <em>tout de suite</em> plut&ocirc;t qu''&agrave; minuit, ou lorsque vous travaillez sur un clone local.</p>',
+                   '<h3>Je suis sur le d&eacute;ploiement Vercel en un clic &mdash; dois-je lancer quelque chose ?</h3>\\n<p>Non. Ce chemin est enti&egrave;rement automatique. La commande existe pour mettre &agrave; jour <em>tout de suite</em> plut&ocirc;t qu''&agrave; minuit, ou lorsque vous travaillez sur un clone local.</p>\\n<h3>J''ai d&eacute;ploy&eacute; sur Vercel, mais depuis <code>npm create nextblock</code>. Est-ce automatique aussi ?</h3>\\n<p>Non &mdash; et c''est la distinction qui pi&egrave;ge le plus. Les mises &agrave; jour automatiques d&eacute;pendent du fait que votre d&eacute;p&ocirc;t soit le <strong>monorepo</strong> NextBlock, pas de l''endroit o&ugrave; le site est h&eacute;berg&eacute;. Un projet g&eacute;n&eacute;r&eacute; par le CLI reste l''application autonome aplatie, quel que soit l''h&eacute;bergeur : il se met &agrave; jour avec <code>npm run update</code>. L''&eacute;tape <strong>Connect GitHub</strong> ne s''affiche pas sur ce type d''installation, car le workflow qu''elle installe fusionnerait une arborescence totalement diff&eacute;rente dans la v&ocirc;tre.</p>'
+                 ),
+                 '<li><strong>Une migration en &eacute;chec</strong> est annul&eacute;e. Corrigez la cause et relancez : rien ne reste &agrave; moiti&eacute; appliqu&eacute;.</li>',
+                 '<li><strong>Une migration en &eacute;chec</strong> est annul&eacute;e. Corrigez la cause et relancez : rien ne reste &agrave; moiti&eacute; appliqu&eacute;.</li>\\n  <li><strong>Les conflits non r&eacute;solus bloquent la base.</strong> Si une fusion a laiss&eacute; des conflits, la mise &agrave; jour termine le code et les d&eacute;pendances mais <em>s''arr&ecirc;te avant les migrations</em> &mdash; votre sch&eacute;ma ne prend jamais de l''avance sur un code que vous n''avez pas fini d''arbitrer. R&eacute;solvez-les puis relancez <code>npm run update</code> pour appliquer les migrations, ou abandonnez avec <code>git reset --hard HEAD</code> : dans les deux cas la base n''a jamais &eacute;t&eacute; touch&eacute;e.</li>'
+               )
+             )
+           ),
+           updated_at = now()
+     WHERE post_id = v_fr_post
+       AND block_type = 'text';
+  END IF;
+END
+$body$;
+
+
+-- >>> FROM: 00000000000024_updating_article_newline_fix.sql <<<
+-- 00000000000024_updating_article_newline_fix.sql
+-- Repairs two mistakes made by 00000000000023 in the "How Updating NextBlock Works"
+-- article, and lands the FAQ entry that migration failed to insert.
+--
+-- 1. RENDERING BUG. 023 wrote \`\\n\` inside ordinary single-quoted SQL literals. With
+--    standard_conforming_strings on (the default), that is a literal backslash followed
+--    by 'n' — not a newline — so five visible "\\n" sequences were stored in the article
+--    body. Replaced here with real newlines via chr(10). Idempotent: once none remain,
+--    replace() is a no-op.
+--
+-- 2. SILENT NO-MATCH. 023's FAQ replacement targeted a string spanning \`</h3>\\n<p>\`, and
+--    for the same reason the literal never matched the real newline in the stored HTML, so
+--    the replacement quietly did nothing. Redone here by anchoring on the single-line <h3>
+--    alone and prepending the new entry — no newline in either the search or the
+--    replacement, which is the rule this file establishes for editing the article.
+--
+-- Data-only; no schema change.
+
+DO $body$
+DECLARE
+  v_en_post integer;
+  v_fr_post integer;
+BEGIN
+  SELECT id INTO v_en_post
+    FROM public.posts WHERE language_id = 1 AND slug = 'how-updating-works'
+   ORDER BY id LIMIT 1;
+
+  SELECT id INTO v_fr_post
+    FROM public.posts WHERE language_id = 2 AND slug = 'comment-fonctionnent-les-mises-a-jour'
+   ORDER BY id LIMIT 1;
+
+  IF v_en_post IS NOT NULL THEN
+    UPDATE public.blocks
+       SET content = jsonb_set(
+             content,
+             '{html_content}',
+             to_jsonb(
+               replace(
+                 -- (1) literal backslash-n -> real newline
+                 replace(content->>'html_content', E'\\\\n', chr(10)),
+                 -- (2) the FAQ entry 023 failed to insert
+                 '<h3>I am on the one-click Vercel deploy &mdash; do I need to run anything?</h3>',
+                 '<h3>I deployed to Vercel, but from <code>npm create nextblock</code>. Is that automatic too?</h3><p>No &mdash; and this is the distinction that catches people out. Automatic updates depend on your repository being the NextBlock <strong>monorepo</strong>, not on where the site is hosted. A project scaffolded by the CLI is the flattened standalone app whatever you deploy it to, so it updates with <code>npm run update</code>. You will not see the <strong>Connect GitHub</strong> step on that kind of install, because the workflow it installs would merge a completely different source tree into yours.</p><h3>I am on the one-click Vercel deploy &mdash; do I need to run anything?</h3>'
+               )
+             )
+           ),
+           updated_at = now()
+     WHERE post_id = v_en_post
+       AND block_type = 'text';
+  END IF;
+
+  IF v_fr_post IS NOT NULL THEN
+    UPDATE public.blocks
+       SET content = jsonb_set(
+             content,
+             '{html_content}',
+             to_jsonb(
+               replace(
+                 replace(content->>'html_content', E'\\\\n', chr(10)),
+                 '<h3>Je suis sur le d&eacute;ploiement Vercel en un clic &mdash; dois-je lancer quelque chose ?</h3>',
+                 '<h3>J''ai d&eacute;ploy&eacute; sur Vercel, mais depuis <code>npm create nextblock</code>. Est-ce automatique aussi ?</h3><p>Non &mdash; et c''est la distinction qui pi&egrave;ge le plus. Les mises &agrave; jour automatiques d&eacute;pendent du fait que votre d&eacute;p&ocirc;t soit le <strong>monorepo</strong> NextBlock, pas de l''endroit o&ugrave; le site est h&eacute;berg&eacute;. Un projet g&eacute;n&eacute;r&eacute; par le CLI reste l''application autonome aplatie, quel que soit l''h&eacute;bergeur : il se met &agrave; jour avec <code>npm run update</code>. L''&eacute;tape <strong>Connect GitHub</strong> ne s''affiche pas sur ce type d''installation, car le workflow qu''elle installe fusionnerait une arborescence totalement diff&eacute;rente dans la v&ocirc;tre.</p><h3>Je suis sur le d&eacute;ploiement Vercel en un clic &mdash; dois-je lancer quelque chose ?</h3>'
+               )
+             )
+           ),
+           updated_at = now()
+     WHERE post_id = v_fr_post
+       AND block_type = 'text';
+  END IF;
+END
+$body$;
+
+
   -- Step D: Record the applied migrations in history (truncated in Step B) so
   -- \`npm run db:migrate:check\` reports up to date instead of listing every file as pending.
   INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES
@@ -6816,7 +7335,12 @@ CREATE POLICY "Admins insert site script revisions" ON public.site_script_revisi
     ('00000000000016', 'product_revisions_and_revision_baseline'),
     ('00000000000017', 'cortex_ai_mcp_server'),
     ('00000000000018', 'site_scripts'),
-    ('00000000000019', 'site_script_revisions')
+    ('00000000000019', 'site_script_revisions'),
+    ('00000000000020', 'updating_article'),
+    ('00000000000021', 'updating_article_git_merge'),
+    ('00000000000022', 'updating_article_accuracy'),
+    ('00000000000023', 'updating_article_layout_not_host'),
+    ('00000000000024', 'updating_article_newline_fix')
   ON CONFLICT (version) DO NOTHING;
 
   -- Step E: Anchor preserved profiles

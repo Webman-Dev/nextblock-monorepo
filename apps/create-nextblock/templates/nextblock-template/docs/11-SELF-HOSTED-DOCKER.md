@@ -95,6 +95,15 @@ Both named volumes persist your database and uploaded media across restarts.
 | `npm run docker:up` | Rebuild and (re)start the stack. |
 | `npm run docker:down` | Stop the stack. Add `-v` to also delete the volumes (wipes local data). |
 | `npm run docker:logs` | Follow the app logs (`docker compose logs -f nextblock-cms`). |
+| `npm run update` | Update the app, its dependencies and the staged migration SQL. Follow it with `docker:up`, which is what applies the migrations — see below. |
+
+> **Updating a Docker install: `npm run update` then `npm run docker:up`.** The updater
+> deliberately does *not* apply migrations here. This stack ships its own migration runner
+> (the `migrate` service, which mounts `supabase/migrations` and records applied versions in
+> `public._nextblock_docker_migrations` — a different tracker from the one every other
+> install uses), so applying the same SQL from the updater as well would run it through two
+> trackers. The updater refreshes the SQL on disk and hands the schema step to the stack.
+> Full details in [docs/13](./13-STAYING-UP-TO-DATE.md).
 
 ### Ports (override with env vars)
 

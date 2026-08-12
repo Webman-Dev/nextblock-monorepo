@@ -1097,6 +1097,9 @@ async function ensureGitignore(projectDir) {
     '# Backups',
     'backup/',
     'backups/',
+    // Written by `npm run update` when it replaces a framework file. Local safety copies
+    // of the previous version — useful to diff against, never to commit.
+    '.nextblock-backup/',
     '',
     '# Misc',
     '.DS_Store',
@@ -1814,12 +1817,30 @@ async function transformPackageJson(projectDir) {
   const packageJson = await fs.readJSON(packageJsonPath);
   const projectName = basename(projectDir);
 
+  // Capture the template's version BEFORE the manifest becomes the user's to manage.
+  // From here on `packageJson.version` belongs to their site; this stamp is what
+  // `npm run update` and the dashboard's update check compare against, so that a user
+  // versioning their own project can never break update detection.
+  const scaffoldedFrom =
+    typeof packageJson.version === 'string' ? packageJson.version : null;
+
   if (projectName) {
     packageJson.name = projectName;
   }
 
   packageJson.version = packageJson.version ?? '0.1.0';
   packageJson.private = packageJson.private ?? true;
+
+  // `install` is the authoritative answer to "can the upstream-sync GitHub Action work
+  // here?". The Action merges the NextBlock MONOREPO into the repository, so it only makes
+  // sense for a repo that IS the monorepo (a 1-click deploy, fork or clone). This project
+  // is the flattened standalone app, so the answer is no — and the marker must overwrite
+  // the "monorepo" value the template inherits from apps/nextblock/package.json.
+  packageJson.nextblock = {
+    ...(packageJson.nextblock ?? {}),
+    install: 'standalone',
+    ...(scaffoldedFrom ? { version: scaffoldedFrom, installedAt: new Date().toISOString() } : {}),
+  };
 
   packageJson.dependencies = packageJson.dependencies ?? {};
 
@@ -1850,10 +1871,10 @@ async function transformPackageJson(projectDir) {
   // `npm run test-create`); fall back to this baked-in set in the published CLI where the
   // monorepo root is not on disk. Keep the fallback in sync with the root package.json.
   const FALLBACK_OVERRIDES = {
-    postcss: '^8.5.12',
+    postcss: '^8.5.26',
     qs: '^6.15.2',
     uuid: '^11.1.1',
-    glob: '^10.4.5',
+    glob: '^13.0.6',
     'whatwg-encoding': 'npm:@exodus/bytes@latest',
     'node-domexception': 'npm:domexception@latest',
     keygrip: 'npm:keygrip@latest',

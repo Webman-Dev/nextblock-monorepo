@@ -23,6 +23,12 @@ import pkg from '../../package.json';
 
 const UPSTREAM_REPO = 'nextblock-cms/nextblock';
 const RELEASES_API = `https://api.github.com/repos/${UPSTREAM_REPO}/releases/latest`;
+// The npm registry is the authoritative version signal for standalone installs: the
+// `create-nextblock` package ships the exact standalone template they were scaffolded
+// from and is published in lockstep with the app, whereas GitHub release tags are cut by
+// hand and lag (they have, in practice, sat many minor versions behind the real version —
+// which silently disabled this whole check). Releases stay as the fallback.
+const NPM_REGISTRY_API = 'https://registry.npmjs.org/create-nextblock/latest';
 // The sync workflow tags its conflict issues with this hidden body marker. We match on it
 // (not on a label) so a label that failed to create on GitHub can't hide a real conflict.
 const CONFLICT_MARKER = '<!-- nextblock-sync-conflict -->';
@@ -88,17 +94,89 @@ function compareSemver(a: string, b: string): number {
 }
 
 /**
+ * The NextBlock version this install is running.
+ *
+ * `package.json.nextblock.version` is the authoritative stamp, written by the scaffolder
+ * and re-written by `npm run update`. A project's own `version` field belongs to the
+ * user, and the moment they bump it for their own site — entirely normal — comparing a
+ * release against it becomes meaningless. Fall back to it only for projects created
+ * before the stamp existed.
+ */
+function readInstalledVersion(): string {
+  const manifest = pkg as { version?: string; nextblock?: { version?: string } };
+  const stamped = manifest.nextblock?.version?.trim();
+  return stamped || manifest.version || '0.0.0';
+}
+
+/** Latest published `create-nextblock` version, or null when the registry is unreachable. */
+async function fetchLatestFromNpm(): Promise<string | null> {
+  try {
+    const res = await fetch(NPM_REGISTRY_API, {
+      headers: { Accept: 'application/vnd.npm.install-v1+json, application/json' },
+      signal: AbortSignal.timeout(15_000),
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { version?: string };
+    const version = body.version?.trim();
+    return version && /^\d+\.\d+\.\d+/.test(version) ? version : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Is this install the NextBlock MONOREPO (a Vercel 1-click deploy, a GitHub fork, or a
+ * clone) rather than the flattened standalone app that `npm create nextblock` produces?
+ *
+ * This — not the hosting platform — is what decides whether the upstream-sync GitHub
+ * Action can work, because that Action merges the monorepo (`apps/`, `libs/`, `tools/`,
+ * `nx.json`) into the repository. Merging it into a flat standalone project, whose tree is
+ * `app/`, `components/`, `lib/`, would wreck the project. A standalone app pushed to GitHub
+ * and deployed on Vercel is still standalone; where it is hosted is irrelevant.
+ *
+ * The marker lives in the bundled package.json (`nextblock.install`) so it is readable on a
+ * serverless filesystem, where neither `nx.json` nor `.github/` is traced into the function.
+ * Projects scaffolded before that marker existed fall back to filesystem probes and then to
+ * 'standalone' — which at worst shows a 1-click deploy an extra update banner, and is the
+ * safe default: it never offers to install the Action where it would do damage.
+ */
+export function isMonorepoInstall(): boolean {
+  const manifest = pkg as { nextblock?: { install?: string } };
+  const declared = manifest.nextblock?.install;
+  if (declared === 'monorepo') return true;
+  if (declared === 'standalone') return false;
+
+  const cwd = process.cwd();
+  try {
+    if (existsSync(path.join(cwd, 'nx.json'))) return true;
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (existsSync(path.join(cwd, '.github', 'workflows', 'nextblock-sync.yml'))) return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+/**
  * Classify how this install receives updates. Explicit NEXTBLOCK_UPDATE_TRACK wins;
- * otherwise Vercel / repos carrying the sync workflow or an upstream remote are 'git'
- * (Track A), everything else is 'standalone' (Track B).
+ * otherwise a monorepo-shaped install with a resolvable GitHub repo is 'git' (Track A —
+ * the daily Action merges upstream for it), and everything else is 'standalone' (Track B —
+ * it needs `npm run update`).
+ *
+ * Deliberately NOT keyed on `process.env.VERCEL`: a standalone project deployed to Vercel
+ * used to be classified 'git', which suppressed its update banner entirely while no Action
+ * existed to update it — leaving it silently frozen.
  */
 function detectTrack(): UpdateTrack {
   const override = process.env.NEXTBLOCK_UPDATE_TRACK?.trim().toLowerCase();
   if (override === 'git' || override === 'standalone') return override;
+  if (!isMonorepoInstall()) return 'standalone';
 
-  if (process.env.VERCEL === '1') return 'git';
   if (resolveSelfRepo()) {
-    // A resolvable GitHub repo identity means git-backed; double-check it's a NextBlock fork.
     const cwd = process.cwd();
     try {
       if (existsSync(path.join(cwd, '.github', 'workflows', 'nextblock-sync.yml'))) return 'git';
@@ -111,16 +189,77 @@ function detectTrack(): UpdateTrack {
     } catch {
       /* ignore */
     }
+    // Monorepo-shaped and GitHub-hosted, but the workflow isn't visible from here (normal
+    // on a serverless filesystem). Trust the layout marker.
+    return 'git';
   }
   return 'standalone';
 }
 
 /**
- * Poll GitHub Releases and, on a standalone install with a newer release, record a
- * runtime_update_available alert (deduped by latest version). Never throws.
+ * Determine the newest published NextBlock version. The npm registry is authoritative
+ * (see NPM_REGISTRY_API); GitHub Releases is the fallback and also supplies the release
+ * notes / archive links when a release exists.
+ */
+async function resolveLatestRelease(): Promise<{
+  latestVersion: string | null;
+  release: {
+    tag_name?: string;
+    html_url?: string;
+    tarball_url?: string;
+    zipball_url?: string;
+    published_at?: string;
+  } | null;
+  error?: string;
+}> {
+  const [npmVersion, githubResult] = await Promise.all([
+    fetchLatestFromNpm(),
+    (async () => {
+      try {
+        const res = await fetch(RELEASES_API, {
+          headers: githubHeaders(),
+          signal: AbortSignal.timeout(15_000),
+          next: { revalidate: 3600 },
+        });
+        if (res.status === 404) return { release: null }; // no releases cut yet
+        if (!res.ok) return { release: null, error: `GitHub Releases API returned HTTP ${res.status}.` };
+        return { release: await res.json() };
+      } catch (caught) {
+        return {
+          release: null,
+          error:
+            caught instanceof Error
+              ? `Could not reach the GitHub Releases API: ${caught.message}`
+              : 'Could not reach the GitHub Releases API.',
+        };
+      }
+    })(),
+  ]);
+
+  const tagVersion = githubResult.release?.tag_name?.trim().replace(/^v/i, '') || null;
+  // Whichever source is ahead wins: a hand-cut tag can lag npm, and npm can lag a
+  // release that was published before the packages went out.
+  const latestVersion =
+    npmVersion && tagVersion
+      ? compareSemver(npmVersion, tagVersion) >= 0
+        ? npmVersion
+        : tagVersion
+      : (npmVersion ?? tagVersion);
+
+  return {
+    latestVersion,
+    release: githubResult.release,
+    // Only surface the GitHub error when npm did not answer either.
+    error: latestVersion ? undefined : githubResult.error,
+  };
+}
+
+/**
+ * Resolve the newest published version and, on a standalone install that is behind,
+ * record a runtime_update_available alert (deduped by latest version). Never throws.
  */
 export async function checkForUpstreamUpdate(): Promise<UpstreamUpdateResult> {
-  const currentVersion = pkg.version;
+  const currentVersion = readInstalledVersion();
   const track = detectTrack();
   const base: UpstreamUpdateResult = {
     ok: false,
@@ -131,40 +270,15 @@ export async function checkForUpstreamUpdate(): Promise<UpstreamUpdateResult> {
     alertRecorded: false,
   };
 
-  let release: {
-    tag_name?: string;
-    html_url?: string;
-    tarball_url?: string;
-    zipball_url?: string;
-    published_at?: string;
-  };
-  try {
-    const res = await fetch(RELEASES_API, {
-      headers: githubHeaders(),
-      signal: AbortSignal.timeout(15_000),
-      next: { revalidate: 3600 },
-    });
-    if (res.status === 404) return { ...base, ok: true }; // no releases yet
-    if (!res.ok) return { ...base, error: `GitHub Releases API returned HTTP ${res.status}.` };
-    release = await res.json();
-  } catch (caught) {
-    return {
-      ...base,
-      error:
-        caught instanceof Error
-          ? `Could not reach the GitHub Releases API: ${caught.message}`
-          : 'Could not reach the GitHub Releases API.',
-    };
-  }
+  const { latestVersion, release, error } = await resolveLatestRelease();
+  if (error) return { ...base, error };
+  if (!latestVersion) return { ...base, ok: true }; // nothing published yet
 
-  const tag = release.tag_name?.trim();
-  if (!tag) return { ...base, ok: true };
-
-  const latestVersion = tag.replace(/^v/i, '');
+  const tag = release?.tag_name?.trim() || `v${latestVersion}`;
   const tarballUrl =
-    release.tarball_url || `https://github.com/${UPSTREAM_REPO}/archive/refs/tags/${tag}.tar.gz`;
+    release?.tarball_url || `https://github.com/${UPSTREAM_REPO}/archive/refs/tags/${tag}.tar.gz`;
   const zipballUrl =
-    release.zipball_url || `https://github.com/${UPSTREAM_REPO}/archive/refs/tags/${tag}.zip`;
+    release?.zipball_url || `https://github.com/${UPSTREAM_REPO}/archive/refs/tags/${tag}.zip`;
   const updateAvailable = compareSemver(latestVersion, currentVersion) > 0;
 
   const result: UpstreamUpdateResult = {
@@ -172,10 +286,10 @@ export async function checkForUpstreamUpdate(): Promise<UpstreamUpdateResult> {
     ok: true,
     latestVersion,
     updateAvailable,
-    htmlUrl: release.html_url,
+    htmlUrl: release?.html_url,
     tarballUrl,
     zipballUrl,
-    publishedAt: release.published_at,
+    publishedAt: release?.published_at,
   };
 
   // Git-backed installs auto-merge via Track A — no runtime update alert for them.
@@ -183,11 +297,15 @@ export async function checkForUpstreamUpdate(): Promise<UpstreamUpdateResult> {
 
   try {
     const supabase = getServiceRoleSupabaseClient();
+    // Deliberately NOT filtered on is_resolved: an admin who dismisses the banner for a
+    // given version has answered for that version, and re-inserting it on the next
+    // 6-hour poll would make the banner un-dismissable. A genuinely newer version
+    // carries a different latest_version and still alerts.
     const { data: existing } = await supabase
       .from('system_alerts')
       .select('id, metadata')
       .eq('alert_type', 'runtime_update_available')
-      .eq('is_resolved', false)
+      .order('created_at', { ascending: false })
       .limit(50);
 
     const alreadyAlerted = (existing ?? []).some(
@@ -196,19 +314,22 @@ export async function checkForUpstreamUpdate(): Promise<UpstreamUpdateResult> {
     );
     if (alreadyAlerted) return result;
 
-    const { error } = await supabase.from('system_alerts').insert({
+    const { error: insertError } = await supabase.from('system_alerts').insert({
       alert_type: 'runtime_update_available',
       title: `NextBlock ${latestVersion} is available`,
-      message: `A newer NextBlock release (${latestVersion}) is available — you are on ${currentVersion}. Download the release archive, replace your files, and update dependencies to upgrade.`,
+      message: `NextBlock ${latestVersion} is out — you are on ${currentVersion}. Run "npm run update" in your project to upgrade the code, dependencies and database schema in one step.`,
       metadata: {
         latest_version: latestVersion,
         current_version: currentVersion,
+        update_command: 'npm run update',
         download_url: tarballUrl,
         zipball_url: zipballUrl,
-        html_url: release.html_url ?? null,
+        html_url: release?.html_url ?? null,
       },
     });
-    if (error) return { ...result, error: `Could not record the update alert: ${error.message}` };
+    if (insertError) {
+      return { ...result, error: `Could not record the update alert: ${insertError.message}` };
+    }
     return { ...result, alertRecorded: true };
   } catch (caught) {
     return {
@@ -411,7 +532,7 @@ export async function markSyncWorkflowInstalled(): Promise<void> {
     const self = resolveSelfRepo();
     const snapshot: UpstreamStatusSnapshot = {
       checked_at: new Date().toISOString(),
-      current_version: prev?.current_version ?? pkg.version,
+      current_version: prev?.current_version ?? readInstalledVersion(),
       latest_version: prev?.latest_version ?? null,
       update_available: prev?.update_available ?? false,
       track: prev?.track ?? 'git',

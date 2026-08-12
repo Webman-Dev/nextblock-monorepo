@@ -1,13 +1,18 @@
 {
   "name": "@nextblock-cms/template",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "private": true,
+  "nextblock": {
+    "install": "standalone"
+  },
   "scripts": {
     "dev": "next dev",
     "prebuild": "node tools/build-migrate.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "update": "node tools/update.mjs",
+    "update:check": "node tools/update.mjs --check",
     "deploy:supabase": "node tools/deploy-supabase.js",
     "configure:supabase-auth": "node tools/configure-supabase-auth.js",
     "docker:setup": "node scripts/docker-setup.mjs",

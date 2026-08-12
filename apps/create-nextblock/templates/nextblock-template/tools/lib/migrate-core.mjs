@@ -1,0 +1,569 @@
+// Shared, dependency-light migration engine.
+//
+// Consumers:
+//   * tools/build-migrate.mjs — the gated `prebuild` hook (Vercel production /
+//     NEXTBLOCK_BUILD_MIGRATE=1). It must NEVER fail a build, so it imports this
+//     module dynamically inside a try/catch.
+//   * tools/update.mjs        — the explicit `npm run update` command, which applies
+//     migrations on purpose and reports what it did.
+//
+// Behaviourally in lockstep with apps/nextblock/lib/setup/schema-apply.ts (the /setup
+// wizard's applier): same tracking table, same one-transaction-per-file contract, same
+// two backends. This file is plain ESM with no app/server-only imports so it loads in
+// any build or CLI context.
+//
+// The one deliberate difference from schema-apply.ts is collectMigrations(): it UNIONS
+// every place migrations can live rather than picking the first hit. That is what keeps
+// a standalone (`npm create nextblock`) project honest — see the comment there.
+
+import { existsSync, readdirSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+
+const MIGRATION_FILE_RE = /^\d+_.*\.sql$/;
+
+/* ------------------------------------------------------------------ env --- */
+
+/** Best-effort .env.local / .env load. dotenv is a dependency; tolerate its absence. */
+export async function loadEnvFiles(cwd = process.cwd()) {
+  try {
+    const dotenv = await import('dotenv');
+    for (const file of ['.env.local', '.env']) {
+      const p = path.join(cwd, file);
+      if (existsSync(p)) dotenv.config({ path: p, override: false, quiet: true });
+    }
+  } catch {
+    /* dotenv unavailable — env may already be injected by the platform */
+  }
+}
+
+/**
+ * Supabase URL through the full alias chain (see docs/12): the hosted Vercel Supabase
+ * Marketplace integration injects SUPABASE_URL, the classic integration injects
+ * NEXT_PUBLIC_SUPABASE_URL. Accept both, plus the self-hosted API URL.
+ */
+export function resolveSupabaseUrl() {
+  return (
+    process.env['NEXT_PUBLIC_SUPABASE_URL'] ||
+    process.env['SUPABASE_URL'] ||
+    process.env['NEXT_PUBLIC_SUPABASE_API_URL'] ||
+    ''
+  ).trim();
+}
+
+/** Supabase project ref, from an explicit id or parsed out of a *.supabase.co URL. */
+export function resolveProjectRef() {
+  const fromId = process.env['SUPABASE_PROJECT_ID']?.trim();
+  if (fromId) return fromId;
+  try {
+    const host = new URL(resolveSupabaseUrl()).hostname;
+    if (host.endsWith('.supabase.co') || host.endsWith('.supabase.in')) return host.split('.')[0];
+  } catch {
+    /* not a cloud URL */
+  }
+  return null;
+}
+
+/** Direct Postgres connection string, if one is configured. */
+export function resolveDbUrl() {
+  return (process.env['POSTGRES_URL'] || process.env['DATABASE_URL'] || '').trim() || null;
+}
+
+/**
+ * TLS setting for a direct Postgres connection.
+ *
+ * Supabase and every other managed host require TLS, but a self-hosted Postgres on
+ * localhost or a Docker service name typically speaks no TLS at all — and the `postgres`
+ * driver's `ssl: 'require'` is a hard failure there, not a downgrade. Pick per host, and
+ * always defer to an explicit sslmode/ssl in the connection string.
+ */
+function resolveSslOption(dbUrl) {
+  let url;
+  try {
+    url = new URL(dbUrl);
+  } catch {
+    return 'require'; // unparseable — keep the safe default
+  }
+  if (url.searchParams.has('sslmode') || url.searchParams.has('ssl')) return undefined;
+
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  const isLoopback = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  const isPrivate =
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    host.endsWith('.internal') ||
+    host.endsWith('.local') ||
+    !host.includes('.'); // a bare docker-compose service name, e.g. "db"
+
+  // 'prefer' negotiates TLS when offered and falls back to plaintext when it is not.
+  return isLoopback || isPrivate ? 'prefer' : 'require';
+}
+
+/** Open a driver connection with host-appropriate TLS. */
+async function openPostgres(dbUrl) {
+  const { default: postgres } = await import('postgres');
+  const ssl = resolveSslOption(dbUrl);
+  return postgres(dbUrl, {
+    ...(ssl === undefined ? {} : { ssl }),
+    onnotice: () => undefined,
+    max: 1,
+  });
+}
+
+/** Describe which backend applyMigrations() would use, without connecting. */
+export function describeBackend() {
+  const ref = resolveProjectRef();
+  const token = process.env['SUPABASE_ACCESS_TOKEN']?.trim();
+  if (ref && token) return { kind: 'management-api', detail: `Supabase project ${ref}` };
+  const dbUrl = resolveDbUrl();
+  if (dbUrl) {
+    let host = 'the database';
+    try {
+      host = new URL(dbUrl).host;
+    } catch {
+      /* unparseable — keep the generic label rather than leaking the string */
+    }
+    return { kind: 'postgres', detail: host };
+  }
+  return { kind: 'none', detail: 'no POSTGRES_URL and no SUPABASE_ACCESS_TOKEN' };
+}
+
+/* ------------------------------------------------------- discovering SQL --- */
+
+/**
+ * Walk up from `startDir` calling `predicate(dir)`. A truthy return is the result; `false`
+ * is an explicit "stop here, no result" boundary; `null`/`undefined` continues upward.
+ */
+function walkUpFor(startDir, predicate, maxDepth = 8) {
+  let dir = startDir;
+  for (let i = 0; i < maxDepth; i++) {
+    const hit = predicate(dir);
+    if (hit) return hit;
+    if (hit === false) return null;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+/** The monorepo's canonical migrations dir, found via the nearest nx.json ancestor. */
+function monorepoMigrationsDir(cwd) {
+  return walkUpFor(cwd, (dir) => {
+    if (!existsSync(path.join(dir, 'nx.json'))) return null;
+    const candidate = path.join(dir, 'libs', 'db', 'src', 'supabase', 'migrations');
+    return existsSync(candidate) ? candidate : null;
+  });
+}
+
+/**
+ * A standalone project's materialized dir: <projectRoot>/supabase/migrations.
+ *
+ * The walk stops at the project root — the nearest ancestor holding a package.json — so a
+ * NextBlock checkout nested inside an unrelated Supabase CLI project (e.g.
+ * ~/work/mysite/nextblock under a ~/work/mysite that has its own supabase/migrations)
+ * cannot pick up that project's SQL and apply it to this one's database.
+ */
+function projectMigrationsDir(cwd) {
+  return walkUpFor(cwd, (dir) => {
+    const candidate = path.join(dir, 'supabase', 'migrations');
+    if (existsSync(candidate)) return candidate;
+    // Reached the project root without a hit — do not escape into the parent tree.
+    return existsSync(path.join(dir, 'package.json')) ? false : null;
+  });
+}
+
+/**
+ * The migrations shipped inside the installed @nextblock-cms/db package.
+ *
+ * This is the copy that `npm install @nextblock-cms/db@newer` refreshes. A standalone
+ * project's <project>/supabase/migrations is materialized ONCE, at scaffold time, and
+ * nothing ever refreshed it — so before this existed, upgrading the package moved the
+ * generated TypeScript types forward while leaving the schema behind, and the app failed
+ * at runtime with `column "…" does not exist`. Including it here closes that gap even for
+ * users who never run `npm run update`.
+ */
+function packageMigrationsDir(cwd) {
+  const suffix = path.join('supabase', 'migrations');
+  try {
+    const require = createRequire(path.join(cwd, 'noop.js'));
+    const pkgJson = require.resolve('@nextblock-cms/db/package.json');
+    const candidate = path.join(path.dirname(pkgJson), suffix);
+    if (existsSync(candidate)) return candidate;
+  } catch {
+    /* not installed, or an exports map that hides package.json — fall through */
+  }
+  return walkUpFor(cwd, (dir) => {
+    const candidate = path.join(dir, 'node_modules', '@nextblock-cms', 'db', suffix);
+    return existsSync(candidate) ? candidate : null;
+  });
+}
+
+function listMigrationFiles(dir) {
+  try {
+    return readdirSync(dir).filter((name) => MIGRATION_FILE_RE.test(name)).sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Collect every migration reachable from `cwd`, deduped by version.
+ *
+ * Precedence is first-source-wins per version, in this order:
+ *   1. the monorepo's libs/db (authoritative when you are IN the monorepo),
+ *   2. the project's own supabase/migrations (what Docker mounts and what a user may
+ *      have hand-added a migration to),
+ *   3. node_modules/@nextblock-cms/db (the freshest copy after an npm upgrade).
+ *
+ * Versions unique to a later source are still included — that union is the point.
+ *
+ * @returns {{files: Array<{version: string, name: string, dir: string}>,
+ *            sources: Array<{label: string, dir: string, count: number, contributed: number}>}}
+ */
+export function collectMigrations(cwd = process.cwd()) {
+  const candidates = [
+    { label: 'monorepo', dir: monorepoMigrationsDir(cwd) },
+    { label: 'project', dir: projectMigrationsDir(cwd) },
+    { label: 'package', dir: packageMigrationsDir(cwd) },
+  ];
+
+  const byVersion = new Map();
+  const sources = [];
+  const seenDirs = new Set();
+
+  for (const { label, dir } of candidates) {
+    if (!dir) continue;
+    const key = path.resolve(dir).toLowerCase();
+    if (seenDirs.has(key)) continue; // the monorepo and project probes can land on one dir
+    seenDirs.add(key);
+
+    const names = listMigrationFiles(dir);
+    let contributed = 0;
+    for (const name of names) {
+      const version = name.split('_')[0];
+      if (byVersion.has(version)) continue;
+      byVersion.set(version, { version, name, dir });
+      contributed += 1;
+    }
+    sources.push({ label, dir, count: names.length, contributed });
+  }
+
+  const files = [...byVersion.values()].sort((a, b) => a.version.localeCompare(b.version));
+  return { files, sources };
+}
+
+/** Read one collected migration's SQL. */
+export function readMigrationSql(entry) {
+  return readFile(path.join(entry.dir, entry.name), 'utf8');
+}
+
+/* -------------------------------------------------------------- applying --- */
+
+// SQL kept in lockstep with apps/nextblock/lib/setup/schema-apply.ts.
+const TRACKING_DDL =
+  'create schema if not exists supabase_migrations;' +
+  'create table if not exists supabase_migrations.schema_migrations ' +
+  '(version text primary key, name text, statements text[]);';
+
+const GRANTS_SQL =
+  'grant usage on schema public to anon, authenticated, service_role;' +
+  'grant select on all tables in schema public to anon;' +
+  'grant all on all tables in schema public to authenticated, service_role;' +
+  'grant all on all sequences in schema public to anon, authenticated, service_role;' +
+  'grant execute on all functions in schema public to anon, authenticated, service_role;';
+
+function recordSql(version, file) {
+  return (
+    `insert into supabase_migrations.schema_migrations (version, name) ` +
+    `values ('${version}', '${file.replace(/'/g, "''")}') on conflict (version) do nothing;`
+  );
+}
+
+/** Wrap a migration file + its version record in one transaction (all-or-nothing). */
+function transactionalMigration(version, file, sqlText) {
+  return `begin;\n${sqlText}\n;\n${recordSql(version, file)}\ncommit;`;
+}
+
+function friendlyError(message) {
+  const unreachable = /ENOTFOUND|ENOENT|EAI_AGAIN|getaddrinfo|ECONNREFUSED|ETIMEDOUT/i.test(message);
+  return unreachable
+    ? `could not reach the database host (${message}); use the Session pooler connection string for IPv4 build networks`
+    : message;
+}
+
+/** Backend 1: Supabase Management API (HTTPS). Works anywhere outbound HTTPS works. */
+async function managementApiQuery(ref, token, query) {
+  const url = `https://api.supabase.com/v1/projects/${ref}/database/query`;
+  let lastError = 'unknown error';
+  for (let attempt = 0; attempt < 4; attempt++) {
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+        signal: AbortSignal.timeout(120_000),
+      });
+    } catch (caught) {
+      lastError = caught instanceof Error ? caught.message : 'network error';
+      await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+      continue;
+    }
+    if (res.ok) {
+      const text = await res.text();
+      if (!text) return [];
+      try {
+        return JSON.parse(text);
+      } catch {
+        return [];
+      }
+    }
+    const body = await res.text().catch(() => '');
+    const isHtml = /<!doctype|<html/i.test(body);
+    lastError = `Supabase Management API ${res.status}${
+      isHtml ? ': gateway error (HTML response)' : body ? `: ${body.slice(0, 200).trim()}` : ''
+    }`;
+    // 4xx (other than rate limiting) will not get better on retry.
+    if (res.status !== 429 && res.status < 500) break;
+    await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+  }
+  throw new Error(lastError);
+}
+
+function toRows(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw?.result)) return raw.result;
+  if (Array.isArray(raw?.data)) return raw.data;
+  return [];
+}
+
+async function applyViaManagementApi(ref, token, files, readSql, onApplied) {
+  const run = (query) => managementApiQuery(ref, token, query);
+  let applied = 0;
+  try {
+    await run(TRACKING_DDL);
+    const done = new Set(
+      toRows(await run('select version from supabase_migrations.schema_migrations;'))
+        .map((r) => r.version)
+        .filter(Boolean),
+    );
+    if (done.size > 0) {
+      const exists = toRows(await run("select to_regclass('public.site_settings') as t;"))[0]?.t;
+      if (exists == null) {
+        await run('delete from supabase_migrations.schema_migrations;');
+        done.clear();
+      }
+    }
+    for (const entry of files) {
+      if (done.has(entry.version)) continue;
+      await run(transactionalMigration(entry.version, entry.name, await readSql(entry)));
+      applied += 1;
+      onApplied?.(entry);
+    }
+    await run(GRANTS_SQL);
+    await run("notify pgrst, 'reload schema';");
+    return { ok: true, applied, backend: 'management-api' };
+  } catch (caught) {
+    const message = caught instanceof Error ? caught.message : 'unknown error applying migrations';
+    return { ok: false, applied, backend: 'management-api', error: friendlyError(message) };
+  }
+}
+
+/** Backend 2: direct Postgres connection. */
+async function applyViaPostgres(dbUrl, files, readSql, onApplied) {
+  let db;
+  try {
+    db = await openPostgres(dbUrl);
+  } catch {
+    return {
+      ok: false,
+      applied: 0,
+      backend: 'postgres',
+      error: 'the "postgres" package is not installed',
+    };
+  }
+
+  let applied = 0;
+  try {
+    await db.unsafe(TRACKING_DDL);
+    const rows = await db`select version from supabase_migrations.schema_migrations`;
+    const done = new Set(rows.map((r) => r.version));
+
+    // Self-heal stale history: recorded versions but a core table missing means the
+    // schema was wiped without clearing history (it lives in a separate schema).
+    if (done.size > 0) {
+      const sentinel = await db`select to_regclass('public.site_settings')::text as t`;
+      if (!sentinel[0]?.t) {
+        await db`delete from supabase_migrations.schema_migrations`;
+        done.clear();
+      }
+    }
+
+    for (const entry of files) {
+      if (done.has(entry.version)) continue;
+      await db.unsafe(transactionalMigration(entry.version, entry.name, await readSql(entry)));
+      applied += 1;
+      onApplied?.(entry);
+    }
+
+    await db.unsafe(GRANTS_SQL);
+    await db.unsafe("notify pgrst, 'reload schema';");
+    return { ok: true, applied, backend: 'postgres' };
+  } catch (caught) {
+    const message = caught instanceof Error ? caught.message : 'unknown error applying migrations';
+    return { ok: false, applied, backend: 'postgres', error: friendlyError(message) };
+  } finally {
+    try {
+      await db.end({ timeout: 5 });
+    } catch {
+      /* closing should never mask the result */
+    }
+  }
+}
+
+/**
+ * Read the versions already recorded in supabase_migrations.schema_migrations, so a
+ * caller can preview what is pending without applying anything.
+ *
+ * @returns {Promise<{ok: boolean, versions: Set<string>, error?: string}>}
+ */
+export async function readAppliedVersions() {
+  const ref = resolveProjectRef();
+  const token = process.env['SUPABASE_ACCESS_TOKEN']?.trim();
+  if (ref && token) {
+    try {
+      // Probe for the tracking table before selecting from it. A database that has never
+      // been migrated — or one reset by the /setup wizard, whose RESET_SQL drops the
+      // supabase_migrations schema — has no such relation, and Postgres raises 42P01 at
+      // parse time regardless of any WHERE clause. Without this the preview would fail
+      // where the applier (which creates the table itself) would have succeeded.
+      const [tracked] = toRows(
+        await managementApiQuery(
+          ref,
+          token,
+          "select to_regclass('supabase_migrations.schema_migrations')::text as t;",
+        ),
+      );
+      if (!tracked?.t) return { ok: true, versions: new Set() };
+
+      const [sentinel] = toRows(
+        await managementApiQuery(ref, token, "select to_regclass('public.site_settings')::text as t;"),
+      );
+      if (!sentinel?.t) return { ok: true, versions: new Set() }; // history is lying; all replay
+
+      const rows = toRows(
+        await managementApiQuery(ref, token, 'select version from supabase_migrations.schema_migrations;'),
+      );
+      return { ok: true, versions: new Set(rows.map((r) => r.version).filter(Boolean)) };
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'unknown error';
+      return { ok: false, versions: new Set(), error: friendlyError(message) };
+    }
+  }
+
+  const dbUrl = resolveDbUrl();
+  if (!dbUrl) {
+    return { ok: false, versions: new Set(), error: describeBackend().detail };
+  }
+
+  let db;
+  try {
+    db = await openPostgres(dbUrl);
+  } catch {
+    return { ok: false, versions: new Set(), error: 'the "postgres" package is not installed' };
+  }
+  try {
+    // A brand-new database has neither the tracking table nor public.site_settings.
+    const [{ t: tracked }] = await db`
+      select to_regclass('supabase_migrations.schema_migrations')::text as t`;
+    if (!tracked) return { ok: true, versions: new Set() };
+    const [{ t: sentinel }] = await db`select to_regclass('public.site_settings')::text as t`;
+    if (!sentinel) return { ok: true, versions: new Set() }; // history is lying; everything replays
+    const rows = await db`select version from supabase_migrations.schema_migrations`;
+    return { ok: true, versions: new Set(rows.map((r) => r.version)) };
+  } catch (caught) {
+    const message = caught instanceof Error ? caught.message : 'unknown error';
+    return { ok: false, versions: new Set(), error: friendlyError(message) };
+  } finally {
+    try {
+      await db.end({ timeout: 5 });
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/**
+ * Run one ad-hoc statement over whichever backend is available. Used for small
+ * housekeeping writes (e.g. resolving the dashboard's "update available" alert once an
+ * update really landed). Never throws — callers inspect `ok`.
+ *
+ * @returns {Promise<{ok: boolean, error?: string}>}
+ */
+export async function runSql(sql) {
+  const ref = resolveProjectRef();
+  const token = process.env['SUPABASE_ACCESS_TOKEN']?.trim();
+  if (ref && token) {
+    try {
+      await managementApiQuery(ref, token, sql);
+      return { ok: true };
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'unknown error';
+      return { ok: false, error: friendlyError(message) };
+    }
+  }
+
+  const dbUrl = resolveDbUrl();
+  if (!dbUrl) return { ok: false, error: describeBackend().detail };
+
+  let db;
+  try {
+    db = await openPostgres(dbUrl);
+  } catch {
+    return { ok: false, error: 'the "postgres" package is not installed' };
+  }
+  try {
+    await db.unsafe(sql);
+    return { ok: true };
+  } catch (caught) {
+    const message = caught instanceof Error ? caught.message : 'unknown error';
+    return { ok: false, error: friendlyError(message) };
+  } finally {
+    try {
+      await db.end({ timeout: 5 });
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/**
+ * Apply every pending migration, preferring the Management API and falling back to a
+ * direct Postgres connection. Never throws — callers inspect `ok`.
+ *
+ * @param {Array<{version: string, name: string, dir: string}>} files
+ * @param {{onApplied?: (entry: object) => void}} [options]
+ * @returns {Promise<{ok: boolean, applied: number, backend: string, error?: string}>}
+ */
+export async function applyMigrations(files, options = {}) {
+  const readSql = options.readSql ?? readMigrationSql;
+  const ref = resolveProjectRef();
+  const token = process.env['SUPABASE_ACCESS_TOKEN']?.trim();
+  if (ref && token) {
+    return applyViaManagementApi(ref, token, files, readSql, options.onApplied);
+  }
+  const dbUrl = resolveDbUrl();
+  if (dbUrl) {
+    return applyViaPostgres(dbUrl, files, readSql, options.onApplied);
+  }
+  return {
+    ok: false,
+    applied: 0,
+    backend: 'none',
+    error:
+      'No Supabase access token or Postgres connection string is available to apply migrations.',
+  };
+}

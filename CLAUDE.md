@@ -114,12 +114,24 @@ Subsystems that span many files (each has a doc):
   Everything from `004` onward is an ordinary incremental migration appended since the
   re-baseline, and they'll be squashed into the baseline again at the next cleanup. So don't
   trust a hardcoded "next migration is N" anywhere in the docs — **list the folder and take
-  the number after the highest file on disk.** (`AGENTS.md` and `docs/04` still repeat the
-  stale `004`; fix them when you next touch either.)
+  the number after the highest file on disk.**
 
-- **After schema/seed changes**, regenerate types and the sandbox payload:
-  `npm run db:types`, then `npm run generate:sandbox` (writes
-  `apps/nextblock/app/api/cron/reset-sandbox/sandboxResetSql.ts`).
+- **After schema/seed changes**, regenerate all three derived artifacts:
+  `npm run db:types`, `npm run generate:migrations-bundle` (writes
+  `apps/nextblock/lib/setup/migrations-bundle.ts`, the `/setup` wizard's serverless
+  fallback), and `npm run generate:sandbox` (writes
+  `apps/nextblock/app/api/cron/reset-sandbox/sandboxResetSql.ts`). Both generators fail
+  silently by omission — the bundle sat three migrations behind for a while, which would
+  have left a serverless `/setup` applying an incomplete schema.
+
+- **`npm run update` is the one update command for every install** (`apps/nextblock/tools/update.mjs`,
+  synced into the template as `tools/update.mjs`). It detects the install shape and updates
+  code + dependencies + schema: a git merge/pull for the monorepo and forks, the published
+  `create-nextblock` package for standalone projects. The applier itself lives in
+  `apps/nextblock/tools/lib/migrate-core.mjs` and is shared with the `prebuild` hook
+  `build-migrate.mjs` — which loads it via a **guarded dynamic import** because that hook
+  must never fail a build. `collectMigrations()` deliberately unions the monorepo dir, the
+  project's `supabase/migrations`, and `node_modules/@nextblock-cms/db`. See `docs/13`.
 
 - **Cortex AI package id is `cortex-ai`, never `ai`.** AI config/client modules
   are server-only and throw if imported into client code; keep keys server-side.

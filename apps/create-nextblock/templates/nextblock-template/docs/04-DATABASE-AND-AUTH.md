@@ -104,7 +104,8 @@ Defined primarily in `00000000000002_setup_content_tables.sql`:
 
 ### Commerce tables
 
-Defined across `00000000000003` and `00000000000004`:
+All defined in the baseline schema `00000000000000` (the numbers `00000000000003`/
+`00000000000004` in earlier revisions of this doc were pre-re-baseline file names):
 
 - `products`
 - `product_media`

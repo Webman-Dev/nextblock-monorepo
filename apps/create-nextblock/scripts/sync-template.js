@@ -53,6 +53,7 @@ const IGNORED_SEGMENTS = new Set([
   'coverage',
   'backup',
   'backups',
+  '.nextblock-backup',
 ]);
 
 async function ensureTemplateSync() {
@@ -101,6 +102,9 @@ async function ensureTemplateSync() {
   await syncPackageVersions();
   await ensureDockerAssets();
   await removeTemplateProjectJson();
+  await removeBuildArtifacts();
+  await markTemplateAsStandalone();
+  await ensureTemplateReadme();
 
   console.log(chalk.green('Template sync complete.'));
 }
@@ -178,6 +182,9 @@ pnpm-debug.log*
 
 supabase/.temp
 supabase/.branches
+
+# Local safety copies written by \`npm run update\` when it replaces a framework file.
+.nextblock-backup/
 `;
   await fs.outputFile(destination, content);
 }
@@ -337,6 +344,96 @@ async function removeBackups() {
 async function removeTemplateProjectJson() {
   const projectJsonPath = resolve(TARGET_DIR, 'project.json');
   await fs.remove(projectJsonPath).catch(() => undefined);
+}
+
+// The wholesale copy of apps/nextblock brings its README, which is written for the MONOREPO:
+// it tells the reader to run `npx nx serve nextblock` (a script a scaffolded project does not
+// have) and links to `../../docs/*` (paths that do not exist outside the repo). Replace it
+// with one written for the project the CLI actually produces.
+async function ensureTemplateReadme() {
+  const content = `# NextBlock
+
+Your NextBlock site — a standalone Next.js app with the CMS, block editor and storefront
+built in. Everything here is yours to edit.
+
+## Everyday commands
+
+\`\`\`bash
+npm run dev             # start the dev server on http://localhost:3000
+npm run build           # production build (applies pending migrations first)
+npm start               # serve the production build
+npm run lint            # lint
+\`\`\`
+
+## Keeping NextBlock up to date
+
+\`\`\`bash
+npm run update              # code + dependencies + database schema, in one step
+npm run update -- --check   # show what would change; write nothing
+\`\`\`
+
+New framework code comes from the published \`create-nextblock\` package and is applied as a
+**git 3-way merge**, so edits you made to NextBlock's own files are preserved — only a change
+that genuinely overlaps yours conflicts, with the usual \`<<<<<<<\` markers. Your own pages,
+components, content and \`.env\` are never touched.
+
+If a merge does conflict, the update finishes the code and dependency work and **stops before
+touching the database**. Fix the conflicts, then run \`npm run update\` again to apply the
+migrations — or \`git reset --hard HEAD\` to back the whole update out. Either way the database
+is untouched until you say so.
+
+Commit your work before updating: a clean git tree is what lets you review the result with
+\`git diff\` and undo it with \`git reset\`.
+
+Full details: [docs/13-STAYING-UP-TO-DATE.md](./docs/13-STAYING-UP-TO-DATE.md).
+
+## Running the whole stack locally with Docker
+
+\`\`\`bash
+npm run docker:setup    # first run: generate .env, build, and start everything
+npm run docker:up       # rebuild and restart (also applies pending migrations)
+npm run docker:down     # stop (your data persists in Docker volumes)
+npm run docker:logs     # follow the app logs
+\`\`\`
+
+On a Docker install, run \`npm run update\` and then \`npm run docker:up\` — the stack applies
+the migrations itself.
+
+## Documentation
+
+The \`docs/\` folder ships with your project:
+
+- [01-PROJECT-OVERVIEW.md](./docs/01-PROJECT-OVERVIEW.md) — how the pieces fit together
+- [03-CMS-AND-EDITOR.md](./docs/03-CMS-AND-EDITOR.md) — the editor and block system
+- [04-DATABASE-AND-AUTH.md](./docs/04-DATABASE-AND-AUTH.md) — schema, auth and migrations
+- [10-CUSTOM-BLOCKS.md](./docs/10-CUSTOM-BLOCKS.md) — building your own blocks
+- [13-STAYING-UP-TO-DATE.md](./docs/13-STAYING-UP-TO-DATE.md) — updating
+`;
+  await fs.outputFile(resolve(TARGET_DIR, 'README.md'), content);
+}
+
+// apps/nextblock/package.json declares `nextblock.install = "monorepo"` — the marker that
+// tells the runtime the upstream-sync GitHub Action can work here, because the repository IS
+// the monorepo. The template is the flattened standalone app, where that Action would merge
+// apps/ + libs/ + nx.json into a tree that has none of them, so the marker must be flipped.
+// The CLI also sets this at scaffold time; doing it here as well means the template is
+// correct on its own, and the value is never wrong for even one step of the pipeline.
+async function markTemplateAsStandalone() {
+  const pkgPath = resolve(TARGET_DIR, 'package.json');
+  if (!(await fs.pathExists(pkgPath))) return;
+  const pkg = await fs.readJSON(pkgPath);
+  pkg.nextblock = { ...(pkg.nextblock ?? {}), install: 'standalone' };
+  await fs.writeJSON(pkgPath, pkg, { spaces: 2 });
+}
+
+// Build artifacts that the wholesale copy of apps/nextblock drags along. tsconfig.tsbuildinfo
+// alone is ~3.7 MB of incremental-compile state that is meaningless outside the monorepo, and
+// it shipped in the published CLI tarball and in every scaffolded project.
+async function removeBuildArtifacts() {
+  const targets = ['tsconfig.tsbuildinfo', '.DS_Store', 'Thumbs.db'];
+  await Promise.all(
+    targets.map((name) => fs.remove(resolve(TARGET_DIR, name)).catch(() => undefined)),
+  );
 }
 
 // Copy the standalone Docker assets into the template and register the docker:* npm scripts so a

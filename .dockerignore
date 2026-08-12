@@ -17,6 +17,7 @@ coverage
 .vercel
 backup
 backups
+.nextblock-backup
 *.log
 npm-debug.log*
 

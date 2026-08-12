@@ -5,9 +5,9 @@ import { createClient } from '@nextblock-cms/db/server';
 import { getStoreConfigStatus } from '@nextblock-cms/ecommerce/server';
 import { getEmailPublicSettings } from '../config/email-settings';
 import { getPrivacySettings } from '../privacy/settings';
-import { detectChannel } from '../setup/env-status';
 import { getSystemConfiguration } from '../setup/system-config';
 import { selfActionsSettingsUrl } from '../updates/repo-identity';
+import { isMonorepoInstall } from '../updates/check-upstream';
 import { isGithubConnectAvailable } from '../updates/github-device';
 
 export type OnboardingStep = {
@@ -178,10 +178,16 @@ export async function getOnboardingStatus(opts: {
     });
   }
 
-  // Git-backed (Vercel 1-click / fork) installs: remind the operator to enable GitHub
-  // Actions so the upstream sync workflow can run. "done" flips once the background poll
-  // (maybeRefreshUpstreamStatus) has seen the workflow run at least once.
-  if (detectChannel() === 'vercel') {
+  // Monorepo-shaped installs (Vercel 1-click, GitHub fork, clone): remind the operator to
+  // enable GitHub Actions so the upstream sync workflow can run. "done" flips once the
+  // background poll (maybeRefreshUpstreamStatus) has seen the workflow registered.
+  //
+  // Gated on the LAYOUT, not on the host. This step's Connect GitHub button installs a
+  // workflow that merges the NextBlock monorepo into the repository; offering it to a
+  // flattened standalone project — which the previous "is this Vercel?" gate did for every
+  // standalone app deployed on Vercel — would merge apps/ + libs/ + nx.json into a tree
+  // that has none of them. Standalone installs update with `npm run update` instead.
+  if (isMonorepoInstall()) {
     let actionsActive = false;
     try {
       const config = await getSystemConfiguration();
