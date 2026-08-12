@@ -1075,6 +1075,24 @@ async function updateSchema(install, core, flags) {
     fail(`Could not read the migration history: ${applied.error}`);
     return { ok: false, applied: 0 };
   }
+  // Versions recorded remotely that have no file here mean the two histories have diverged
+  // — most often an install that predates the July 2026 re-baseline, where the old 000–044
+  // numbering is still recorded. That matters because Supabase (and this applier) match
+  // history by VERSION ONLY, never by content: a local file whose number is already
+  // recorded is skipped in silence, with no error and no output. Warn rather than block —
+  // a hand-written migration of the operator's own is a perfectly legitimate cause.
+  const localVersions = new Set(files.map((f) => f.version));
+  const remoteOnly = [...applied.versions].filter((v) => !localVersions.has(v)).sort();
+  if (remoteOnly.length > 0) {
+    warn(`${remoteOnly.length} version(s) are recorded in the database with no matching file:`);
+    for (const v of remoteOnly.slice(0, 10)) info(C.dim(`  ${v}`));
+    if (remoteOnly.length > 10) info(C.dim(`  … and ${remoteOnly.length - 10} more`));
+    info('Migrations are matched by version, never by content, so a local file reusing one');
+    info('of those numbers would never run. If this install predates the migration');
+    info(`re-baseline, reconcile it once with ${C.cyan('npm run db:migrate:repair-history')}.`);
+    say();
+  }
+
   const pending = files.filter((f) => !applied.versions.has(f.version));
 
   if (pending.length === 0) {
