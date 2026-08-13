@@ -82,7 +82,7 @@ export async function submitFeedback(data: FeedbackData) {
     `;
 
     await sendEmail({
-      to: "feedback@nextblock.ca",
+      to: "feedback@nextblock.dev",
       // Newlines in a header would let a caller inject extra headers (Bcc, …).
       subject: `[CMS Feedback] ${subject.replace(/[\r\n]+/g, ' ')}`,
       text: textContent,

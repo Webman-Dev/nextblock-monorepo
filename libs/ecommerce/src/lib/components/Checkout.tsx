@@ -621,7 +621,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
         </p>
         <p className="text-muted-foreground mb-6">{t('ecommerce.license_notice')}</p>
         <a
-          href="https://nextblock.ca"
+          href="https://nextblock.dev"
           target="_blank"
           rel="noopener noreferrer"
           className="block w-full text-center py-3 px-4 rounded-lg bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity"

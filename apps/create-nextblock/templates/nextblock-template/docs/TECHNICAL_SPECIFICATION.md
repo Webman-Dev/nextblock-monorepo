@@ -10,7 +10,7 @@ NextBlock CMS is an AI-Native, Open-Core Content Management System purpose-built
 
 The system's central value proposition — "Speed. Scalability. AI-Readiness (coming soon)." — is encoded directly in its architectural decisions: a Next.js 16 App Router application (`apps/nextblock`) backed by Supabase, leveraging React Server Components, edge caching, and an image-optimization pipeline targeting a default 100/100 Lighthouse Performance score. Users bootstrap new projects in under thirty seconds via the `npm create nextblock@latest` CLI, which produces a standalone, production-ready Next.js application.
 
-A live sandbox instance at `https://cms.nextblock.ca/` (accessible with demo credentials `demo@nextblock.ca` / `password`) resets daily via a cron-triggered endpoint (`/api/cron/reset-sandbox`) to provide evaluators with a clean-state environment.
+A live sandbox instance at `https://cms.nextblock.dev/` (accessible with demo credentials `demo@nextblock.dev` / `password`) resets daily via a cron-triggered endpoint (`/api/cron/reset-sandbox`) to provide evaluators with a clean-state environment.
 
 ### 1.1.2 Core Business Problem
 
@@ -1187,7 +1187,7 @@ Two cron jobs are declared in `vercel.json`. The `/api/cron/reset-sandbox` endpo
 
 **Description**
 
-Sandbox mode is toggled via the `NEXT_PUBLIC_IS_SANDBOX` environment variable. When enabled, the application renders the `SandboxBanner` and `SandboxCredentialsAlert` components (with demo credentials `demo@nextblock.ca`/`password`), and relaxes Freemius webhook signature verification to tolerate signature mismatches. A live deployment at `https://cms.nextblock.ca/` demonstrates the feature and resets daily via F-025.
+Sandbox mode is toggled via the `NEXT_PUBLIC_IS_SANDBOX` environment variable. When enabled, the application renders the `SandboxBanner` and `SandboxCredentialsAlert` components (with demo credentials `demo@nextblock.dev`/`password`), and relaxes Freemius webhook signature verification to tolerate signature mismatches. A live deployment at `https://cms.nextblock.dev/` demonstrates the feature and resets daily via F-025.
 
 **Dependencies**
 
@@ -1262,7 +1262,7 @@ The workspace is an Nx 22.6.0 monorepo whose ESLint configuration in `eslint.con
 
 **Description**
 
-CMS users can submit feedback through the `FeedbackModal` component in `apps/nextblock/app/cms/components/FeedbackModal.tsx`. The server action `submitFeedback` in `apps/nextblock/app/actions/feedback.ts` dispatches email via `nodemailer` to the fixed inbox `feedback@nextblock.ca` with a `[CMS Feedback]` subject prefix.
+CMS users can submit feedback through the `FeedbackModal` component in `apps/nextblock/app/cms/components/FeedbackModal.tsx`. The server action `submitFeedback` in `apps/nextblock/app/actions/feedback.ts` dispatches email via `nodemailer` to the fixed inbox `feedback@nextblock.dev` with a `[CMS Feedback]` subject prefix.
 
 **Dependencies**
 
@@ -1429,7 +1429,7 @@ This subsection provides the detailed, testable requirements that operationalize
 | F-026-RQ-001 | Sandbox banner and credential alert MUST render when `NEXT_PUBLIC_IS_SANDBOX === 'true'` | Should-Have | Low |
 | F-027-RQ-001 | `/api/revalidate` MUST validate `REVALIDATE_SECRET_TOKEN` before calling `revalidatePath` | Must-Have | Medium |
 | F-028-RQ-001 | ESLint `@nx/enforce-module-boundaries` MUST enforce the three dependency rules from `.agent/skills/project-architecture/SKILL.md` | Must-Have | Medium |
-| F-029-RQ-001 | Feedback submissions MUST be routed to `feedback@nextblock.ca` with `[CMS Feedback]` subject prefix | Should-Have | Low |
+| F-029-RQ-001 | Feedback submissions MUST be routed to `feedback@nextblock.dev` with `[CMS Feedback]` subject prefix | Should-Have | Low |
 
 #### 2.2.4.2 Technical Specifications and Validation — Platform
 
@@ -3734,7 +3734,7 @@ flowchart LR
 
 ### 4.8.3 Error Notification Flows
 
-The primary error notification path is the Feedback System (F-029), which allows CMS users to submit feedback via the `FeedbackModal` component. The `submitFeedback` server action dispatches emails via `nodemailer` to the fixed inbox `feedback@nextblock.ca` with a `[CMS Feedback]` subject prefix.
+The primary error notification path is the Feedback System (F-029), which allows CMS users to submit feedback via the `FeedbackModal` component. The `submitFeedback` server action dispatches emails via `nodemailer` to the fixed inbox `feedback@nextblock.dev` with a `[CMS Feedback]` subject prefix.
 
 ```mermaid
 flowchart LR
@@ -3744,7 +3744,7 @@ flowchart LR
     Auth -->|No| Rejected[Reject]
     Auth -->|Yes| Nodemailer[nodemailer transport]
     Nodemailer --> SMTP[SMTP Server]
-    SMTP --> Inbox[feedback@nextblock.ca<br/>Subject: CMS Feedback]
+    SMTP --> Inbox[feedback@nextblock.dev<br/>Subject: CMS Feedback]
 ```
 
 ## 4.9 CLI SCAFFOLDING WORKFLOWS (F-023)
@@ -4702,7 +4702,7 @@ flowchart LR
 
 #### 5.4.3.4 Error Notification Path
 
-The primary error notification path is the Feedback System (F-029), which allows CMS users to submit feedback via the `FeedbackModal` component. The `submitFeedback` server action dispatches emails via `nodemailer` to the fixed inbox `feedback@nextblock.ca` with a `[CMS Feedback]` subject prefix.
+The primary error notification path is the Feedback System (F-029), which allows CMS users to submit feedback via the `FeedbackModal` component. The `submitFeedback` server action dispatches emails via `nodemailer` to the fixed inbox `feedback@nextblock.dev` with a `[CMS Feedback]` subject prefix.
 
 ### 5.4.4 Authentication and Authorization Framework
 
@@ -8298,7 +8298,7 @@ The following minimal observability practices are in place and documented throug
 | Structured log emission | JSON-shaped `console.log` events in `proxy.ts` and `/api/revalidate-log` | Vercel platform log stream |
 | Critical-failure log preservation | `compiler.removeConsole` preserves `warn` and `error` | Vercel platform log stream |
 | Admin content dashboard | `/cms/dashboard` with live Supabase counts | CMS UI |
-| Manual alert channel | `FeedbackModal` → `submitFeedback` → `nodemailer` → `feedback@nextblock.ca` | SMTP inbox |
+| Manual alert channel | `FeedbackModal` → `submitFeedback` → `nodemailer` → `feedback@nextblock.dev` | SMTP inbox |
 | Scheduled-job health | Vercel cron execution status | Vercel dashboard |
 
 #### 6.5.1.3 Explicitly Out-of-Scope Monitoring Concepts
@@ -8393,7 +8393,7 @@ No dedicated alert manager is deployed. Alert pathways fall into three categorie
 
 ##### 6.5.2.4.1 User-Initiated Feedback Channel (F-029)
 
-The primary alert pathway is the **Feedback System** implemented by `FeedbackModal.tsx` in the CMS layout and backed by the `submitFeedback` server action in `apps/nextblock/app/actions/feedback.ts`. The modal presents a subject dropdown (`suggestion`, `bug`, `feature`, `other`), and the server action dispatches an email via `nodemailer ^7.0.10` to the fixed inbox `feedback@nextblock.ca` with a `[CMS Feedback]` subject prefix. Transport credentials are env-configured (SMTP host, port, user, pass). Submission failures log `console.error("Failed to submit feedback:", error)` and return a structured `{success: false, error}` response to the modal.
+The primary alert pathway is the **Feedback System** implemented by `FeedbackModal.tsx` in the CMS layout and backed by the `submitFeedback` server action in `apps/nextblock/app/actions/feedback.ts`. The modal presents a subject dropdown (`suggestion`, `bug`, `feature`, `other`), and the server action dispatches an email via `nodemailer ^7.0.10` to the fixed inbox `feedback@nextblock.dev` with a `[CMS Feedback]` subject prefix. Transport credentials are env-configured (SMTP host, port, user, pass). Submission failures log `console.error("Failed to submit feedback:", error)` and return a structured `{success: false, error}` response to the modal.
 
 ##### 6.5.2.4.2 Configuration-Discovery Alerts
 
@@ -8501,7 +8501,7 @@ graph TB
 
     subgraph ManualChannels["Manual Alert Channels"]
         FeedbackUi[FeedbackModal<br/>Subject: suggestion·bug·feature·other]
-        SmtpOut[SMTP via nodemailer<br/>feedback@nextblock.ca]
+        SmtpOut[SMTP via nodemailer<br/>feedback@nextblock.dev]
         GhIssues[GitHub Issues<br/>nextblock-cms/nextblock]
     end
 
@@ -8687,7 +8687,7 @@ Alert routing is **manual by default**. There is no automatic alert-to-on-call r
 
 | Origin | Destination | Transport |
 |:--|:--|:--|
-| CMS user feedback | `feedback@nextblock.ca` | `FeedbackModal` → `submitFeedback` → `nodemailer` → SMTP |
+| CMS user feedback | `feedback@nextblock.dev` | `FeedbackModal` → `submitFeedback` → `nodemailer` → SMTP |
 | Developer bug reports | `https://github.com/nextblock-cms/nextblock/issues` | Declared in root `package.json` `bugs.url` |
 | Platform function failures | Vercel dashboard email/webhook (platform-managed) | Vercel |
 | Database alerts | Supabase dashboard (platform-managed) | Supabase |
@@ -8704,7 +8704,7 @@ flowchart LR
         FeedbackModal[FeedbackModal.tsx<br/>Subject: suggestion · bug<br/>feature · other]
         Action[submitFeedback<br/>server action]
         Nodemailer[nodemailer ^7.0.10<br/>SMTP over TLS]
-        Inbox[(feedback@nextblock.ca<br/>Fixed inbox)]
+        Inbox[(feedback@nextblock.dev<br/>Fixed inbox)]
 
         CmsUser --> FeedbackModal
         FeedbackModal --> Action
@@ -8743,7 +8743,7 @@ flowchart LR
 
 #### 6.5.4.3 Escalation Procedures
 
-**Escalation procedures are not documented in the repository.** There is no PagerDuty integration, no on-call rotation configuration, no severity taxonomy (SEV-1/2/3), and no defined response SLA. All incident escalation is implicit: the `feedback@nextblock.ca` inbox is monitored by the maintainer team, and GitHub issues are triaged asynchronously. For deployments requiring enterprise escalation, operators are expected to configure Vercel's platform notification integrations and Supabase's project alerts independently of the application code.
+**Escalation procedures are not documented in the repository.** There is no PagerDuty integration, no on-call rotation configuration, no severity taxonomy (SEV-1/2/3), and no defined response SLA. All incident escalation is implicit: the `feedback@nextblock.dev` inbox is monitored by the maintainer team, and GitHub issues are triaged asynchronously. For deployments requiring enterprise escalation, operators are expected to configure Vercel's platform notification integrations and Supabase's project alerts independently of the application code.
 
 #### 6.5.4.4 Operational Runbooks
 
@@ -8780,7 +8780,7 @@ Improvement tracking relies on three informal channels:
 |:--|:--|
 | GitHub Issues (`nextblock-cms/nextblock/issues`) | Public bug tracking, feature requests |
 | `ts-errors.txt` (repo root) | Captured TypeScript compiler diagnostics for cleanup tracking |
-| `feedback@nextblock.ca` | Aggregation point for CMS-user-originated issues |
+| `feedback@nextblock.dev` | Aggregation point for CMS-user-originated issues |
 
 These channels feed an implicit improvement loop but are not tied to formal metrics dashboards or SLO-based error budgets.
 
@@ -8855,7 +8855,7 @@ The following observability gaps are acknowledged and documented for honest stak
 - **Three telemetry layers are active.** Client-side RUM via Vercel Speed Insights, client-side analytics via Google Tag Manager, and server-side structured console logging into the Vercel log stream.
 - **Log level strategy is load-bearing.** `compiler.removeConsole` in `next.config.js` strips `console.log` but preserves `console.warn` and `console.error`, guaranteeing that security-relevant events survive production builds.
 - **Two structured log schemas exist.** `{type:'cache', status, path}` from `proxy.ts` and `{type:'isr_revalidate', path}` from `/api/revalidate-log`.
-- **Alert routing is manual.** The primary alert path is the `FeedbackModal` → `submitFeedback` → SMTP → `feedback@nextblock.ca` flow; platform alerts are configured in Vercel/Supabase consoles.
+- **Alert routing is manual.** The primary alert path is the `FeedbackModal` → `submitFeedback` → SMTP → `feedback@nextblock.dev` flow; platform alerts are configured in Vercel/Supabase consoles.
 - **No distributed tracing, no alert manager, no runbooks, no post-mortems, no persistent audit log table.** These absences are deliberate for the system's scale and are documented as explicit gaps.
 - **SLAs are codified in config, not monitored actively.** The canonical SLA table (Section 4.12) lists all timing constraints; crossings surface as HTTP errors or terminated function invocations in the Vercel log stream.
 - **Disaster recovery rests on Supabase PITR, canonical migrations, content revisions, and the nightly sandbox-reset reconstruction rehearsal** (detailed in Section 6.1.6 and Section 5.4.6).
@@ -8893,7 +8893,7 @@ The following observability gaps are acknowledged and documented for honest stak
 - `apps/nextblock/app/api/cron/sync-currencies/route.ts` — Currency cron with Bearer `CRON_SECRET` auth; `maxDuration: 30s`
 - `apps/nextblock/app/api/webhooks/stripe/route.ts` — Stripe webhook handler with `console.error` reporting on signature failures
 - `apps/nextblock/app/api/webhooks/freemius/route.ts` — HMAC-SHA-256 verification with `console.warn` for sandbox bypass path
-- `apps/nextblock/app/actions/feedback.ts` — `submitFeedback` server action dispatching email to `feedback@nextblock.ca` via `nodemailer`
+- `apps/nextblock/app/actions/feedback.ts` — `submitFeedback` server action dispatching email to `feedback@nextblock.dev` via `nodemailer`
 - `apps/nextblock/app/cms/dashboard/page.tsx` — CMS admin dashboard UI with four KPI cards, Recent Content panel, Upcoming Schedule panel, mock Traffic Overview, GTM-configuration `<Alert>` banner
 - `apps/nextblock/app/cms/dashboard/actions.ts` — `getDashboardStats()` Supabase `count` aggregations
 - `apps/nextblock/app/cms/components/FeedbackModal.tsx` — Primary user alert channel UI component with subject dropdown
@@ -10427,7 +10427,7 @@ graph TB
         SpeedIns[(Vercel Speed Insights<br/>LCP · INP · CLS · TTFB)]
         GTM[(Google Tag Manager<br/>privacy_settings.gtm_id)]
         VercelLogs[(Vercel Log Stream<br/>warn + error preserved)]
-        FeedbackInbox[(feedback@nextblock.ca<br/>SMTP inbox)]
+        FeedbackInbox[(feedback@nextblock.dev<br/>SMTP inbox)]
     end
 
     Browser --> Edge
@@ -11203,7 +11203,7 @@ No automated post-deployment smoke suite is configured. Available validation sur
 | Core Web Vitals | Vercel Speed Insights dashboard |
 | CMS smoke test | Manual login + `/cms/dashboard` render |
 | Cron execution | Vercel dashboard cron history |
-| Feedback surface | `feedback@nextblock.ca` inbox |
+| Feedback surface | `feedback@nextblock.dev` inbox |
 
 #### 8.6.3.8 Release Management Process
 
@@ -11350,7 +11350,7 @@ No dedicated alert manager is deployed. Alert pathways:
 
 | Origin | Destination | Transport |
 |:--|:--|:--|
-| CMS user feedback | `feedback@nextblock.ca` | `FeedbackModal` → `submitFeedback` → `nodemailer ^7.0.10` → SMTP |
+| CMS user feedback | `feedback@nextblock.dev` | `FeedbackModal` → `submitFeedback` → `nodemailer ^7.0.10` → SMTP |
 | Developer bug reports | `https://github.com/nextblock-cms/nextblock/issues` | Declared in root `package.json` `bugs.url` |
 | Platform function failures | Vercel dashboard email/webhook | Vercel platform notification config |
 | Database alerts | Supabase dashboard | Supabase platform notification config |
@@ -11375,7 +11375,7 @@ graph TB
         SpeedDash[(Vercel Speed Insights<br/>LCP INP CLS TTFB)]
         GaDash[(Google Analytics via GTM)]
         VercelLogs[(Vercel Log Stream<br/>warn + error preserved)]
-        FeedbackInbox[(feedback@nextblock.ca)]
+        FeedbackInbox[(feedback@nextblock.dev)]
         SupaDash[(Supabase Dashboard)]
         R2Dash[(Cloudflare R2 Dashboard)]
     end
@@ -11412,7 +11412,7 @@ graph TB
 |:--|:--|:--|
 | Review Vercel log stream | Daily / on-alert | Vercel console |
 | Review Supabase Advisors | Weekly | Supabase console |
-| Review feedback inbox | Daily | `feedback@nextblock.ca` |
+| Review feedback inbox | Daily | `feedback@nextblock.dev` |
 | Sandbox reset validation | Automated | `/api/cron/reset-sandbox` nightly at 03:00 UTC |
 | FX rate sync | Automated | `/api/cron/sync-currencies` daily at 18:00 UTC |
 | Dependency audit | Per release | `npm audit`, manual review |
@@ -11474,7 +11474,7 @@ Documented gaps (per §6.4 and §6.5):
 | MFA disabled by default | No two-factor in default config | Operator can re-enable in `config.toml` |
 | No automated post-deployment smoke tests | Manual validation required | `/cms/dashboard` render test |
 | No distributed tracing | Cross-function causality limited | Vercel request ID correlation |
-| No on-call rotation / runbook library | Escalation is manual | `feedback@nextblock.ca` + GitHub Issues |
+| No on-call rotation / runbook library | Escalation is manual | `feedback@nextblock.dev` + GitHub Issues |
 
 ---
 
@@ -12149,7 +12149,7 @@ The glossary defines domain-specific, product-specific, and platform-specific te
 
 #### S
 
-**Sandbox Mode** — The demonstration environment activated by `NEXT_PUBLIC_IS_SANDBOX=true`. The `cms.nextblock.ca` deployment operates in sandbox mode with demo credentials `demo@nextblock.ca` / `password`.
+**Sandbox Mode** — The demonstration environment activated by `NEXT_PUBLIC_IS_SANDBOX=true`. The `cms.nextblock.dev` deployment operates in sandbox mode with demo credentials `demo@nextblock.dev` / `password`.
 
 **Sandbox Reset** — The nightly 03:00 UTC cron job at `/api/cron/reset-sandbox` that clears R2, bootstraps SQL, normalizes media, and re-seeds content.
 

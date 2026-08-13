@@ -62,12 +62,12 @@ export function PackageCard({ pkg, isActive, licenseKey }: PackageCardProps) {
                             To purchase a real license for your self-hosted NextBlock™ instance, visit:
                         </p>
                         <a
-                            href="https://nextblock.ca"
+                            href="https://nextblock.dev"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="block w-full text-center py-3 px-4 rounded-lg bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity"
                         >
-                            Purchase at nextblock.ca
+                            Purchase at nextblock.dev
                         </a>
                     </div>
                 </div>
@@ -110,7 +110,7 @@ export function PackageCard({ pkg, isActive, licenseKey }: PackageCardProps) {
                         </Button>
                     ) : (
                         <Button asChild className="w-full">
-                            <a href="https://nextblock.ca" target="_blank" rel="noopener noreferrer">
+                            <a href="https://nextblock.dev" target="_blank" rel="noopener noreferrer">
                                 Buy License <ExternalLink className="ml-2 w-3 h-3" />
                             </a>
                         </Button>

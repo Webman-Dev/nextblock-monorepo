@@ -46,8 +46,8 @@ export function ActivationForm() {
         <p className="text-sm text-amber-700 dark:text-amber-400">
           License activation is disabled in this sandbox demo. To purchase a real license for
           your self-hosted instance, visit{' '}
-          <a href="https://nextblock.ca" target="_blank" rel="noopener noreferrer" className="underline font-semibold">
-            nextblock.ca
+          <a href="https://nextblock.dev" target="_blank" rel="noopener noreferrer" className="underline font-semibold">
+            nextblock.dev
           </a>.
         </p>
       </div>

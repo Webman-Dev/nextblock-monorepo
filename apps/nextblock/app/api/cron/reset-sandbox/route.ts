@@ -2596,7 +2596,7 @@ async function seedFakeStoreData(sql: SqlClient, supabaseAdmin: any) {
   console.log('[Sandbox Reset] Starting fake store data seeding...');
   
   // 1. Ensure Demo User
-  const email = 'demo@nextblock.ca';
+  const email = 'demo@nextblock.dev';
   console.log(`[Sandbox Reset] Checking for demo user: ${email}`);
   const { data: userData, error: userError } = await supabaseAdmin.auth.admin.listUsers();
   if (userError) {
@@ -2629,7 +2629,7 @@ async function seedFakeStoreData(sql: SqlClient, supabaseAdmin: any) {
   console.log('[Sandbox Reset] Seeding invoice branding...');
   const branding = {
     business_name: 'NextBlock CMS',
-    email: 'billing@nextblock.ca',
+    email: 'billing@nextblock.dev',
     phone: '5143188025',
     address: {
       line1: '',

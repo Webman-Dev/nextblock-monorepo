@@ -1,5 +1,5 @@
 <div align="center">
- <img src="https://cms.nextblock.ca/_next/image?url=%2Fimages%2Fnextblock-logo-small.webp&w=128&q=75" alt="NextBlock™ CMS Logo" width="200"/>
+ <img src="https://cms.nextblock.dev/_next/image?url=%2Fimages%2Fnextblock-logo-small.webp&w=128&q=75" alt="NextBlock™ CMS Logo" width="200"/>
 
 # NextBlock™ CMS
 
@@ -19,9 +19,9 @@
   </p>
 
   <p>
-    <a href="https://cms.nextblock.ca/" target="_blank"><strong>👉 View Live Demo</strong></a><br />
+    <a href="https://cms.nextblock.dev/" target="_blank"><strong>👉 View Live Demo</strong></a><br />
     Explore the admin dashboard in our public sandbox (resets every 15 minutes).<br/>
-    <strong>User:</strong> demo@nextblock.ca • <strong>Pass:</strong> password
+    <strong>User:</strong> demo@nextblock.dev • <strong>Pass:</strong> password
   </p>
   
   <br/>

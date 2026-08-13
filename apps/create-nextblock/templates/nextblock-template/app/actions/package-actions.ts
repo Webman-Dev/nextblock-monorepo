@@ -39,7 +39,7 @@ const getServiceRoleClient = () => {
 
 export async function activatePackage(key: string) {
   if (process.env.NEXT_PUBLIC_IS_SANDBOX === 'true') {
-    return { error: 'License activation is disabled in Sandbox mode. To purchase a real license, visit nextblock.ca' };
+    return { error: 'License activation is disabled in Sandbox mode. To purchase a real license, visit nextblock.dev' };
   }
 
   if (!key) {
@@ -98,7 +98,7 @@ export async function activatePackage(key: string) {
 
     if (!data || !pkg) {
         if (hasLicenseError && process.env.NEXT_PUBLIC_IS_SANDBOX !== 'true' && !specificErrorMsg) {
-            return { error: 'Sorry, this is a sandbox key. Please purchase the real key at nextblock.ca' };
+            return { error: 'Sorry, this is a sandbox key. Please purchase the real key at nextblock.dev' };
         }
         return { error: specificErrorMsg || 'Activation failed. Invalid key, wrong product, or limit reached.' };
     }
