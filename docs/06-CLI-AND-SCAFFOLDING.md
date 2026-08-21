@@ -87,7 +87,7 @@ It currently:
 - copies `apps/nextblock` into `templates/nextblock-template`
 - skips `node_modules`, `.next`, backups, and other generated folders
 - copies the root `docs/` folder into the template docs directory
-- copies `.env.example` or `.env.exemple`
+- copies `.env.example` (the legacy `.env.exemple` spelling is still accepted as a fallback)
 - rewrites imports for packaged library consumption
 - removes the copied `project.json`
 - syncs package versions

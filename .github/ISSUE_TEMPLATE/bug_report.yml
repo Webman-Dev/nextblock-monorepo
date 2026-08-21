@@ -1,0 +1,90 @@
+name: 🐛 Bug report
+description: Something in NextBlock is not working as documented.
+labels: ['bug', 'needs triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report.
+
+        **Do not use this form for security vulnerabilities.** Use
+        [private vulnerability reporting](https://github.com/nextblock-cms/nextblock/security/advisories/new)
+        or email security@nextblock.dev — see [SECURITY.md](../blob/master/SECURITY.md).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you expected, and what you got instead.
+      placeholder: I expected the block to render, but the page showed "Unsupported block type".
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Be specific enough that someone can follow along on a fresh instance.
+      placeholder: |
+        1. Create a custom block definition with slug `hero-banner`
+        2. Add it to a page and publish
+        3. Rename the definition's slug to `hero`
+        4. Reload the public page
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-type
+    attributes:
+      label: How is NextBlock installed?
+      description: This changes which code path you are on more than anything else.
+      options:
+        - One-click Vercel deploy
+        - npm create nextblock (standalone project)
+        - Cloned the Nx monorepo
+        - Self-hosted Docker (npm run docker:setup)
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: NextBlock version
+      description: 'The `version` field in your `package.json`, or the output of `npm run update -- --check`.'
+      placeholder: 0.15.5
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Node version (`node -v`), package manager, OS, browser if relevant, and where the database lives (Supabase cloud, local, Docker).
+      placeholder: |
+        Node: 20.11.0
+        npm: 10.9.8
+        OS: Windows 11
+        Database: Supabase cloud
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error output
+      description: Server logs, browser console, or build output. Redact keys and connection strings before pasting.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I am on the latest version, or have confirmed the bug still exists there.
+          required: true
+        - label: I have removed any secrets (API keys, service-role keys, connection strings) from the text above.
+          required: true

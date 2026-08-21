@@ -7,8 +7,8 @@ setup helper in `tools/scripts/setup.mjs`.
 
 ### Prerequisites
 
-`npm run setup` is interactive and asks for credentials from three services, so
-create them first:
+Configuration happens in the browser, not the terminal — but the wizard asks for
+credentials from these services, so have them ready:
 
 1. **Supabase project** (https://supabase.com/dashboard) — Reference ID
    (Project Settings → General), connection string (Connect → Direct connection →
@@ -25,24 +25,30 @@ create them first:
 
 ```bash
 npm install
-npm run setup
-npx nx serve nextblock
+npm run setup            # prints the next steps — it asks nothing
+npx nx serve nextblock   # then open http://localhost:4200/setup
 ```
 
-What `npm run setup` does:
+`npm run setup` (`tools/scripts/setup.mjs`) is **informational only**. It writes
+no files, prompts for nothing, and touches no database — it just points you at
+the browser wizard. Terminal-based configuration was removed; everything below
+now happens in the **First-Boot Setup Wizard** at `/setup`:
 
-- creates `.env.local` from `.env.exemple` if needed
-- prompts for Supabase, Cloudflare R2, and SMTP details (all required)
-- writes `NEXT_PUBLIC_URL` and auto-generates `CRON_SECRET`,
-  `DRAFT_MODE_SECRET`, and `REVALIDATE_SECRET_TOKEN`
-- links the local Supabase CLI workdir to your project (`npm run db:link`)
-- applies the full schema baseline to the new database
-  (`npm run db:migrate:fresh`)
-- syncs hosted Supabase Auth — custom SMTP and branded email templates
-  (`npm run configure:supabase-auth`)
+- connecting Supabase and saving the credentials
+- applying the schema to the new database
+- configuring media storage (R2, or the connected Supabase project's storage)
+  and outbound email
+- creating the first administrator
 
-If you skip `npm run setup`, the misspelled root sample file `.env.exemple` is
-the reference template for manual environment setup.
+A fresh instance redirects every route to `/setup` until an admin exists, so you
+cannot miss it.
+
+> **Self-hosted Docker is the exception** — `npm run docker:setup` is a real,
+> one-command, non-interactive bootstrap that brings up the whole stack and
+> applies migrations. See [11-SELF-HOSTED-DOCKER.md](./11-SELF-HOSTED-DOCKER.md).
+
+If you would rather configure by hand, the root sample file `.env.example` is the
+reference template for a manual `.env.local`.
 
 ### First login
 
@@ -105,9 +111,9 @@ repo expects at least:
 - `SUPABASE_PROJECT_ID` for Supabase CLI migration tooling
 - `SUPABASE_ACCESS_TOKEN` for Supabase CLI linking
 - `POSTGRES_URL` or `DATABASE_URL` for SQL fallback paths and db tooling
-- `NEXT_PUBLIC_URL` — written by `npm run setup`
+- `NEXT_PUBLIC_URL` — set by the `/setup` wizard
 - `CRON_SECRET`, `DRAFT_MODE_SECRET`, `REVALIDATE_SECRET_TOKEN` — auto-generated
-  by `npm run setup`
+  by the `/setup` wizard
 
 > **Supabase key aliases.** The names above are the local-dev canon, but the app also
 > accepts the *new-style* names the hosted/Vercel Supabase Marketplace integration
@@ -120,7 +126,7 @@ repo expects at least:
 > production — when unset they are derived from the service-role key (see
 > `apps/nextblock/lib/app-secrets.ts`). See [12-VERCEL-DEPLOYMENT.md](./12-VERCEL-DEPLOYMENT.md).
 
-Captured by `npm run setup` and needed for a complete CMS:
+Captured by the `/setup` wizard and needed for a complete CMS:
 
 - R2 credentials for media storage. The app builds and serves without them, but
   uploads, image processing, and full-site backups return 500 until R2 is set.

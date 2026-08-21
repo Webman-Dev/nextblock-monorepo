@@ -2621,6 +2621,20 @@ async function seedFakeStoreData(sql: SqlClient, supabaseAdmin: any) {
     console.log(`[Sandbox Reset] Created new demo user with ID: ${demoUser.id}`);
   } else {
     console.log(`[Sandbox Reset] Found existing demo user with ID: ${demoUser.id}`);
+    // The demo credentials are published (README + community posts), so any visitor can
+    // change this account's password and lock everyone else out. The SQL reset below does
+    // not touch auth.users, so re-assert the known-good password on every run — otherwise a
+    // single password change survives every future reset.
+    const { error: resetPwError } = await supabaseAdmin.auth.admin.updateUserById(demoUser.id, {
+      password: 'password',
+      email_confirm: true,
+    });
+    if (resetPwError) {
+      // Non-fatal: the rest of the sandbox reset is still worth doing.
+      console.error('[Sandbox Reset] Failed to restore demo password:', resetPwError);
+    } else {
+      console.log('[Sandbox Reset] Restored demo user password to the published default.');
+    }
   }
 
   const userId = demoUser.id;

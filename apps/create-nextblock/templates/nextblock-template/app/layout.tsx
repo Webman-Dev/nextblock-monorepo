@@ -33,7 +33,11 @@ import { headers, cookies, draftMode } from 'next/headers';
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
 import { unstable_cache } from 'next/cache';
 import { createStaticSupabaseClient, getSiteSettings } from './lib/site-settings';
-import { DEFAULT_OG_IMAGE } from './lib/seo';
+import {
+  DEFAULT_OG_IMAGE,
+  DEFAULT_OG_IMAGE_WIDTH,
+  DEFAULT_OG_IMAGE_HEIGHT,
+} from './lib/seo';
 import { resolveActiveLogo } from '../lib/logos/active-logo';
 import {
   isSupabaseConfigured,
@@ -489,8 +493,8 @@ export async function generateMetadata(): Promise<Metadata> {
       images: [
         {
           url: DEFAULT_OG_IMAGE,
-          width: 1200,
-          height: 630,
+          width: DEFAULT_OG_IMAGE_WIDTH,
+          height: DEFAULT_OG_IMAGE_HEIGHT,
           alt: siteTitle,
         },
       ],

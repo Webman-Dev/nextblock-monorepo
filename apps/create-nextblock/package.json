@@ -1,7 +1,7 @@
 {
   "name": "create-nextblock",
-  "version": "0.15.5",
-  "description": "",
+  "version": "0.15.8",
+  "description": "Scaffold a production-ready NextBlock CMS project — the open-source, full-stack AI-native CMS for Next.js 16, Supabase, and Tailwind CSS.",
   "main": "index.js",
   "bin": {
     "create-nextblock": "bin/create-nextblock.js"
@@ -11,9 +11,33 @@
     "sync-template": "node ./scripts/sync-template.js",
     "prepack": "npm run sync-template"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "create-nextblock",
+    "nextblock",
+    "cms",
+    "nextjs",
+    "nextjs16",
+    "supabase",
+    "rsc",
+    "tailwind",
+    "tiptap",
+    "fullstack",
+    "open-source",
+    "scaffolding",
+    "starter",
+    "cli"
+  ],
+  "author": "NextBlock CMS (https://nextblock.dev)",
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nextblock-cms/nextblock.git",
+    "directory": "apps/create-nextblock"
+  },
+  "bugs": {
+    "url": "https://github.com/nextblock-cms/nextblock/issues"
+  },
+  "homepage": "https://nextblock.dev",
   "type": "module",
   "dependencies": {
     "@clack/prompts": "^0.8.1",

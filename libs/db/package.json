@@ -1,6 +1,7 @@
 {
   "name": "@nextblock-cms/db",
-  "version": "0.15.5",
+  "version": "0.15.8",
+  "license": "AGPL-3.0-or-later",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {

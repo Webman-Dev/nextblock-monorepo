@@ -1,30 +1,43 @@
 <div align="center">
- <img src="https://cms.nextblock.dev/_next/image?url=%2Fimages%2Fnextblock-logo-small.webp&w=128&q=75" alt="NextBlock™ CMS Logo" width="200"/>
+
+<img src="./apps/nextblock/public/assets/nextblock-banner.jpg" alt="NextBlock CMS — the open-source, full-stack AI-native CMS for Next.js 16, Supabase and Tailwind CSS" width="100%" />
 
 # NextBlock™ CMS
 
-**The AI-Native, Open-Core CMS for Next.js 16**
+**The open-source, full-stack AI-native CMS for Next.js 16, Supabase, and Tailwind CSS.**
 
-  <p align="center">
-    <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js" alt="Next.js 16"></a>
-    <a href="https://supabase.com"><img src="https://img.shields.io/badge/Supabase-Database-3ecf8e?style=for-the-badge&logo=supabase" alt="Supabase"></a>
-    <a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/Tailwind-CSS-38bdf8?style=for-the-badge&logo=tailwindcss" alt="Tailwind CSS"></a>
-    <a href="https://nx.dev"><img src="https://img.shields.io/badge/Nx-Monorepo-blue?style=for-the-badge&logo=nx" alt="Nx"></a>
-  </p>
+<p align="center">
+  <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D"><img src="https://vercel.com/button" alt="Deploy with Vercel" height="40" /></a>
+</p>
 
-  <p>
-    <strong>Speed. Scalability. AI-Readiness (coming soon).</strong>
-    <br/>
-    Build premium, high-performance websites in minutes, not months.
-  </p>
+<p align="center">
+  <strong>Deploy a production Next.js 16 + Supabase website and CMS in one click.</strong><br/>
+  Vercel provisions the database and injects its keys before the first build, NextBlock applies its own<br/>
+  schema during that build, and the in-app wizard asks only for your admin account.<br/>
+  <strong>No environment variables to fill in.</strong>
+</p>
 
-  <p>
-    <a href="https://cms.nextblock.dev/" target="_blank"><strong>👉 View Live Demo</strong></a><br />
-    Explore the admin dashboard in our public sandbox (resets every 15 minutes).<br/>
-    <strong>User:</strong> demo@nextblock.dev • <strong>Pass:</strong> password
-  </p>
-  
-  <br/>
+<p align="center">
+  <a href="https://cms.nextblock.dev/"><strong>Live Sandbox</strong></a>
+  &nbsp;·&nbsp;
+  <a href="./docs/README.md"><strong>Documentation</strong></a>
+  &nbsp;·&nbsp;
+  <a href="./docs/12-VERCEL-DEPLOYMENT.md"><strong>Deploy Guide</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/nextblock-cms/nextblock"><strong>GitHub</strong></a>
+</p>
+
+<p align="center">
+  <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js" alt="Next.js 16"></a>
+  <a href="https://supabase.com"><img src="https://img.shields.io/badge/Supabase-Database-3ecf8e?style=for-the-badge&logo=supabase" alt="Supabase"></a>
+  <a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/Tailwind-CSS-38bdf8?style=for-the-badge&logo=tailwindcss" alt="Tailwind CSS"></a>
+  <a href="https://nx.dev"><img src="https://img.shields.io/badge/Nx-Monorepo-blue?style=for-the-badge&logo=nx" alt="Nx"></a>
+  <a href="./LICENSE.md"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue?style=for-the-badge" alt="License: AGPL v3"></a>
+</p>
+
+<p align="center">
+  <sub>Sandbox resets daily &nbsp;·&nbsp; <strong>User:</strong> demo@nextblock.dev &nbsp;·&nbsp; <strong>Pass:</strong> password</sub>
+</p>
 
 </div>
 
@@ -38,7 +51,10 @@ We combined the **flexibility of a Block Editor** with the **raw power of Next.j
 
 ### ✨ Key Features
 
-- **⚡ 100% Lighthouse Performance**: Built-in edge caching, image optimization, and zero layout shift. Speed is not a plugin; it's the default.
+- **▲ Next.js 16 App Router + React 19 Server Components**: the public site renders on the server — page, article and product routes are all Server Components — with client components reserved for cart, checkout, forms and the CMS dashboard.
+- **🗄️ Supabase PostgreSQL with JSONB block storage**: every content block is a row in `public.blocks` with a `jsonb` `content` column. User-defined block types live in `custom_block_definitions` (`fields` / `layout_schema` as `jsonb`, guarded by Postgres CHECK constraints) and render without a rebuild.
+- **🚀 Zero-config 1-click migrations**: the Vercel Supabase integration provisions the database and injects its keys before the first build; NextBlock then applies its own forward-only migrations *during that build* (`tools/build-migrate.mjs`), with a runtime fallback in the `/setup` wizard. Nothing to run, nothing to paste.
+- **⚡ [100/100 Lighthouse](./docs/assets/lighthouse-scores.png)**: Perfect scores across Performance, Accessibility, Best Practices and SEO — 0.3 s FCP, 0.8 s LCP, **0 ms** Total Blocking Time and **0** Cumulative Layout Shift on a production build. AVIF/WebP images with a one-year cache TTL, critical-CSS inlining and tree-shaken imports are the defaults, not plugins.
 - **🤖 Built for AI Agents**: Our codebase is documented and structured specifically to be easily read and extended by AI coding assistants.
 - **🛍️ E-Commerce Ready**: Premium commerce package for digital products, checkout providers, currency, tax, and shipping management.
 - **🧱 Visual Block Editor**: A reusable Tiptap-powered Notion-style editor that your clients will actually enjoy using.
@@ -55,7 +71,29 @@ We combined the **flexibility of a Block Editor** with the **raw power of Next.j
 | **DX**           | 💎 **React Server Components** | 📜 Legacy PHP Hooks       | 🧩 Config Heavy         |
 | **AI Ready**     | ✅ **Native**                  | ❌ No                     | 🟡 Integration required |
 
-## 🏁 Get Started in 30 Seconds
+## 🏁 Get Started
+
+### ☁️ Option 1 — Deploy to the cloud in one click (recommended)
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D)
+
+During import, Vercel's native **Supabase Marketplace integration** (the `stores`
+button parameter) prompts you to create a Supabase database (name + region), then
+**provisions it, connects it to the project, and injects its keys before the first
+build** — you never copy a value, and there are **no environment variables to fill in**
+(the site URL defaults to your `*.vercel.app` URL and the app secrets are derived
+automatically). The app boots with the database already connected: the wizard
+auto-skips the connection step, applies the schema for you, uses the connected Supabase
+project for media storage, and leaves just "create your admin." Full walkthrough:
+[docs/12-VERCEL-DEPLOYMENT.md](./docs/12-VERCEL-DEPLOYMENT.md).
+
+> **Tip — keep the new repo public.** When Vercel asks, leave **"Create private Git
+> Repository" unchecked**. On the free (Hobby) plan, automatic upstream updates only deploy
+> from a **public** repo — Hobby blocks bot-authored deploys on private repos — and public
+> also makes update checks fully tokenless. You can change visibility later in the repo's
+> GitHub settings if you change your mind. Details: [docs/13](./docs/13-STAYING-UP-TO-DATE.md).
+
+### 💻 Option 2 — Scaffold locally with the CLI
 
 Stop cloning heavy repos. Start with our CLI and get a production-ready app instantly.
 
@@ -70,26 +108,6 @@ npm run dev   # then open http://localhost:4200/setup
 ```
 
 The **First-Boot Setup Wizard** at `/setup` walks you through connecting Supabase, configuring storage / email, and creating the first administrator. Every fresh instance redirects there automatically until an admin exists.
-
-### ☁️ Deploy to the cloud in one click
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnextblock-cms%2Fnextblock&project-name=nextblock&repository-name=nextblock&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D)
-
-> **Tip — keep the new repo public.** When Vercel asks, leave **"Create private Git
-> Repository" unchecked**. On the free (Hobby) plan, automatic upstream updates only deploy
-> from a **public** repo — Hobby blocks bot-authored deploys on private repos — and public
-> also makes update checks fully tokenless. You can change visibility later in the repo's
-> GitHub settings if you change your mind. Details: [docs/13](./docs/13-STAYING-UP-TO-DATE.md).
-
-During import, Vercel's native **Supabase Marketplace integration** (the `stores`
-button parameter) prompts you to create a Supabase database (name + region), then
-**provisions it, connects it to the project, and injects its keys before the first
-build** — you never copy a value, and there are **no environment variables to fill in**
-(the site URL defaults to your `*.vercel.app` URL and the app secrets are derived
-automatically). The app boots with the database already connected: the wizard
-auto-skips the connection step, applies the schema for you, uses the connected Supabase
-project for media storage, and leaves just "create your admin." Full walkthrough:
-[docs/12-VERCEL-DEPLOYMENT.md](./docs/12-VERCEL-DEPLOYMENT.md).
 
 > **Want a fully local, zero-config sandbox?** Use **Local Self-Hosted Docker Mode** — one command spins up the entire stack (Supabase engines + S3 storage + the app) on your own machine, with **no cloud accounts**. The app boots straight into the `/setup` wizard with MinIO storage pre-filled. See [docs/11-SELF-HOSTED-DOCKER.md](./docs/11-SELF-HOSTED-DOCKER.md).
 
@@ -113,7 +131,7 @@ project for media storage, and leaves just "create your admin." Full walkthrough
 
 ### ⚡ Developer Quickstart
 
-**Prerequisites** — create these three things first; `npm run setup` will ask for their keys:
+**Prerequisites** — configuration happens in the browser, but the `/setup` wizard asks for these, so create them first:
 
 1. **Supabase project** ([dashboard](https://supabase.com/dashboard)) — you'll need the **Reference ID** (Project Settings → General), the **connection string** (Connect → Direct connection → URI), the **anon** + **service_role** keys (Project Settings → API Keys), and a **Personal Access Token** (Account → Access Tokens → Generate new token).
 2. **Cloudflare R2 bucket** ([dashboard](https://dash.cloudflare.com) → R2) — create a bucket, enable its **Public Development URL** (Bucket → Settings → General), then create an **Account API token** (R2 → Manage API Tokens) with _Object Read & Write_. Copy the **Access Key ID** and **Secret Access Key** — the secret is shown only once.
@@ -129,7 +147,7 @@ npm run setup
 npx nx serve nextblock
 ```
 
-The interactive `setup` wizard writes your `.env.local` (Supabase, R2, SMTP, and auto-generated secrets), links the Supabase CLI, and applies the database schema.
+`npm run setup` is informational only — it prompts for nothing and writes no files. Open **http://localhost:4200/setup** and the browser wizard connects Supabase, applies the schema, configures storage / email, and creates your first administrator.
 
 **First login:** the dev server runs at **http://localhost:4200**. Open `/sign-up` and create your account — the **first** account to register automatically becomes the **ADMIN**. Click the confirmation email (or confirm the user in Supabase → Authentication → Users), then sign in to reach the CMS at `/cms/dashboard`.
 
@@ -203,6 +221,16 @@ _The template docs are copied from the root docs through the sync pipeline, so t
 | [docs/README.md](./docs/README.md)                                                 | Audience-based docs index                                                                |
 
 > **Under the hood note:** The migration folder under `libs/db/src/supabase/migrations` is the best source of truth for current platform capabilities.
+
+---
+
+## 🤝 Contributing
+
+NextBlock is open source under [AGPL-3.0-or-later](./LICENSE.md), and contributions are welcome.
+
+- **[CONTRIBUTING.md](./CONTRIBUTING.md)** — setup, everyday commands, and the repo-specific rules that are easy to trip over (append-only migrations, the generated template, the derived artifacts).
+- **[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)** — Contributor Covenant v2.1.
+- **[SECURITY.md](./SECURITY.md)** — how to report a vulnerability privately. Please never use the public issue tracker for security reports.
 
 ---
 

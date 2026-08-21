@@ -75,7 +75,7 @@ Known incomplete or future work:
 | `libs/utils/src/lib/nextblock-packages.ts` | Package registry. Contains `cortex-ai` metadata and Freemius product/plan ids. |
 | `libs/cortex/src/lib/ai-config.ts` | Server-only Cortex AI constants and environment accessors. |
 | `libs/cortex/src/lib/ai-key-crypto.ts` | AES-256-GCM encryption/decryption helpers for stored OpenRouter BYOK keys. |
-| `.env.exemple` | Documents `FREEMIUS_AI_SANDBOX_KEY`, `OPENROUTER_API_KEY`, and `CORTEX_AI_ENCRYPTION_KEY`. |
+| `.env.example` | Documents `FREEMIUS_AI_SANDBOX_KEY`, `OPENROUTER_API_KEY`, and `CORTEX_AI_ENCRYPTION_KEY`. |
 | `libs/environment.d.ts` | Type declarations for Cortex AI environment variables. |
 
 ### Database and Sandbox
@@ -189,7 +189,7 @@ Current usage:
 
 ## Environment Variables
 
-Environment variables are documented in `.env.exemple` and typed in `libs/environment.d.ts`.
+Environment variables are documented in `.env.example` and typed in `libs/environment.d.ts`.
 
 ```txt
 FREEMIUS_AI_SANDBOX_KEY=

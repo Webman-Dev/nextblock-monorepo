@@ -6,7 +6,7 @@
 
 ### 1.1.1 Project Overview
 
-NextBlock CMS is an AI-Native, Open-Core Content Management System purpose-built for Next.js 16, distributed as an Nx 22.6.0 monorepo that unifies a public-facing website, an authenticated CMS, a collaborative block editor, shared database utilities, a design system, an optional premium e-commerce module, and a command-line scaffolding tool into a single coherent workspace. The project is published under the workspace package identifier `@nextblock/source` (version `0.2.77`) and is licensed under AGPLv3, with premium modules distributed under a source-available, license-gated model.
+NextBlock CMS is an AI-Native, Open-Core Content Management System purpose-built for Next.js 16, distributed as an Nx monorepo that unifies a public-facing website, an authenticated CMS, a collaborative block editor, shared database utilities, a design system, an optional premium e-commerce module, and a command-line scaffolding tool into a single coherent workspace. The project is published under the workspace package identifier `nextblock` and is licensed under AGPLv3, with premium modules distributed under a source-available, license-gated model.
 
 The system's central value proposition — "Speed. Scalability. AI-Readiness (coming soon)." — is encoded directly in its architectural decisions: a Next.js 16 App Router application (`apps/nextblock`) backed by Supabase, leveraging React Server Components, edge caching, and an image-optimization pipeline targeting a default 100/100 Lighthouse Performance score. Users bootstrap new projects in under thirty seconds via the `npm create nextblock@latest` CLI, which produces a standalone, production-ready Next.js application.
 
@@ -67,7 +67,7 @@ NextBlock CMS occupies the "sweet spot" between block-editor flexibility (WordPr
 
 1. **Open-Core Core** — All foundational libraries (`libs/ui`, `libs/utils`, `libs/db`, `libs/editor`, `libs/sdk`) are tagged `scope:public` in their Nx project configurations and published under AGPLv3.
 2. **Premium Source-Available Extensions** — The `libs/ecommerce` library is tagged `scope:premium` in `libs/ecommerce/project.json` and activated via a license-key-gated installation path (`@nextblock-cms/ecommerce@npm:@nextblock-cms/ecom@latest`).
-3. **CLI-Driven Scaffolding** — The `apps/create-nextblock` package (CLI version `0.2.78`) provides the `create` (default) and `activate` commands for respectively bootstrapping a new project and installing premium modules post-scaffold.
+3. **CLI-Driven Scaffolding** — The `apps/create-nextblock` package provides the `create` (default) and `activate` commands for respectively bootstrapping a new project and installing premium modules post-scaffold.
 
 #### 1.2.1.2 Current System Limitations Addressed
 
@@ -75,16 +75,16 @@ The project does not replace an existing in-house system; rather, it targets ext
 
 #### 1.2.1.3 Integration with Existing Enterprise Landscape
 
-NextBlock CMS integrates with a specific, opinionated set of external services whose environment requirements are declared in `libs/environment.d.ts` (augmenting `NodeJS.ProcessEnv`) and `.env.exemple`.
+NextBlock CMS integrates with a specific, opinionated set of external services whose environment requirements are declared in `libs/environment.d.ts` (augmenting `NodeJS.ProcessEnv`) and `.env.example`.
 
 | Integration Domain | Provider(s) | Purpose |
 |:--|:--|:--|
-| Database & Authentication | Supabase (`@supabase/ssr` 0.7.0, `@supabase/supabase-js` 2.77.0) | Postgres storage, Row-Level Security, Auth |
-| Object Storage | Cloudflare R2 (S3-compatible via `@aws-sdk/client-s3` 3.920.0) | Media assets, presigned uploads |
-| Physical Commerce | Stripe (`stripe` 20.4.1, `@stripe/stripe-js` 8.11.0) | Checkout, payments, Stripe Tax |
-| Digital Commerce | Freemius (`@freemius/checkout` 1.4.1, `@freemius/sdk` 0.3.0) | Digital-product checkout, licensing |
+| Database & Authentication | Supabase (`@supabase/ssr`, `@supabase/supabase-js`) | Postgres storage, Row-Level Security, Auth |
+| Object Storage | Cloudflare R2 (S3-compatible via `@aws-sdk/client-s3`) | Media assets, presigned uploads |
+| Physical Commerce | Stripe (`stripe`, `@stripe/stripe-js`) | Checkout, payments, Stripe Tax |
+| Digital Commerce | Freemius (`@freemius/checkout`, `@freemius/sdk`) | Digital-product checkout, licensing |
 | FX Rates | `api.frankfurter.dev` (configurable via `FX_API_BASE_URL`) | Multi-currency rate synchronization |
-| Analytics & Observability | `@vercel/speed-insights` 1.3.1, `@next/third-parties` (GTM) 1.1.1 | Performance and behavior tracking |
+| Analytics & Observability | `@vercel/speed-insights`, `@next/third-parties` (GTM) | Performance and behavior tracking |
 | Hosting Platform | Vercel (cron jobs defined in `vercel.json`) | Edge delivery, scheduled jobs |
 | Email Transport | SMTP (env-configured) | Transactional email |
 
@@ -115,8 +115,6 @@ The workspace is composed of two applications and six libraries, each with an in
 | Block SDK | `libs/sdk` | `@nextblock-cms/sdk` |
 | UI Design System | `libs/ui` | `@nextblock-cms/ui` |
 | Utilities | `libs/utils` | `@nextblock-cms/utils` |
-
-The current published versions are: `apps/nextblock` (private, `0.2.55`), `create-nextblock` (`0.2.78`), `@nextblock-cms/db` (`0.2.32`), `@nextblock-cms/editor` (`0.2.24`), `@nextblock-cms/ecom` (`0.0.10`), `@nextblock-cms/sdk` (`0.2.9`), `@nextblock-cms/ui` (`0.2.19`), `@nextblock-cms/utils` (`0.2.13`).
 
 ```mermaid
 graph TB
@@ -168,46 +166,46 @@ The technical approach combines a React Server Components-first rendering model 
 
 **Core Framework Stack**
 
-| Concern | Technology | Version |
-|:--|:--|:--|
-| Application Framework | Next.js (App Router) | `16.1.7` |
-| UI Runtime | React / react-dom | `19.2.4` |
-| Language | TypeScript (strict mode) | `5.9.3` |
-| Monorepo Orchestration | Nx | `22.6.0` |
+| Concern | Technology |
+| :-- | :-- |
+| Application Framework | Next.js (App Router) |
+| UI Runtime | React / react-dom |
+| Language | TypeScript (strict mode) |
+| Monorepo Orchestration | Nx |
 
 **Styling, UI, and Editor**
 
-| Concern | Technology | Version |
-|:--|:--|:--|
-| Utility CSS | Tailwind CSS | `4.1.16` |
-| Primitive Components | Radix UI (12+ primitives) | Multiple |
-| Icon System | lucide-react | `0.548.0` |
-| Theme Management | next-themes (light/dark/vibrant/system) | `0.4.6` |
-| Rich-Text Engine | Tiptap (40+ extensions) | `3.22.4` |
-| Collaboration | Yjs / y-protocols / y-tiptap | `13.6.30` / `1.0.7` |
-| Syntax Highlighting | lowlight | `3.3.0` |
-| Mathematics | katex | `0.16.25` |
+| Concern | Technology |
+| :-- | :-- |
+| Utility CSS | Tailwind CSS |
+| Primitive Components | Radix UI (12+ primitives) |
+| Icon System | lucide-react |
+| Theme Management | next-themes (light/dark/vibrant/system) |
+| Rich-Text Engine | Tiptap (40+ extensions) |
+| Collaboration | Yjs / y-protocols / y-tiptap |
+| Syntax Highlighting | lowlight |
+| Mathematics | katex |
 
 **State, Forms, and Validation**
 
-| Concern | Technology | Version |
-|:--|:--|:--|
-| Client State | zustand | `5.0.10` |
-| Schema Validation | zod | `4.3.6` |
-| Form Management | react-hook-form | `7.71.1` |
-| Form Resolvers | @hookform/resolvers | `5.2.2` |
+| Concern | Technology |
+| :-- | :-- |
+| Client State | zustand |
+| Schema Validation | zod |
+| Form Management | react-hook-form |
+| Form Resolvers | @hookform/resolvers |
 
 **Media, Build, and Operations**
 
-| Concern | Technology | Version |
-|:--|:--|:--|
-| Image Processing | sharp | `0.34.2` |
-| Blur Placeholders | plaiceholder | `3.0.0` |
-| Critical CSS | beasties | `0.4.1` |
-| Bundle Analysis | @next/bundle-analyzer | `16.0.1` |
-| Unit Testing | Vitest (in `libs/utils/tests`) | `4.0.0` |
-| Library Build | Vite + vite-plugin-dts | `7.2.6` |
-| Local Registry | Verdaccio (`.verdaccio/`) | `6.0.5` |
+| Concern | Technology |
+| :-- | :-- |
+| Image Processing | sharp |
+| Blur Placeholders | plaiceholder |
+| Critical CSS | beasties |
+| Bundle Analysis | @next/bundle-analyzer |
+| Unit Testing | Vitest (in `libs/utils/tests`) |
+| Library Build | Vite + vite-plugin-dts |
+| Local Registry | Verdaccio (`.verdaccio/`) |
 
 **Architectural Patterns**
 
@@ -267,7 +265,7 @@ The following architectural invariants are enforced at workspace level and must 
 | Content | `text`, `heading`, `image`, `button`, `video_embed`, `section`, `form`, `testimonial`, `posts_grid` |
 | Commerce | `product_grid`, `featured_product`, `cart`, `checkout`, `product_details` |
 
-**Editor Capabilities** — The `@nextblock-cms/editor` library (version `0.2.24`) exports `Editor`, `NotionEditor`, `EditorToolbar`, `EditorBubbleMenu`, `EditorFloatingMenu`, `EnhancedFloatingMenu`, `SlashCommandList`, `DragHandle`, `HtmlContent`, and `editorExtensions`. Feature set includes Tiptap StarterKit rich text, syntax-highlighted code blocks, tables, task lists, slash commands, drag handles, image handling, character counting, typography, mathematics, emoji, mentions, inline alert and call-to-action widgets, and custom HTML-preserving extensions for `div`, `style`, `script`, `svg`, `span`, and catch-all attribute preservation. A media-picker bridge is exposed via `setOpenImagePicker()`.
+**Editor Capabilities** — The `@nextblock-cms/editor` library exports `Editor`, `NotionEditor`, `EditorToolbar`, `EditorBubbleMenu`, `EditorFloatingMenu`, `EnhancedFloatingMenu`, `SlashCommandList`, `DragHandle`, `HtmlContent`, and `editorExtensions`. Feature set includes Tiptap StarterKit rich text, syntax-highlighted code blocks, tables, task lists, slash commands, drag handles, image handling, character counting, typography, mathematics, emoji, mentions, inline alert and call-to-action widgets, and custom HTML-preserving extensions for `div`, `style`, `script`, `svg`, `span`, and catch-all attribute preservation. A media-picker bridge is exposed via `setOpenImagePicker()`.
 
 **Translation & Localization** — The set of served locales is the active rows of the `languages` table (managed at `/cms/settings/languages`; the proxy reads them with a 60-second in-memory cache and only falls back to the hardcoded `FALLBACK_LOCALES` `en`/`fr` when the DB is unreadable), backed by `languages` and `translations` tables from migration `00000000000001_setup_cms_core.sql`. First-visit language detection is admin-configurable (see F-007): browser `Accept-Language`, IP-country via host geo headers, combined, or always-default — implemented in `apps/nextblock/lib/i18n/detection.ts` and stored in `site_settings.language_detection_settings`. Content revision history is stored as snapshot + JSON Patch diff (enum `revision_type: snapshot, diff`) per migration `00000000000002_setup_content_tables.sql`.
 
@@ -401,12 +399,12 @@ The system does not natively integrate with: alternative payment processors beyo
 - `README.md` — Product value proposition, competitive positioning, feature list, and documentation index
 - `package.json` — Root workspace metadata, dependency versions, build scripts, and release tooling
 - `LICENSE.md` — AGPLv3 license text and copyright notice (`Copyright (C) 2025 NextBlock CMS`)
-- `nx.json` — Nx 22.6.0 workspace configuration, target defaults, and release settings
+- `nx.json` — Nx workspace configuration, target defaults, and release settings
 - `tsconfig.base.json` — Shared TypeScript strict-mode configuration and `@nextblock-cms/*` path aliases
 - `components.json` — shadcn/ui configuration (Slate base, CSS variables, RSC)
 - `tailwind.config.js` — Root Tailwind CSS theme tokens and dark-mode configuration
 - `vercel.json` — Cron schedule definitions (reset-sandbox at 03:00 UTC, sync-currencies at 18:00 UTC)
-- `.env.exemple` — Environment variable reference template
+- `.env.example` — Environment variable reference template
 
 ### 1.4.2 Documentation Hub (`docs/`)
 
@@ -421,7 +419,7 @@ The system does not natively integrate with: alternative payment processors beyo
 
 ### 1.4.3 Application Sources
 
-- `apps/nextblock/package.json` — Primary application package metadata (`@nextblock-cms/template` v0.2.55)
+- `apps/nextblock/package.json` — Primary application package metadata (`@nextblock-cms/template`)
 - `apps/nextblock/README.md` — Application-level contributor orientation
 - `apps/nextblock/project.json` — Nx project tags `app:nextblock` and `scope:public`
 - `apps/nextblock/next.config.js` — Next.js image optimization, CSP, and `transpilePackages` config
@@ -430,21 +428,21 @@ The system does not natively integrate with: alternative payment processors beyo
 - `apps/nextblock/app/page.tsx` — Homepage locale resolution
 - `apps/nextblock/app/providers.tsx` — Client provider composition order
 - `apps/nextblock/app/api/cron/reset-sandbox/route.ts` — Sandbox reset endpoint
-- `apps/create-nextblock/package.json` — CLI package metadata (`create-nextblock` v0.2.78)
+- `apps/create-nextblock/package.json` — CLI package metadata (`create-nextblock`)
 - `apps/create-nextblock/bin/create-nextblock.js` — CLI command definitions
 
 ### 1.4.4 Library Sources
 
 - `libs/environment.d.ts` — Global `NodeJS.ProcessEnv` augmentation
-- `libs/ui/package.json` — `@nextblock-cms/ui` v0.2.19
-- `libs/editor/package.json` — `@nextblock-cms/editor` v0.2.24 (+ Tiptap extension manifest)
+- `libs/ui/package.json` — `@nextblock-cms/ui`
+- `libs/editor/package.json` — `@nextblock-cms/editor` (+ Tiptap extension manifest)
 - `libs/editor/README.md` — Editor capability enumeration
-- `libs/ecommerce/package.json` — `@nextblock-cms/ecom` v0.0.10
+- `libs/ecommerce/package.json` — `@nextblock-cms/ecom`
 - `libs/ecommerce/project.json` — `scope:premium` Nx tag
-- `libs/db/package.json` — `@nextblock-cms/db` v0.2.32
+- `libs/db/package.json` — `@nextblock-cms/db`
 - `libs/db/src/lib/package-validation.ts` — Premium package activation check (60s cache)
-- `libs/sdk/package.json` — `@nextblock-cms/sdk` v0.2.9
-- `libs/utils/package.json` — `@nextblock-cms/utils` v0.2.13
+- `libs/sdk/package.json` — `@nextblock-cms/sdk`
+- `libs/utils/package.json` — `@nextblock-cms/utils`
 
 ### 1.4.5 Database Migrations
 
@@ -480,7 +478,7 @@ The system does not natively integrate with: alternative payment processors beyo
 
 # 2. Product Requirements
 
-This section decomposes NextBlock CMS into thirty discrete, testable features organized across content management, security and authorization, premium commerce, and developer/platform concerns. Each feature is traceable to specific source files, database migrations, and documentation artifacts enumerated in section `1.4 REFERENCES`. All requirements herein are grounded in observable repository evidence; no speculative capabilities are introduced. Requirements inherit the scope boundaries established in section `1.3 SCOPE` (including explicit exclusions in `1.3.3`).
+This section decomposes NextBlock CMS into thirty discrete, testable features organized across content management, security and authorization, premium commerce, and developer/platform concerns. Each feature is traceable to specific source files, database migrations, and documentation artifacts enumerated in section `1.4 REFERENCES`. All requirements herein are grounded in observable repository evidence; no speculative capabilities are introduced. Requirements inherit the scope boundaries established in section `1.3 SCOPE` (including explicit exclusions in ).
 
 ## 2.1 FEATURE CATALOG
 
@@ -521,7 +519,7 @@ The public content delivery feature provides locale-aware rendering of marketing
 |:--|:--|
 | Prerequisite Features | F-002 (Auth session context), F-007 (Localization), F-009 (Navigation), F-012 (Proxy) |
 | System Dependencies | Supabase (reads published content), Cloudflare R2 (media URLs) |
-| External Dependencies | Next.js 16.1.7, React 19.2.4, `@vercel/speed-insights` 1.3.1 |
+| External Dependencies | Next.js, React, `@vercel/speed-insights` |
 | Integration Requirements | Upstream `sharp` + `plaiceholder` media pipeline; `next-themes` for class-based theming |
 
 #### 2.1.2.2 F-004: Block-Based Page Builder
@@ -548,7 +546,7 @@ The block-based page builder is implemented as a registry in `apps/nextblock/lib
 |:--|:--|
 | Prerequisite Features | F-005 (Editor — used by `text` and `product_details`), F-006 (Media — used by `image`, `section`), F-007 (Translations) |
 | System Dependencies | `blocks` database table (from migration `00000000000002`) |
-| External Dependencies | `zod` 4.3.6 for schema validation |
+| External Dependencies | `zod` for schema validation |
 | Integration Requirements | Commerce blocks (`product_grid`, `featured_product`, `cart`, `checkout`, `product_details`) require `@nextblock-cms/ecommerce` via F-022 |
 
 #### 2.1.2.3 F-005: Tiptap Rich Text Editor
@@ -565,7 +563,7 @@ The block-based page builder is implemented as a registry in `apps/nextblock/lib
 
 **Description**
 
-The editor is a standalone published library at `libs/editor` (version `0.2.24`) exposing `Editor`, `NotionEditor`, `EditorToolbar`, `EditorBubbleMenu`, `EditorFloatingMenu`, `EnhancedFloatingMenu`, `SlashCommandList`, `DragHandle`, `HtmlContent`, and `editorExtensions`. It bundles Tiptap 3.22.4 with 40+ extensions including StarterKit, syntax-highlighted code blocks (via `lowlight` 3.3.0 and `CodeBlockLowlight`), tables, task lists, link handling, TextStyleKit, highlight, subscript/superscript, typography, character counting, slash commands, drag handles, image handling, KaTeX mathematics (`katex` 0.16.25), emoji, mentions, inline alert and call-to-action widgets, and custom HTML-preserving extensions for `div`, `style`, `script`, `svg`, `span`, and catch-all attribute preservation. Collaborative editing infrastructure is supplied by `yjs` 13.6.30, `y-protocols` 1.0.7, and `y-tiptap` 3.0.3.
+The editor is a standalone published library at `libs/editor` exposing `Editor`, `NotionEditor`, `EditorToolbar`, `EditorBubbleMenu`, `EditorFloatingMenu`, `EnhancedFloatingMenu`, `SlashCommandList`, `DragHandle`, `HtmlContent`, and `editorExtensions`. It bundles Tiptap with 40+ extensions including StarterKit, syntax-highlighted code blocks (via `lowlight` and `CodeBlockLowlight`), tables, task lists, link handling, TextStyleKit, highlight, subscript/superscript, typography, character counting, slash commands, drag handles, image handling, KaTeX mathematics (`katex`), emoji, mentions, inline alert and call-to-action widgets, and custom HTML-preserving extensions for `div`, `style`, `script`, `svg`, `span`, and catch-all attribute preservation. Collaborative editing infrastructure is supplied by `yjs`, `y-protocols`, and `y-tiptap`.
 
 **Business Value:** Eliminates the need for downstream adopters to build or license a separate rich-text editor. **User Benefits:** Notion-class writing experience with slash commands, drag handles, and live collaboration primitives. **Technical Context:** Extension kit assembled in `libs/editor/src/lib/kit.ts`; advanced features catalogued in `libs/editor/ADVANCED_FEATURES.md`.
 
@@ -575,7 +573,7 @@ The editor is a standalone published library at `libs/editor` (version `0.2.24`)
 |:--|:--|
 | Prerequisite Features | None (leaf library within `scope:public`) |
 | System Dependencies | F-006 media-picker bridge (via `setOpenImagePicker()`) |
-| External Dependencies | Tiptap 3.22.4 extension ecosystem, `lowlight` 3.3.0, `katex` 0.16.25, Yjs stack |
+| External Dependencies | Tiptap extension ecosystem, `lowlight`, `katex`, Yjs stack |
 | Integration Requirements | Consumed by F-004 for text-oriented block rendering |
 
 #### 2.1.2.4 F-006: Media Management and Image Pipeline
@@ -592,9 +590,9 @@ The editor is a standalone published library at `libs/editor` (version `0.2.24`)
 
 **Description**
 
-Media management combines a Cloudflare R2-backed object store with an image-processing pipeline. Two upload mechanisms are supported: a presigned PUT URL path and a multipart proxy path, both exposed under `apps/nextblock/app/api/upload/`. Processing occurs through `apps/nextblock/app/api/process-image/` using `sharp` 0.34.2 to generate AVIF derivatives and `plaiceholder` 3.0.0 to produce blur placeholders. The `media` table in the Supabase schema stores `object_key`, `file_type`, `size_bytes`, `description`, `width`, `height`, `blur_data_url`, `variants` (JSONB), `folder`, and `file_path`. Upload recording is enforced to the `ADMIN` and `WRITER` roles via `recordMediaUpload` in `libs/db/src/lib/media-actions.ts`.
+Media management combines a Cloudflare R2-backed object store with an image-processing pipeline. Two upload mechanisms are supported: a presigned PUT URL path and a multipart proxy path, both exposed under `apps/nextblock/app/api/upload/`. Processing occurs through `apps/nextblock/app/api/process-image/` using `sharp` to generate AVIF derivatives and `plaiceholder` to produce blur placeholders. The `media` table in the Supabase schema stores `object_key`, `file_type`, `size_bytes`, `description`, `width`, `height`, `blur_data_url`, `variants` (JSONB), `folder`, and `file_path`. Upload recording is enforced to the `ADMIN` and `WRITER` roles via `recordMediaUpload` in `libs/db/src/lib/media-actions.ts`.
 
-**Business Value:** Delivers production-grade media handling without requiring adopters to integrate a dedicated DAM. **User Benefits:** Automatic modern-format conversion, blur placeholders, and role-gated uploads. **Technical Context:** Uses `@aws-sdk/client-s3` 3.920.0 and `@aws-sdk/s3-request-presigner` 3.919.0 for S3-compatible R2 access.
+**Business Value:** Delivers production-grade media handling without requiring adopters to integrate a dedicated DAM. **User Benefits:** Automatic modern-format conversion, blur placeholders, and role-gated uploads. **Technical Context:** Uses `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner` for S3-compatible R2 access.
 
 **Dependencies**
 
@@ -650,7 +648,7 @@ Locale propagation uses the `NEXT_USER_LOCALE` cookie and the `X-User-Locale` re
 
 **Description**
 
-Revisions are implemented in the `page_revisions` and `post_revisions` tables defined in migration `00000000000002_setup_content_tables.sql`, using a hybrid snapshot/diff model. The `revision_type` enum (`snapshot`, `diff`) distinguishes between full snapshots and JSON Patch diffs (generated via `fast-json-patch` 3.1.1). A UNIQUE constraint on `(page_id, version)` ensures monotonically increasing snapshot versions. The CMS surface resides under `apps/nextblock/app/cms/revisions/`.
+Revisions are implemented in the `page_revisions` and `post_revisions` tables defined in migration `00000000000002_setup_content_tables.sql`, using a hybrid snapshot/diff model. The `revision_type` enum (`snapshot`, `diff`) distinguishes between full snapshots and JSON Patch diffs (generated via `fast-json-patch`). A UNIQUE constraint on `(page_id, version)` ensures monotonically increasing snapshot versions. The CMS surface resides under `apps/nextblock/app/cms/revisions/`.
 
 **Business Value:** Provides audit trail and rollback capability for authored content. **User Benefits:** Authors can restore prior states; accidental deletions are recoverable. **Technical Context:** Diff generation reduces storage overhead for frequently-updated content.
 
@@ -660,7 +658,7 @@ Revisions are implemented in the `page_revisions` and `post_revisions` tables de
 |:--|:--|
 | Prerequisite Features | F-002 (Auth), F-003 (RBAC) |
 | System Dependencies | `page_revisions`, `post_revisions` tables; `revision_type` enum |
-| External Dependencies | `fast-json-patch` 3.1.1 |
+| External Dependencies | `fast-json-patch` |
 | Integration Requirements | Triggered on page/post write paths |
 
 #### 2.1.2.7 F-009: Navigation Menus
@@ -704,7 +702,7 @@ Three menu locations are supported: `HEADER`, `FOOTER`, and `SIDEBAR`, encoded b
 
 **Description**
 
-Authentication is layered over Supabase Auth using `@supabase/ssr` 0.7.0 and `@supabase/supabase-js` 2.77.0. Server actions in `apps/nextblock/app/actions.ts` implement sign-in, sign-up, and forgot-password flows. The `app/auth/callback/route.ts` route exchanges authorization codes for sessions (used by the email-confirmation and recovery flows) (`supabase.auth.exchangeCodeForSession()`), loads the profile role, and redirects using `resolvePostAuthRedirect()`. Email templates for confirmation, email change, invitation, magic-link, reauthentication, and password recovery reside in `libs/db/src/supabase/templates/`. A `handle_new_user()` trigger function paired with the `on_auth_user_created` trigger on `auth.users` automatically provisions a `profiles` row on registration.
+Authentication is layered over Supabase Auth using `@supabase/ssr` and `@supabase/supabase-js`. Server actions in `apps/nextblock/app/actions.ts` implement sign-in, sign-up, and forgot-password flows. The `app/auth/callback/route.ts` route exchanges authorization codes for sessions (used by the email-confirmation and recovery flows) (`supabase.auth.exchangeCodeForSession()`), loads the profile role, and redirects using `resolvePostAuthRedirect()`. Email templates for confirmation, email change, invitation, magic-link, reauthentication, and password recovery reside in `libs/db/src/supabase/templates/`. A `handle_new_user()` trigger function paired with the `on_auth_user_created` trigger on `auth.users` automatically provisions a `profiles` row on registration.
 
 **Business Value:** Eliminates the need for adopters to integrate a separate identity provider. **User Benefits:** Multiple sign-in methods (email/password, magic link) with localized email templates. **Technical Context:** Supabase Auth session cookies are synchronized by the request proxy to Server Components.
 
@@ -714,7 +712,7 @@ Authentication is layered over Supabase Auth using `@supabase/ssr` 0.7.0 and `@s
 |:--|:--|
 | Prerequisite Features | F-012 (Proxy session sync) |
 | System Dependencies | `auth.users` (Supabase-managed), `profiles` table |
-| External Dependencies | `@supabase/ssr` 0.7.0, `@supabase/supabase-js` 2.77.0, `nodemailer` 7.0.10 for SMTP |
+| External Dependencies | `@supabase/ssr`, `@supabase/supabase-js`, `nodemailer` for SMTP |
 | Integration Requirements | Supabase project env vars; SMTP env vars |
 
 #### 2.1.3.2 F-003: Role-Based Access Control (RBAC)
@@ -893,7 +891,7 @@ The shopping cart is implemented with Zustand state management in `libs/ecommerc
 |:--|:--|
 | Prerequisite Features | F-013, F-018 (Multi-Currency), F-022, F-019 (Shipping), F-020 (Tax) |
 | System Dependencies | `orders` table, `order_items` table |
-| External Dependencies | `stripe` 20.4.1, `@freemius/checkout` 1.4.1 |
+| External Dependencies | `stripe`, `@freemius/checkout` |
 | Integration Requirements | Provider-specific handoff to F-016 or F-017 based on product type |
 
 #### 2.1.4.4 F-016: Stripe Payment Integration
@@ -918,7 +916,7 @@ Stripe integration resides in `libs/ecommerce/src/lib/stripe/`. The `StripeProvi
 |:--|:--|
 | Prerequisite Features | F-013, F-014, F-018, F-019, F-020, F-021, F-022 |
 | System Dependencies | Stripe account, webhook endpoint |
-| External Dependencies | `stripe` 20.4.1, `@stripe/stripe-js` 8.11.0 |
+| External Dependencies | `stripe`, `@stripe/stripe-js` |
 | Integration Requirements | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` env vars |
 
 #### 2.1.4.5 F-017: Freemius Licensing and Digital Products
@@ -943,7 +941,7 @@ Freemius integration lives in `libs/ecommerce/src/lib/providers/` and supports d
 |:--|:--|
 | Prerequisite Features | F-013 (products with Freemius provider), F-022 |
 | System Dependencies | `freemius_plans`, `freemius_pricing` tables |
-| External Dependencies | `@freemius/checkout` 1.4.1, `@freemius/sdk` 0.3.0 |
+| External Dependencies | `@freemius/checkout`, `@freemius/sdk` |
 | Integration Requirements | `FREEMIUS_*` env vars |
 
 #### 2.1.4.6 F-018: Multi-Currency Pricing
@@ -1087,7 +1085,7 @@ The `package_activations` table (migration `00000000000003_setup_catalog_and_lic
 
 **Description**
 
-Four themes — `light`, `dark`, `vibrant`, and `system` — are provided via `next-themes` 0.4.6 with class-based switching. The `ThemeProvider` is composed as the outermost wrapper in `apps/nextblock/app/providers.tsx` (line 61), and `components/theme-switcher.tsx` exposes the UI toggle.
+Four themes — `light`, `dark`, `vibrant`, and `system` — are provided via `next-themes` with class-based switching. The `ThemeProvider` is composed as the outermost wrapper in `apps/nextblock/app/providers.tsx` (line 61), and `components/theme-switcher.tsx` exposes the UI toggle.
 
 **Dependencies**
 
@@ -1095,7 +1093,7 @@ Four themes — `light`, `dark`, `vibrant`, and `system` — are provided via `n
 |:--|:--|
 | Prerequisite Features | None |
 | System Dependencies | None |
-| External Dependencies | `next-themes` 0.4.6 |
+| External Dependencies | `next-themes` |
 | Integration Requirements | Tailwind CSS `dark:` variants |
 
 #### 2.1.5.2 F-023: CLI Scaffolding Tool (`create-nextblock`)
@@ -1112,7 +1110,7 @@ Four themes — `light`, `dark`, `vibrant`, and `system` — are provided via `n
 
 **Description**
 
-The CLI package `apps/create-nextblock` (version `0.2.78`) is published as `create-nextblock` on npm and invoked via `npm create nextblock@latest`. The CLI entry point at `apps/create-nextblock/bin/create-nextblock.js` exposes two commands. The default `create [project-directory]` command prompts for a project name, copies the `templates/nextblock-template` directory, applies client-component/provider adjustments, normalizes editor/UI imports, generates UI proxy modules, rewrites `package.json` to use published packages, writes `.npmrc`, optionally installs dependencies, optionally runs a setup wizard, and initializes git. The `activate [module]` command presently supports only `ecommerce`, installs it via the npm alias `@nextblock-cms/ecommerce@npm:@nextblock-cms/ecom@latest`, and injects route wrappers that call `verifyPackageOnline()` for `/cms/orders`, `/cms/products`, `/cms/payments`, `/checkout/success`, and `/api/checkout`. Package versions are resolved from local workspace `package.json` files.
+The CLI package `apps/create-nextblock` is published as `create-nextblock` on npm and invoked via `npm create nextblock@latest`. The CLI entry point at `apps/create-nextblock/bin/create-nextblock.js` exposes two commands. The default `create [project-directory]` command prompts for a project name, copies the `templates/nextblock-template` directory, applies client-component/provider adjustments, normalizes editor/UI imports, generates UI proxy modules, rewrites `package.json` to use published packages, writes `.npmrc`, optionally installs dependencies, optionally runs a setup wizard, and initializes git. The `activate [module]` command presently supports only `ecommerce`, installs it via the npm alias `@nextblock-cms/ecommerce@npm:@nextblock-cms/ecom@latest`, and injects route wrappers that call `verifyPackageOnline()` for `/cms/orders`, `/cms/products`, `/cms/payments`, `/checkout/success`, and `/api/checkout`. Package versions are resolved from local workspace `package.json` files.
 
 **Dependencies**
 
@@ -1137,7 +1135,7 @@ The CLI package `apps/create-nextblock` (version `0.2.78`) is published as `crea
 
 **Description**
 
-The SDK library at `libs/sdk` (version `0.2.9`) provides a typed contract for external block authoring. Main exports from `libs/sdk/src/lib/sdk.ts` include `BlockContentSchema`, `BlockData<TSchema>`, `BlockProps<TSchema>`, `BlockEditorProps<TSchema>`, `BlockConfig<TSchema>`, and `LucideIcon`. A compliant block configuration declares `type`, `label`, optional `icon`, `schema`, `initialContent`, `RendererComponent`, and `EditorComponent`. Renderer props expose `content`, optional `className`, `isInEditor`, and `languageKey`; editor props expose `content`, `block`, and `onChange`. Per `docs/07-BLOCK-SDK-AND-EXTENSIBILITY.md`, the SDK defines the reusable contract, while the built-in CMS implementation resides in `apps/nextblock/lib/blocks/blockRegistry.ts` (F-004).
+The SDK library at `libs/sdk` provides a typed contract for external block authoring. Main exports from `libs/sdk/src/lib/sdk.ts` include `BlockContentSchema`, `BlockData<TSchema>`, `BlockProps<TSchema>`, `BlockEditorProps<TSchema>`, `BlockConfig<TSchema>`, and `LucideIcon`. A compliant block configuration declares `type`, `label`, optional `icon`, `schema`, `initialContent`, `RendererComponent`, and `EditorComponent`. Renderer props expose `content`, optional `className`, `isInEditor`, and `languageKey`; editor props expose `content`, `block`, and `onChange`. Per `docs/07-BLOCK-SDK-AND-EXTENSIBILITY.md`, the SDK defines the reusable contract, while the built-in CMS implementation resides in `apps/nextblock/lib/blocks/blockRegistry.ts` (F-004).
 
 **Dependencies**
 
@@ -1145,7 +1143,7 @@ The SDK library at `libs/sdk` (version `0.2.9`) provides a typed contract for ex
 |:--|:--|
 | Prerequisite Features | None |
 | System Dependencies | None |
-| External Dependencies | `zod` 4.3.6, `lucide-react` 0.548.0 |
+| External Dependencies | `zod`, `lucide-react` |
 | Integration Requirements | Referenced by F-004 for conformant implementation |
 
 #### 2.1.5.4 F-025: Scheduled Jobs (Cron Endpoints)
@@ -1237,7 +1235,7 @@ A secure webhook at `apps/nextblock/app/api/revalidate/` validates the shared se
 
 **Description**
 
-The workspace is an Nx 22.6.0 monorepo whose ESLint configuration in `eslint.config.mjs` enables `@nx/enforce-module-boundaries`. Scope tags `scope:public` (applied to `libs/ui`, `libs/utils`, `libs/db`, `libs/editor`, `libs/sdk`) and `scope:premium` (applied to `libs/ecommerce`) differentiate license boundaries. Per `.agent/skills/project-architecture/SKILL.md`, three dependency rules are enforced: (1) `libs/*` may depend on other `libs/*`; (2) `apps/*` may depend on `libs/*`; (3) `libs/ui` MUST NOT depend on `apps/nextblock`. Published library versions are: `@nextblock-cms/ui` 0.2.19, `@nextblock-cms/utils` 0.2.13, `@nextblock-cms/db` 0.2.32, `@nextblock-cms/editor` 0.2.24, `@nextblock-cms/sdk` 0.2.9, and `@nextblock-cms/ecom` 0.0.10.
+The workspace is an Nx monorepo whose ESLint configuration in `eslint.config.mjs` enables `@nx/enforce-module-boundaries`. Scope tags `scope:public` (applied to `libs/ui`, `libs/utils`, `libs/db`, `libs/editor`, `libs/sdk`) and `scope:premium` (applied to `libs/ecommerce`) differentiate license boundaries. Per `.agent/skills/project-architecture/SKILL.md`, three dependency rules are enforced: (1) `libs/*` may depend on other `libs/*`; (2) `apps/*` may depend on `libs/*`; (3) `libs/ui` MUST NOT depend on `apps/nextblock`. Published library versions are: `@nextblock-cms/ui`, `@nextblock-cms/utils`, `@nextblock-cms/db`, `@nextblock-cms/editor`, `@nextblock-cms/sdk`, and `@nextblock-cms/ecom`.
 
 **Dependencies**
 
@@ -1245,7 +1243,7 @@ The workspace is an Nx 22.6.0 monorepo whose ESLint configuration in `eslint.con
 |:--|:--|
 | Prerequisite Features | None |
 | System Dependencies | Nx CLI |
-| External Dependencies | Nx 22.6.0, ESLint `@nx/enforce-module-boundaries` plugin |
+| External Dependencies | Nx, ESLint `@nx/enforce-module-boundaries` plugin |
 | Integration Requirements | `nx.json`, individual `project.json` files |
 
 #### 2.1.5.8 F-029: Feedback System
@@ -1270,7 +1268,7 @@ CMS users can submit feedback through the `FeedbackModal` component in `apps/nex
 |:--|:--|
 | Prerequisite Features | F-002 (Auth) |
 | System Dependencies | SMTP transport |
-| External Dependencies | `nodemailer` 7.0.10 |
+| External Dependencies | `nodemailer` |
 | Integration Requirements | SMTP env vars |
 
 ## 2.2 FUNCTIONAL REQUIREMENTS
@@ -1595,7 +1593,7 @@ The following matrix links features to the sections of the technical specificati
 | F-023 | `apps/create-nextblock/bin/create-nextblock.js` | §1.2.1.1(3), §1.2.3.1 | Scaffolding |
 | F-024 | `libs/sdk/src/lib/sdk.ts` | §1.2.2.2 | Extensibility contract |
 | F-025 | `vercel.json`, cron route handlers | §1.2.3.3 (job health), §1.2.1.3 | Scheduled operations |
-| F-026 | `.env.exemple`, `SandboxBanner` | §1.1.1 (demo credentials) | Evaluator experience |
+| F-026 | `.env.example`, `SandboxBanner` | §1.1.1 (demo credentials) | Evaluator experience |
 | F-027 | `app/api/revalidate/` | §1.2.3.3 (caching) | Cache invalidation |
 | F-028 | `nx.json`, `.agent/skills/project-architecture/SKILL.md` | §1.2.2.2, §1.2.3.2(1)(2) | Architectural discipline |
 | F-029 | `app/actions/feedback.ts`, `FeedbackModal.tsx` | (N/A) | Adopter signal |
@@ -1673,7 +1671,7 @@ The following matrix links features to the sections of the technical specificati
 | Library releases | Each of the six libraries is independently versioned and published | F-004, F-005, F-024, F-028 |
 | CLI release cadence | `apps/create-nextblock` version must track the template's consumed library versions | F-023 |
 | Email templates | Six templates in `libs/db/src/supabase/templates/` must be kept in sync with Supabase Auth flow changes | F-002 |
-| Environment variable drift | Changes must be reflected in `.env.exemple` and `libs/environment.d.ts` `NodeJS.ProcessEnv` augmentation | All env-dependent features |
+| Environment variable drift | Changes must be reflected in `.env.example` and `libs/environment.d.ts` `NodeJS.ProcessEnv` augmentation | All env-dependent features |
 | CSP allowlist | Must be updated whenever new third-party origins are introduced | F-011 |
 | Cron secrets | `CRON_SECRET` rotation requires coordinated env var update | F-025 |
 | FX override | `FX_API_BASE_URL` toggle allows switching provider without code change | F-018 |
@@ -1687,23 +1685,23 @@ The following matrix links features to the sections of the technical specificati
 
 | Category | Assumption or Constraint |
 |:--|:--|
-| Deployment Target | Vercel (cron schedules declared in `vercel.json`; `@vercel/speed-insights` 1.3.1 integrated) |
+| Deployment Target | Vercel (cron schedules declared in `vercel.json`; `@vercel/speed-insights` integrated) |
 | Infrastructure | Supabase + Cloudflare R2 + SMTP required for any deployment; Stripe + Freemius + Frankfurter required for premium commerce |
 | First-User Rule | Exactly one `ADMIN` guaranteed at bootstrap; subsequent users default to `USER` (per §1.1.3) |
 | License Model | Open core under AGPLv3; premium modules source-available and license-gated (per §1.1.1) |
 | Version Alignment | Library versions are independent; CLI's generated template is pinned to specific published versions at scaffold time |
 | Testability | All requirements in §2.2 are stated as MUST/SHOULD/COULD statements with observable acceptance criteria |
-| Requirement Versioning | Requirements herein correspond to the workspace state at `@nextblock/source` version `0.2.77` (per §1.1.1) |
+| Requirement Versioning | Requirements herein correspond to the current workspace state (per §1.1.1) |
 
 ## 2.5 REFERENCES
 
 ### 2.5.1 Files Examined
 
 - `README.md` — Product value proposition, competitive positioning, Lighthouse and CLI claims
-- `package.json` — Workspace dependency versions (Next.js 16.1.7, React 19.2.4, TypeScript 5.9.3, Nx 22.6.0, Tailwind 4.1.16, Tiptap 3.22.4)
-- `nx.json` — Nx 22.6.0 plugin and release configuration
+- `package.json` — Workspace dependency versions (Next.js, React, TypeScript, Nx, Tailwind, Tiptap)
+- `nx.json` — Nx plugin and release configuration
 - `vercel.json` — Cron schedule definitions (reset-sandbox 03:00 UTC; sync-currencies 18:00 UTC)
-- `.env.exemple` — Environment variable reference template
+- `.env.example` — Environment variable reference template
 - `eslint.config.mjs` — `@nx/enforce-module-boundaries` scope-tag rules (F-028)
 - `apps/nextblock/next.config.js` — Image format/device-size config; CSP; `transpilePackages`
 - `apps/nextblock/proxy.ts` — Auth proxy, RBAC gating, locale propagation, security headers, page-type signaling (F-002, F-003, F-007, F-011, F-012)
@@ -1788,7 +1786,7 @@ The following matrix links features to the sections of the technical specificati
 
 # 3. Technology Stack
 
-The NextBlock CMS technology stack is a deliberately opinionated, TypeScript-first selection optimized for a Next.js 16 App Router runtime, a Supabase Postgres backend, and a Vercel-native deployment topology. Every technology choice documented below is traceable to a concrete file in the workspace at `@nextblock/source` version `0.2.77` — there is no theoretical dependency in this catalog. The stack departs meaningfully from the default reference stack specified for this project (AWS, Docker, Terraform, GitHub Actions, Python/Flask, MongoDB, Auth0, Langchain, React-Native, Swift, Kotlin, Objective-C, ElectronJS); these deviations are enumerated explicitly in Section 3.7 along with the justifications for each divergence.
+The NextBlock CMS technology stack is a deliberately opinionated, TypeScript-first selection optimized for a Next.js 16 App Router runtime, a Supabase Postgres backend, and a Vercel-native deployment topology. Every technology choice documented below is traceable to a concrete file in the workspace at `nextblock` version — there is no theoretical dependency in this catalog. The stack departs meaningfully from the default reference stack specified for this project (AWS, Docker, Terraform, GitHub Actions, Python/Flask, MongoDB, Auth0, Langchain, React-Native, Swift, Kotlin, Objective-C, ElectronJS); these deviations are enumerated explicitly in Section 3.7 along with the justifications for each divergence.
 
 The selections align with the critical success factors defined in Section 1.2.3.2 — strict TypeScript compliance, open-core scope-tag discipline via Nx module boundaries, production nonce-based CSP coverage, premium license integrity via the `package_activations` table, the first-user ADMIN trigger guarantee, and role-gated CMS access.
 
@@ -1798,7 +1796,7 @@ The selections align with the critical success factors defined in Section 1.2.3.
 
 | Language | Version / Dialect | Primary Usage | Evidence |
 |:--|:--|:--|:--|
-| TypeScript | `^5.9.3` (strict mode) | Application, library, editor, CLI, tooling source | `package.json`, `tsconfig.base.json` |
+| TypeScript | (strict mode) | Application, library, editor, CLI, tooling source | `package.json`, `tsconfig.base.json` |
 | JavaScript | ES2022 / ESM + CommonJS | Configuration files, tooling scripts, CLI entry | `next.config.js`, `tools/scripts/*` |
 | SQL (PostgreSQL) | PostgreSQL dialect | Schema migrations, RLS policies, triggers, RPCs | `libs/db/src/supabase/migrations/` |
 
@@ -1830,7 +1828,7 @@ TypeScript's strict mode is enumerated as a **Critical Success Factor** in Secti
 
 ### 3.1.3 JavaScript — Tooling and Configuration
 
-JavaScript serves a narrow, well-defined role: configuration files consumed by the Node runtime (e.g., `next.config.js`, `postcss.config.js`, `tailwind.config.js`, `eslint.config.mjs`), the CLI entry point at `apps/create-nextblock/bin/create-nextblock.js` (which uses an ES module shebang to remain Node-native), and release automation scripts under `tools/scripts/` (a mix of `.js`, `.cjs`, `.mjs`, and `.ts` per the consuming execution context). The package manager is pinned via the `packageManager` field in the root `package.json` to `npm@10.9.4`.
+JavaScript serves a narrow, well-defined role: configuration files consumed by the Node runtime (e.g., `next.config.js`, `postcss.config.js`, `tailwind.config.js`, `eslint.config.mjs`), the CLI entry point at `apps/create-nextblock/bin/create-nextblock.js` (which uses an ES module shebang to remain Node-native), and release automation scripts under `tools/scripts/` (a mix of `.js`, `.cjs`, `.mjs`, and `.ts` per the consuming execution context). The package manager is pinned via the `packageManager` field in the root `package.json` to `npm`.
 
 ### 3.1.4 SQL — PostgreSQL Dialect
 
@@ -1840,12 +1838,12 @@ Eleven numbered migration files located in `libs/db/src/supabase/migrations/` (n
 
 ### 3.2.1 Core Application Framework Stack
 
-| Technology | Version | Purpose | Evidence |
-|:--|:--|:--|:--|
-| Next.js (App Router) | `16.1.7` | Full-stack React framework with RSC | `package.json` line 138 |
-| React / react-dom | `^19.2.4` | UI runtime with Server Components | `package.json` lines 146, 149 |
-| TypeScript | `^5.9.3` | Strict-mode language runtime | `package.json` line 157 |
-| Nx | `22.6.0` | Monorepo orchestration, task graph, caching | `package.json`, `nx.json` |
+| Technology | Purpose | Evidence |
+| :-- | :-- | :-- |
+| Next.js (App Router) | Full-stack React framework with RSC | `package.json` line 138 |
+| React / react-dom | UI runtime with Server Components | `package.json` lines 146, 149 |
+| TypeScript | Strict-mode language runtime | `package.json` line 157 |
+| Nx | Monorepo orchestration, task graph, caching | `package.json`, `nx.json` |
 
 #### 3.2.1.1 Next.js 16 — Justification
 
@@ -1859,11 +1857,11 @@ The `transpilePackages` array in `apps/nextblock/next.config.js` lists `@nextblo
 
 #### 3.2.1.2 React 19 — Justification
 
-React 19.2.4 is required by Next.js 16's App Router and provides Server Components, Server Actions, and the new `use()` hook semantics used by the provider chain composed in `apps/nextblock/app/providers.tsx` (`AuthProvider → LanguageProvider → CurrencyProvider → CurrentContentProvider → CartTranslator → TranslationBridge → TranslationsProvider → ThemeProvider`).
+React is required by Next.js 16's App Router and provides Server Components, Server Actions, and the new `use()` hook semantics used by the provider chain composed in `apps/nextblock/app/providers.tsx` (`AuthProvider → LanguageProvider → CurrencyProvider → CurrentContentProvider → CartTranslator → TranslationBridge → TranslationsProvider → ThemeProvider`).
 
 #### 3.2.1.3 Nx 22.6.0 — Justification
 
-Nx 22.6.0 is selected per the scope constraint in Section 1.3.3.5 ("no alternative monorepo orchestrators beyond Nx"). Its value proposition rests on three invariants enforced at the workspace level:
+Nx is selected per the scope constraint in Section 1.3.3.5 ("no alternative monorepo orchestrators beyond Nx"). Its value proposition rests on three invariants enforced at the workspace level:
 
 1. **Module boundary enforcement** via `@nx/enforce-module-boundaries` in `eslint.config.mjs`, which encodes the architectural rule that `libs/ui` MUST NOT depend on `apps/nextblock`.
 2. **Scope-tag discipline** partitioning the workspace into `scope:public` libraries (AGPLv3) and `scope:premium` libraries (source-available, license-gated).
@@ -1873,20 +1871,20 @@ Nx 22.6.0 is selected per the scope constraint in Section 1.3.3.5 ("no alternati
 
 The following Nx plugins are registered in `nx.json` and installed as devDependencies in the root `package.json`:
 
-| Plugin | Version | Role |
-|:--|:--|:--|
-| `@nx/esbuild` | `22.6.0` | esbuild-based compilation |
-| `@nx/eslint` + `@nx/eslint-plugin` | `22.6.0` | Linting integration |
-| `@nx/js` | `22.6.0` | TypeScript library builder |
-| `@nx/key` | `^5.0.0` | Nx Powerpack license key |
-| `@nx/next` | `22.6.0` | Next.js app executor |
-| `@nx/node` | `22.6.0` | Node application support |
-| `@nx/powerpack-license` | `^5.0.0` | Powerpack license enforcement |
-| `@nx/react` | `22.6.0` | React support |
-| `@nx/vite` | `22.6.0` | Vite executor for libraries |
-| `@nx/vitest` | `22.6.0` | Vitest test runner integration |
-| `@nx/web` | `22.6.0` | Web target support |
-| `@nx/workspace` | `22.6.0` | Workspace primitives |
+| Plugin | Role |
+| :-- | :-- |
+| `@nx/esbuild` | esbuild-based compilation |
+| `@nx/eslint` + `@nx/eslint-plugin` | Linting integration |
+| `@nx/js` | TypeScript library builder |
+| `@nx/key` | Nx Powerpack license key |
+| `@nx/next` | Next.js app executor |
+| `@nx/node` | Node application support |
+| `@nx/powerpack-license` | Powerpack license enforcement |
+| `@nx/react` | React support |
+| `@nx/vite` | Vite executor for libraries |
+| `@nx/vitest` | Vitest test runner integration |
+| `@nx/web` | Web target support |
+| `@nx/workspace` | Workspace primitives |
 
 ### 3.2.2 Styling and Design System Libraries
 
@@ -1894,16 +1892,16 @@ Tailwind CSS 4 is the workspace's sole styling system, layered with Radix UI pri
 
 #### 3.2.2.1 Utility CSS and Post-Processing
 
-| Library | Version | Purpose |
-|:--|:--|:--|
-| `tailwindcss` | `^4.1.16` | Utility-first CSS framework |
-| `@tailwindcss/postcss` | `^4.1.16` | Tailwind 4 PostCSS integration |
-| `postcss` | `^8.5.6` | CSS transformation pipeline |
-| `autoprefixer` | `^10.4.21` | Vendor prefix generation |
-| `tailwindcss-animate` | `^1.0.7` | Pre-built animation utilities |
-| `tailwind-merge` | `^3.3.1` | Class-name conflict resolution |
-| `clsx` | `^2.1.1` | Conditional class composition |
-| `class-variance-authority` | `^0.7.1` | Variant-based styling primitives |
+| Library | Purpose |
+| :-- | :-- |
+| `tailwindcss` | Utility-first CSS framework |
+| `@tailwindcss/postcss` | Tailwind 4 PostCSS integration |
+| `postcss` | CSS transformation pipeline |
+| `autoprefixer` | Vendor prefix generation |
+| `tailwindcss-animate` | Pre-built animation utilities |
+| `tailwind-merge` | Class-name conflict resolution |
+| `clsx` | Conditional class composition |
+| `class-variance-authority` | Variant-based styling primitives |
 
 The root `tailwind.config.js` declares `darkMode: ['class']` for next-themes compatibility, content globs spanning `apps/**` and `libs/**`, HSL variable-based theme tokens (`primary`, `secondary`, `accent`, `muted`, `destructive`, `warning`, `popover`, `card`), and keyframe animations for accordion interactions.
 
@@ -1911,23 +1909,23 @@ The root `tailwind.config.js` declares `darkMode: ['class']` for next-themes com
 
 The `components.json` file at the workspace root registers shadcn/ui with the `slate` base color palette, CSS variables-based theming, React Server Components support, and TSX component format. Twelve `@radix-ui/*` headless primitives supply the underlying accessibility-compliant behavior:
 
-| Primitive | Version | Primitive | Version |
-|:--|:--|:--|:--|
-| `@radix-ui/react-avatar` | `^1.1.10` | `@radix-ui/react-progress` | `^1.1.7` |
-| `@radix-ui/react-checkbox` | `^1.3.3` | `@radix-ui/react-radio-group` | `^1.3.8` |
-| `@radix-ui/react-dialog` | `^1.1.15` | `@radix-ui/react-select` | `^2.2.6` |
-| `@radix-ui/react-dropdown-menu` | `^2.1.16` | `@radix-ui/react-separator` | `^1.1.7` |
-| `@radix-ui/react-label` | `^2.1.7` | `@radix-ui/react-slot` | `^1.2.3` |
-| `@radix-ui/react-popover` | `^1.1.15` | `@radix-ui/react-tooltip` | `^1.2.8` |
+| Primitive | Primitive |
+| :-- | :-- |
+| `@radix-ui/react-avatar` | `@radix-ui/react-progress` |
+| `@radix-ui/react-checkbox` | `@radix-ui/react-radio-group` |
+| `@radix-ui/react-dialog` | `@radix-ui/react-select` |
+| `@radix-ui/react-dropdown-menu` | `@radix-ui/react-separator` |
+| `@radix-ui/react-label` | `@radix-ui/react-slot` |
+| `@radix-ui/react-popover` | `@radix-ui/react-tooltip` |
 
 #### 3.2.2.3 Iconography and Theming
 
-- **lucide-react** — `^0.548.0` at workspace level; `^0.534.0` in the published template package. Provides the typed icon set consumed by `@nextblock-cms/sdk` block configurations (F-024).
-- **next-themes** — `^0.4.6` enabling light/dark/vibrant/system theme switching (F-010) via class-based strategy, composed as the outermost provider in `apps/nextblock/app/providers.tsx`.
+- **lucide-react** — used at the workspace level and in the published template package. Provides the typed icon set consumed by `@nextblock-cms/sdk` block configurations (F-024).
+- **next-themes** — enabling light/dark/vibrant/system theme switching (F-010) via class-based strategy, composed as the outermost provider in `apps/nextblock/app/providers.tsx`.
 
 ### 3.2.3 Rich-Text Editor Stack — `libs/editor`
 
-The `@nextblock-cms/editor` library (version `0.2.24`) bundles Tiptap 3.22.4 with more than 40 extensions and the Yjs collaboration stack. This is the substrate that powers the F-005 editor feature documented in Section 2.1.2.3.
+The `@nextblock-cms/editor` library bundles Tiptap with more than 40 extensions and the Yjs collaboration stack. This is the substrate that powers the F-005 editor feature documented in Section 2.1.2.3.
 
 #### 3.2.3.1 Tiptap Core and Extensions
 
@@ -1938,72 +1936,72 @@ The `@nextblock-cms/editor` library (version `0.2.24`) bundles Tiptap 3.22.4 wit
 | Block Nodes | bullet-list, ordered-list, list-item, task-item, task-list, heading, code-block-lowlight, details, horizontal-rule, hard-break, table/-cell/-header/-row, image |
 | Interactions | bubble-menu, floating-menu, drag-handle, drag-handle-react, focus, placeholder, character-count, dropcursor, gapcursor, emoji, mention, node-range, typography, history, mathematics, youtube |
 
-All extensions are pinned at version `^3.22.4` (matching the Tiptap core release).
+All extensions are pinned to (matching the Tiptap core release).
 
 #### 3.2.3.2 Collaboration Layer
 
-| Library | Version | Role |
-|:--|:--|:--|
-| `@tiptap/extension-collaboration` | `^3.22.4` | Tiptap collaboration plugin |
-| `@tiptap/y-tiptap` | `^3.0.3` | Tiptap ↔ Yjs bridge |
-| `yjs` | `^13.6.30` | CRDT backbone |
-| `y-protocols` | `^1.0.7` | Awareness and sync protocols |
+| Library | Role |
+| :-- | :-- |
+| `@tiptap/extension-collaboration` | Tiptap collaboration plugin |
+| `@tiptap/y-tiptap` | Tiptap ↔ Yjs bridge |
+| `yjs` | CRDT backbone |
+| `y-protocols` | Awareness and sync protocols |
 
 #### 3.2.3.3 Auxiliary Editor Dependencies
 
-- **lowlight** `^3.3.0` — Syntax highlighting engine used by `CodeBlockLowlight`.
-- **katex** `^0.16.25` — Mathematical notation rendering for the `@tiptap/extension-mathematics` extension.
+- **lowlight** — Syntax highlighting engine used by `CodeBlockLowlight`.
+- **katex** — Mathematical notation rendering for the `@tiptap/extension-mathematics` extension.
 
 ### 3.2.4 Forms, Validation, and State Management
 
-| Library | Version | Role | Evidence |
-|:--|:--|:--|:--|
-| `zod` | `^4.3.6` | Schema validation (block schemas, API validation, form resolvers) | F-004, F-024 |
-| `react-hook-form` | `^7.71.1` | Form state management | Admin CMS forms |
-| `@hookform/resolvers` | `^5.2.2` | Zod ↔ react-hook-form adapter | Admin CMS forms |
-| `zustand` | `^5.0.10` | Client-side cart store (F-015) | `libs/ecommerce/src/lib/cart-store.ts` |
+| Library | Role | Evidence |
+| :-- | :-- | :-- |
+| `zod` | Schema validation (block schemas, API validation, form resolvers) | F-004, F-024 |
+| `react-hook-form` | Form state management | Admin CMS forms |
+| `@hookform/resolvers` | Zod ↔ react-hook-form adapter | Admin CMS forms |
+| `zustand` | Client-side cart store (F-015) | `libs/ecommerce/src/lib/cart-store.ts` |
 
 Zod is selected as the universal validation layer because it simultaneously satisfies the typed block-schema contract required by F-024 (`BlockContentSchema`) and provides server-action input validation in line with the "typed block schemas" mitigation for XSS enumerated in Section 2.4.4.
 
 ### 3.2.5 Interaction and UI Behavior Libraries
 
-| Library | Version | Purpose |
-|:--|:--|:--|
-| `@dnd-kit/core` | `^6.3.1` | Drag-and-drop primitives for block reordering |
-| `@dnd-kit/sortable` | `^10.0.0` | Sortable list implementation |
-| `@dnd-kit/utilities` | `^3.2.2` | DnD helpers |
-| `@floating-ui/dom` | `^1.7.4` | Floating element positioning |
-| `@floating-ui/react` | `^0.27.16` | React bindings for floating-ui |
+| Library | Purpose |
+| :-- | :-- |
+| `@dnd-kit/core` | Drag-and-drop primitives for block reordering |
+| `@dnd-kit/sortable` | Sortable list implementation |
+| `@dnd-kit/utilities` | DnD helpers |
+| `@floating-ui/dom` | Floating element positioning |
+| `@floating-ui/react` | React bindings for floating-ui |
 
 ### 3.2.6 Media and Performance Libraries
 
-| Library | Version | Purpose |
-|:--|:--|:--|
-| `sharp` | `^0.34.2` | AVIF/WebP derivative generation |
-| `plaiceholder` | `^3.0.0` | Blur placeholder generation |
-| `beasties` | `^0.4.1` | Critical CSS extraction |
-| `@next/bundle-analyzer` | `^16.0.1` | Bundle size analysis |
-| `@next/third-parties` | `^16.1.1` | Optimized third-party script loading (GTM) |
+| Library | Purpose |
+| :-- | :-- |
+| `sharp` | AVIF/WebP derivative generation |
+| `plaiceholder` | Blur placeholder generation |
+| `beasties` | Critical CSS extraction |
+| `@next/bundle-analyzer` | Bundle size analysis |
+| `@next/third-parties` | Optimized third-party script loading (GTM) |
 
 The `sharp` + `plaiceholder` combination underpins F-006 (Media Management) as documented in Section 2.1.2.4.
 
 ### 3.2.7 Supporting Libraries
 
-| Library | Version | Purpose |
-|:--|:--|:--|
-| `date-fns` | `^4.1.0` | Date formatting |
-| `html-react-parser` | `^5.2.7` | HTML-to-React parsing |
-| `react-hot-toast` | `^2.6.0` | Toast notifications |
-| `sonner` | `^2.0.7` | Alternative toast notifications |
-| `react-transition-group` | `^4.4.5` | Transition animations |
-| `react-color` | `^2.19.3` | Color-picker primitive |
-| `react-colorful` | `^5.6.1` | Minimal color picker |
-| `react-day-picker` | `^9.13.0` | Date-picker component |
-| `fast-json-patch` | `^3.1.1` | JSON Patch generation for F-008 content revisions |
-| `js-cookie` | `^3.0.5` | Cookie manipulation helper |
-| `lodash.debounce` | `^4.0.8` | Debounced event handlers |
-| `uuid` | `^11.0.4` | UUID generation (published template) |
-| `server-only` | `^0.0.1` | Next.js server-only import guard |
+| Library | Purpose |
+| :-- | :-- |
+| `date-fns` | Date formatting |
+| `html-react-parser` | HTML-to-React parsing |
+| `react-hot-toast` | Toast notifications |
+| `sonner` | Alternative toast notifications |
+| `react-transition-group` | Transition animations |
+| `react-color` | Color-picker primitive |
+| `react-colorful` | Minimal color picker |
+| `react-day-picker` | Date-picker component |
+| `fast-json-patch` | JSON Patch generation for F-008 content revisions |
+| `js-cookie` | Cookie manipulation helper |
+| `lodash.debounce` | Debounced event handlers |
+| `uuid` | UUID generation (published template) |
+| `server-only` | Next.js server-only import guard |
 
 ## 3.3 OPEN SOURCE DEPENDENCIES
 
@@ -2015,7 +2013,7 @@ All third-party dependencies are resolved from the public npm registry (`registr
 
 #### 3.3.1.2 Verdaccio — Local Development Registry
 
-The workspace includes a Verdaccio 6.0.5 configuration at `.verdaccio/config.yml` providing a local npm registry for release testing without publishing to the public registry. Key parameters:
+The workspace includes a Verdaccio configuration at `.verdaccio/config.yml` providing a local npm registry for release testing without publishing to the public registry. Key parameters:
 
 | Parameter | Value |
 |:--|:--|
@@ -2026,19 +2024,19 @@ The workspace includes a Verdaccio 6.0.5 configuration at `.verdaccio/config.yml
 
 ### 3.3.2 Published Workspace Libraries
 
-Each library publishes an independent version to the public npm registry. The table below summarizes workspace-source state at `@nextblock/source` version `0.2.77`:
+Each library publishes an independent version to the public npm registry. The table below summarizes workspace-source state:
 
-| Package | Workspace Path | Version | Publish Access | Scope Tag |
-|:--|:--|:--|:--|:--|
-| `@nextblock-cms/ui` | `libs/ui` | `0.2.19` | `public` | `scope:public` |
-| `@nextblock-cms/utils` | `libs/utils` | `0.2.13` | `public` | `scope:public` |
-| `@nextblock-cms/db` | `libs/db` | `0.2.32` | `public` | `scope:public` |
-| `@nextblock-cms/editor` | `libs/editor` | `0.2.24` | `public` | `scope:public` |
-| `@nextblock-cms/sdk` | `libs/sdk` | `0.2.9` | `public` | `scope:public` |
-| `@nextblock-cms/ecom` | `libs/ecommerce` | `0.0.10` | `public` | `scope:premium` |
-| `create-nextblock` | `apps/create-nextblock` | `0.2.78` | `public` | — |
-| `@nextblock-cms/template` | `apps/nextblock` | `0.2.55` | `private: true` | — |
-| `@nextblock/source` | (root) | `0.2.77` | `private: true` | — |
+| Package | Workspace Path | Publish Access | Scope Tag |
+| :-- | :-- | :-- | :-- |
+| `@nextblock-cms/ui` | `libs/ui` | `public` | `scope:public` |
+| `@nextblock-cms/utils` | `libs/utils` | `public` | `scope:public` |
+| `@nextblock-cms/db` | `libs/db` | `public` | `scope:public` |
+| `@nextblock-cms/editor` | `libs/editor` | `public` | `scope:public` |
+| `@nextblock-cms/sdk` | `libs/sdk` | `public` | `scope:public` |
+| `@nextblock-cms/ecom` | `libs/ecommerce` | `public` | `scope:premium` |
+| `create-nextblock` | `apps/create-nextblock` | `public` | — |
+| `@nextblock-cms/template` | `apps/nextblock` | `private: true` | — |
+| `nextblock` | (root) | `private: true` | — |
 
 #### 3.3.2.1 Package Alias Convention for Premium Modules
 
@@ -2059,40 +2057,40 @@ The root `package.json` declares four npm overrides to resolve transitive depend
 
 The `apps/create-nextblock` scaffolding CLI depends on a focused set of command-line interaction libraries:
 
-| Dependency | Version | Purpose |
-|:--|:--|:--|
-| `@clack/prompts` | `^0.8.1` | Modern interactive prompts |
-| `@nextblock-cms/db` | `latest` | Database schema utilities during scaffold |
-| `chalk` | `^5.6.2` | Terminal text styling |
-| `commander` | `^14.0.1` | Command-line argument parsing |
-| `execa` | `^9.3.0` | Subprocess execution (npm install, git init) |
-| `fs-extra` | `^11.3.2` | File-system utilities |
-| `inquirer` | `^12.10.0` | Interactive prompts (legacy path) |
-| `open` | `^10.1.0` | URL opening in default browser |
-| `ora` | `^8.0.1` | Terminal spinners |
-| `picocolors` | `^1.1.1` | Minimal color utility |
+| Dependency | Purpose |
+| :-- | :-- |
+| `@clack/prompts` | Modern interactive prompts |
+| `@nextblock-cms/db` | Database schema utilities during scaffold |
+| `chalk` | Terminal text styling |
+| `commander` | Command-line argument parsing |
+| `execa` | Subprocess execution (npm install, git init) |
+| `fs-extra` | File-system utilities |
+| `inquirer` | Interactive prompts (legacy path) |
+| `open` | URL opening in default browser |
+| `ora` | Terminal spinners |
+| `picocolors` | Minimal color utility |
 
 ### 3.3.5 Type Definitions
 
 The following `@types/*` packages are installed as devDependencies to supply ambient types for untyped or partially-typed dependencies:
 
-| Package | Version |
-|:--|:--|
-| `@types/deno` | `^2.5.0` |
-| `@types/fs-extra` | `^11.0.4` |
-| `@types/inquirer` | `^9.0.9` |
-| `@types/js-cookie` | `^3.0.6` |
-| `@types/lodash.debounce` | `^4.0.9` |
-| `@types/node` | `^24.9.1` |
-| `@types/nodemailer` | `^7.0.3` |
-| `@types/react` | `^19.2.2` |
-| `@types/react-dom` | `^19.2.2` |
-| `@types/react-color` | `^3.0.13` |
-| `@types/react-transition-group` | `^4.4.12` |
+| Package |
+| :-- |
+| `@types/deno` |
+| `@types/fs-extra` |
+| `@types/inquirer` |
+| `@types/js-cookie` |
+| `@types/lodash.debounce` |
+| `@types/node` |
+| `@types/nodemailer` |
+| `@types/react` |
+| `@types/react-dom` |
+| `@types/react-color` |
+| `@types/react-transition-group` |
 
 ## 3.4 THIRD-PARTY SERVICES
 
-Every external integration listed below is declared in `libs/environment.d.ts` (augmenting `NodeJS.ProcessEnv`) and documented via the `.env.exemple` template. The integration set corresponds exactly to the eight integration domains enumerated in Section 1.2.1.3.
+Every external integration listed below is declared in `libs/environment.d.ts` (augmenting `NodeJS.ProcessEnv`) and documented via the `.env.example` template. The integration set corresponds exactly to the eight integration domains enumerated in Section 1.2.1.3.
 
 ```mermaid
 graph TB
@@ -2132,11 +2130,11 @@ graph TB
 
 ### 3.4.1 Supabase — Database and Authentication
 
-| Library | Version | Role |
-|:--|:--|:--|
-| `@supabase/ssr` | `^0.7.0` | SSR-safe cookie-based Supabase client |
-| `@supabase/supabase-js` | `^2.77.0` | Core Supabase SDK |
-| `supabase` (CLI) | `^2.65.0` | Migration management, type generation (devDependency) |
+| Library | Role |
+| :-- | :-- |
+| `@supabase/ssr` | SSR-safe cookie-based Supabase client |
+| `@supabase/supabase-js` | Core Supabase SDK |
+| `supabase` (CLI) | Migration management, type generation (devDependency) |
 
 #### 3.4.1.1 Responsibilities
 
@@ -2155,28 +2153,28 @@ Supabase provides PostgreSQL data storage, Row-Level Security, authentication (F
 
 ### 3.4.2 Cloudflare R2 — Object Storage
 
-| Library | Version | Role |
-|:--|:--|:--|
-| `@aws-sdk/client-s3` | `^3.920.0` | S3-compatible client |
-| `@aws-sdk/s3-request-presigner` | `^3.919.0` (workspace) / `^3.920.0` (published) | Presigned URL generation |
+| Library | Role |
+| :-- | :-- |
+| `@aws-sdk/client-s3` | S3-compatible client |
+| `@aws-sdk/s3-request-presigner` | Presigned URL generation |
 
 Cloudflare R2 serves as the media object store with an S3-compatible endpoint, per the infrastructure assumption in Section 1.3.3.3. It is accessed via two upload mechanisms: a presigned PUT URL path and a multipart proxy path, both exposed under `apps/nextblock/app/api/upload/`. The required environment variables are `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_S3_ENDPOINT`, `R2_REGION`, `R2_BUCKET_NAME`, `R2_TOKEN_VALUE`, `NEXT_PUBLIC_R2_PUBLIC_URL`, and `NEXT_PUBLIC_R2_BASE_URL`.
 
 ### 3.4.3 Stripe — Physical Products Payment
 
-| Library | Version | Role |
-|:--|:--|:--|
-| `stripe` | `^20.4.1` | Server-side Stripe SDK |
-| `@stripe/stripe-js` | `^8.11.0` | Client-side Stripe.js loader |
+| Library | Role |
+| :-- | :-- |
+| `stripe` | Server-side Stripe SDK |
+| `@stripe/stripe-js` | Client-side Stripe.js loader |
 
 Stripe handles all physical-product checkout flows (F-016) including Stripe Tax integration for automatic tax calculation (F-020). Webhook processing at `apps/nextblock/app/api/webhooks/stripe/route.ts` validates signatures using `STRIPE_WEBHOOK_SECRET` per the security mitigation declared in Section 2.4.4. A development helper script (`npm run stripe`) invokes `stripe listen --forward-to localhost:4200/api/webhooks/stripe` to forward webhook events during local development.
 
 ### 3.4.4 Freemius — Digital Products and Licensing
 
-| Library | Version | Role |
-|:--|:--|:--|
-| `@freemius/checkout` | `^1.4.1` | Checkout widget |
-| `@freemius/sdk` | `^0.3.0` | Freemius SDK for server operations |
+| Library | Role |
+| :-- | :-- |
+| `@freemius/checkout` | Checkout widget |
+| `@freemius/sdk` | Freemius SDK for server operations |
 
 Freemius handles digital-product checkout and licensing (F-017) including the premium license-gating surface that enables F-022. Webhook verification uses HMAC SHA-256 signature validation via `FREEMIUS_SECRET_KEY`. Per the known-issue enumeration in Section 1.3.3.1, webhook events are currently acknowledged but not yet reconciled back to the local database state. The Freemius environment variable surface is comparatively broad — `FREEMIUS_STORE_ID`, `FREEMIUS_PRODUCT_ID`, `FREEMIUS_PUBLIC_KEY`, `FREEMIUS_SECRET_KEY`, `FREEMIUS_API_KEY`, `FREEMIUS_CHECKOUT_PRODUCTS_JSON`, `FREEMIUS_ECOMMERCE_SANDBOX_PUBLIC_KEY`, `FREEMIUS_ECOMMERCE_SANDBOX_SECRET_KEY`, `FREEMIUS_SANDBOX_ENABLED`, `FREEMIUS_DEVELOPER_ID`, `FREEMIUS_ECOMMERCE_SANDBOX_KEY` — reflecting the mixture of store-scoped and product-scoped identifiers plus sandbox-aware duplication.
 
@@ -2186,18 +2184,18 @@ The `https://api.frankfurter.dev` public endpoint supplies daily FX rates for th
 
 ### 3.4.6 SMTP — Transactional Email
 
-| Library | Version | Role |
-|:--|:--|:--|
-| `nodemailer` | `^7.0.10` | SMTP client for transactional email |
+| Library | Role |
+| :-- | :-- |
+| `nodemailer` | SMTP client for transactional email |
 
 SMTP is used both by Supabase Auth (via the templates in `libs/db/src/supabase/templates/`) and directly by the CMS feedback feature (F-029). Environment variables: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, `SUPABASE_AUTH_RATE_LIMIT_EMAIL_SENT`.
 
 ### 3.4.7 Vercel — Hosting Platform and Observability
 
-| Library | Version | Role |
-|:--|:--|:--|
-| `@vercel/speed-insights` | `^1.3.1` | RUM performance telemetry |
-| `@vercel/analytics` | `^1.6.1` | Page-view analytics (published template) |
+| Library | Role |
+| :-- | :-- |
+| `@vercel/speed-insights` | RUM performance telemetry |
+| `@vercel/analytics` | Page-view analytics (published template) |
 
 #### 3.4.7.1 Cron Job Declarations
 
@@ -2212,7 +2210,7 @@ Both endpoints enforce `Authorization: Bearer ${CRON_SECRET}` per the security m
 
 ### 3.4.8 Google Tag Manager — Analytics Delivery
 
-Google Tag Manager is loaded via `@next/third-parties` (`^16.1.1`) using the GTM container id configured in the CMS at **Settings → Privacy** and stored in the `site_settings` table (`privacy_settings.gtm_id`); there is no `NEXT_PUBLIC_GTM_ID` environment variable. The id is read in the root layout via `getPrivacySettings()` and passed through the consent gate, so the tag loads only after the visitor accepts analytics. The production CSP allowlist emitted by `apps/nextblock/proxy.ts` explicitly includes `googletagmanager.com`, `google-analytics.com`, and `analytics.google.com` per F-011's origin allowlist.
+Google Tag Manager is loaded via `@next/third-parties` using the GTM container id configured in the CMS at **Settings → Privacy** and stored in the `site_settings` table (`privacy_settings.gtm_id`); there is no `NEXT_PUBLIC_GTM_ID` environment variable. The id is read in the root layout via `getPrivacySettings()` and passed through the consent gate, so the tag loads only after the visitor accepts analytics. The production CSP allowlist emitted by `apps/nextblock/proxy.ts` explicitly includes `googletagmanager.com`, `google-analytics.com`, and `analytics.google.com` per F-011's origin allowlist.
 
 ## 3.5 DATABASES AND STORAGE
 
@@ -2283,22 +2281,22 @@ The Next.js image optimizer is configured in `apps/nextblock/next.config.js` wit
 
 #### 3.6.1.1 Linting and Code Quality
 
-| Tool | Version | Role |
-|:--|:--|:--|
-| `eslint` | `^9.38.0` | Flat-config linter |
-| `typescript-eslint` | `^8.46.2` | TypeScript parser + plugin meta-package |
-| `@typescript-eslint/eslint-plugin` | `^8.46.2` | TypeScript lint rules |
-| `@typescript-eslint/parser` | `^8.46.2` | TypeScript ESLint parser |
-| `eslint-config-next` | `16.1.6` | Next.js ESLint preset |
-| `eslint-config-prettier` | `^10.1.8` | Prettier compatibility |
-| `eslint-plugin-import` | `^2.32.0` | Import sort/group rules |
-| `eslint-plugin-jsx-a11y` | `^6.10.2` | Accessibility rules |
-| `eslint-plugin-react` | `^7.37.5` | React rules |
-| `eslint-plugin-react-hooks` | `^7.0.1` | React Hooks rules |
-| `@next/eslint-plugin-next` | `^16.0.1` | Next.js core-web-vitals rules |
-| `eslint-import-resolver-typescript` | `^4.4.4` | TS path resolution |
-| `jsonc-eslint-parser` | `^2.4.1` | JSONC parsing support |
-| `prettier` | `^3.6.2` | Code formatter |
+| Tool | Role |
+| :-- | :-- |
+| `eslint` | Flat-config linter |
+| `typescript-eslint` | TypeScript parser + plugin meta-package |
+| `@typescript-eslint/eslint-plugin` | TypeScript lint rules |
+| `@typescript-eslint/parser` | TypeScript ESLint parser |
+| `eslint-config-next` | Next.js ESLint preset |
+| `eslint-config-prettier` | Prettier compatibility |
+| `eslint-plugin-import` | Import sort/group rules |
+| `eslint-plugin-jsx-a11y` | Accessibility rules |
+| `eslint-plugin-react` | React rules |
+| `eslint-plugin-react-hooks` | React Hooks rules |
+| `@next/eslint-plugin-next` | Next.js core-web-vitals rules |
+| `eslint-import-resolver-typescript` | TS path resolution |
+| `jsonc-eslint-parser` | JSONC parsing support |
+| `prettier` | Code formatter |
 
 #### 3.6.1.2 Nx Module Boundary Rules
 
@@ -2314,12 +2312,12 @@ The workspace operates a dual build strategy: Next.js's native build pipeline fo
 
 #### 3.6.2.1 Library Bundling — Vite
 
-| Tool | Version | Role |
-|:--|:--|:--|
-| `vite` | `^7.2.6` | Library bundler |
-| `vite-plugin-dts` | `~4.5.0` | TypeScript declaration emission |
-| `@vitejs/plugin-react` | `^5.1.0` | React/JSX transformation |
-| `vite-tsconfig-paths` | `^5.1.4` | TypeScript path alias resolution |
+| Tool | Role |
+| :-- | :-- |
+| `vite` | Library bundler |
+| `vite-plugin-dts` | TypeScript declaration emission |
+| `@vitejs/plugin-react` | React/JSX transformation |
+| `vite-tsconfig-paths` | TypeScript path alias resolution |
 
 Libraries `libs/ui`, `libs/db`, `libs/editor`, `libs/sdk`, and `libs/utils` are bundled via Vite. Each library's `vite.config.ts` imposes package-specific concerns — `libs/ui` patches client directives, `libs/utils` separates client/server entries, and `libs/db` appends a `copy-db-supabase.cjs` post-step to propagate migration assets.
 
@@ -2329,27 +2327,27 @@ The `libs/ecommerce` premium library uses the `@nx/js:tsc` executor to produce o
 
 #### 3.6.2.3 Transpilation and Runtime Compilation
 
-| Tool | Version | Role |
-|:--|:--|:--|
-| `esbuild` | `^0.25.11` | Fast bundler used by Nx |
-| `@swc-node/register` | `1.11.1` | SWC-based Node register |
-| `@swc/cli` | `0.7.10` | SWC CLI |
-| `@swc/core` | `^1.15.8` | SWC compiler core |
-| `@swc/helpers` | `0.5.18` | SWC runtime helpers |
-| `@swc/wasm` | `^1.15.8` | SWC WASM build |
-| `@babel/core` | `^7.28.5` | Babel core |
-| `@babel/preset-react` | `^7.28.5` | Babel React preset |
-| `ts-node` | `^10.9.2` | TypeScript execution |
-| `tsx` | `^4.20.6` | TypeScript execute for scripts |
-| `jiti` | `^2.6.1` | Runtime TypeScript loader |
+| Tool | Role |
+| :-- | :-- |
+| `esbuild` | Fast bundler used by Nx |
+| `@swc-node/register` | SWC-based Node register |
+| `@swc/cli` | SWC CLI |
+| `@swc/core` | SWC compiler core |
+| `@swc/helpers` | SWC runtime helpers |
+| `@swc/wasm` | SWC WASM build |
+| `@babel/core` | Babel core |
+| `@babel/preset-react` | Babel React preset |
+| `ts-node` | TypeScript execution |
+| `tsx` | TypeScript execute for scripts |
+| `jiti` | Runtime TypeScript loader |
 
 #### 3.6.2.4 Environment Variable Tooling
 
-| Tool | Version | Role |
-|:--|:--|:--|
-| `dotenv` | `^17.3.1` | `.env` file loader |
-| `dotenv-cli` | `^10.0.0` | CLI wrapper for dotenv |
-| `cross-env` | `^10.1.0` | Cross-platform env-var setter |
+| Tool | Role |
+| :-- | :-- |
+| `dotenv` | `.env` file loader |
+| `dotenv-cli` | CLI wrapper for dotenv |
+| `cross-env` | Cross-platform env-var setter |
 
 #### 3.6.2.5 Key Build Targets
 
@@ -2363,13 +2361,13 @@ The `libs/ecommerce` premium library uses the `@nx/js:tsc` executor to produce o
 
 ### 3.6.3 Testing
 
-| Tool | Version | Role |
-|:--|:--|:--|
-| `vitest` | `4.0.0` | Unit test runner |
-| `@vitest/ui` | `4.0.0` | Vitest web UI |
-| `jsdom` | `^27.0.1` | Browser environment shim |
-| `ajv` | `^8.17.2` | JSON schema validation |
-| `baseline-browser-mapping` | `^2.9.19` | Browser compatibility data |
+| Tool | Role |
+| :-- | :-- |
+| `vitest` | Unit test runner |
+| `@vitest/ui` | Vitest web UI |
+| `jsdom` | Browser environment shim |
+| `ajv` | JSON schema validation |
+| `baseline-browser-mapping` | Browser compatibility data |
 
 The Vitest configuration is integrated via `@nx/vitest` with `testTargetName: "test"`. The `libs/utils/tests/` directory contains Vitest coverage for translation-workspace helpers.
 
@@ -2398,7 +2396,7 @@ The workspace does **not** use Terraform. Infrastructure configuration is declar
 | `vercel.json` | Cron schedules |
 | `libs/db/src/supabase/migrations/` | Database schema (ordered append-only migration files) |
 | `libs/db/src/supabase/config.toml` | Supabase local development configuration |
-| `.env.exemple` | Environment variable template |
+| `.env.example` | Environment variable template |
 | `nx.json` + per-project `project.json` | Workspace orchestration topology |
 
 ### 3.6.7 Workspace Automation Scripts
@@ -2444,7 +2442,7 @@ The Default Technology Stack specified for this project included assumptions tha
 
 The stack substitutions collectively preserve the four cross-cutting architectural invariants articulated in Section 1.2.3.2:
 
-1. **Open-core boundary enforcement** — Nx 22.6.0 + ESLint's `@nx/enforce-module-boundaries` plugin implement the invariant. No equivalent exists in a Python/Flask monorepo.
+1. **Open-core boundary enforcement** — Nx + ESLint's `@nx/enforce-module-boundaries` plugin implement the invariant. No equivalent exists in a Python/Flask monorepo.
 2. **Scope tag discipline** — Nx scope tags (`scope:public`, `scope:premium`) are project-local metadata that cannot be expressed in the Default Stack's toolchain.
 3. **Security header coverage** — The `proxy.ts` pattern requires a Node/Edge runtime with access to the Next.js response pipeline, unattainable with a Python web server.
 4. **License activation integrity** — `verifyPackageOnline()` leans on Next.js's `unstable_cache` for its 60-second memoization window.
@@ -2529,21 +2527,21 @@ The premium `libs/ecommerce` is guarded at runtime by the `verifyPackageOnline('
 - `eslint.config.mjs` — Flat ESLint configuration with `@nx/enforce-module-boundaries` rules
 - `components.json` — shadcn/ui configuration (slate base, CSS variables, RSC, TSX)
 - `project.json` — Root Nx project with Verdaccio `local-registry` target
-- `.env.exemple` — Environment variable reference template
+- `.env.example` — Environment variable reference template
 - `.verdaccio/config.yml` — Local npm registry configuration (port 4873)
-- `apps/nextblock/package.json` — `@nextblock-cms/template` v0.2.55 dependencies
+- `apps/nextblock/package.json` — `@nextblock-cms/template` dependencies
 - `apps/nextblock/next.config.js` — Image optimization, CSP, `transpilePackages`, Turbopack
 - `apps/nextblock/proxy.ts` — Session sync, RBAC, locale, security headers, CSP
 - `apps/nextblock/tsconfig.json` — App-level TypeScript configuration (ES2017 target, bundler resolution)
 - `apps/nextblock/eslint.config.mjs` — App ESLint with Next.js Core Web Vitals
-- `apps/create-nextblock/package.json` — CLI package v0.2.78 dependencies
+- `apps/create-nextblock/package.json` — CLI package dependencies
 - `apps/create-nextblock/bin/create-nextblock.js` — CLI entry point (ES module shebang)
-- `libs/db/package.json` — `@nextblock-cms/db` v0.2.32
-- `libs/ui/package.json` — `@nextblock-cms/ui` v0.2.19 with exports map
-- `libs/editor/package.json` — `@nextblock-cms/editor` v0.2.24 with Tiptap + Yjs dependencies
-- `libs/ecommerce/package.json` — `@nextblock-cms/ecom` v0.0.10 with `scope:premium` Nx tag
-- `libs/utils/package.json` — `@nextblock-cms/utils` v0.2.13
-- `libs/sdk/package.json` — `@nextblock-cms/sdk` v0.2.9
+- `libs/db/package.json` — `@nextblock-cms/db`
+- `libs/ui/package.json` — `@nextblock-cms/ui` with exports map
+- `libs/editor/package.json` — `@nextblock-cms/editor` with Tiptap + Yjs dependencies
+- `libs/ecommerce/package.json` — `@nextblock-cms/ecom` with `scope:premium` Nx tag
+- `libs/utils/package.json` — `@nextblock-cms/utils`
+- `libs/sdk/package.json` — `@nextblock-cms/sdk`
 - `libs/environment.d.ts` — `NodeJS.ProcessEnv` augmentation for all environment variables
 - `libs/db/src/lib/package-validation.ts` — `verifyPackageOnline` with 60-second `unstable_cache`
 - `libs/db/vite.config.ts` — Vite library build + `copy-db-supabase.cjs` post-step
@@ -2701,7 +2699,7 @@ flowchart LR
 
 ### 4.2.2 Authentication Workflows
 
-Authentication (F-002) is layered over Supabase Auth via `@supabase/ssr` 0.7.0. Server actions in `apps/nextblock/app/actions.ts` orchestrate email/password sign-up, sign-in, and password-reset flows, while `app/auth/callback/route.ts` handles OAuth authorization-code exchange.
+Authentication (F-002) is layered over Supabase Auth via `@supabase/ssr`. Server actions in `apps/nextblock/app/actions.ts` orchestrate email/password sign-up, sign-in, and password-reset flows, while `app/auth/callback/route.ts` handles OAuth authorization-code exchange.
 
 #### 4.2.2.1 Sign-Up Flow
 
@@ -4043,7 +4041,7 @@ NextBlock CMS is architected as an **Nx-orchestrated monorepo** that composes a 
 
 #### 5.1.1.1 Architectural Principles
 
-- **Server-Components-First Rendering.** The application is built on the React Server Components model introduced by the Next.js App Router. The system uses Next.js (App Router) version `16.1.7` as its application framework, React / react-dom `19.2.4` as its UI runtime, and TypeScript `5.9.3` under strict mode as the implementation language. Public layouts such as `apps/nextblock/app/layout.tsx` fetch cached data through `unstable_cache` and render on the server, while client islands (cart, editors, switchers) hydrate inside the provider chain declared in `apps/nextblock/app/providers.tsx`.
+- **Server-Components-First Rendering.** The application is built on the React Server Components model introduced by the Next.js App Router. The system uses Next.js (App Router) as its application framework, React / react-dom as its UI runtime, and TypeScript under strict mode as the implementation language. Public layouts such as `apps/nextblock/app/layout.tsx` fetch cached data through `unstable_cache` and render on the server, while client islands (cart, editors, switchers) hydrate inside the provider chain declared in `apps/nextblock/app/providers.tsx`.
 
 - **Open-Core Boundary Enforcement.** The workspace is partitioned into two dependency tiers via Nx scope tags. All foundational libraries (`libs/ui`, `libs/utils`, `libs/db`, `libs/editor`, `libs/sdk`) are tagged `scope:public` and published under AGPLv3, while `libs/ecommerce` is tagged `scope:premium` and activated through a license-key-gated installation path (`@nextblock-cms/ecommerce@npm:@nextblock-cms/ecom@latest`). The rule that `libs/ui` MUST NOT depend on `apps/nextblock` is enforced via ESLint's `@nx/enforce-module-boundaries` plugin, as documented in `.agent/skills/project-architecture/SKILL.md`, and every Nx project declares a `scope:public` or `scope:premium` tag, enabling dependency-direction enforcement between open and premium tiers.
 
@@ -4055,7 +4053,7 @@ NextBlock CMS is architected as an **Nx-orchestrated monorepo** that composes a 
 
 #### 5.1.1.2 System Boundaries and Major Interfaces
 
-The trust boundary runs between the Next.js application and its eight external service integrations. The external service landscape is composed of Supabase (`@supabase/ssr` 0.7.0, `@supabase/supabase-js` 2.77.0) for Postgres storage, Row-Level Security, and Auth; Cloudflare R2 (S3-compatible via `@aws-sdk/client-s3` 3.920.0) for media assets and presigned uploads; Stripe (`stripe` 20.4.1, `@stripe/stripe-js` 8.11.0) for Checkout, payments, and Stripe Tax; Freemius (`@freemius/checkout` 1.4.1, `@freemius/sdk` 0.3.0) for digital-product checkout and licensing; `api.frankfurter.dev` (configurable via `FX_API_BASE_URL`) for multi-currency rate synchronization; `@vercel/speed-insights` 1.3.1 and `@next/third-parties` (GTM) 1.1.1 for performance and behavior tracking; Vercel for edge delivery and scheduled jobs defined in `vercel.json`; and SMTP (env-configured) for transactional email.
+The trust boundary runs between the Next.js application and its eight external service integrations. The external service landscape is composed of Supabase (`@supabase/ssr`, `@supabase/supabase-js`) for Postgres storage, Row-Level Security, and Auth; Cloudflare R2 (S3-compatible via `@aws-sdk/client-s3`) for media assets and presigned uploads; Stripe (`stripe`, `@stripe/stripe-js`) for Checkout, payments, and Stripe Tax; Freemius (`@freemius/checkout`, `@freemius/sdk`) for digital-product checkout and licensing; `api.frankfurter.dev` (configurable via `FX_API_BASE_URL`) for multi-currency rate synchronization; `@vercel/speed-insights` and `@next/third-parties` (GTM) for performance and behavior tracking; Vercel for edge delivery and scheduled jobs defined in `vercel.json`; and SMTP (env-configured) for transactional email.
 
 Major interfaces are exposed at six Next.js route surfaces:
 
@@ -4127,14 +4125,14 @@ The workspace decomposes into eight first-class components (two applications and
 
 | Component Name | Primary Responsibility | Key Dependencies |
 |---|---|---|
-| `apps/nextblock` (`@nextblock-cms/template`, v0.2.55) | Public site, CMS admin, checkout, API/cron/webhooks, proxy | All six libraries + Supabase, R2, Stripe, Freemius |
-| `apps/create-nextblock` (`create-nextblock`, v0.2.78) | CLI scaffolder (`create`, `activate`) | `@clack/prompts`, `commander`, `execa`, `fs-extra` |
-| `libs/db` (`@nextblock-cms/db`, v0.2.32) | Supabase clients, migrations, package-activation gate, media actions | `@supabase/ssr`, `@supabase/supabase-js`, `postgres` |
-| `libs/ui` (`@nextblock-cms/ui`, v0.2.19) | Shared design system, Radix primitives, Tailwind config, styles | Radix UI, `tailwindcss`, `lucide-react` |
-| `libs/editor` (`@nextblock-cms/editor`, v0.2.24) | Tiptap rich-text editor, slash menu, block widgets | Tiptap 3.x, Yjs, lowlight, katex |
-| `libs/sdk` (`@nextblock-cms/sdk`, v0.2.9) | Block registration contract (schemas, props) | `zod`, peer: React |
-| `libs/utils` (`@nextblock-cms/utils`, v0.2.13) | Client/server helpers, email, R2 client, translations | `nodemailer`, `@aws-sdk/client-s3` |
-| `libs/ecommerce` (`@nextblock-cms/ecom`, v0.0.10) | Catalog, cart, checkout, payments, shipping, tax, orders | Stripe, Freemius, Zustand, `@nextblock-cms/db` |
+| `apps/nextblock` (`@nextblock-cms/template`,) | Public site, CMS admin, checkout, API/cron/webhooks, proxy | All six libraries + Supabase, R2, Stripe, Freemius |
+| `apps/create-nextblock` (`create-nextblock`,) | CLI scaffolder (`create`, `activate`) | `@clack/prompts`, `commander`, `execa`, `fs-extra` |
+| `libs/db` (`@nextblock-cms/db`,) | Supabase clients, migrations, package-activation gate, media actions | `@supabase/ssr`, `@supabase/supabase-js`, `postgres` |
+| `libs/ui` (`@nextblock-cms/ui`,) | Shared design system, Radix primitives, Tailwind config, styles | Radix UI, `tailwindcss`, `lucide-react` |
+| `libs/editor` (`@nextblock-cms/editor`,) | Tiptap rich-text editor, slash menu, block widgets | Tiptap 3.x, Yjs, lowlight, katex |
+| `libs/sdk` (`@nextblock-cms/sdk`,) | Block registration contract (schemas, props) | `zod`, peer: React |
+| `libs/utils` (`@nextblock-cms/utils`,) | Client/server helpers, email, R2 client, translations | `nodemailer`, `@aws-sdk/client-s3` |
+| `libs/ecommerce` (`@nextblock-cms/ecom`,) | Catalog, cart, checkout, payments, shipping, tax, orders | Stripe, Freemius, Zustand, `@nextblock-cms/db` |
 
 #### 5.1.2.2 Components: Integration Points and Considerations
 
@@ -4171,7 +4169,7 @@ The authoritative store is **Supabase Postgres**, governed by 11 SQL migrations 
 
 ### 5.1.4 External Integration Points
 
-The integration landscape comprises eight external domains declared in `libs/environment.d.ts` and `.env.exemple`:
+The integration landscape comprises eight external domains declared in `libs/environment.d.ts` and `.env.example`:
 
 #### 5.1.4.1 Integration Types and Exchange Patterns
 
@@ -4207,7 +4205,7 @@ The integration landscape comprises eight external domains declared in `libs/env
 
 The primary Next.js application is the sole runtime surface; it hosts the public website, the CMS admin, the customer storefront, and all API/webhook/cron/upload handlers. It is the only component that owns `proxy.ts`, `next.config.js`, and `app/providers.tsx`.
 
-The application stack comprises Next.js App Router 16.1.7, React 19.2.4, TypeScript 5.9.3 in strict mode, Tailwind CSS 4.1.16 with 12+ Radix UI primitives, lucide-react 0.548.0 for icons, next-themes 0.4.6 for theme management with light/dark/vibrant/system variants, Tiptap 3.22.4 for rich text, Zustand 5.0.10 for client state, Zod 4.3.6 for schemas, react-hook-form 7.71.1 for forms, @hookform/resolvers 5.2.2, sharp 0.34.2 for image processing, plaiceholder 3.0.0 for blur placeholders, beasties 0.4.1 for critical CSS, @next/bundle-analyzer 16.0.1, Vitest 4.0.0 for unit tests, and Verdaccio 6.0.5 as a local registry.
+The application stack comprises Next.js App Router, React, TypeScript in strict mode, Tailwind CSS with 12+ Radix UI primitives, lucide-react for icons, next-themes for theme management with light/dark/vibrant/system variants, Tiptap for rich text, Zustand for client state, Zod for schemas, react-hook-form for forms, @hookform/resolvers, sharp for image processing, plaiceholder for blur placeholders, beasties for critical CSS, @next/bundle-analyzer, Vitest for unit tests, and Verdaccio as a local registry.
 
 #### 5.2.1.2 Key Interfaces and APIs
 
@@ -4302,7 +4300,7 @@ The premium `libs/ecommerce` is guarded at runtime by `verifyPackageOnline('ecom
 
 #### 5.2.4.1 Purpose and Technologies
 
-Encapsulates the entire commerce domain: catalog rendering, cart persistence, checkout orchestration, payment provider routing, currency conversion, shipping zone resolution, tax calculation, order sync, and invoice synthesis. Technologies include Stripe 20.4.1 and @stripe/stripe-js 8.11.0 for physical-product checkout, @freemius/checkout 1.4.1 and @freemius/sdk 0.3.0 for digital-product checkout and licensing, and Zustand 5.0.10 for the cart store with persist middleware.
+Encapsulates the entire commerce domain: catalog rendering, cart persistence, checkout orchestration, payment provider routing, currency conversion, shipping zone resolution, tax calculation, order sync, and invoice synthesis. Technologies include Stripe and @stripe/stripe-js for physical-product checkout, @freemius/checkout and @freemius/sdk for digital-product checkout and licensing, and Zustand for the cart store with persist middleware.
 
 #### 5.2.4.2 Key Interfaces and Provider Routing
 
@@ -4336,7 +4334,7 @@ Commerce tables live in migrations `003_catalog_and_licensing` (products, varian
 
 #### 5.2.5.1 Purpose and Technologies
 
-Exports a Tiptap-based rich text editor with a slash menu, draggable nodes, inline widgets, image picker bridging, and HTML-preserving behavior suitable for the in-app block registry. Technologies: Tiptap 3.22.4 with 40+ extensions, Yjs 13.6.30 with y-protocols 1.0.7 and y-tiptap for collaboration, lowlight 3.3.0 for syntax highlighting, and katex 0.16.25 for mathematical typesetting.
+Exports a Tiptap-based rich text editor with a slash menu, draggable nodes, inline widgets, image picker bridging, and HTML-preserving behavior suitable for the in-app block registry. Technologies: Tiptap with 40+ extensions, Yjs with y-protocols and y-tiptap for collaboration, lowlight for syntax highlighting, and katex for mathematical typesetting.
 
 #### 5.2.5.2 Interfaces
 
@@ -4498,11 +4496,11 @@ stateDiagram-v2
 
 ### 5.3.1 Architecture Style Decisions and Tradeoffs
 
-The Nx monorepo orchestrator runs at version 22.6.0, supporting atomic commits across apps and libraries.
+The Nx monorepo orchestrator supports atomic commits across apps and libraries.
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Monorepo vs. polyrepo | Nx monorepo (22.6.0) | Atomic commits across apps and libs; single lint/test config |
+| Monorepo vs. polyrepo | Nx monorepo | Atomic commits across apps and libs; single lint/test config |
 | Rendering model | React Server Components + App Router | Minimal client JS; server-side data fetching; caching primitives |
 | Middleware form | `proxy.ts` (explicit) | Single chokepoint for auth, RBAC, locale, CSP, page-type |
 | Premium distribution | Scope tag + license gate | Open core without exposing premium source |
@@ -4536,8 +4534,8 @@ Each pattern was selected to match the operational constraints of its surface: V
 | Concern | Choice | Reasoning |
 |---|---|---|
 | Primary OLTP | Supabase Postgres | Native RLS, auth, storage; SQL power; matches TypeScript types via codegen |
-| Object Storage | Cloudflare R2 | Egress-free; S3 API compatibility via `@aws-sdk/client-s3` 3.920.0 |
-| Browser-local State | Zustand 5.0.10 + persist | Minimal client JS; first-class TypeScript |
+| Object Storage | Cloudflare R2 | Egress-free; S3 API compatibility via `@aws-sdk/client-s3` |
+| Browser-local State | Zustand + persist | Minimal client JS; first-class TypeScript |
 | Server-side cache | `unstable_cache` (Next.js Data Cache) | Tag-based invalidation; 60s TTL on hot paths |
 
 **Why not MongoDB or Prisma?** The tech stack deviations in Section 3.7 note that MongoDB, Langchain, and the Default Stack's container/Terraform/GitHub Actions tooling are not used. The decision to use Postgres was reinforced by the need for strict relational constraints (CHECK constraints on `products.type`/`provider`, `tax_rates` ranges, single-default currency enforcement) and RLS policies, both of which are idiomatic in Postgres.
@@ -4629,7 +4627,7 @@ RPC is the primary code path; a direct-`postgres` SQL fallback activates when th
 
 ### 5.4.1 Monitoring and Observability Approach
 
-Observability instrumentation includes @vercel/speed-insights 1.3.1 for performance metrics and @next/third-parties (GTM) 1.1.1 for client-side analytics. Server-side observability is achieved via structured `console.log`/`console.error` (with `compiler.removeConsole` stripping debug logs in production), `/api/revalidate-log` for best-effort revalidation telemetry, and the Speed Insights dashboard.
+Observability instrumentation includes @vercel/speed-insights for performance metrics and @next/third-parties (GTM) for client-side analytics. Server-side observability is achieved via structured `console.log`/`console.error` (with `compiler.removeConsole` stripping debug logs in production), `/api/revalidate-log` for best-effort revalidation telemetry, and the Speed Insights dashboard.
 
 #### 5.4.1.1 Key Performance Indicators Tracked
 
@@ -5048,16 +5046,16 @@ Although there are no internal services, the codebase is decomposed into eight f
 
 The eight components of the workspace are summarized below. Each has a stable path alias defined in `tsconfig.base.json` and a scope tag declared in the respective `project.json`.
 
-| Component | Version | Scope Tag |
-|:--|:--|:--|
-| `apps/nextblock` | 0.2.55 | `scope:public` |
-| `apps/create-nextblock` | 0.2.78 | (apps) |
-| `libs/db` (`@nextblock-cms/db`) | 0.2.32 | `scope:public` |
-| `libs/ui` (`@nextblock-cms/ui`) | 0.2.19 | `scope:public` |
-| `libs/editor` (`@nextblock-cms/editor`) | 0.2.24 | `scope:public` |
-| `libs/sdk` (`@nextblock-cms/sdk`) | 0.2.9 | `scope:public` |
-| `libs/utils` (`@nextblock-cms/utils`) | 0.2.13 | `scope:public` |
-| `libs/ecommerce` (`@nextblock-cms/ecom`) | 0.0.10 | `scope:premium` |
+| Component | Scope Tag |
+| :-- | :-- |
+| `apps/nextblock` | `scope:public` |
+| `apps/create-nextblock` | (apps) |
+| `libs/db` (`@nextblock-cms/db`) | `scope:public` |
+| `libs/ui` (`@nextblock-cms/ui`) | `scope:public` |
+| `libs/editor` (`@nextblock-cms/editor`) | `scope:public` |
+| `libs/sdk` (`@nextblock-cms/sdk`) | `scope:public` |
+| `libs/utils` (`@nextblock-cms/utils`) | `scope:public` |
+| `libs/ecommerce` (`@nextblock-cms/ecom`) | `scope:premium` |
 
 Component-level responsibilities and dependencies are documented exhaustively in Section 5.2. For this section's purposes, the salient observation is that **all eight components are bundled into a single Next.js build output** deployed to Vercel — they are not independently deployable services.
 
@@ -5124,7 +5122,7 @@ The only "services" in the architecture are the **eight external third-party dom
 
 #### 6.1.3.1 External Services Inventory
 
-Eight external integration points are declared in `libs/environment.d.ts` and `.env.exemple`:
+Eight external integration points are declared in `libs/environment.d.ts` and `.env.example`:
 
 | Service | Purpose | Protocol |
 |:--|:--|:--|
@@ -5289,7 +5287,7 @@ Performance targets (Section 5.4.5) include a 100/100 Lighthouse score, ≤30 s 
 
 1. **React Server Components First.** Public layouts (`apps/nextblock/app/layout.tsx`) fetch cached data via `unstable_cache` and render on the server, minimizing client JavaScript.
 2. **Image Pipeline Pre-optimization.** The `next.config.js` configures AVIF + WebP formats, nine image sizes (16 – 512 px), eleven device sizes (320 – 2560 px), quality tiers `[60, 75]`, and a 1-year `minimumCacheTTL`. Uploads are post-processed by `sharp` and `plaiceholder` to derive derivatives at widths 1920/1280/768/384/128 with blur placeholders.
-3. **Critical CSS Inlining.** `beasties` 0.4.1 inlines critical CSS at build.
+3. **Critical CSS Inlining.** `beasties` inlines critical CSS at build.
 4. **ISR + On-Demand Revalidation.** Supabase webhooks call `/api/revalidate`, which invokes `revalidatePath(normalizedPath, 'page')` to surgically invalidate changed routes.
 5. **Prefetch Priority Signaling.** `proxy.ts` attaches `X-Prefetch-Priority` headers based on page type (`critical`, `high`, `medium`) to guide client-side prefetch decisions.
 6. **bfcache Compatibility.** `proxy.ts` emits `Cache-Control: public, max-age=0, must-revalidate` to enable back/forward cache reuse.
@@ -5307,7 +5305,7 @@ Because the application is deployed on a managed platform with automatic scaling
 | Stripe webhook latency | Response must complete rapidly; all processing inline | `/api/webhooks/stripe/route.ts` |
 | Frankfurter API | One daily cron call amortizes across all stores | `/api/cron/sync-currencies` |
 | Cron execution budget | Fit within declared `maxDuration` (30s / 60s) | `vercel.json` |
-| Revision storage | Use JSON Patch diffs over snapshots to minimize growth | `fast-json-patch` 3.1.1 |
+| Revision storage | Use JSON Patch diffs over snapshots to minimize growth | `fast-json-patch` |
 
 Additional scalability considerations documented in Section 2.4.3:
 
@@ -5491,7 +5489,7 @@ Content recovery is available through a hybrid snapshot/diff revision scheme:
 - Revisions are stored in `page_revisions` and `post_revisions` tables.
 - `revision_type` enum values are `snapshot` | `diff`.
 - `UNIQUE (page_id, version)` ensures monotonic versioning.
-- Diffs use JSON Patch via `fast-json-patch` 3.1.1.
+- Diffs use JSON Patch via `fast-json-patch`.
 
 This enables rollback to any published state without requiring a database restore.
 
@@ -5586,7 +5584,7 @@ Failover behavior is **implicit via Vercel's platform** and **explicit via dual-
 - `nx.json` — Nx workspace orchestration and target defaults
 - `eslint.config.mjs` — `@nx/enforce-module-boundaries` rules for scope:public/scope:premium
 - `tsconfig.base.json` — Path aliases for all `@nextblock-cms/*` packages
-- `package.json` (root) — Workspace metadata (`@nextblock/source` v0.2.77)
+- `package.json` (root) — Workspace metadata (`nextblock`)
 
 #### Folders Explored
 
@@ -6065,7 +6063,7 @@ flowchart TB
     end
 
     subgraph DirectPath["Direct Postgres Path - Resilience"]
-        PgLib[postgres ^3.4.8<br/>order-inventory.ts]
+        PgLib[postgres<br/>order-inventory.ts]
         PgUrl[POSTGRES_URL or DATABASE_URL<br/>ssl: require]
     end
 
@@ -6148,7 +6146,7 @@ sequenceDiagram
     end
 ```
 
-The RPC function `apply_order_inventory_deduction(p_order_id)` (defined in migration `00000000000005`) is idempotent via the `inventory_deducted_at` sentinel column, respects the `track_quantities` setting read from `site_settings.ecommerce_inventory_settings`, and uses `FOR UPDATE` locking on the order row. If the RPC fails (PostgREST cold start, transient network error), the fallback opens a direct Postgres connection using the `postgres` library (^3.4.8) with `ssl: 'require'` and replicates the same transactional semantics. Both paths throw on failure — ensuring the order never transitions to `paid` without a successful inventory effect.
+The RPC function `apply_order_inventory_deduction(p_order_id)` (defined in migration `00000000000005`) is idempotent via the `inventory_deducted_at` sentinel column, respects the `track_quantities` setting read from `site_settings.ecommerce_inventory_settings`, and uses `FOR UPDATE` locking on the order row. If the RPC fails (PostgREST cold start, transient network error), the fallback opens a direct Postgres connection using the `postgres` library with `ssl: 'require'` and replicates the same transactional semantics. Both paths throw on failure — ensuring the order never transitions to `paid` without a successful inventory effect.
 
 #### 6.2.3.5 Caching Policies
 
@@ -6318,7 +6316,7 @@ Connection pooling is managed by **Supabase's managed Supavisor pooler** at the 
 Application-layer details:
 
 - **PostgREST (primary path)** — HTTP-based, stateless; each request uses the Supabase pooler implicitly. No client-side pool configuration is needed.
-- **Direct Postgres (fallback path)** — `libs/ecommerce/src/lib/order-inventory.ts` uses the `postgres` library (^3.4.8) with `ssl: 'require'`. Per-invocation connection (no persistent pool) to minimize serverless function footprint, suited to Vercel's short-lived functions.
+- **Direct Postgres (fallback path)** — `libs/ecommerce/src/lib/order-inventory.ts` uses the `postgres` library with `ssl: 'require'`. Per-invocation connection (no persistent pool) to minimize serverless function footprint, suited to Vercel's short-lived functions.
 - **Supabase CLI** — uses direct connection with `POSTGRES_URL` / `DATABASE_URL` for `pg_dump`, `psql`, and migration push.
 
 #### 6.2.5.4 Read/Write Splitting
@@ -6416,7 +6414,7 @@ flowchart TB
     end
 
     subgraph DirectPath["Direct Postgres Fallback"]
-        PgClient[postgres ^3.4.8<br/>ssl: require]
+        PgClient[postgres<br/>ssl: require]
     end
 
     Prox -->|Session Sync| GoTrue
@@ -6777,14 +6775,14 @@ External integrations inherit their upstream provider's versioning regime:
 | Provider | Versioning Mechanism | Version Anchor |
 |:--|:--|:--|
 | Frankfurter FX | Hardcoded `/v2/rates` path | `libs/ecommerce/src/lib/currency-sync.ts` line 225 |
-| Stripe | SDK-pinned API version | `stripe` package `^20.4.1` |
-| Freemius | SDK-pinned API version | `@freemius/sdk` `^0.3.0` |
-| Supabase | SDK-pinned client version | `@supabase/supabase-js` `^2.77.0`, `@supabase/ssr` `^0.7.0` |
-| Cloudflare R2 | AWS S3 v4 signatures | `@aws-sdk/client-s3` `^3.920.0` |
+| Stripe | SDK-pinned API version | `stripe` package |
+| Freemius | SDK-pinned API version | `@freemius/sdk` |
+| Supabase | SDK-pinned client version | `@supabase/supabase-js` , `@supabase/ssr` |
+| Cloudflare R2 | AWS S3 v4 signatures | `@aws-sdk/client-s3` |
 
 ##### 6.3.2.5.2 Library Versioning as Implicit Contract Versioning
 
-Internal contracts between `apps/nextblock` and the six in-process libraries carry independent npm versions (e.g., `libs/ecommerce` at `0.0.10`, `libs/db` at `0.2.32`). Because all libraries are bundled into a single deployable build, these versions are primarily meaningful for the `apps/create-nextblock` CLI and external SDK consumers — not for runtime API versioning within the application itself.
+Internal contracts between `apps/nextblock` and the six in-process libraries carry independent npm versions. Because all libraries are bundled into a single deployable build, these versions are primarily meaningful for the `apps/create-nextblock` CLI and external SDK consumers — not for runtime API versioning within the application itself.
 
 #### 6.3.2.6 Documentation Standards
 
@@ -6813,7 +6811,7 @@ Additional documentation lives in:
 
 - `docs/02-ECOMMERCE-CAPABILITIES.md` — Commerce feature matrix and known limitations
 - `docs/04-DATABASE-AND-AUTH.md` — Database schema and auth flows
-- `.env.exemple` — Authoritative environment variable template
+- `.env.example` — Authoritative environment variable template
 - `.agent/skills/project-architecture/SKILL.md` — Boundary-enforcement documentation
 
 ---
@@ -6953,19 +6951,19 @@ This pattern is the system's in-process analog to a retry-with-fallback circuit 
 
 #### 6.3.4.1 Third-Party Integration Patterns
 
-The system integrates with **eight external services**, each declared in `libs/environment.d.ts` and documented in the `.env.exemple` template. Each follows one of the four canonical patterns introduced in Section 6.3.1.2.
+The system integrates with **eight external services**, each declared in `libs/environment.d.ts` and documented in the `.env.example` template. Each follows one of the four canonical patterns introduced in Section 6.3.1.2.
 
 ##### 6.3.4.1.1 Complete External Service Inventory
 
 | Service | Library / Version | Primary Purpose |
 |:--|:--|:--|
-| Supabase | `@supabase/ssr ^0.7.0`, `@supabase/supabase-js ^2.77.0` | Postgres + Auth + RLS + Storage |
-| Cloudflare R2 | `@aws-sdk/client-s3 ^3.920.0`, `@aws-sdk/s3-request-presigner ^3.919.0` | S3-compatible object storage |
-| Stripe | `stripe ^20.4.1`, `@stripe/stripe-js ^8.11.0` | Physical product checkout + Tax |
-| Freemius | `@freemius/checkout ^1.4.1`, `@freemius/sdk ^0.3.0` | Digital product checkout + licensing |
+| Supabase | `@supabase/ssr`, `@supabase/supabase-js` | Postgres + Auth + RLS + Storage |
+| Cloudflare R2 | `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner` | S3-compatible object storage |
+| Stripe | `stripe`, `@stripe/stripe-js` | Physical product checkout + Tax |
+| Freemius | `@freemius/checkout`, `@freemius/sdk` | Digital product checkout + licensing |
 | Frankfurter | (native fetch) | FX rate synchronization |
-| SMTP | `nodemailer ^7.0.10` | Transactional email |
-| Vercel Platform | `@vercel/speed-insights ^1.3.1`, `@next/third-parties ^16.1.1` | Hosting + cron + RUM |
+| SMTP | `nodemailer` | Transactional email |
+| Vercel Platform | `@vercel/speed-insights`, `@next/third-parties` | Hosting + cron + RUM |
 | Google Tag Manager | `@next/third-parties` | Client-side analytics |
 
 ##### 6.3.4.1.2 Pattern Distribution
@@ -7069,7 +7067,7 @@ The CSP policy emitted by `proxy.ts` explicitly whitelists each external integra
 
 #### 6.3.4.4 External Service Contracts
 
-The complete environment-variable surface of the system is documented below, organized by external integration. All variables are declared in `libs/environment.d.ts` and documented in `.env.exemple`.
+The complete environment-variable surface of the system is documented below, organized by external integration. All variables are declared in `libs/environment.d.ts` and documented in `.env.example`.
 
 ##### 6.3.4.4.1 Supabase Contract (6 variables)
 
@@ -7432,7 +7430,7 @@ The `shipping_zone_locations.postal_code` column exists in the schema but the cu
 
 - `vercel.json` — Cron schedule declarations (`reset-sandbox` at 03:00 UTC, `sync-currencies` at 18:00 UTC)
 - `libs/environment.d.ts` — NodeJS.ProcessEnv augmentation declaring all external-integration environment variables
-- `.env.exemple` — Authoritative environment variable template
+- `.env.example` — Authoritative environment variable template
 - `apps/nextblock/proxy.ts` — 272-line request proxy consolidating session sync, RBAC, locale, security headers, CSP, and page-type classification
 - `apps/nextblock/app/api/checkout/route.ts` — Checkout orchestration with `resolveProviderFromItem` priority chain, license gate, and provider constraints
 - `apps/nextblock/app/api/webhooks/stripe/route.ts` — Stripe webhook transport with raw-body preservation, delegating to `handleStripeWebhook`
@@ -7486,7 +7484,7 @@ The `shipping_zone_locations.postal_code` column exists in the schema but the cu
 - `4.5 SCHEDULED AND OPERATIONAL WORKFLOWS` — Sandbox reset and currency sync cron flows
 - `4.8 ERROR HANDLING AND RECOVERY` — Error taxonomy and five-pattern resilience classification
 - `4.12 TIMING AND SLA CONSIDERATIONS` — Consolidated SLA values
-- `5.1 HIGH-LEVEL ARCHITECTURE` — Boundary diagrams and integration types (5.1.4)
+- `5.1 HIGH-LEVEL ARCHITECTURE` — Boundary diagrams and integration types
 - `5.3 TECHNICAL DECISIONS` — Communication pattern choices, ADR-04 (provider segregation), ADR-05 (inventory dual-path)
 - `5.4 CROSS-CUTTING CONCERNS` — Error handling patterns, auth/authz framework, integration points
 - `6.1 Core Services Architecture` — Monolithic applicability justification and external integration patterns
@@ -7886,7 +7884,7 @@ No application-layer field-level encryption is implemented; the architecture rel
 
 #### 6.4.4.2 Key and Secret Management
 
-Secrets are managed exclusively through environment variables. No credentials are hardcoded in the repository. The authoritative inventory lives in `.env.exemple` and `libs/environment.d.ts` (which augments `NodeJS.ProcessEnv` for compile-time typing).
+Secrets are managed exclusively through environment variables. No credentials are hardcoded in the repository. The authoritative inventory lives in `.env.example` and `libs/environment.d.ts` (which augments `NodeJS.ProcessEnv` for compile-time typing).
 
 | Secret | Purpose | Binding Scope |
 |--------|---------|---------------|
@@ -8152,7 +8150,7 @@ No formal compliance certification (SOC 2, ISO 27001, PCI-DSS, HIPAA) is declare
 | Authorization | Least privilege via RLS grants | `migration 00000000000006` |
 | Data Protection (Transit) | TLS via Vercel; HSTS preload eligible | Live response headers |
 | Data Protection (Rest) | Platform-default AES-256 (Supabase + R2) | Managed service |
-| Secret Management | Env-only; no hardcoded credentials | `.env.exemple` audit |
+| Secret Management | Env-only; no hardcoded credentials | `.env.example` audit |
 | Webhook Integrity | Provider-specific HMAC signature verification | `/api/webhooks/*` |
 | Audit Trail | Structured `console.warn`/`console.error` + Speed Insights | `proxy.ts` + `next.config.js` |
 | Bootstrap Integrity | First-admin bootstrap via DB-level atomicity (`FOR UPDATE` + SECURITY DEFINER) | `migration 00000000000005` |
@@ -8244,7 +8242,7 @@ For details beyond the scope of this section, consult:
 
 #### Environment and Configuration
 
-- `.env.exemple` — 69-line environment variable inventory
+- `.env.example` — 69-line environment variable inventory
 - `libs/environment.d.ts` — `NodeJS.ProcessEnv` type augmentation
 
 #### Documentation and Skills
@@ -8293,7 +8291,7 @@ The following minimal observability practices are in place and documented throug
 
 | Practice | Implementation | Surface |
 |:--|:--|:--|
-| Real User Monitoring (RUM) | `@vercel/speed-insights ^1.3.1` in `app/layout.tsx` | Vercel Speed Insights dashboard |
+| Real User Monitoring (RUM) | `@vercel/speed-insights` in `app/layout.tsx` | Vercel Speed Insights dashboard |
 | Client-side analytics | `@next/third-parties` GoogleTagManager in `app/layout.tsx` | GTM / Google Analytics |
 | Structured log emission | JSON-shaped `console.log` events in `proxy.ts` and `/api/revalidate-log` | Vercel platform log stream |
 | Critical-failure log preservation | `compiler.removeConsole` preserves `warn` and `error` | Vercel platform log stream |
@@ -8324,7 +8322,7 @@ Metrics collection is accomplished through two client-side telemetry libraries l
 
 ##### 6.5.2.1.1 Vercel Speed Insights (Real User Monitoring)
 
-The `@vercel/speed-insights ^1.3.1` package is declared in the root `package.json` and mounted via the `<SpeedInsights nonce={nonce} />` component near the closing `<body>` tag of `apps/nextblock/app/layout.tsx`. The component collects Core Web Vitals (LCP, FID/INP, CLS, TTFB) from real user browsers and reports them to the Vercel platform, where they are surfaced on the project's Speed Insights dashboard. The CSP declared in `proxy.ts` explicitly allowlists the `vercel.live` and `vercel.com` origins to permit telemetry transport under the strict nonce-based script policy.
+The `@vercel/speed-insights` package is declared in the root `package.json` and mounted via the `<SpeedInsights nonce={nonce} />` component near the closing `<body>` tag of `apps/nextblock/app/layout.tsx`. The component collects Core Web Vitals (LCP, FID/INP, CLS, TTFB) from real user browsers and reports them to the Vercel platform, where they are surfaced on the project's Speed Insights dashboard. The CSP declared in `proxy.ts` explicitly allowlists the `vercel.live` and `vercel.com` origins to permit telemetry transport under the strict nonce-based script policy.
 
 ##### 6.5.2.1.2 Google Tag Manager and Client-Side Analytics
 
@@ -8332,15 +8330,15 @@ Google Tag Manager is integrated via `@next/third-parties`, wrapped by `ConsentG
 
 ##### 6.5.2.1.3 Declared-but-Unused @vercel/analytics
 
-The `@vercel/analytics ^1.6.1` package is declared in `apps/nextblock/package.json` but is not imported or rendered anywhere in the active codebase. This is an intentional dependency reservation for future enablement; page-view analytics are currently delivered exclusively through GTM when configured.
+The `@vercel/analytics` package is declared in `apps/nextblock/package.json` but is not imported or rendered anywhere in the active codebase. This is an intentional dependency reservation for future enablement; page-view analytics are currently delivered exclusively through GTM when configured.
 
 ##### 6.5.2.1.4 Metrics Collection Summary
 
 | Collector | Library Version | Integration Point |
 |:--|:--|:--|
-| Vercel Speed Insights | `@vercel/speed-insights ^1.3.1` | `apps/nextblock/app/layout.tsx` |
-| Google Tag Manager | `@next/third-parties 1.1.1` | `apps/nextblock/app/layout.tsx` |
-| `@vercel/analytics` | `^1.6.1` (declared) | Not imported |
+| Vercel Speed Insights | `@vercel/speed-insights` | `apps/nextblock/app/layout.tsx` |
+| Google Tag Manager | `@next/third-parties` | `apps/nextblock/app/layout.tsx` |
+| `@vercel/analytics` | (declared) | Not imported |
 | Prometheus / StatsD / OTel | Not present | Not applicable |
 
 #### 6.5.2.2 Log Aggregation
@@ -8393,7 +8391,7 @@ No dedicated alert manager is deployed. Alert pathways fall into three categorie
 
 ##### 6.5.2.4.1 User-Initiated Feedback Channel (F-029)
 
-The primary alert pathway is the **Feedback System** implemented by `FeedbackModal.tsx` in the CMS layout and backed by the `submitFeedback` server action in `apps/nextblock/app/actions/feedback.ts`. The modal presents a subject dropdown (`suggestion`, `bug`, `feature`, `other`), and the server action dispatches an email via `nodemailer ^7.0.10` to the fixed inbox `feedback@nextblock.dev` with a `[CMS Feedback]` subject prefix. Transport credentials are env-configured (SMTP host, port, user, pass). Submission failures log `console.error("Failed to submit feedback:", error)` and return a structured `{success: false, error}` response to the modal.
+The primary alert pathway is the **Feedback System** implemented by `FeedbackModal.tsx` in the CMS layout and backed by the `submitFeedback` server action in `apps/nextblock/app/actions/feedback.ts`. The modal presents a subject dropdown (`suggestion`, `bug`, `feature`, `other`), and the server action dispatches an email via `nodemailer` to the fixed inbox `feedback@nextblock.dev` with a `[CMS Feedback]` subject prefix. Transport credentials are env-configured (SMTP host, port, user, pass). Submission failures log `console.error("Failed to submit feedback:", error)` and return a structured `{success: false, error}` response to the modal.
 
 ##### 6.5.2.4.2 Configuration-Discovery Alerts
 
@@ -8673,7 +8671,7 @@ Capacity tracking is **entirely platform-delegated**. Per Section 6.1.4, the sys
 | Cron execution budget | `maxDuration` 30s/60s | Vercel + `vercel.json` |
 | Stripe API rate | Provider-managed | Stripe |
 | Frankfurter API rate | Single daily cron amortization | Application |
-| Revision table growth | JSON Patch diffs over snapshots | Application (`fast-json-patch ^3.1.1`) |
+| Revision table growth | JSON Patch diffs over snapshots | Application (`fast-json-patch`) |
 
 Because capacity is not tracked in-application, capacity planning guidance (Section 6.1.4.6) focuses on external integration limits rather than on instance counts.
 
@@ -8703,7 +8701,7 @@ flowchart LR
         CmsUser((CMS User<br/>ADMIN / WRITER))
         FeedbackModal[FeedbackModal.tsx<br/>Subject: suggestion · bug<br/>feature · other]
         Action[submitFeedback<br/>server action]
-        Nodemailer[nodemailer ^7.0.10<br/>SMTP over TLS]
+        Nodemailer[nodemailer<br/>SMTP over TLS]
         Inbox[(feedback@nextblock.dev<br/>Fixed inbox)]
 
         CmsUser --> FeedbackModal
@@ -8763,7 +8761,7 @@ The repository does not contain a dedicated `runbooks/` directory. The closest e
 
 Operators have four primary recovery mechanisms, all described in detail in Section 6.1.6 and Section 5.4.6:
 
-1. **Content rollback via revisions.** `page_revisions` and `post_revisions` tables store hybrid snapshot/diff records (JSON Patch via `fast-json-patch ^3.1.1`) keyed by `UNIQUE (page_id, version)`. Any published state can be restored without a database restore.
+1. **Content rollback via revisions.** `page_revisions` and `post_revisions` tables store hybrid snapshot/diff records (JSON Patch via `fast-json-patch`) keyed by `UNIQUE (page_id, version)`. Any published state can be restored without a database restore.
 2. **Supabase Point-in-Time Recovery.** Platform-level PITR is the authoritative recovery path for catastrophic data loss.
 3. **Schema reconstruction from migrations.** The eleven canonical SQL files in `libs/db/src/supabase/migrations/` (`000_foundation_and_enums` through `010_seed_content_scaffold`) allow deterministic schema rebuild on a fresh Supabase project.
 4. **Nightly sandbox reset as reconstruction rehearsal.** The 03:00 UTC `/api/cron/reset-sandbox` job exercises the full R2-clear → SQL-bootstrap → media-normalize → seed pipeline daily, serving as continuous validation that the recovery procedure still works.
@@ -8902,8 +8900,8 @@ The following observability gaps are acknowledged and documented for honest stak
 - `libs/db/src/lib/package-validation.ts` — License gate with `console.error` and 60-second `unstable_cache` tagged `'package-activation'`
 - `libs/environment.d.ts` — `NodeJS.ProcessEnv` augmentation declaring external-service env vars (Supabase, R2/S3, SMTP, Freemius, OpenRouter/Cortex AI). GTM is no longer env-configured — it lives in `privacy_settings`.
 - `vercel.json` — Two cron schedule declarations: `0 3 * * *` reset-sandbox (60s) and `0 18 * * *` sync-currencies (30s)
-- `package.json` (root) — Dependency declarations including `@vercel/speed-insights ^1.3.1` and `@next/third-parties ^16.1.1`
-- `apps/nextblock/package.json` — Template-level dependency declarations including `@vercel/analytics ^1.6.1` (declared but not imported)
+- `package.json` (root) — Dependency declarations including `@vercel/speed-insights` and `@next/third-parties`
+- `apps/nextblock/package.json` — Template-level dependency declarations including `@vercel/analytics` (declared but not imported)
 - `docs/05-DEVELOPER-GUIDE.md` — Operational handbook, deployment notes, sandbox operations
 - `docs/04-DATABASE-AND-AUTH.md` — Authentication flow, RLS policies, role assignment
 
@@ -8977,16 +8975,16 @@ The table below clarifies what is in and out of scope for this section:
 
 #### 6.6.2.1 Testing Framework and Dependencies
 
-The unit testing surface uses **Vitest 4.0.0** as the test runner, integrated into the Nx workspace through the `@nx/vitest` 22.6.0 plugin. The full dependency set declared in the root `package.json` is:
+The unit testing surface uses **Vitest** as the test runner, integrated into the Nx workspace through the `@nx/vitest` plugin. The full dependency set declared in the root `package.json` is:
 
-| Package | Version | Role in Testing |
-|:--|:--|:--|
-| `vitest` | `4.0.0` | Test runner and assertion library |
-| `@vitest/ui` | `4.0.0` | Browser-based test UI |
-| `@nx/vitest` | `22.6.0` | Nx workspace integration; auto-infers test targets |
-| `jsdom` | `^27.0.1` | Browser environment shim for DOM-dependent tests |
-| `ajv` | `^8.17.2` | JSON Schema validation (available to schema-driven tests) |
-| `baseline-browser-mapping` | `^2.9.19` | Browser compatibility reference data |
+| Package | Role in Testing |
+| :-- | :-- |
+| `vitest` | Test runner and assertion library |
+| `@vitest/ui` | Browser-based test UI |
+| `@nx/vitest` | Nx workspace integration; auto-infers test targets |
+| `jsdom` | Browser environment shim for DOM-dependent tests |
+| `ajv` | JSON Schema validation (available to schema-driven tests) |
+| `baseline-browser-mapping` | Browser compatibility reference data |
 
 Authoritative enumeration of these packages appears in §3.6.3 (Testing) of this specification. No additional testing libraries (Jest, Playwright, Cypress, Storybook, React Testing Library, WebdriverIO, c8, istanbul) are installed.
 
@@ -9120,7 +9118,7 @@ No E2E test framework (Playwright, Cypress, WebdriverIO, Puppeteer) is installed
 
 #### 6.6.4.2 Cross-Browser Testing — Not Automated
 
-Cross-browser compatibility is addressed through the **`baseline-browser-mapping` 2.9.19** reference dataset, which informs build-time compatibility decisions. No automated cross-browser test matrix (BrowserStack, Sauce Labs, Playwright browser pool) is configured. The workspace ships `jsdom ^27.0.1` as a browser environment shim — available for future DOM-dependent unit tests — but currently has no tests that use it.
+Cross-browser compatibility is addressed through the **`baseline-browser-mapping`** reference dataset, which informs build-time compatibility decisions. No automated cross-browser test matrix (BrowserStack, Sauce Labs, Playwright browser pool) is configured. The workspace ships `jsdom` as a browser environment shim — available for future DOM-dependent unit tests — but currently has no tests that use it.
 
 #### 6.6.4.3 Performance Testing Requirements — Not Automated
 
@@ -9224,12 +9222,12 @@ The quality gates that **do** exist — and that, in aggregate, substitute for t
 | Gate | Mechanism | Enforcement Point |
 |:--|:--|:--|
 | Type safety | TypeScript `strict: true` | `tsconfig.base.json` — build-time |
-| Code style | Prettier 3.6.2 | `.prettierrc` — IDE / manual |
-| Lint rules | ESLint 9.38.0 flat config | `eslint.config.mjs` — `npm run lint` |
+| Code style | Prettier | `.prettierrc` — IDE / manual |
+| Lint rules | ESLint flat config | `eslint.config.mjs` — `npm run lint` |
 | Module boundaries | `@nx/enforce-module-boundaries` | `eslint.config.mjs` — lint-time |
-| Accessibility | `eslint-plugin-jsx-a11y ^6.10.2` | Lint-time |
-| React rules | `eslint-plugin-react ^7.37.5`, `eslint-plugin-react-hooks ^7.0.1` | Lint-time |
-| Next.js best practices | `eslint-config-next 16.1.6`, `@next/eslint-plugin-next ^16.0.1` | Lint-time |
+| Accessibility | `eslint-plugin-jsx-a11y` | Lint-time |
+| React rules | `eslint-plugin-react`, `eslint-plugin-react-hooks` | Lint-time |
+| Next.js best practices | `eslint-config-next`, `@next/eslint-plugin-next` | Lint-time |
 | Database authorization | Row-Level Security + SECURITY DEFINER helpers | Runtime (Supabase) |
 | Webhook authenticity | Stripe `constructEvent`, Freemius HMAC-SHA-256 | Runtime (serverless handlers) |
 | Server-only isolation | `import 'server-only'` + `typeof window !== 'undefined'` guards | Build-time + runtime |
@@ -9272,8 +9270,8 @@ graph TB
     subgraph DevMachine["Developer Machine - Local Test Environment"]
         Node[Node.js Runtime<br/>v20 or later]
         Pnpm[npm / Nx CLI]
-        Nx[Nx 22.6.0<br/>with @nx/vitest plugin]
-        VitestRunner[Vitest 4.0.0 Runner]
+        Nx[Nx<br/>with @nx/vitest plugin]
+        VitestRunner[Vitest Runner]
         JSDOM[jsdom 27 - available<br/>currently unused]
         TestFile[libs/utils/tests/<br/>translation-workspace.test.ts]
         SrcModule[libs/utils/src/lib/<br/>translation-workspace.ts]
@@ -9308,7 +9306,7 @@ flowchart TD
     NxResolve --> Infer{Test target<br/>configured?}
     Infer -->|No explicit target| AutoInfer[@nx/vitest plugin<br/>auto-infers test target]
     Infer -->|Yes explicit| DirectTarget[Use declared target]
-    AutoInfer --> LaunchVitest[Launch Vitest 4.0.0]
+    AutoInfer --> LaunchVitest[Launch Vitest]
     DirectTarget --> LaunchVitest
     LaunchVitest --> Discover[Discover test files<br/>matching test pattern]
     Discover --> LoadTest[Load<br/>translation-workspace.test.ts]
@@ -9357,7 +9355,7 @@ Resource requirements for executing the test suite are minimal and match a stand
 
 | Resource | Requirement |
 |:--|:--|
-| Node.js | Version compatible with Vitest 4.0.0 and Nx 22.6.0 |
+| Node.js | Version compatible with Vitest and Nx |
 | CPU | Single core sufficient (6 tests complete in subsecond time) |
 | Memory | <512 MB typical for Vitest + jsdom idle load |
 | Disk | Shared with Nx workspace cache (no dedicated test artifact storage) |
@@ -9462,7 +9460,7 @@ While the current posture is intentional, the Nx workspace is pre-configured to 
 |:--|:--|
 | Additional unit tests in any library | Add `*.test.ts` file; `@nx/vitest` auto-infers the target |
 | Coverage enforcement | Create `vitest.config.ts` in a project; Nx generator supports `--coverage` |
-| Component testing (React Testing Library) | Install `@testing-library/react`; use existing `jsdom ^27.0.1` environment shim |
+| Component testing (React Testing Library) | Install `@testing-library/react`; use existing `jsdom` environment shim |
 | E2E testing (Playwright / Cypress) | Install framework; create `apps/nextblock-e2e` project per Nx convention |
 | CI integration (GitHub Actions) | Create `.github/workflows/ci.yml` invoking `nx affected -t test,lint,build` |
 | Coverage reporting | Apply the registered-but-unapplied `@nx/vitest` migration `update-22-6-0-prefix-reports-directory` |
@@ -9503,7 +9501,7 @@ The accepted tradeoff in §5.3.1 ("Vitest-only — Limited end-to-end coverage")
 
 - The system has an **intentionally minimal testing strategy** formalized as an ADR in §5.3.1.
 - The **sole automated test file** is `libs/utils/tests/translation-workspace.test.ts`, containing six Vitest test cases across two `describe` blocks.
-- **Vitest 4.0.0** is integrated via the `@nx/vitest` 22.6.0 plugin with `testTargetName: "test"`; no `vitest.config.ts` file exists in the workspace.
+- **Vitest** is integrated via the `@nx/vitest` plugin with `testTargetName: "test"`; no `vitest.config.ts` file exists in the workspace.
 - **No CI/CD test automation exists** — the repository contains no `.github/workflows/` directory; Vercel builds the application and Node scripts publish libraries, neither of which runs tests.
 - **Manual QA harnesses** in `libs/editor/src/lib/components/test/` provide human-operated validation for editor surfaces but are not automated tests.
 - **Quality assurance substitutes** for an automated test pyramid via TypeScript `strict: true`, ESLint `@nx/enforce-module-boundaries`, accessibility lints, RLS at the database layer, signed-webhook verification at integration boundaries, and build-time type safety.
@@ -9530,7 +9528,7 @@ The accepted tradeoff in §5.3.1 ("Vitest-only — Limited end-to-end coverage")
 
 #### Files Examined
 
-- `package.json` (root) — Declares `vitest@4.0.0`, `@vitest/ui@4.0.0`, `@nx/vitest@22.6.0`, `jsdom@^27.0.1`, `ajv@^8.17.2`, `baseline-browser-mapping@^2.9.19`; contains 51 scripts with zero matching `test`/`spec`
+- `package.json` (root) — Declares `vitest`, `@vitest/ui`, `@nx/vitest`, `jsdom`, `ajv`, `baseline-browser-mapping`; contains 51 scripts with zero matching `test`/`spec`
 - `nx.json` — `@nx/vitest` plugin registration with `testTargetName: "test"`; production named-input excludes `*.spec.*`/`*.test.*`/`tsconfig.spec.json`/`test-setup.*`; `@nx/react` library generator default `unitTestRunner: "none"`
 - `migrations.json` — Registered unapplied migration `update-22-6-0-prefix-reports-directory` for Vitest coverage report path
 - `tsconfig.base.json` — Workspace-wide TypeScript `strict: true` (compensating compile-time gate)
@@ -9599,12 +9597,12 @@ The UI is composed using the React Server Components (RSC)-first model introduce
 
 ### 7.2.1 Framework and Runtime Stack
 
-| Technology | Version | Role |
-|:--|:--|:--|
-| Next.js (App Router) | `16.1.7` | Full-stack React framework with RSC |
-| React / react-dom | `^19.2.4` | UI runtime with Server Components & Actions |
-| TypeScript | `^5.9.3` | Strict-mode language |
-| Nx | `22.6.0` | Monorepo orchestration |
+| Technology | Role |
+| :-- | :-- |
+| Next.js (App Router) | Full-stack React framework with RSC |
+| React / react-dom | UI runtime with Server Components & Actions |
+| TypeScript | Strict-mode language |
+| Nx | Monorepo orchestration |
 
 The application is the sole runtime surface; it hosts the public website, the CMS admin, the customer storefront, and all API/webhook/cron/upload handlers. Client-side composition follows a strict nested provider order, defined in `apps/nextblock/app/providers.tsx`, that hydrates server-resolved state (auth, locale, currency, content context, translations, theme) into React Context for the entire client tree.
 
@@ -9612,15 +9610,15 @@ The application is the sole runtime surface; it hosts the public website, the CM
 
 The workspace's styling model combines a utility-first CSS layer with a headless-component layer:
 
-| Library | Version | Purpose |
-|:--|:--|:--|
-| `tailwindcss` | `^4.1.16` | Utility-first CSS framework |
-| `@tailwindcss/postcss` | `^4.1.16` | Tailwind 4 PostCSS integration |
-| `postcss` / `autoprefixer` | `^8.5.6` / `^10.4.21` | CSS transformation + vendor prefixing |
-| `tailwindcss-animate` | `^1.0.7` | Pre-built animation utilities |
-| `tailwind-merge` | `^3.3.1` | Class-name conflict resolution |
-| `clsx` | `^2.1.1` | Conditional class composition |
-| `class-variance-authority` | `^0.7.1` | Variant-based styling primitives |
+| Library | Purpose |
+| :-- | :-- |
+| `tailwindcss` | Utility-first CSS framework |
+| `@tailwindcss/postcss` | Tailwind 4 PostCSS integration |
+| `postcss` / `autoprefixer` | CSS transformation + vendor prefixing |
+| `tailwindcss-animate` | Pre-built animation utilities |
+| `tailwind-merge` | Class-name conflict resolution |
+| `clsx` | Conditional class composition |
+| `class-variance-authority` | Variant-based styling primitives |
 
 The root `components.json` registers shadcn/ui with the `slate` base color palette, CSS-variables-based theming, React Server Components support, and TSX component format. Tailwind is configured with `darkMode: ['class']` for `next-themes` compatibility and content globs spanning both `apps/**` and `libs/**`.
 
@@ -9628,23 +9626,23 @@ The root `components.json` registers shadcn/ui with the `slate` base color palet
 
 Twelve `@radix-ui/*` primitives supply accessible, WAI-ARIA-compliant behavior underneath the design system components:
 
-| Primitive | Version | Primitive | Version |
-|:--|:--|:--|:--|
-| `@radix-ui/react-avatar` | `^1.1.10` | `@radix-ui/react-progress` | `^1.1.7` |
-| `@radix-ui/react-checkbox` | `^1.3.3` | `@radix-ui/react-radio-group` | `^1.3.8` |
-| `@radix-ui/react-dialog` | `^1.1.15` | `@radix-ui/react-select` | `^2.2.6` |
-| `@radix-ui/react-dropdown-menu` | `^2.1.16` | `@radix-ui/react-separator` | `^1.1.7` |
-| `@radix-ui/react-label` | `^2.1.7` | `@radix-ui/react-slot` | `^1.2.3` |
-| `@radix-ui/react-popover` | `^1.1.15` | `@radix-ui/react-tooltip` | `^1.2.8` |
+| Primitive | Primitive |
+| :-- | :-- |
+| `@radix-ui/react-avatar` | `@radix-ui/react-progress` |
+| `@radix-ui/react-checkbox` | `@radix-ui/react-radio-group` |
+| `@radix-ui/react-dialog` | `@radix-ui/react-select` |
+| `@radix-ui/react-dropdown-menu` | `@radix-ui/react-separator` |
+| `@radix-ui/react-label` | `@radix-ui/react-slot` |
+| `@radix-ui/react-popover` | `@radix-ui/react-tooltip` |
 
 ### 7.2.4 Iconography and Theming
 
-- **`lucide-react`** (`^0.548.0` at workspace level; `^0.534.0` in the published template package) — provides the typed icon set consumed throughout the UI and by `@nextblock-cms/sdk` block configurations (F-024).
-- **`next-themes`** (`^0.4.6`) — enables four-variant theme switching (`light`, `dark`, `vibrant`, `system`) via class-based strategy, composed as the outermost provider in `apps/nextblock/app/providers.tsx`.
+- **`lucide-react`** (at workspace level; in the published template package) — provides the typed icon set consumed throughout the UI and by `@nextblock-cms/sdk` block configurations (F-024).
+- **`next-themes`** — enables four-variant theme switching (`light`, `dark`, `vibrant`, `system`) via class-based strategy, composed as the outermost provider in `apps/nextblock/app/providers.tsx`.
 
 ### 7.2.5 Rich-Text Editor Stack — `libs/editor`
 
-The `@nextblock-cms/editor` library (version `0.2.24`) bundles Tiptap 3.22.4 with 40+ extensions and the Yjs collaboration stack, exported by feature family:
+The `@nextblock-cms/editor` library bundles Tiptap with 40+ extensions and the Yjs collaboration stack, exported by feature family:
 
 | Family | Included Extensions |
 |:--|:--|
@@ -9652,29 +9650,29 @@ The `@nextblock-cms/editor` library (version `0.2.24`) bundles Tiptap 3.22.4 wit
 | Inline Marks | bold, italic, underline, strike, code, subscript, superscript, highlight, link, color, font-family, text-align, text-style, blockquote |
 | Block Nodes | bullet-list, ordered-list, list-item, task-item, task-list, heading, code-block-lowlight, details, horizontal-rule, hard-break, table/-cell/-header/-row, image |
 | Interactions | bubble-menu, floating-menu, drag-handle, drag-handle-react, focus, placeholder, character-count, dropcursor, gapcursor, emoji, mention, node-range, typography, history, mathematics, youtube |
-| Collaboration | `@tiptap/extension-collaboration` `^3.22.4`, `@tiptap/y-tiptap` `^3.0.3`, `yjs` `^13.6.30`, `y-protocols` `^1.0.7` |
-| Auxiliary | `lowlight` `^3.3.0` for syntax highlighting, `katex` `^0.16.25` for mathematical notation |
+| Collaboration | `@tiptap/extension-collaboration` , `@tiptap/y-tiptap` , `yjs` , `y-protocols` |
+| Auxiliary | `lowlight` for syntax highlighting, `katex` for mathematical notation |
 
 ### 7.2.6 Forms, Validation, and Client State
 
-| Library | Version | Role |
-|:--|:--|:--|
-| `zod` | `^4.3.6` | Universal schema validation (block schemas, API validation, form resolvers) |
-| `react-hook-form` | `^7.71.1` | Form state management |
-| `@hookform/resolvers` | `^5.2.2` | Zod ↔ react-hook-form adapter |
-| `zustand` | `^5.0.10` | Client-side cart store (F-015) with persist middleware |
+| Library | Role |
+| :-- | :-- |
+| `zod` | Universal schema validation (block schemas, API validation, form resolvers) |
+| `react-hook-form` | Form state management |
+| `@hookform/resolvers` | Zod ↔ react-hook-form adapter |
+| `zustand` | Client-side cart store (F-015) with persist middleware |
 
 ### 7.2.7 Interaction and Behavior Libraries
 
-| Library | Version | Purpose |
-|:--|:--|:--|
-| `@dnd-kit/core` | `^6.3.1` | Drag-and-drop primitives for block reordering |
-| `@dnd-kit/sortable` | `^10.0.0` | Sortable list implementation |
-| `@dnd-kit/utilities` | `^3.2.2` | DnD helpers |
-| `@floating-ui/dom` | `^1.7.4` | Floating element positioning |
-| `@floating-ui/react` | `^0.27.16` | React bindings for floating-ui |
-| `react-hot-toast` | `^2.6.0` | Toast notifications |
-| `sonner` | `^2.0.7` | Alternative toast notifications |
+| Library | Purpose |
+| :-- | :-- |
+| `@dnd-kit/core` | Drag-and-drop primitives for block reordering |
+| `@dnd-kit/sortable` | Sortable list implementation |
+| `@dnd-kit/utilities` | DnD helpers |
+| `@floating-ui/dom` | Floating element positioning |
+| `@floating-ui/react` | React bindings for floating-ui |
+| `react-hot-toast` | Toast notifications |
+| `sonner` | Alternative toast notifications |
 
 ---
 
@@ -9789,7 +9787,7 @@ sequenceDiagram
 
 ### 7.5.1 Block SDK Contract (F-024)
 
-The published `@nextblock-cms/sdk` library (version `0.2.9`) defines the typed extensibility contract for block authoring. Main exports from `libs/sdk/src/lib/sdk.ts`:
+The published `@nextblock-cms/sdk` library defines the typed extensibility contract for block authoring. Main exports from `libs/sdk/src/lib/sdk.ts`:
 
 | Export | Role |
 |:--|:--|
@@ -10514,7 +10512,7 @@ The repository declares no explicit compliance requirements (no SOC 2, ISO 27001
 | Content security | Nonce-based CSP via `crypto.randomUUID()` | `proxy.ts` |
 | Data authorization | Row-Level Security + SECURITY DEFINER helpers | 11 canonical migrations |
 | Webhook authenticity | Stripe `constructEvent`; Freemius HMAC-SHA-256 | `libs/ecommerce/src/lib/stripe/webhooks.ts`; Freemius route |
-| Session security | `HttpOnly`/`Secure` cookies via `@supabase/ssr ^0.7.0` | Proxy + Supabase SSR |
+| Session security | `HttpOnly`/`Secure` cookies via `@supabase/ssr` | Proxy + Supabase SSR |
 | Open-source licensing | AGPLv3 for public libraries; license-gated for premium | `LICENSE.md`, scope tags |
 
 PCI-DSS scope is reduced by delegating card handling entirely to Stripe (card data never reaches NextBlock servers or Supabase). Digital-product licensing is delegated to Freemius.
@@ -10531,7 +10529,7 @@ NextBlock CMS does **not use Terraform, Pulumi, AWS CloudFormation, or any imper
 | `libs/db/src/supabase/migrations/` (11 files) | Database schema, enums, functions, triggers, RLS, indexes, seed data |
 | `libs/db/src/supabase/config.toml` | Supabase CLI local-dev ports, auth settings, rate limits, pooler config |
 | `libs/db/src/supabase/templates/` (6 files) | Auth email templates (confirmation, invite, magic link, recovery, reauth, email change) |
-| `.env.exemple` | Authoritative environment variable template (40+ variables) |
+| `.env.example` | Authoritative environment variable template (40+ variables) |
 | `nx.json` | Workspace orchestration, build graph plugins, generator defaults, named inputs |
 | Per-project `project.json` (10 files) | Nx project targets, scope tags, build executors, outputs |
 | `.verdaccio/config.yml` | Local npm registry configuration (port 4873) |
@@ -10539,7 +10537,7 @@ NextBlock CMS does **not use Terraform, Pulumi, AWS CloudFormation, or any imper
 
 #### 8.2.2.2 Configuration Management Strategy
 
-Runtime configuration is **exclusively environment-variable driven**, consumed through `process.env` at server boundaries and validated (implicitly) through TypeScript declarations in `libs/environment.d.ts`. The authoritative variable inventory from `.env.exemple` is grouped into seven categories:
+Runtime configuration is **exclusively environment-variable driven**, consumed through `process.env` at server boundaries and validated (implicitly) through TypeScript declarations in `libs/environment.d.ts`. The authoritative variable inventory from `.env.example` is grouped into seven categories:
 
 | Category | Variable Count | Examples |
 |:--|:--|:--|
@@ -10552,7 +10550,7 @@ Runtime configuration is **exclusively environment-variable driven**, consumed t
 | Stripe | 3 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` |
 | Freemius | 10 | `FREEMIUS_DEVELOPER_ID`, `FREEMIUS_PUBLIC_KEY`, `FREEMIUS_SECRET_KEY`, `FREEMIUS_API_KEY`, `FREEMIUS_CHECKOUT_PRODUCTS_JSON`, `FREEMIUS_ECOMMERCE_SANDBOX_PUBLIC_KEY`, `FREEMIUS_ECOMMERCE_SANDBOX_SECRET_KEY`, `FREEMIUS_SANDBOX_ENABLED`, `FREEMIUS_ECOMMERCE_SANDBOX_KEY` |
 
-Local developer bootstrap is driven by the interactive `node tools/scripts/setup.mjs` wizard (invoked via `npm run setup`), which creates `.env.local` from `.env.exemple` and interactively prompts for Supabase project id, connection string, anon key, service role key, and access token. Passwords are extracted from `POSTGRES_URL` where possible.
+Local developer bootstrap is driven by the interactive `node tools/scripts/setup.mjs` wizard (invoked via `npm run setup`), which creates `.env.local` from `.env.example` and interactively prompts for Supabase project id, connection string, anon key, service role key, and access token. Passwords are extracted from `POSTGRES_URL` where possible.
 
 **Configuration layering order** at runtime is the Next.js default: `.env.local` > `.env.<NODE_ENV>.local` > `.env.<NODE_ENV>` > `.env`. Vercel supplies production values through its **Environment Variables** dashboard section (per-environment: Production, Preview, Development).
 
@@ -10602,7 +10600,7 @@ Disaster recovery relies on **four compounding recovery mechanisms**, none of wh
 | Mechanism | Recovery Objective | Implementation |
 |:--|:--|:--|
 | Supabase Point-in-Time Recovery (PITR) | Catastrophic data loss | Platform-managed by Supabase |
-| Content revisions | Accidental edits / content rollback | `page_revisions` + `post_revisions` tables with JSON Patch diffs (via `fast-json-patch ^3.1.1`), `UNIQUE(page_id, version)` |
+| Content revisions | Accidental edits / content rollback | `page_revisions` + `post_revisions` tables with JSON Patch diffs (via `fast-json-patch`), `UNIQUE(page_id, version)` |
 | Schema reconstruction from migrations | Cold-start rebuild | 11 canonical SQL files in `libs/db/src/supabase/migrations/` applied in order |
 | Nightly sandbox reset (reconstruction rehearsal) | Continuous validation that recovery pipeline works | `/api/cron/reset-sandbox` at 03:00 UTC |
 
@@ -10631,7 +10629,7 @@ Three distinct cloud providers compose the production footprint. The rationale f
 |:--|:--|:--|
 | Vercel | Compute + Edge + Cron + RUM | Zero-configuration Next.js 16 hosting; built-in image optimization; native App Router support; no container orchestration overhead; cron scheduling integrated with function lifecycle |
 | Supabase | PostgreSQL + Auth + Storage metadata | Managed PostgreSQL 17 with built-in RLS; GoTrue auth service; SQL migration CLI; PITR included; generous free tier for open-core distribution |
-| Cloudflare R2 | S3-compatible object storage | Zero egress fees (superior to AWS S3 for media-heavy workloads); S3-compatible API usable via `@aws-sdk/client-s3 ^3.920.0`; global edge presence |
+| Cloudflare R2 | S3-compatible object storage | Zero egress fees (superior to AWS S3 for media-heavy workloads); S3-compatible API usable via `@aws-sdk/client-s3`; global edge presence |
 
 **Documented deviations from the Default Technology Stack** (per §3.7.1):
 
@@ -10639,7 +10637,7 @@ Three distinct cloud providers compose the production footprint. The rationale f
 |:--|:--|:--|
 | AWS | Vercel + Cloudflare R2 | Platform simplicity + Next.js-native integration + zero egress fees for media |
 | Docker | None | Vercel-native deployment eliminates container runtime requirement |
-| Terraform | Declarative config across `vercel.json`, migrations, `config.toml`, `.env.exemple`, `nx.json` | No multi-service provisioning to orchestrate |
+| Terraform | Declarative config across `vercel.json`, migrations, `config.toml`, `.env.example`, `nx.json` | No multi-service provisioning to orchestrate |
 | GitHub Actions | Vercel Git integration + Node release scripts in `tools/scripts/` | No CI test suite to gate; publication handled imperatively |
 | Python / Flask | TypeScript + Next.js route handlers | Unified stack across client + server |
 | Auth0 | Supabase Auth (GoTrue) | Integrated with RLS at the database layer |
@@ -10649,26 +10647,26 @@ Three distinct cloud providers compose the production footprint. The rationale f
 
 #### 8.3.2.1 Vercel Platform Services
 
-| Vercel Service | Integration Library | Version | Function |
-|:--|:--|:--|:--|
-| Serverless Functions | `next` (built-in) | `16.0.10` (template) / `16.1.7` (workspace) | Run Route Handlers, Server Actions, Server Components |
-| Edge Runtime | `next/server` (built-in) | same | Execute `proxy.ts` |
-| Cron | `vercel.json` `crons` declaration | N/A (platform) | Invoke scheduled endpoints |
-| Image Optimization | `next/image` (built-in) | same | AVIF + WebP transformation |
-| Speed Insights | `@vercel/speed-insights` | `^1.3.1` | Core Web Vitals RUM |
-| Third-Party Script Loader | `@next/third-parties` | `^16.1.1` / `1.1.1` | GTM script loader with nonce support |
-| Analytics (declared, unused) | `@vercel/analytics` | `^1.6.1` | Reserved for future page-view enablement |
+| Vercel Service | Integration Library | Function |
+| :-- | :-- | :-- |
+| Serverless Functions | `next` (built-in) | Run Route Handlers, Server Actions, Server Components |
+| Edge Runtime | `next/server` (built-in) | Execute `proxy.ts` |
+| Cron | `vercel.json` `crons` declaration | Invoke scheduled endpoints |
+| Image Optimization | `next/image` (built-in) | AVIF + WebP transformation |
+| Speed Insights | `@vercel/speed-insights` | Core Web Vitals RUM |
+| Third-Party Script Loader | `@next/third-parties` | GTM script loader with nonce support |
+| Analytics (declared, unused) | `@vercel/analytics` | Reserved for future page-view enablement |
 
 #### 8.3.2.2 Supabase Services
 
-| Supabase Service | Integration Library | Version | Function |
-|:--|:--|:--|:--|
-| PostgreSQL | `postgres` | `^3.8` (inventory dual-path fallback) | Direct SQL when RPC unavailable |
-| SSR client | `@supabase/ssr` | `^0.7.0` | Server-side cookie-based session |
-| Browser client | `@supabase/supabase-js` | `^2.77.0` | Client components + editor |
-| Auth (GoTrue) | via `@supabase/ssr` | bundled | Email/password, password reset |
-| Realtime | bundled (enabled in `config.toml`) | bundled | WebSocket subscriptions |
-| CLI | `supabase` | invoked via `npx supabase` | Migrations, link, db push, config push |
+| Supabase Service | Integration Library | Function |
+| :-- | :-- | :-- |
+| PostgreSQL | `postgres` | Direct SQL when RPC unavailable |
+| SSR client | `@supabase/ssr` | Server-side cookie-based session |
+| Browser client | `@supabase/supabase-js` | Client components + editor |
+| Auth (GoTrue) | via `@supabase/ssr` | Email/password, password reset |
+| Realtime | bundled (enabled in `config.toml`) | WebSocket subscriptions |
+| CLI | `supabase` | Migrations, link, db push, config push |
 
 **Supabase `config.toml` declarations** (`libs/db/src/supabase/config.toml`):
 
@@ -10702,7 +10700,7 @@ Three distinct cloud providers compose the production footprint. The rationale f
 
 #### 8.3.2.3 Cloudflare R2 Configuration
 
-R2 is consumed through the S3-compatible API using `@aws-sdk/client-s3 ^3.920.0`. The endpoint is constructed as `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`. Access is dual-mode:
+R2 is consumed through the S3-compatible API using `@aws-sdk/client-s3`. The endpoint is constructed as `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`. Access is dual-mode:
 
 | Access Mode | Use Case | Credential |
 |:--|:--|:--|
@@ -10716,16 +10714,16 @@ The `next.config.js` `remotePatterns` are dynamically derived from `NEXT_PUBLIC_
 
 Eight external service integrations are declared across the workspace:
 
-| Service | Client Library | Version | Failure Classification |
-|:--|:--|:--|:--|
-| Supabase Postgres + Auth | `@supabase/ssr`, `@supabase/supabase-js`, `postgres` | `^0.7.0`, `^2.77.0`, `^3.8` | Critical path |
-| Cloudflare R2 | `@aws-sdk/client-s3` | `^3.920.0` | Critical for media |
-| Stripe | `stripe` | `^20.4.1` | Critical path for commerce |
-| Freemius | `@freemius/checkout`, `@freemius/sdk` | `^1.4.1`, `^0.3.0` | Best-effort (ack-only) |
-| Frankfurter FX | native `fetch` | N/A (`api.frankfurter.dev`) | Best-effort (skipped currency telemetry) |
-| SMTP | `nodemailer` | `^7.0.10` | Best-effort degrade |
-| Vercel Speed Insights | `@vercel/speed-insights` | `^1.3.1` | Observational |
-| Google Tag Manager | `@next/third-parties` | `^16.1.1` / `1.1.1` | Observational (disabled if `privacy_settings.gtm_id` unset) |
+| Service | Client Library | Failure Classification |
+| :-- | :-- | :-- |
+| Supabase Postgres + Auth | `@supabase/ssr`, `@supabase/supabase-js`, `postgres` | Critical path |
+| Cloudflare R2 | `@aws-sdk/client-s3` | Critical for media |
+| Stripe | `stripe` | Critical path for commerce |
+| Freemius | `@freemius/checkout`, `@freemius/sdk` | Best-effort (ack-only) |
+| Frankfurter FX | native `fetch` | Best-effort (skipped currency telemetry) |
+| SMTP | `nodemailer` | Best-effort degrade |
+| Vercel Speed Insights | `@vercel/speed-insights` | Observational |
+| Google Tag Manager | `@next/third-parties` | Observational (disabled if `privacy_settings.gtm_id` unset) |
 
 ### 8.3.3 High Availability Design
 
@@ -10817,7 +10815,7 @@ The concerns that containerization would address are handled through alternative
 
 | Containerization Concern | Substitute Mechanism |
 |:--|:--|
-| Runtime environment consistency | `packageManager: npm@10.9.4` pinning + `nx.json` `defaultBase: master` + Node version managed by Vercel |
+| Runtime environment consistency | `packageManager` pinning + `nx.json` `defaultBase: master` + Node version managed by Vercel |
 | Dependency isolation | Nx-enforced module boundaries via `@nx/enforce-module-boundaries` + scope tags (`scope:public` / `scope:premium`) |
 | Local dev database parity | Supabase CLI with `libs/db/src/supabase/config.toml` (local ports 54321/54322/54323/54320) |
 | Reproducible builds | `tools/scripts/release-lib.js` with `--skip-nx-cache --with-deps` |
@@ -10870,30 +10868,30 @@ NextBlock CMS operates a **hybrid CI/CD model**. There is **no `.github/workflow
 | Repository | `git+https://github.com/nextblock-cms/nextblock.git` |
 | Default base branch | `master` (declared in `nx.json` `defaultBase`) |
 | Git integration | Vercel Git Integration |
-| Package manager | `npm@10.9.4` (pinned in root `package.json` `packageManager`) |
-| Workspace orchestrator | Nx `22.6.0` |
+| Package manager | `npm` (pinned in root `package.json` `packageManager`) |
+| Workspace orchestrator | Nx |
 
 #### 8.6.2.2 Build Environment Requirements
 
-| Component | Version |
-|:--|:--|
-| Node.js | As required by `next 16.0.10+`, `vitest 4.0.0`, `nx 22.6.0` (typically Node 20 LTS) |
-| npm | `10.9.4` |
-| Nx CLI | `22.6.0` |
-| Supabase CLI (optional, for DB deploys) | Installed via `npx supabase` on demand |
+| Component |
+| :-- |
+| Node.js |
+| npm |
+| Nx CLI |
+| Supabase CLI (optional, for DB deploys) |
 
 #### 8.6.2.3 Nx Workspace Plugin Graph
 
 The `nx.json` registers six plugins that together compose the build graph:
 
-| Plugin | Version | Inferred Targets |
-|:--|:--|:--|
-| `@nx/next/plugin` | `22.6.0` | `build`, `dev`, `start`, `serve-static`, `build-deps`, `watch-deps` |
-| `@nx/eslint/plugin` | `22.6.0` | `lint` |
-| `@nx/react/router-plugin` | `22.6.0` | router-related targets |
-| `@nx/vite/plugin` | `22.6.0` | `build`, `preview`, `serve`, `test` |
-| `@nx/vitest` | `22.6.0` | `test` (`testTargetName: "test"`) |
-| `@nx/esbuild` | `22.6.0` (via `targetDefaults`) | `esbuild` executor with cache |
+| Plugin | Inferred Targets |
+| :-- | :-- |
+| `@nx/next/plugin` | `build`, `dev`, `start`, `serve-static`, `build-deps`, `watch-deps` |
+| `@nx/eslint/plugin` | `lint` |
+| `@nx/react/router-plugin` | router-related targets |
+| `@nx/vite/plugin` | `build`, `preview`, `serve`, `test` |
+| `@nx/vitest` | `test` (`testTargetName: "test"`) |
+| `@nx/esbuild` | `esbuild` executor with cache |
 
 Key Nx configuration elements:
 
@@ -10919,26 +10917,26 @@ The workspace operates two build pipelines in parallel:
 
 **Key build tool versions** (from `package.json`):
 
-| Tool | Version |
-|:--|:--|
-| `vite` | `^7.2.6` |
-| `vite-plugin-dts` | `~4.5.0` |
-| `@vitejs/plugin-react` | `^5.1.0` |
-| `vite-tsconfig-paths` | `^5.1.4` |
-| `esbuild` | `^0.25.11` |
-| `@swc/core` | `^1.15.8` |
-| `@babel/core` | `^7.28.5` |
-| `typescript` | `5.9.3` |
-| `dotenv` | `^17.3.1` |
-| `dotenv-cli` | `^10.0.0` |
-| `cross-env` | `^10.1.0` |
+| Tool |
+| :-- |
+| `vite` |
+| `vite-plugin-dts` |
+| `@vitejs/plugin-react` |
+| `vite-tsconfig-paths` |
+| `esbuild` |
+| `@swc/core` |
+| `@babel/core` |
+| `typescript` |
+| `dotenv` |
+| `dotenv-cli` |
+| `cross-env` |
 
 #### 8.6.2.5 Dependency Management
 
 | Aspect | Implementation |
 |:--|:--|
 | Workspace protocol | `workspace:*` for internal packages (`@nextblock-cms/ui`, `@nextblock-cms/db`, `@nextblock-cms/editor`, `@nextblock-cms/sdk`, `@nextblock-cms/utils`) |
-| Version overrides | `glob ^10.4.5`, `whatwg-encoding`, `node-domexception`, `keygrip` |
+| Version overrides | `glob`, `whatwg-encoding`, `node-domexception`, `keygrip` |
 | Template transpilation | `transpilePackages: ['@nextblock-cms/utils', '@nextblock-cms/ui', '@nextblock-cms/editor']` in `apps/nextblock/next.config.js` |
 | Local registry for testing | Verdaccio on port 4873 via root `project.json` |
 | Public npm registry | `registry.npmjs.org` — default for all public packages |
@@ -10983,14 +10981,14 @@ Quality gates operate at build time only (no runtime tests in CI):
 
 | Gate | Mechanism | Enforcement |
 |:--|:--|:--|
-| Type safety | TypeScript `strict: true` (v5.9.3) | Build fails on type error |
-| Code style | Prettier v^3.6.2 | IDE advisory / manual |
-| Lint rules | ESLint flat config v^9.38.0 | `npm run lint` |
-| Module boundaries | `@nx/enforce-module-boundaries` v22.6.0 | Lint-time |
-| Accessibility | `eslint-plugin-jsx-a11y` v^6.10.2 | Lint-time |
-| React rules | `eslint-plugin-react` v^7.37.5, `eslint-plugin-react-hooks` v^7.0.1 | Lint-time |
-| Next.js best practices | `eslint-config-next` v16.1.6, `@next/eslint-plugin-next` v^16.0.1 | Lint-time |
-| Unit tests (optional) | Vitest v4.0.0 (6 tests in `libs/utils/tests/translation-workspace.test.ts`) | Developer-invoked |
+| Type safety | TypeScript `strict: true` | Build fails on type error |
+| Code style | Prettier | IDE advisory / manual |
+| Lint rules | ESLint flat config | `npm run lint` |
+| Module boundaries | `@nx/enforce-module-boundaries` | Lint-time |
+| Accessibility | `eslint-plugin-jsx-a11y` | Lint-time |
+| React rules | `eslint-plugin-react`, `eslint-plugin-react-hooks` | Lint-time |
+| Next.js best practices | `eslint-config-next`, `@next/eslint-plugin-next` | Lint-time |
+| Unit tests (optional) | Vitest (6 tests in `libs/utils/tests/translation-workspace.test.ts`) | Developer-invoked |
 | Vercel build | `nx build nextblock` | Build failure aborts deployment |
 
 Note: the root `package.json` declares 51 scripts, **none of which match `test` or `spec`**; test execution is entirely developer-initiated.
@@ -11226,7 +11224,7 @@ Infrastructure monitoring is **intentionally minimal and platform-delegated**. N
 
 | Pillar | Mechanism | Destination |
 |:--|:--|:--|
-| Real User Monitoring | `@vercel/speed-insights ^1.3.1` via `<SpeedInsights nonce={nonce} />` in `app/layout.tsx` | Vercel Speed Insights dashboard |
+| Real User Monitoring | `@vercel/speed-insights` via `<SpeedInsights nonce={nonce} />` in `app/layout.tsx` | Vercel Speed Insights dashboard |
 | Client analytics | `@next/third-parties` `<GoogleTagManager gtmId={...} nonce={nonce} />` | Google Analytics via GTM |
 | Server-side logging | Structured `console.warn` / `console.error` | Vercel log stream |
 
@@ -11350,7 +11348,7 @@ No dedicated alert manager is deployed. Alert pathways:
 
 | Origin | Destination | Transport |
 |:--|:--|:--|
-| CMS user feedback | `feedback@nextblock.dev` | `FeedbackModal` → `submitFeedback` → `nodemailer ^7.0.10` → SMTP |
+| CMS user feedback | `feedback@nextblock.dev` | `FeedbackModal` → `submitFeedback` → `nodemailer` → SMTP |
 | Developer bug reports | `https://github.com/nextblock-cms/nextblock/issues` | Declared in root `package.json` `bugs.url` |
 | Platform function failures | Vercel dashboard email/webhook | Vercel platform notification config |
 | Database alerts | Supabase dashboard | Supabase platform notification config |
@@ -11468,7 +11466,7 @@ Documented gaps (per §6.4 and §6.5):
 | Package name mismatch: `@nextblock-cms/ecom` (published) vs `@nextblock-cms/ecommerce` (workspace import) | Developer confusion | Import alias documented in §3.8 |
 | Freemius webhook ack-only (no DB reconciliation) | Drift between Freemius state and local records | Manual reconciliation via Freemius dashboard |
 | Postal-code shipping matching not consumed at runtime | Shipping logic incomplete | Feature pending |
-| `@vercel/analytics ^1.6.1` declared but not imported | Page-view analytics not live | GTM provides substitute |
+| `@vercel/analytics` declared but not imported | Page-view analytics not live | GTM provides substitute |
 | No persistent audit log table | Forensic reconstruction relies on Vercel log retention | Content revisions table (partial) |
 | No application-layer WAF/DDoS beyond Vercel | Abuse mitigation delegated | Platform defaults |
 | MFA disabled by default | No two-factor in default config | Operator can re-enable in `config.toml` |
@@ -11492,10 +11490,10 @@ Documented gaps (per §6.4 and §6.5):
 
 | API | Failure Classification | Source |
 |:--|:--|:--|
-| Stripe (physical product checkout) | Critical path for commerce | `stripe ^20.4.1` |
-| Freemius (digital licensing) | Best-effort (ack-only) | `@freemius/checkout ^1.4.1`, `@freemius/sdk ^0.3.0` |
+| Stripe (physical product checkout) | Critical path for commerce | `stripe` |
+| Freemius (digital licensing) | Best-effort (ack-only) | `@freemius/checkout`, `@freemius/sdk` |
 | Frankfurter FX (`api.frankfurter.dev`) | Best-effort (skipped currency telemetry) | Native `fetch` |
-| SMTP provider | Best-effort degrade | `nodemailer ^7.0.10` |
+| SMTP provider | Best-effort degrade | `nodemailer` |
 | Google Tag Manager | Observational | `@next/third-parties` |
 
 ### 8.9.3 Development Infrastructure Dependencies
@@ -11516,8 +11514,8 @@ Documented gaps (per §6.4 and §6.5):
 
 | Resource | Minimum | Recommended |
 |:--|:--|:--|
-| Node.js | Per Vitest 4.0.0 + Nx 22.6.0 compatibility (Node 20 LTS) | Node 20 LTS |
-| npm | 10.9.4 | 10.9.4 |
+| Node.js | Per Vitest + Nx compatibility (Node 20 LTS) | Node 20 LTS |
+| npm | | |
 | Disk | ~10 GB for `node_modules` + `dist` + `.next` + Supabase local | SSD recommended |
 | Memory | 8 GB | 16 GB+ |
 | CPU | Single-core sufficient for 6-test Vitest suite | Multi-core for parallel Nx builds |
@@ -11546,7 +11544,7 @@ Operators should select tiers based on expected monthly active users, storage fo
 - **Three managed platform providers** compose the production footprint: Vercel (app + edge + cron + RUM), Supabase (PostgreSQL 17 + Auth + Storage metadata), Cloudflare R2 (S3-compatible object storage).
 - **Hybrid CI/CD** combines Vercel Git integration (for application deployment) with three Node.js release scripts under `tools/scripts/` (for library/CLI/DB releases).
 - **Two Vercel cron schedules** in `vercel.json`: `/api/cron/reset-sandbox` at 03:00 UTC (60s max) and `/api/cron/sync-currencies` at 18:00 UTC (30s max).
-- **Infrastructure as Code is declarative**, distributed across `vercel.json`, `nx.json`, `libs/db/src/supabase/{migrations/, config.toml, templates/}`, `.env.exemple`, and per-project `project.json` files.
+- **Infrastructure as Code is declarative**, distributed across `vercel.json`, `nx.json`, `libs/db/src/supabase/{migrations/, config.toml, templates/}`, `.env.example`, and per-project `project.json` files.
 - **Library publication uses a Twin Package Strategy** for `@nextblock-cms/ecom`: stub to public npm registry + real module to private GitHub Packages.
 - **11 canonical SQL migrations** compose the database schema; re-running them from a fresh Supabase project deterministically reconstructs the system.
 - **Monitoring is intentionally minimal**: Vercel Speed Insights for RUM, GTM for client analytics, structured `console.warn`/`console.error` logs for server-side events. No Prometheus/Grafana/Datadog/PagerDuty.
@@ -11583,15 +11581,15 @@ Operators should select tiers based on expected monthly active users, storage fo
 
 **Files Examined**
 
-- `.env.exemple` — Authoritative inventory of 40+ environment variables across 7 categories (Platform, Secrets, FX, Supabase, R2, SMTP, Stripe, Freemius)
+- `.env.example` — Authoritative inventory of 40+ environment variables across 7 categories (Platform, Secrets, FX, Supabase, R2, SMTP, Stripe, Freemius)
 - `vercel.json` — Declarative cron schedule definitions (2 crons: reset-sandbox at 03:00 UTC, sync-currencies at 18:00 UTC)
-- `package.json` (root) — Workspace identity (`@nextblock/source` v0.2.77), 51 npm scripts, Nx 22.6.0 plugin versions, dependency overrides, `packageManager: npm@10.9.4`
+- `package.json` (root) — Workspace identity (`nextblock`), 51 npm scripts, Nx plugin versions, dependency overrides, `packageManager`
 - `nx.json` — Workspace orchestration: 6 plugins, `defaultBase: master`, production named-input exclusions, `release.version.preVersionCommand`
 - `apps/nextblock/next.config.js` — Image pipeline config, `compiler.removeConsole`, `transpilePackages`, dynamic `remotePatterns`, `turbopack.resolveAlias`
 - `apps/nextblock/project.json` — Nx project descriptor (build / build-base / serve / start), tags `["app:nextblock", "scope:public"]`
-- `apps/nextblock/package.json` — `@nextblock-cms/template` v0.2.55, workspace dependencies, `@vercel/analytics ^1.6.1` (declared but unused)
+- `apps/nextblock/package.json` — `@nextblock-cms/template`, workspace dependencies, `@vercel/analytics` (declared but unused)
 - `apps/nextblock/proxy.ts` — Edge runtime: Supabase session handling, nonce generation, RBAC `cmsRoutePermissions`, locale cookie
-- `apps/create-nextblock/package.json` — CLI identity (`create-nextblock` v0.2.78), `commander`, `@clack/prompts`, `inquirer`, `execa`, `fs-extra`
+- `apps/create-nextblock/package.json` — CLI identity (`create-nextblock`), `commander`, `@clack/prompts`, `inquirer`, `execa`, `fs-extra`
 - `.verdaccio/config.yml` — Local npm registry configuration (port 4873, `tmp/local-registry/storage`, `$all` perms, `allow_offline: true`)
 - `tools/scripts/deploy-supabase.js` — Full Supabase deployment flow (link + db push + config push + auth sync)
 - `tools/scripts/release-lib.js` — Library release pipeline: standard npm publish and Twin Package Strategy for ecom
@@ -11652,7 +11650,7 @@ This appendix catalogs supplementary reference material that supports the main b
 
 ### 9.1.1 Environment Variable Reference
 
-The following table enumerates environment variables declared in the `NodeJS.ProcessEnv` augmentation in `libs/environment.d.ts` and in the `.env.exemple` inventory. Variables prefixed with `NEXT_PUBLIC_` are exposed to the browser bundle; all others are server-only. Maintain all platform credentials in accordance with the Supabase, Cloudflare R2, Stripe, Freemius, and SMTP configuration contracts documented in Section 3.4.
+The following table enumerates environment variables declared in the `NodeJS.ProcessEnv` augmentation in `libs/environment.d.ts` and in the `.env.example` inventory. Variables prefixed with `NEXT_PUBLIC_` are exposed to the browser bundle; all others are server-only. Maintain all platform credentials in accordance with the Supabase, Cloudflare R2, Stripe, Freemius, and SMTP configuration contracts documented in Section 3.4.
 
 | Variable | Category | Purpose |
 |:--|:--|:--|
@@ -11783,15 +11781,15 @@ Reproduced from Section 4.12 for quick reference during operational work. Values
 
 The workspace publishes the following libraries to the public npm registry. Version numbers reflect the state captured in Section 3.3 (Open Source Dependencies) and are advanced by `tools/scripts/release-lib.js`, which runs `npx nx run ${nxProject}:build --skip-nx-cache --with-deps`, bumps the version, and publishes to npm.
 
-| Package | Version | Scope Tag | Role |
-|:--|:--|:--|:--|
-| `@nextblock-cms/ui` | 0.2.19 | `scope:public` | Design-system primitives |
-| `@nextblock-cms/utils` | 0.2.13 | `scope:public` | Cross-cutting helpers |
-| `@nextblock-cms/db` | 0.2.32 | `scope:public` | Supabase client factories |
-| `@nextblock-cms/editor` | 0.2.24 | `scope:public` | Tiptap-based editor |
-| `@nextblock-cms/sdk` | 0.2.9 | `scope:public` | Block and plugin SDK |
-| `@nextblock-cms/ecom` | 0.0.10 | `scope:premium` | Commerce library (stub/real Twin Package) |
-| `create-nextblock` | 0.2.78 | N/A (CLI) | Project scaffolding CLI |
+| Package | Scope Tag | Role |
+| :-- | :-- | :-- |
+| `@nextblock-cms/ui` | `scope:public` | Design-system primitives |
+| `@nextblock-cms/utils` | `scope:public` | Cross-cutting helpers |
+| `@nextblock-cms/db` | `scope:public` | Supabase client factories |
+| `@nextblock-cms/editor` | `scope:public` | Tiptap-based editor |
+| `@nextblock-cms/sdk` | `scope:public` | Block and plugin SDK |
+| `@nextblock-cms/ecom` | `scope:premium` | Commerce library (stub/real Twin Package) |
+| `create-nextblock` | N/A (CLI) | Project scaffolding CLI |
 
 Cross-reference: Section 3.3 (Open Source Dependencies), Section 8.11 (Summary and Cross-References).
 
@@ -12039,7 +12037,7 @@ The glossary defines domain-specific, product-specific, and platform-specific te
 
 **ER (Entity-Relationship) Model** — The relational schema captured in Section 6.2 (Database Design).
 
-**ESLint** — The JavaScript/TypeScript linter used in the workspace. ESLint 9.38.0 flat config is enforced via `eslint.config.mjs` as a compile-time quality gate.
+**ESLint** — The JavaScript/TypeScript linter used in the workspace. ESLint flat config is enforced via `eslint.config.mjs` as a compile-time quality gate.
 
 #### F
 
@@ -12073,7 +12071,7 @@ The glossary defines domain-specific, product-specific, and platform-specific te
 
 #### J
 
-**JSON Patch** — The diff format used in content revisioning via `fast-json-patch 3.1.1`. See Section 6.2 (revisions hybrid snapshot/diff strategy).
+**JSON Patch** — The diff format used in content revisioning via `fast-json-patch`. See Section 6.2 (revisions hybrid snapshot/diff strategy).
 
 #### L
 
@@ -12095,7 +12093,7 @@ The glossary defines domain-specific, product-specific, and platform-specific te
 
 **Nonce** — A single-use random token generated by `crypto.randomUUID()` in `proxy.ts` and attached to each CSP directive that permits inline scripts/styles.
 
-**Nx** — The monorepo orchestrator used at version 22.6.0. See Section 3.2 and Section 5.3.
+**Nx** — The monorepo orchestrator used. See Section 3.2 and Section 5.3.
 
 #### O
 
@@ -12129,7 +12127,7 @@ The glossary defines domain-specific, product-specific, and platform-specific te
 
 #### R
 
-**R2 (Cloudflare R2)** — The S3-compatible object storage service used for media. Accessed via `@aws-sdk/client-s3 3.920.0`.
+**R2 (Cloudflare R2)** — The S3-compatible object storage service used for media. Accessed via `@aws-sdk/client-s3`.
 
 **RBAC (Role-Based Access Control)** — The authorization mechanism implemented via the `user_role` enum and `cmsRoutePermissions` in `proxy.ts`. See F-003.
 
@@ -12143,7 +12141,7 @@ The glossary defines domain-specific, product-specific, and platform-specific te
 
 **RPC (Remote Procedure Call)** — The primary inventory deduction path; invoked through a PostgreSQL stored procedure via `supabase.rpc()`.
 
-**RSC (React Server Components)** — The React 19.2.4 feature class in which the majority of NextBlock's pages render.
+**RSC (React Server Components)** — The React feature class in which the majority of NextBlock's pages render.
 
 **RUM (Real User Monitoring)** — The observability approach implemented via Vercel Speed Insights.
 
@@ -12163,7 +12161,7 @@ The glossary defines domain-specific, product-specific, and platform-specific te
 
 **SLA (Service-Level Agreement)** — The formal commitment to a target metric. NextBlock's SLAs are codified in configuration files and summarized in Section 9.1.6.
 
-**SMTP (Simple Mail Transfer Protocol)** — The outbound email transport used via `nodemailer 7.0.10`. See Section 3.4.
+**SMTP (Simple Mail Transfer Protocol)** — The outbound email transport used via `nodemailer`. See Section 3.4.
 
 **SSG (Static Site Generation)** — Next.js's build-time HTML generation.
 
@@ -12177,9 +12175,9 @@ The glossary defines domain-specific, product-specific, and platform-specific te
 
 #### T
 
-**Tailwind CSS** — The utility-first CSS framework at version 4.1.16.
+**Tailwind CSS** — The utility-first CSS framework.
 
-**Tiptap** — The rich-text editor framework at version 3.22.4 underpinning F-005. Employs 40+ extensions.
+**Tiptap** — The rich-text editor framework underpinning F-005. Employs 40+ extensions.
 
 **Translation Group ID** — A UUID linking language variants across pages, posts, products, and navigation items. See F-007.
 
@@ -12201,7 +12199,7 @@ The glossary defines domain-specific, product-specific, and platform-specific te
 
 **Vercel Speed Insights** — The RUM library (`@vercel/speed-insights`) loaded from the root layout to collect Core Web Vitals.
 
-**Vitest** — The JavaScript testing framework at version 4.0.0 integrated via the `@nx/vitest` plugin. See Section 6.6.
+**Vitest** — The JavaScript testing framework integrated via the `@nx/vitest` plugin. See Section 6.6.
 
 #### W
 
@@ -12211,7 +12209,7 @@ The glossary defines domain-specific, product-specific, and platform-specific te
 
 **WebP** — A modern image format generated by the NextBlock image pipeline alongside AVIF.
 
-**Workspace** — The Nx-managed repository defined by `nx.json`, `package.json` (as `@nextblock/source` v0.2.77), and `tsconfig.base.json`.
+**Workspace** — The Nx-managed repository defined by `nx.json`, `package.json` (as `nextblock`), and `tsconfig.base.json`.
 
 #### X
 
@@ -12219,13 +12217,13 @@ The glossary defines domain-specific, product-specific, and platform-specific te
 
 #### Y
 
-**Yjs** — The CRDT library (version 13.6.30) underpinning collaborative editing surfaces.
+**Yjs** — The CRDT library underpinning collaborative editing surfaces.
 
 #### Z
 
 **Zod** — The TypeScript-first schema validation library used for per-block Zod schemas and form validation.
 
-**Zustand** — The state-management library (version 5.0.10) used for cart state.
+**Zustand** — The state-management library used for cart state.
 
 ---
 
@@ -12431,7 +12429,7 @@ The appendices above synthesize material from the following sections of this spe
 #### Primary Source Files Cross-Referenced by the Appendices
 
 - `libs/environment.d.ts` — Typed `NodeJS.ProcessEnv` augmentation used to enumerate every environment variable listed in Section 9.1.1
-- `.env.exemple` — Environment variable inventory and sample values cross-checked against the typed augmentation
+- `.env.example` — Environment variable inventory and sample values cross-checked against the typed augmentation
 - `libs/db/src/supabase/migrations/00000000000000_setup_foundation_and_enums.sql` — `user_role` enum definition
 - `libs/db/src/supabase/migrations/00000000000002_setup_content_tables.sql` — `page_status`, `menu_location`, `revision_type` enum definitions
 - `libs/db/src/supabase/migrations/00000000000003_setup_catalog_and_licensing.sql` — `product_type`, `payment_provider` enum definitions
@@ -12451,7 +12449,7 @@ The appendices above synthesize material from the following sections of this spe
 - `libs/db/src/lib/package-validation.ts` — License gate `unstable_cache` TTL
 - `vercel.json` — Cron schedule declarations
 - `nx.json` — Scope tag topology and workspace orchestration
-- `package.json` (root) — Workspace identity (`@nextblock/source` v0.2.77) and dependency versions
+- `package.json` (root) — Workspace identity (`nextblock`) and dependency versions
 - `tsconfig.base.json` — Path aliases and strict TypeScript configuration
 - `eslint.config.mjs` — Flat config enforcing module boundaries and accessibility rules
 - `tools/scripts/release-lib.js` — Library publication contract driving package versions in Section 9.1.7
@@ -12481,8 +12479,8 @@ The appendices above synthesize material from the following sections of this spe
 - §2.1 Feature Catalog — F-001 through F-030 feature families
 - §2.3 Feature Relationships — Dependency graph, integration points, shared components
 - §2.4 Implementation Considerations — Performance, scalability, security targets
-- §3.1 Programming Languages — TypeScript 5.9.3 strict mode
-- §3.2 Frameworks and Libraries — Next.js 16.1.7, React 19.2.4, Nx 22.6.0, Tiptap 3.22.4, Yjs
+- §3.1 Programming Languages — TypeScript strict mode
+- §3.2 Frameworks and Libraries — Next.js, React, Nx, Tiptap, Yjs
 - §3.3 Open Source Dependencies — Published library versions and Verdaccio
 - §3.4 Third-Party Services — Supabase, R2, Stripe, Freemius, Frankfurter, SMTP, Vercel, GTM
 - §3.5 Databases and Storage — PostgreSQL 17, eleven migrations, image pipeline

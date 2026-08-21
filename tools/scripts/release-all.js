@@ -115,7 +115,7 @@ console.log(
   `  ${'create-nextblock (CLI)'.padEnd(26)} ${String(readVersion('apps/create-nextblock/package.json')).padEnd(10)} → ${versionSpec}`,
 );
 console.log(
-  `  ${'(root @nextblock/source)'.padEnd(26)} ${String(readVersion('package.json')).padEnd(10)} → ${versionSpec}`,
+  `  ${'(root nextblock)'.padEnd(26)} ${String(readVersion('package.json')).padEnd(10)} → ${versionSpec}`,
 );
 console.log(
   `  ${'(template)'.padEnd(26)} ${String(readVersion('apps/nextblock/package.json')).padEnd(10)} → ${versionSpec}`,

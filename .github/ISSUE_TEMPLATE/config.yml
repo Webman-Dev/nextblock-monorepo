@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/nextblock-cms/nextblock/security/advisories/new
+    about: Never report security issues publicly. Use private vulnerability reporting, or email security@nextblock.dev. See SECURITY.md.
+  - name: 💬 Questions and discussion
+    url: https://github.com/nextblock-cms/nextblock/discussions
+    about: Ask how to do something, share what you built, or discuss an idea before opening an issue.
+  - name: 📚 Documentation
+    url: https://github.com/nextblock-cms/nextblock/tree/master/docs
+    about: The maintained reference set — setup, database and auth, the block system, deployment, and staying up to date.

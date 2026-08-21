@@ -9,7 +9,15 @@ export const DEFAULT_SITE_KEYWORDS =
   'NextBlock, CMS, Next.js, Supabase, headless CMS, block editor, visual page builder, multilingual, e-commerce, open source';
 
 /** Bundled fallback Open Graph image (resolved to absolute via metadataBase). */
-export const DEFAULT_OG_IMAGE = '/images/metadata_image.webp';
+export const DEFAULT_OG_IMAGE = '/assets/nextblock-banner.jpg';
+
+/**
+ * Intrinsic pixel size of DEFAULT_OG_IMAGE. Social scrapers trust the declared
+ * width/height over the file itself, so these must track the real asset — keep
+ * them next to the path so the two cannot drift apart.
+ */
+export const DEFAULT_OG_IMAGE_WIDTH = 1672;
+export const DEFAULT_OG_IMAGE_HEIGHT = 941;
 
 const DEFAULT_META_DESCRIPTION_LENGTH = 160;
 

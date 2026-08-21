@@ -20,12 +20,33 @@ have to type (see "No environment variables required" below). The only interacti
 Supabase integration's "create database" step, which can't be skipped because provisioning
 a Postgres DB requires choosing a region/plan.
 
-> **Why `stores`, not `integration-ids`?** The legacy `integration-ids=oac_…` parameter
-> triggers an OAuth integration that *creates* a Supabase project but leaves it
-> **disconnected** — it injects **no** environment variables into the Vercel project, so
-> the app boots unconfigured and you have to wire the keys up by hand. The modern `stores`
-> parameter is the native Marketplace path that actually **connects the store and injects
-> credentials before the build**. ([Vercel Deploy Button docs](https://vercel.com/docs/deploy-button/source))
+> **Why `stores`, not `integration-ids`?** Both parameters are current — neither is
+> deprecated — but they do different jobs, and only one of them provisions a database.
+>
+> **`integration-ids=oac_…`** ([docs](https://vercel.com/docs/deploy-button/integrations))
+> only forces an integration to be **installed and authorized before the project can be
+> imported** (up to three per project). Vercel's documentation makes no promise about
+> environment variables either way: whether credentials land in the project is a property
+> of that integration's own OAuth flow, not of the parameter. Supabase's flow does set
+> them — the `vercel/next.js` `with-supabase` example states that "all relevant environment
+> variables will be assigned to the project" after installation — so this route can work.
+> It just isn't Vercel guaranteeing it, and it says nothing about *when* they land.
+>
+> **`stores`** ([docs](https://vercel.com/docs/deploy-button/source)) is the native
+> Marketplace path: it creates the store **as part of the deployment** and creates the
+> environment variables for it. That timing is what NextBlock actually depends on — the
+> build-time migration hook needs `POSTGRES_URL` to exist *during* the first build, not
+> after it. See "Build configuration" below.
+>
+> The deciding evidence is Vercel's own Template Gallery entry for the Supabase Starter,
+> which ships the **exact `stores` payload** used above.
+>
+> **If you ever add an `integration-ids` fallback, the only correct Supabase value is
+> `oac_VqOgBHqhEoFTPzGkPd7L0iH6`** — confirmed in `supabase/supabase`'s own example READMEs
+> and in the Vercel record behind `vercel.com/templates/next.js/supabase`. A plausible
+> lookalike, `oac_VqOgBHqhvvqGe2YujqqiW0wo`, circulates in AI-generated snippets and is
+> **not a real integration id**; it shares only the first twelve characters. An unknown id
+> makes Vercel refuse the import outright, which breaks the deploy completely.
 
 ## Connect the database (Supabase integration)
 
@@ -88,9 +109,11 @@ imports the workspace libraries one level up, which a custom Root Directory woul
 
 ## No environment variables required
 
-A Deploy-Button URL can only carry variable **names**, never values — so secrets can
-never be pre-filled through it. Rather than make you paste random strings, NextBlock
-resolves everything in-app, and the button prompts for nothing:
+A Deploy-Button URL can carry environment variable **names** (`env`), and non-sensitive
+**default values** (`envDefaults`) — but never secrets: Vercel's own docs warn that the URL
+"is saved in the browser history, making it insecure" and to "never use default values for
+sensitive data like passwords, API keys, tokens, database credentials." NextBlock sidesteps
+the question entirely by resolving everything in-app, so the button prompts for nothing:
 
 - **`NEXT_PUBLIC_URL`** — optional. When unset the app falls back to Vercel's
   production URL (`VERCEL_PROJECT_PRODUCTION_URL` server-side /
