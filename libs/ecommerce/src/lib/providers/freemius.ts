@@ -488,7 +488,18 @@ export class FreemiusProvider implements PaymentProvider {
       const apiKey = checkoutCredentials.apiKey;
 
       if (!publicKey || (isFreemiusSandboxEnabled && !secretKey)) {
-          return { error: 'Missing FREEMIUS credentials (PUBLIC_KEY or SECRET_KEY) in environment variables.', url: null };
+          // The shopper cannot act on "missing FREEMIUS_PUBLIC_KEY", and naming the store's
+          // environment variables to the public is needless detail. Log the specifics,
+          // return the same keyed message the Stripe path uses.
+          console.error(
+              'Freemius checkout blocked: missing credentials (PUBLIC_KEY or SECRET_KEY) in CMS → Payments or environment.'
+          );
+          return {
+              error: 'This store is not able to take payments right now. Please contact the seller to complete your purchase.',
+              errorKey: 'ecommerce.checkout_payments_unavailable',
+              errorStatus: 503,
+              url: null,
+          };
       }
 
       if (isFreemiusSandboxEnabled && checkoutCredentials.source === 'legacy-env') {

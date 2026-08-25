@@ -41,6 +41,7 @@ import {
   type VisibilityState,
 } from "@nextblock-cms/utils";
 import {
+  AlertTriangle,
   CalendarClock,
   ChevronDown,
   Link2,
@@ -79,11 +80,12 @@ export interface VisibilityControlProps {
   /** True when unpublished content edits exist in the Live Draft. */
   hasDraft?: boolean;
   /**
-   * Why this content cannot go public yet, if it can't — e.g. a product whose
-   * payment provider isn't configured. Blocks publish and schedule, and is shown
-   * verbatim, so write it as an explanation the editor can act on.
+   * A caution to show before this content goes public — e.g. a product whose payment
+   * provider isn't configured, which publishes fine but cannot be bought yet. Shown
+   * verbatim as an amber callout in the publish and schedule dialogs; it never blocks
+   * the action, so write it as a consequence the editor can weigh, not a refusal.
    */
-  publishBlockedReason?: string | null;
+  publishWarning?: string | null;
 }
 
 const STATE_LABEL: Record<VisibilityState, string> = {
@@ -139,7 +141,7 @@ export default function VisibilityControl({
   translationGroupId,
   languages = [],
   hasDraft = false,
-  publishBlockedReason = null,
+  publishWarning = null,
 }: VisibilityControlProps) {
   const router = useRouter();
   const liveStatus = LIVE_STATUS[type];
@@ -178,7 +180,9 @@ export default function VisibilityControl({
   );
 
   const openPublishDialog = React.useCallback(() => {
-    setError(publishBlockedReason);
+    // A warning is not an error: seeding it into `error` renders it destructive-red and
+    // `run()` clears it on the next attempt. It belongs in the dialog body instead.
+    setError(null);
     setAlsoPublishDraft(true);
     setSiblings(null);
     setDialog("publish");
@@ -186,7 +190,7 @@ export default function VisibilityControl({
     if (translationGroupId) {
       void getSiblingVisibility(type, translationGroupId, id).then(setSiblings);
     }
-  }, [id, publishBlockedReason, translationGroupId, type]);
+  }, [id, translationGroupId, type]);
 
   const run = async (intent: VisibilityIntent, opts?: { publishDraft?: boolean }) => {
     setIsBusy(true);
@@ -251,6 +255,16 @@ export default function VisibilityControl({
   const typeLabel = type === "product" ? "product" : type;
   const busySpinner = <Loader2 className="mr-2 h-4 w-4 animate-spin" />;
 
+  // Amber, not destructive: publishing is still allowed. Same treatment as the
+  // "publish your unpublished edits too" opt-in below, which is the other caution
+  // shown in this dialog.
+  const publishWarningCallout = (
+    <div className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+      <span>{publishWarning}</span>
+    </div>
+  );
+
   return (
     <div className="flex items-center gap-2">
       <span
@@ -304,7 +318,7 @@ export default function VisibilityControl({
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={() => {
-                setError(publishBlockedReason);
+                setError(null);
                 setScheduleValue(toDateTimeLocal(publishedAt) || defaultScheduleValue());
                 setDialog("schedule");
               }}
@@ -398,6 +412,8 @@ export default function VisibilityControl({
             </div>
           )}
 
+          {publishWarning && publishWarningCallout}
+
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           <DialogFooter className="mt-2 gap-2">
@@ -406,10 +422,10 @@ export default function VisibilityControl({
             </Button>
             <Button
               onClick={() => void run({ action: "publish" }, { publishDraft: alsoPublishDraft })}
-              disabled={isBusy || Boolean(publishBlockedReason)}
+              disabled={isBusy}
             >
               {isBusy && busySpinner}
-              Publish {typeLabel}
+              {publishWarning ? `Publish anyway` : `Publish ${typeLabel}`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -436,6 +452,8 @@ export default function VisibilityControl({
             />
           </div>
 
+          {publishWarning && publishWarningCallout}
+
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           <DialogFooter className="mt-2 gap-2">
@@ -444,10 +462,6 @@ export default function VisibilityControl({
             </Button>
             <Button
               onClick={() => {
-                if (publishBlockedReason) {
-                  setError(publishBlockedReason);
-                  return;
-                }
                 const local = new Date(scheduleValue);
                 if (Number.isNaN(local.getTime())) {
                   setError("That isn't a valid date and time.");
@@ -455,10 +469,10 @@ export default function VisibilityControl({
                 }
                 void run({ action: "schedule", publishedAt: local.toISOString() });
               }}
-              disabled={isBusy || !scheduleValue || Boolean(publishBlockedReason)}
+              disabled={isBusy || !scheduleValue}
             >
               {isBusy && busySpinner}
-              Schedule
+              {publishWarning ? "Schedule anyway" : "Schedule"}
             </Button>
           </DialogFooter>
         </DialogContent>

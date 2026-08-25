@@ -1,4 +1,4 @@
-import { getProductBySlug, getProducts } from '@nextblock-cms/ecommerce/server';
+import { getProductBySlug, getProducts, getProviderReadiness } from '@nextblock-cms/ecommerce/server';
 import {
   ProductProvider,
   mapRawVariantRelations,
@@ -53,7 +53,13 @@ function formatMinorUnitAmount(amount: unknown) {
   return (numericAmount / 100).toFixed(2);
 }
 
-function resolveOfferAvailability(productRecord: any) {
+function resolveOfferAvailability(productRecord: any, canPurchase = true) {
+  // Don't advertise a buyable offer for something checkout will refuse: a rich result
+  // promising "InStock" that dead-ends at an enquiry form is worse than no offer badge.
+  if (!canPurchase) {
+    return 'https://schema.org/InStoreOnly';
+  }
+
   if (productRecord.product_type === 'digital') {
     return 'https://schema.org/InStock';
   }
@@ -412,6 +418,20 @@ export default async function ProductPage({ params }: ProductPageProps) {
     })),
   };
   const siteUrl = process.env.NEXT_PUBLIC_URL || "";
+
+  // Whether checkout would actually accept this product, so the structured data
+  // doesn't promise a purchase the store can't complete. Defaults to buyable on any
+  // failure — a working shop must never lose its offer markup to an unrelated error.
+  const canPurchase = await (async () => {
+    const provider = productRecord.payment_provider;
+    if (provider !== 'stripe' && provider !== 'freemius') return true;
+    try {
+      return (await getProviderReadiness(provider)).ready;
+    } catch {
+      return true;
+    }
+  })();
+
   const nonce = (await headers()).get('x-nonce') || undefined;
   const title = resolveMetaTitle(productRecord.meta_title, productRecord.title);
   const description = resolveProductMetaDescription(
@@ -443,7 +463,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           url: `${siteUrl}/product/${productRecord.slug}`,
           price,
           priceCurrency: defaultCurrency?.code || 'USD',
-          availability: resolveOfferAvailability(productRecord),
+          availability: resolveOfferAvailability(productRecord, canPurchase),
           itemCondition: 'https://schema.org/NewCondition',
         }
       : undefined,

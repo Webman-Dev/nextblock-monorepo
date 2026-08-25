@@ -1599,6 +1599,54 @@ export type Database = {
           },
         ]
       }
+      product_inquiries: {
+        Row: {
+          created_at: string
+          email_delivered: boolean
+          id: string
+          ip_masked: string | null
+          is_resolved: boolean
+          locale: string | null
+          message: string
+          product_id: string | null
+          product_slug: string | null
+          product_title: string | null
+          sender_email: string
+          sender_name: string
+          user_agent: string | null
+        }
+        Insert: {
+          created_at?: string
+          email_delivered?: boolean
+          id?: string
+          ip_masked?: string | null
+          is_resolved?: boolean
+          locale?: string | null
+          message: string
+          product_id?: string | null
+          product_slug?: string | null
+          product_title?: string | null
+          sender_email: string
+          sender_name: string
+          user_agent?: string | null
+        }
+        Update: {
+          created_at?: string
+          email_delivered?: boolean
+          id?: string
+          ip_masked?: string | null
+          is_resolved?: boolean
+          locale?: string | null
+          message?: string
+          product_id?: string | null
+          product_slug?: string | null
+          product_title?: string | null
+          sender_email?: string
+          sender_name?: string
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       product_media: {
         Row: {
           media_id: string

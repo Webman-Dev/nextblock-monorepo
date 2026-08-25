@@ -25,6 +25,7 @@ export { ProductCategorySelector } from './lib/pages/cms/products/components/Pro
 export * from './lib/cart-store';
 export * from './lib/coupons';
 export * from './lib/CurrencyProvider';
+export * from './lib/PaymentReadinessProvider';
 export * from './lib/currency';
 export * from './lib/currency-store';
 export * from './lib/use-cart';

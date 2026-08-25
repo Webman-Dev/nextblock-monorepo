@@ -42,7 +42,12 @@ export async function savePaymentProviderCredentials(formData: FormData) {
     },
   });
 
+  // The storefront buy CTAs, the CMS payments banner and the publish warning all read
+  // readiness. Without a layout-wide revalidate they keep showing "can't take payments"
+  // after the admin has just pasted working keys.
   revalidatePath('/cms/payments');
+  revalidatePath('/cms/dashboard');
+  revalidatePath('/', 'layout');
 }
 
 export async function updatePaymentSettings(

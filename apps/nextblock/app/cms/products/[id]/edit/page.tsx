@@ -19,6 +19,7 @@ import {
   getGlobalProductAttributes,
   getProductTranslations,
   getStoreConfigStatus,
+  getStoreReadiness,
   normalizeCurrencyRecord,
   updateProductAction,
   getCategoriesWithCount,
@@ -49,6 +50,7 @@ export default async function EditProductPage({
     languages,
     enabledProviders,
     configStatus,
+    storeReadiness,
   ] =
     await Promise.all([
       params,
@@ -57,6 +59,7 @@ export default async function EditProductPage({
       getActiveLanguagesServerSide(),
       getEnabledPaymentProviders(),
       getStoreConfigStatus(),
+      getStoreReadiness(),
     ]);
 
   if (!isOnline) {
@@ -115,14 +118,19 @@ export default async function EditProductPage({
   const globalAttributes = buildGlobalAttributesForForm(globalAttributesRaw || []);
   const productLanguage = languages.find((language) => language.id === product.language_id);
 
-  // The Status select used to sit inside ProductForm, where submitting with
-  // status "active" was blocked unless the payment provider was enabled and
-  // configured. Publishing now happens outside the form, so that guard has to
-  // travel with it — a product nobody can pay for should not reach the storefront.
+  // The Status select used to sit inside ProductForm, where submitting with status
+  // "active" was blocked unless the payment provider was enabled and configured.
+  // Publishing now happens outside the form, so that guidance travels with it — but as
+  // a WARNING, not a block: an owner should be able to build a catalogue while their
+  // Stripe onboarding is still in progress. The storefront covers the gap by offering
+  // shoppers an enquiry form in place of Add-to-Cart.
   const productProvider = product.payment_provider as 'stripe' | 'freemius' | undefined;
-  const publishBlockedReason =
-    productProvider && (!enabledProviders[productProvider] || !configStatus[productProvider].hasKeys)
-      ? `${productProvider === 'stripe' ? 'Stripe' : 'Freemius'} must be enabled and fully configured before this product can be published.`
+  const providerReadiness = productProvider ? storeReadiness[productProvider] : null;
+  const publishWarning =
+    providerReadiness && !providerReadiness.ready
+      ? `${providerReadiness.label} isn't set up yet${
+          providerReadiness.missing.length ? ` (missing: ${providerReadiness.missing.join(', ')})` : ''
+        }, so nobody can buy this product. It will still go live — visitors will see a "Contact the seller" form instead of Add to cart. Finish setting up payments at CMS → Payments.`
       : null;
 
   const { data: draftData } = await supabase
@@ -329,7 +337,7 @@ export default async function EditProductPage({
             translationGroupId={product.translation_group_id}
             languages={languages}
             hasDraft={hasDraft}
-            publishBlockedReason={publishBlockedReason}
+            publishWarning={publishWarning}
           />
         </div>
       </div>

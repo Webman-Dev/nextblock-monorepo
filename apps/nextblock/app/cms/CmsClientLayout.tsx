@@ -7,12 +7,14 @@ import { useRouter, usePathname } from "next/navigation" // Import usePathname
 import Link from "next/link"
 import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
-  Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins,
+  Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins, MessageSquareText,
   ExternalLink, Paintbrush, Brain, TicketPercent, ShieldAlert, Folder, DatabaseBackup, Boxes, Tag,
   ShieldCheck, Code2, Cookie, LineChart, Mail, UserPlus, SlidersHorizontal,
 } from "lucide-react"
 import TwoFactorReminderBanner from "./components/TwoFactorReminderBanner"
 import SystemAlertsBanner, { type SystemAlertItem } from "./components/SystemAlertsBanner"
+import PaymentsReminderBanner from "./components/PaymentsReminderBanner"
+import type { PaymentsReminder } from "../../lib/cms/payments-reminder"
 import { Button } from "@nextblock-cms/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar"
 import { cn } from "@nextblock-cms/utils"
@@ -120,12 +122,14 @@ export default function CmsClientLayout({
   isEcommerceActive = false,
   showTwoFactorReminder = false,
   systemAlerts = [],
+  paymentsReminder = null,
 }: {
   children: ReactNode,
   isCortexAiActive?: boolean,
   isEcommerceActive?: boolean,
   showTwoFactorReminder?: boolean,
   systemAlerts?: SystemAlertItem[],
+  paymentsReminder?: PaymentsReminder | null,
 }) {
   const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
   const { user, profile, role, isLoading, isAdmin, isWriter } = useAuth();
@@ -254,6 +258,7 @@ export default function CmsClientLayout({
   else if (pathname.startsWith("/cms/products")) pageTitle = "Products";
   else if (pathname.startsWith("/cms/orders/") && pathname.endsWith("/edit")) pageTitle = "Edit Order";
   else if (pathname.startsWith("/cms/orders")) pageTitle = "Orders";
+  else if (pathname.startsWith("/cms/inquiries")) pageTitle = "Product Enquiries";
 
 
   return (
@@ -358,6 +363,9 @@ export default function CmsClientLayout({
                   </CollapsibleNavItem>
                   <NavItem href="/cms/orders" icon={ListOrdered} isActive={pathname.startsWith("/cms/orders")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                     Orders
+                  </NavItem>
+                  <NavItem href="/cms/inquiries" icon={MessageSquareText} isActive={pathname.startsWith("/cms/inquiries")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                    Enquiries
                   </NavItem>
                   <NavItem href="/cms/coupons" icon={TicketPercent} isActive={pathname.startsWith("/cms/coupons")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Coupons
@@ -510,6 +518,7 @@ export default function CmsClientLayout({
         </header>
         <main className="flex-1 min-h-0 w-full overflow-y-auto overscroll-contain px-6 pt-6 pb-20 scroll-pb-24 md:pb-24">
             {showTwoFactorReminder && <TwoFactorReminderBanner />}
+            {paymentsReminder && <PaymentsReminderBanner reminder={paymentsReminder} />}
             <SystemAlertsBanner alerts={systemAlerts} />
             {children}
         </main>

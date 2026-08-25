@@ -41,6 +41,14 @@ interface ProductDetailsLayoutProps {
   visualEditingEnabled?: boolean;
   descriptionNode?: React.ReactNode;
   reviewsNode?: React.ReactNode;
+  /**
+   * False when the store cannot take payment for this product's provider. The whole
+   * purchase control — physical or digital — is then replaced by `purchaseFallbackNode`.
+   * Defaults to true so every existing caller is unaffected.
+   */
+  canPurchase?: boolean;
+  /** Rendered in place of the buy controls when `canPurchase` is false. */
+  purchaseFallbackNode?: React.ReactNode;
 }
 
 function buildProductVisualEditAttributes(
@@ -113,6 +121,8 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
   visualEditingEnabled = false,
   descriptionNode,
   reviewsNode,
+  canPurchase = true,
+  purchaseFallbackNode,
 }) => {
   const product = useProduct();
   const { t, lang } = useTranslations();
@@ -462,7 +472,9 @@ export const ProductDetailsLayout: React.FC<ProductDetailsLayoutProps> = ({
 
             {/* Unified Purchase Card */}
             <div className="p-5 rounded-2xl bg-card/60 border border-border/80 shadow-md backdrop-blur-md space-y-4">
-              {isFreemius ? (
+              {!canPurchase ? (
+                purchaseFallbackNode
+              ) : isFreemius ? (
                 <SubscriptionSelector product={product} />
               ) : (
                 <div className="space-y-3.5">

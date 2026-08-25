@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { formatPrice, useTranslations } from '@nextblock-cms/utils';
 import { countries, normalizeCountryCode } from '../countries';
+import { usePaymentReadiness } from '../PaymentReadinessProvider';
 import { getShippingEstimates } from '../server-actions/shipping-actions';
 import { getTaxEstimate } from '../server-actions/tax-actions';
 import { ResolvedShippingMethod } from '../shipping/resolver';
@@ -305,6 +306,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
   const store = useCart((state) => state);
   const { t, lang } = useTranslations();
   const { activeCurrencyCode, currencies } = useCurrency();
+  const paymentReadiness = usePaymentReadiness();
   const items = store?.items ?? [];
   const stripeItems = useMemo(
     () => items.filter((item) => !isDigitalItem(item)),
@@ -851,7 +853,23 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
     );
   }
 
-  const stripeCheckoutDisabledMessage = hasPhysicalProducts
+  // A cart can outlive the store's ability to charge for it — items added before the
+  // keys were removed, or a /checkout deep link minted by the UCP agent surface. The
+  // /api/checkout preflight refuses these server-side; disabling the buttons here just
+  // means the shopper is told before they click rather than after.
+  //
+  // Resolved per provider, not once for the store: a Stripe-only shop must keep its
+  // physical checkout fully working while its digital section explains itself.
+  const paymentsUnavailableMessage = translateOrFallback(
+    'ecommerce.checkout_payments_unavailable',
+    'This store is not able to take payments right now. Please contact the seller to complete your purchase.'
+  );
+  const stripeUnavailableMessage = paymentReadiness.stripe ? null : paymentsUnavailableMessage;
+  const freemiusUnavailableMessage = paymentReadiness.freemius ? null : paymentsUnavailableMessage;
+
+  const stripeCheckoutDisabledMessage = stripeUnavailableMessage
+    ? stripeUnavailableMessage
+    : hasPhysicalProducts
     ? !isShippingAddressReadyForRates
       ? translateOrFallback(
           'ecommerce.waiting_on_address_info',
@@ -1411,7 +1429,7 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                               itemKey
                             )
                           }
-                          disabled={processingKey !== null}
+                          disabled={processingKey !== null || freemiusUnavailableMessage !== null}
                         >
                           {processingKey === itemKey ? (
                             <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" />
@@ -1451,6 +1469,12 @@ export const Checkout = ({ initialCustomer }: CheckoutProps) => {
                   <div className="flex justify-between text-sm font-semibold text-emerald-600">
                     <span>{translateOrFallback('ecommerce.discount', 'Discount')}</span>
                     <span>-{formatPrice(freemiusDiscountTotal, activeCurrencyCode)}</span>
+                  </div>
+                ) : null}
+
+                {freemiusUnavailableMessage ? (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
+                    {freemiusUnavailableMessage}
                   </div>
                 ) : null}
 

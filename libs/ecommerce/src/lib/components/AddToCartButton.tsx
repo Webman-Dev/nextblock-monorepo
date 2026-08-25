@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@nextblock-cms/ui/button';
-import { ShoppingCart } from 'lucide-react';
+import { Mail, ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 
@@ -10,6 +10,7 @@ import { useTranslations } from '@nextblock-cms/utils';
 
 import { getProductPaymentProvider, isDigitalProduct, Product } from '../types';
 import { useCurrency } from '../CurrencyProvider';
+import { useCanPurchase } from '../PaymentReadinessProvider';
 
 interface AddToCartButtonProps {
   product: Product;
@@ -23,6 +24,7 @@ export const AddToCartButton = ({ product, className, quantity }: AddToCartButto
   const store = useCart((state) => state);
   const { t } = useTranslations();
   const { activeCurrencyCode } = useCurrency();
+  const canPurchase = useCanPurchase(product);
   const isDigital = isDigitalProduct(product);
   const requiresVariantSelection =
     Boolean(product.has_variants) && !product.variant_id && !isDigital;
@@ -30,6 +32,23 @@ export const AddToCartButton = ({ product, className, quantity }: AddToCartButto
   // product is not inventory-tracked — mirrors the cart store's stock guard.
   const isOutOfStock =
     !isDigital && typeof product.stock === 'number' && product.stock <= 0;
+
+  // The store cannot charge through this product's payment provider, so there is no
+  // cart to add to. Send the shopper to the enquiry form on the detail page rather than
+  // letting them reach a checkout that will refuse them. Checked FIRST: an unbuyable
+  // product's stock or variant state is irrelevant.
+  if (!canPurchase) {
+    const contactLabel = t('ecommerce.contact_seller');
+
+    return (
+      <Button asChild variant="outline" className={className}>
+        <Link href={`/product/${product.slug}#contact-seller`}>
+          <Mail className="mr-2 h-4 w-4" />
+          {contactLabel === 'ecommerce.contact_seller' ? 'Contact the seller' : contactLabel}
+        </Link>
+      </Button>
+    );
+  }
 
   if (requiresVariantSelection) {
     return (

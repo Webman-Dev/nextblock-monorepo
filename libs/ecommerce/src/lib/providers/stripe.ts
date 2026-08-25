@@ -788,7 +788,29 @@ export class StripeProvider implements PaymentProvider {
     } catch (error: any) {
       console.error('Stripe session creation failed:', error);
       await supabase.from('orders').update({ status: 'failed' }).eq('id', orderId);
-      return { error: error.message, url: null };
+
+      // Never hand a raw Stripe message to a shopper. Stripe's own text for a bad key
+      // ("Invalid API Key provided: sk_test_*ummy") is meaningless to them and leaks
+      // implementation detail; the real cause is already in the server log above.
+      const isConfigError =
+        error?.name === 'StripeNotConfiguredError' ||
+        error?.type === 'StripeAuthenticationError';
+
+      if (isConfigError) {
+        return {
+          error:
+            'This store is not able to take payments right now. Please contact the seller to complete your purchase.',
+          errorKey: 'ecommerce.checkout_payments_unavailable',
+          errorStatus: 503,
+          url: null,
+        };
+      }
+
+      return {
+        error: 'Something went wrong while preparing your checkout. Please try again.',
+        errorKey: 'ecommerce.checkout_internal_server_error',
+        url: null,
+      };
     }
   }
 }

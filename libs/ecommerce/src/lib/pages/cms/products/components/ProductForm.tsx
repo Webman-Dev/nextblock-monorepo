@@ -710,24 +710,13 @@ export function ProductForm({
         return;
       }
 
-      if (
-        data.status === 'active' &&
-        (!isProviderEnabled || !isProviderReady)
-      ) {
-        const errorMsg = `${derivedPaymentProvider === 'stripe' ? 'Stripe' : 'Freemius'} must be enabled and fully configured before this product can be published.`;
-        setError('product_type', {
-          type: 'manual',
-          message: errorMsg,
-        });
-        if (isEdit) {
-          setSaveError(errorMsg);
-        } else {
-          alert(errorMsg);
-        }
-        setIsSubmitting(false);
-        setIsSaving(false);
-        return;
-      }
+      // NOTE: there used to be a guard here rejecting any save where `data.status ===
+      // 'active'` and the provider wasn't configured. It became a trap once the Status
+      // select moved out of this form: `data.status` is now simply whatever the live row
+      // already holds, so on an already-published product with missing keys EVERY
+      // debounced autosave failed — the owner could not edit the very product they
+      // needed to fix. Publishing is gated (as a warning) by VisibilityControl instead;
+      // the readiness pill below still tells the editor what is missing.
 
       const normalizedTrialPeriodDays = isStripeMode
         ? 0
@@ -871,10 +860,13 @@ export function ProductForm({
             )}
             
             {!isProviderReady && derivedPaymentProvider && configStatus[derivedPaymentProvider].missing.length > 0 && (
-              <div className="hidden xl:flex h-9 items-center gap-1 text-[10px] text-muted-foreground bg-muted/50 px-2 py-1 rounded border border-dashed leading-none">
+              <a
+                href="/cms/payments"
+                className="hidden xl:flex h-9 items-center gap-1 text-[10px] text-muted-foreground bg-muted/50 px-2 py-1 rounded border border-dashed leading-none hover:text-foreground hover:border-solid"
+              >
                 <Info className="h-3 w-3" />
-                Missing: {configStatus[derivedPaymentProvider].missing.join(', ')}
-              </div>
+                Missing: {configStatus[derivedPaymentProvider].missing.join(', ')} — set up payments
+              </a>
             )}
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getPaymentProvider } from '@nextblock-cms/ecommerce/server';
+import { getPaymentProvider, getProviderReadiness } from '@nextblock-cms/ecommerce/server';
 import { createClient, verifyPackageOnline } from '@nextblock-cms/db/server';
 import { normalizeCustomerAddress } from '@nextblock-cms/ecommerce';
 
@@ -98,6 +98,22 @@ export async function POST(req: Request) {
         'ecommerce.checkout_billing_address_required',
         'Billing address is required',
         400
+      );
+    }
+
+    // Preflight: refuse before the provider writes anything. StripeProvider inserts a
+    // pending `orders` row and can burn a coupon redemption BEFORE it ever calls Stripe,
+    // so an unconfigured store used to accumulate failed orders and spent coupons on
+    // every attempt — and the shopper got Stripe's raw "Invalid API Key" string back.
+    const readiness = await getProviderReadiness(providerName);
+    if (!readiness.ready) {
+      console.error(
+        `Checkout blocked: ${readiness.label} is not ready (missing: ${readiness.missing.join(', ') || 'unknown'})`
+      );
+      return jsonError(
+        'ecommerce.checkout_payments_unavailable',
+        'This store is not able to take payments right now. Please contact the seller to complete your purchase.',
+        503
       );
     }
 

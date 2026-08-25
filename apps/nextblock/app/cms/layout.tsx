@@ -5,6 +5,7 @@ import CmsClientLayout from "./CmsClientLayout";
 import { verifyPackageOnline, createClient } from '@nextblock-cms/db/server';
 import { evaluateTwoFactor, getStaffTwoFactorReminder } from '../../lib/auth/twoFactor';
 import { maybeRefreshUpstreamStatus } from '../../lib/updates/check-upstream';
+import { getPaymentsReminder } from '../../lib/cms/payments-reminder';
 import type { SystemAlertItem } from './components/SystemAlertsBanner';
 
 /**
@@ -47,12 +48,15 @@ export default async function CmsLayout({
     redirect('/two-factor?redirect_to=/cms/dashboard');
   }
 
-  const [isEcommerceActive, isCortexAiActive, showTwoFactorReminder, systemAlerts] =
+  const [isEcommerceActive, isCortexAiActive, showTwoFactorReminder, systemAlerts, paymentsReminder] =
     await Promise.all([
       verifyPackageOnline('ecommerce'),
       verifyPackageOnline('cortex-ai'),
       getStaffTwoFactorReminder(),
       getUnresolvedSystemAlerts(),
+      // Re-checks ecommerce activation itself; verifyPackageOnline is unstable_cache'd
+      // for 60s, so the second call costs nothing.
+      getPaymentsReminder(),
     ]);
 
   // After the response, refresh upstream update/conflict status in the background
@@ -66,6 +70,7 @@ export default async function CmsLayout({
       isEcommerceActive={isEcommerceActive}
       showTwoFactorReminder={showTwoFactorReminder}
       systemAlerts={systemAlerts}
+      paymentsReminder={paymentsReminder}
     >
       {children}
     </CmsClientLayout>

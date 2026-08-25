@@ -13,6 +13,12 @@ interface EmailParams {
   subject: string;
   text: string;
   html: string;
+  /**
+   * Where a reply should go, when that is not the SMTP identity. Set only from a
+   * server-validated address — it lands in a mail header, so an unvalidated value
+   * would be a header-injection vector.
+   */
+  replyTo?: string;
 }
 
 // Without explicit bounds nodemailer inherits the OS socket timeouts, so an unreachable
@@ -78,7 +84,7 @@ function getTransporter(config: ResolvedEmailConfig): Transporter {
   return transporter;
 }
 
-export async function sendEmail({ to, subject, text, html }: EmailParams) {
+export async function sendEmail({ to, subject, text, html, replyTo }: EmailParams) {
   // DB-first (CMS Settings → Configuration → Email), falling back to SMTP_* env vars.
   // Resolved in parallel with branding — neither depends on the other, and both are
   // pure reads standing between the click and the first SMTP packet.
@@ -104,6 +110,8 @@ export async function sendEmail({ to, subject, text, html }: EmailParams) {
     subject,
     text,
     html: brandedHtml,
+    // Strip CR/LF defensively: this value ends up in a mail header.
+    ...(replyTo ? { replyTo: replyTo.replace(/[\r\n]+/g, ' ').trim() } : {}),
   };
 
   return transporter.sendMail(options);
