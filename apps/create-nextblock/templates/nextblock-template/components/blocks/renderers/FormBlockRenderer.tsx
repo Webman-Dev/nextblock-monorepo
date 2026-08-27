@@ -65,8 +65,10 @@ function resolveBotProtection(
 
 const FormBlockRenderer: React.FC<FormBlockRendererProps> = ({ content, visualEditAttributes, botProtectionPublic, scriptNonce }) => {
   const { provider, siteKey } = resolveBotProtection(content, botProtectionPublic);
+  // Only the opaque key travels to the client. The address it resolves to is read
+  // server-side, so it is neither disclosed here nor forgeable in the request.
   const [state, formAction] = useActionState(handleFormSubmission.bind(null, {
-    recipient: content.recipient_email,
+    formKey: content.form_key,
     botProtectionProvider: provider,
   }), {
     success: false,
@@ -335,7 +337,9 @@ const FormBlockRenderer: React.FC<FormBlockRendererProps> = ({ content, visualEd
 const renderField = (field: FormField) => {
     const commonProps = {
         id: field.temp_id,
-        name: field.label.toLowerCase().replace(/\s+/g, '_'),
+        // Keyed on the stable temp_id, not the label: renaming a field's label used to
+        // silently change its FormData key and orphan the value.
+        name: `f_${field.temp_id}`,
         placeholder: field.placeholder || '',
         required: field.is_required,
     };

@@ -2818,9 +2818,12 @@ describe('Cortex AI global agent tool executors', () => {
     });
     expect(database.blocks.map((block) => block.block_type)).toEqual(['section', 'form']);
     expect(database.blocks[1].content).toMatchObject({
-      recipient_email: 'info@nextblock.dev',
       submit_button_text: 'Send Message',
     });
+    // The destination must NEVER be written into block content: content is handed whole
+    // to a client component, so an address stored here is published in the page payload.
+    // A generated form resolves its recipient from CMS -> Messages instead.
+    expect(database.blocks[1].content).not.toHaveProperty('recipient_email');
     // Page mutations also bust "/" so a translated homepage (any slug) stays fresh.
     expect(revalidated).toEqual(['/cms/pages/1/edit', '/contact-us', '/', '/cms/pages']);
   });

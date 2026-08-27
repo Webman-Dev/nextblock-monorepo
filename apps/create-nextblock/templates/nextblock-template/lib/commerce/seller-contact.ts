@@ -3,6 +3,7 @@ import 'server-only';
 import { getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
 
 import { isEmailConfigured } from '../config/email-settings';
+import { isPlaceholderEmail } from '../email/placeholder-address';
 import { getPrivacySettings } from '../privacy/settings';
 
 /**
@@ -32,14 +33,17 @@ export interface SellerContactResolution {
   source: 'sandbox' | 'store_contact' | 'invoice' | 'privacy' | 'first_admin' | 'none';
 }
 
-const PLACEHOLDER_EMAILS = new Set(['privacy@example.com', 'support@example.com']);
-
 function clean(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/**
+ * An address is only usable if it can actually receive mail. Seeded @example.com values
+ * look configured to every check downstream while delivering nowhere, so they are
+ * treated as unset and the ladder continues past them.
+ */
 function usable(value: string): boolean {
-  return value.length > 0 && !PLACEHOLDER_EMAILS.has(value.toLowerCase());
+  return value.length > 0 && !isPlaceholderEmail(value);
 }
 
 /** The ADMIN-set override, or '' when unset. Safe to render inside the CMS. */

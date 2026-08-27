@@ -19,6 +19,7 @@ library surfaces rather than historical planning notes.
 - Self-hosted local Docker stack: [11-SELF-HOSTED-DOCKER.md](./11-SELF-HOSTED-DOCKER.md)
 - One-click cloud deploy (Deploy to Vercel): [12-VERCEL-DEPLOYMENT.md](./12-VERCEL-DEPLOYMENT.md)
 - Updating an install (`npm run update`, upstream sync): [13-STAYING-UP-TO-DATE.md](./13-STAYING-UP-TO-DATE.md)
+- Messages inbox (enquiries, contact forms, reviews, comments): [14-MESSAGES-INBOX.md](./14-MESSAGES-INBOX.md)
 
 ## Audience Guide
 

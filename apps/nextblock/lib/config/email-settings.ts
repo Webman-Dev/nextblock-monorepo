@@ -43,6 +43,8 @@ export type EmailSettingsView = EmailPublicSettings & {
 
 /** Fully-resolved transport config consumed by nodemailer. */
 export type ResolvedEmailConfig = {
+  /** Refuse to send unless the connection is upgraded to TLS (STARTTLS ports). */
+  requireTLS?: boolean;
   host: string;
   port: number;
   secure: boolean;
@@ -195,6 +197,63 @@ export async function isEmailConfigured(): Promise<boolean> {
 }
 
 /**
+ * Ports whose TLS mode is not a preference but a protocol fact.
+ *
+ * 465 is SMTPS: the server expects a TLS handshake as the very first bytes. 25, 587 and
+ * 2525 are plaintext-then-STARTTLS: the server opens with a plaintext `220` greeting.
+ *
+ * Getting this backwards produces an error nobody can act on. Implicit TLS against a
+ * STARTTLS port makes OpenSSL read that plaintext greeting as a TLS record and fail with
+ * "ssl3_get_record:wrong version number" — which says nothing about ports or SMTP. The
+ * combination is never valid, so rather than honour a setting that cannot work, reconcile
+ * it and say so.
+ */
+const IMPLICIT_TLS_PORTS = new Set([465]);
+const STARTTLS_PORTS = new Set([25, 587, 2525]);
+
+/** Local relays (Mailpit, MailHog, Papercut) legitimately speak plaintext with no TLS. */
+function isLocalRelay(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
+}
+
+export interface ReconciledTls {
+  secure: boolean;
+  /** True when we refuse to send unless the connection is upgraded to TLS. */
+  requireTLS: boolean;
+  /** Set when the stored setting disagreed with the port and was overridden. */
+  correctedFrom?: boolean;
+}
+
+export function reconcileTlsForPort(
+  port: number,
+  configuredSecure: boolean,
+  host: string
+): ReconciledTls {
+  if (IMPLICIT_TLS_PORTS.has(port)) {
+    return {
+      secure: true,
+      requireTLS: false,
+      ...(configuredSecure ? {} : { correctedFrom: configuredSecure }),
+    };
+  }
+
+  if (STARTTLS_PORTS.has(port)) {
+    return {
+      secure: false,
+      // Opportunistic STARTTLS would silently send credentials in the clear against a
+      // relay that stopped advertising it. Demand the upgrade — every hosted provider
+      // on these ports supports it; only a local test relay might not.
+      requireTLS: !isLocalRelay(host),
+      ...(configuredSecure ? { correctedFrom: configuredSecure } : {}),
+    };
+  }
+
+  // A non-standard port carries no convention, so the operator's choice stands.
+  return { secure: configuredSecure, requireTLS: false };
+}
+
+/**
  * Resolve the full SMTP transport config, DB-first with an env fallback. Uses the
  * service-role client so it works from any context (the secret row is ADMIN-only under
  * RLS). Returns null when host/user/pass/from cannot be resolved from either source.
@@ -241,11 +300,21 @@ export async function resolveEmailServerConfig(
   }
 
   const portNumber = Number(port);
+  // The CMS toggle defaults to ON, so a host entered with port 587 or 2525 lands in a
+  // combination that can never connect. Reconcile against the port before building the
+  // transport rather than letting it fail at handshake time.
+  const tls = reconcileTlsForPort(portNumber, pub.host ? pub.secure : portNumber === 465, host);
+  if (tls.correctedFrom !== undefined) {
+    console.warn(
+      `[email] Port ${portNumber} requires TLS mode "${tls.secure ? 'implicit' : 'STARTTLS'}"; ` +
+        `the saved setting said the opposite and was overridden. Update it in CMS Settings → Email.`
+    );
+  }
   const resolved: ResolvedEmailConfig = {
     host,
     port: portNumber,
-    // Honor the CMS toggle; fall back to the SMTPS convention (465 ⇒ implicit TLS).
-    secure: pub.host ? pub.secure : portNumber === 465,
+    secure: tls.secure,
+    requireTLS: tls.requireTLS,
     auth: { user, pass },
     from: fromName ? `"${fromName}" <${fromEmail}>` : fromEmail,
   };

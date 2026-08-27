@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui/avatar";
 import { submitInteraction, toggleReaction } from "../app/actions/interactions";
 import { cn, useTranslations } from "@nextblock-cms/utils";
 import { MessageSquare, ThumbsUp, Star, Loader2, PenTool } from "lucide-react";
+import { StaffReplies, useStaffReplies } from "./StaffReplies";
 
 interface ProductReviewsSectionProps {
   productId: string;
@@ -47,6 +48,10 @@ export default function ProductReviewsSection({ productId }: ProductReviewsSecti
         return r;
       })
   );
+
+  // Staff answers for the parents currently on screen. Keyed off the base list, not the
+  // optimistic one: a like never changes which replies exist.
+  const staffReplies = useStaffReplies(reviews.map((item: any) => item.id));
 
   useEffect(() => {
     // 1. Fetch user
@@ -383,6 +388,8 @@ export default function ProductReviewsSection({ productId }: ProductReviewsSecti
                     {likeCount > 0 && <span className="font-semibold ml-0.5">{likeCount}</span>}
                   </button>
                 </div>
+
+                <StaffReplies replies={staffReplies[review.id]} />
               </div>
             );
           })

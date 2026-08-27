@@ -46,3 +46,57 @@ export function resolveSiteUrl(fallback = 'http://localhost:3000'): string {
 export function hasResolvedSiteUrl(): boolean {
   return Boolean(process.env.NEXT_PUBLIC_URL?.trim() || vercelProductionUrl());
 }
+
+/**
+ * Whether the resolved site URL is one a stranger could actually open.
+ *
+ * `resolveSiteUrl()` falls back to http://localhost:3000 when nothing is configured,
+ * which is correct for rendering local links but catastrophic in an email: the
+ * recipient gets a dead button, and — because a non-routable host under a plain http
+ * scheme alongside a long opaque token reads exactly like phishing — the message is
+ * likely to be quarantined before they even see it. Anything that mails a link out
+ * must check this first.
+ */
+export function isPubliclyRoutableSiteUrl(url: string = resolveSiteUrl()): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+
+    const host = parsed.hostname.toLowerCase();
+    if (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '::1' ||
+      host === '0.0.0.0' ||
+      host.endsWith('.local') ||
+      host.endsWith('.localhost') ||
+      // RFC1918 / link-local: reachable on someone's LAN, never from an inbox.
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+      /^169\.254\./.test(host)
+    ) {
+      return false;
+    }
+
+    // A bare hostname with no dot cannot be resolved from outside this network.
+    return host.includes('.');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the site URL was actually chosen by the operator, rather than invented.
+ *
+ * This is the distinction that matters before mailing a link. A `localhost` URL is
+ * perfectly workable when the person reading the mail is on the machine running the
+ * server — that is an ordinary way to test. What is not workable is `resolveSiteUrl()`
+ * quietly inventing `http://localhost:3000` because nothing was configured, and a link
+ * to it going out to a real customer.
+ *
+ * So: honour an explicit choice, refuse an accidental default.
+ */
+export function hasExplicitSiteUrl(): boolean {
+  return Boolean(process.env.NEXT_PUBLIC_URL?.trim() || vercelProductionUrl());
+}

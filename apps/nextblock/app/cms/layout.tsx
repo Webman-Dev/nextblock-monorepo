@@ -6,6 +6,8 @@ import { verifyPackageOnline, createClient } from '@nextblock-cms/db/server';
 import { evaluateTwoFactor, getStaffTwoFactorReminder } from '../../lib/auth/twoFactor';
 import { maybeRefreshUpstreamStatus } from '../../lib/updates/check-upstream';
 import { getPaymentsReminder } from '../../lib/cms/payments-reminder';
+import { getUnreadMessageCount } from '../../lib/cms/unread-messages';
+import { getContactReminder } from '../../lib/cms/contact-reminder';
 import type { SystemAlertItem } from './components/SystemAlertsBanner';
 
 /**
@@ -48,7 +50,24 @@ export default async function CmsLayout({
     redirect('/two-factor?redirect_to=/cms/dashboard');
   }
 
-  const [isEcommerceActive, isCortexAiActive, showTwoFactorReminder, systemAlerts, paymentsReminder] =
+  const supabaseForRole = createClient();
+  const {
+    data: { user: cmsUser },
+  } = await supabaseForRole.auth.getUser();
+  const { data: cmsProfile } = cmsUser
+    ? await supabaseForRole.from('profiles').select('role').eq('id', cmsUser.id).maybeSingle()
+    : { data: null };
+  const isAdmin = cmsProfile?.role === 'ADMIN';
+
+  const [
+    isEcommerceActive,
+    isCortexAiActive,
+    showTwoFactorReminder,
+    systemAlerts,
+    paymentsReminder,
+    messagesUnread,
+    contactReminder,
+  ] =
     await Promise.all([
       verifyPackageOnline('ecommerce'),
       verifyPackageOnline('cortex-ai'),
@@ -57,6 +76,8 @@ export default async function CmsLayout({
       // Re-checks ecommerce activation itself; verifyPackageOnline is unstable_cache'd
       // for 60s, so the second call costs nothing.
       getPaymentsReminder(),
+      getUnreadMessageCount(isAdmin),
+      isAdmin ? getContactReminder() : Promise.resolve(null),
     ]);
 
   // After the response, refresh upstream update/conflict status in the background
@@ -71,6 +92,8 @@ export default async function CmsLayout({
       showTwoFactorReminder={showTwoFactorReminder}
       systemAlerts={systemAlerts}
       paymentsReminder={paymentsReminder}
+      messagesUnread={messagesUnread}
+      contactReminder={contactReminder}
     >
       {children}
     </CmsClientLayout>

@@ -1,4 +1,5 @@
 import { Checkout } from '@nextblock-cms/ecommerce';
+import PaymentReadinessBoundary from '../../components/commerce/PaymentReadinessBoundary';
 import { createClient } from '@nextblock-cms/db/server';
 import { getDefaultUserAddresses } from '@nextblock-cms/ecommerce/server';
 import { getUcpCartCheckoutItems } from '../lib/ucp/server';
@@ -24,7 +25,9 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     return (
       <>
         <UcpCartHydrator items={ucpCartItems} />
-        <Checkout initialCustomer={{ isAuthenticated: false }} />
+        <PaymentReadinessBoundary>
+          <Checkout initialCustomer={{ isAuthenticated: false }} />
+        </PaymentReadinessBoundary>
       </>
     );
   }
@@ -37,6 +40,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   return (
     <>
       <UcpCartHydrator items={ucpCartItems} />
+      <PaymentReadinessBoundary>
       <Checkout
         initialCustomer={{
           isAuthenticated: true,
@@ -47,6 +51,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           shippingAddress,
         }}
       />
+      </PaymentReadinessBoundary>
     </>
   );
 }

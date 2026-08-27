@@ -4,8 +4,8 @@ import { headers } from 'next/headers';
 import { after } from 'next/server';
 import { getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
 
-import { sendEmail } from './email';
 import { resolveSellerContactEmail } from '../../lib/commerce/seller-contact';
+import { createThread, notifyAdminOfMessage } from '../../lib/messages/threads';
 import { verifyBotProtection } from '../../lib/botProtection/verify';
 
 /**
@@ -82,16 +82,6 @@ function maskIp(ip: string | null): string {
     return octets.join('.');
   }
   return UNKNOWN_IP_BUCKET;
-}
-
-/** Everything below is visitor-controlled text landing in an HTML email body. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 function readField(formData: FormData, name: string, maxLength: number): string {
@@ -191,103 +181,42 @@ export async function submitProductInquiry(
       return { success: false, messageKey: 'ecommerce.contact_seller_error' };
     }
 
-    // The lead is safe from here on; notification is best-effort and runs after the
-    // response. A bare floating promise would risk the serverless instance being frozen
-    // before the SMTP round trip finishes.
-    after(() =>
-      notifySeller({
-        inquiryId: inserted.id,
-        productTitle: product.title,
-        productSlug: product.slug,
-        senderName,
-        senderEmail,
-        message,
-      })
-    );
+    // Open the conversation this enquiry belongs to. The enquiry row above stays as
+    // the enquiry's own record (and owns the ip_masked the throttle counts); the thread
+    // is what the owner actually replies in.
+    const thread = await createThread({
+      source: 'product_inquiry',
+      subjectId: inserted.id,
+      subjectLabel: product.title,
+      senderName,
+      senderEmail,
+      message,
+      locale,
+      ipMasked,
+      userAgent: userAgent ? userAgent.slice(0, MAX_USER_AGENT_LENGTH) : null,
+    });
+
+    // Notification is best-effort and runs after the response. A bare floating promise
+    // would risk the serverless instance being frozen before the SMTP round trip ends.
+    if (thread) {
+      after(async () => {
+        const { email: recipient } = await resolveSellerContactEmail();
+        await notifyAdminOfMessage({
+          threadId: thread.threadId,
+          source: 'product_inquiry',
+          messageId: thread.messageId,
+          subjectLabel: product.title,
+          senderName,
+          senderEmail,
+          message,
+          recipient,
+        });
+      });
+    }
 
     return { success: true, messageKey: 'ecommerce.contact_seller_sent' };
   } catch (error) {
     console.error('Product inquiry submission failed:', error);
     return { success: false, messageKey: 'ecommerce.contact_seller_error' };
-  }
-}
-
-interface NotifyInput {
-  inquiryId: string;
-  productTitle: string;
-  productSlug: string | null;
-  senderName: string;
-  senderEmail: string;
-  message: string;
-}
-
-/**
- * Best-effort owner notification. Never throws into the request path: an unconfigured
- * SMTP relay is an expected state for exactly the half-configured store this feature
- * exists for, and the enquiry is already stored.
- */
-async function notifySeller(input: NotifyInput): Promise<void> {
-  try {
-    const { email: recipient, source } = await resolveSellerContactEmail();
-    if (!recipient) {
-      console.warn(
-        `[product-inquiry] No seller contact address resolved; enquiry ${input.inquiryId} is stored but nobody was emailed. Set one at CMS → Payments.`
-      );
-      return;
-    }
-
-    const safeName = escapeHtml(input.senderName);
-    const safeEmail = escapeHtml(input.senderEmail);
-    const safeTitle = escapeHtml(input.productTitle);
-    const safeMessage = escapeHtml(input.message).replace(/\n/g, '<br />');
-
-    const html = `
-    {{brand_header}}
-    <h2>New purchase enquiry</h2>
-    <p>Someone tried to buy <strong>${safeTitle}</strong> but online checkout isn't available for it yet.</p>
-    <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse;">
-      <tbody>
-        <tr><td style="padding: 8px;"><strong>Product</strong></td><td style="padding: 8px;">${safeTitle}</td></tr>
-        <tr><td style="padding: 8px;"><strong>Name</strong></td><td style="padding: 8px;">${safeName}</td></tr>
-        <tr><td style="padding: 8px;"><strong>Email</strong></td><td style="padding: 8px;">${safeEmail}</td></tr>
-        <tr><td style="padding: 8px;"><strong>Message</strong></td><td style="padding: 8px;">${safeMessage}</td></tr>
-      </tbody>
-    </table>
-    <p>Reply directly to this email to answer them.</p>
-    `;
-
-    const text = [
-      'New purchase enquiry',
-      '',
-      `Product: ${input.productTitle}`,
-      `Name: ${input.senderName}`,
-      `Email: ${input.senderEmail}`,
-      '',
-      input.message,
-    ].join('\n');
-
-    await sendEmail({
-      to: recipient,
-      // Newlines in a header would let a caller inject extra headers (Bcc, …).
-      subject: `Purchase enquiry: ${input.productTitle.replace(/[\r\n]+/g, ' ')}`,
-      text,
-      html,
-      // Lets the owner just hit Reply; without it the mail appears to come from their
-      // own SMTP identity with the visitor's address buried in the body.
-      replyTo: input.senderEmail,
-    });
-
-    const supabase = getServiceRoleSupabaseClient();
-    await supabase
-      .from('product_inquiries')
-      .update({ email_delivered: true })
-      .eq('id', input.inquiryId);
-
-    console.info(`[product-inquiry] Notified seller (${source}) about enquiry ${input.inquiryId}.`);
-  } catch (error) {
-    console.error(
-      `[product-inquiry] Enquiry ${input.inquiryId} is stored but the notification failed:`,
-      error
-    );
   }
 }

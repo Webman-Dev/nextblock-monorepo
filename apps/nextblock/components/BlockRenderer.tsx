@@ -183,7 +183,7 @@ async function renderLoadedBlock({
 
   return (
     <RendererComponent
-      content={block.content}
+      content={stripServerOnlyContent(block.block_type, block.content)}
       languageId={languageId}
       excludeProductId={excludeProductId}
       excludeTranslationGroupId={excludeTranslationGroupId}
@@ -200,6 +200,22 @@ async function renderLoadedBlock({
       priority={blockIndex === 0}
     />
   );
+}
+
+/**
+ * Last line of defence before block content crosses into a client component, where
+ * everything is serialized into the RSC payload.
+ *
+ * Migration 27 removed `recipient_email` from every stored form block, but an install
+ * can still acquire one: a CSV/JSON import, a restored revision, or a fork that has not
+ * run the migration. Stripping it here means an un-migrated block degrades to "no
+ * recipient" (the server resolves one from settings) rather than publishing an address.
+ */
+function stripServerOnlyContent(blockType: string, content: unknown): unknown {
+  if (blockType !== 'form' || !content || typeof content !== 'object') return content;
+  if (!('recipient_email' in (content as Record<string, unknown>))) return content;
+  const { recipient_email: _dropped, ...safe } = content as Record<string, unknown>;
+  return safe;
 }
 
 async function renderBlock(context: BlockRenderContext) {

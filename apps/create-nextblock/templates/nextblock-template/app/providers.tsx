@@ -18,7 +18,6 @@ import { CurrentContentProvider } from '../context/CurrentContentContext';
 import { ThemeCatalogProvider } from '../context/ThemeCatalogContext';
 import { DeferredCartTranslator } from '../components/DeferredCartTranslator';
 import { CurrencyProvider } from '@nextblock-cms/ecommerce/CurrencyProvider';
-import { PaymentReadinessProvider } from '@nextblock-cms/ecommerce/PaymentReadinessProvider';
 import { TranslationsProvider } from '@nextblock-cms/utils';
 
 function TranslationBridge({
@@ -52,7 +51,6 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
     themeSlugs,
     initialTheme,
     themeCatalog,
-    paymentReadiness,
   } = props;
 
   // Themes come from the site_themes table. Fall back to the three that ship in
@@ -76,7 +74,6 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
           initialCurrencyCode={initialCurrencyCode}
           locale={serverLocale}
         >
-          <PaymentReadinessProvider readiness={paymentReadiness}>
           <CurrentContentProvider>
             <DeferredCartTranslator />
             <TranslationBridge translations={translations}>
@@ -92,7 +89,6 @@ export function Providers({ children, ...props }: { children: React.ReactNode;[k
               </ThemeProvider>
             </TranslationBridge>
           </CurrentContentProvider>
-          </PaymentReadinessProvider>
         </CurrencyProvider>
       </LanguageProvider>
     </AuthProvider>

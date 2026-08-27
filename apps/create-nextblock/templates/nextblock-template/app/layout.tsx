@@ -31,7 +31,6 @@ import { getActiveLanguagesServerSide } from '@nextblock-cms/db/server';
 import type { Database } from '@nextblock-cms/db';
 import { headers, cookies, draftMode } from 'next/headers';
 import { verifyPackageOnline } from '@nextblock-cms/db/server';
-import { getStoreReadiness } from '@nextblock-cms/ecommerce/server';
 import { unstable_cache } from 'next/cache';
 import { createStaticSupabaseClient, getSiteSettings } from './lib/site-settings';
 import {
@@ -356,9 +355,6 @@ async function loadLayoutData() {
       privacySettings: DEFAULT_PRIVACY_SETTINGS,
       footerAttributionEnabled: true,
       rememberVisitorChoice: DEFAULT_LANGUAGE_DETECTION_SETTINGS.rememberVisitorChoice,
-      // No Supabase env: nothing can be resolved, so assume a working store rather
-      // than showing every product an enquiry form.
-      paymentReadiness: { stripe: true, freemius: true },
     };
   }
 
@@ -388,7 +384,6 @@ async function loadLayoutData() {
     isEcommerceActive,
     privacySettings,
     languageDetectionSettings,
-    paymentReadiness,
   ] = await Promise.all([
     supabase.auth.getUser(),
     getCachedLanguages().catch(() => getActiveLanguagesServerSide().catch(() => [])),
@@ -405,12 +400,6 @@ async function loadLayoutData() {
     getCachedLanguageDetectionSettings().catch(() => ({
       ...DEFAULT_LANGUAGE_DETECTION_SETTINGS,
     })),
-    // Whether the store can actually charge, per provider. Feeds the storefront buy
-    // CTAs. On any failure this resolves to "both ready" so a working shop is never
-    // degraded to the enquiry form by an unrelated error.
-    getStoreReadiness()
-      .then((readiness) => ({ stripe: readiness.stripe.ready, freemius: readiness.freemius.ready }))
-      .catch(() => ({ stripe: true, freemius: true })),
   ]);
 
   // Serve only active languages, matching the proxy's detection set (is_active
@@ -474,7 +463,6 @@ async function loadLayoutData() {
     canAccessCms,
     siteTitle,
     isEcommerceActive,
-    paymentReadiness,
     globalCss,
     siteThemes,
     siteScripts,
@@ -559,7 +547,6 @@ export default async function RootLayout({
     canAccessCms,
     siteTitle,
     isEcommerceActive,
-    paymentReadiness,
     globalCss,
     siteThemes,
     siteScripts,
@@ -642,7 +629,6 @@ export default async function RootLayout({
           themeSlugs={themeSlugs}
           initialTheme={initialTheme}
           themeCatalog={themeCatalog}
-          paymentReadiness={paymentReadiness}
         >
           <ToasterProvider />
           <AppShell

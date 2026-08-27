@@ -940,7 +940,11 @@ const fallbackBlockSchemas: Record<BlockType, z.ZodTypeAny> = {
         temp_id: z.string(),
       })
     ),
-    recipient_email: z.string().email(),
+    // Opaque handle into form_endpoints, which holds the destination server-side.
+    form_key: z.string().optional(),
+    // Legacy. Migration 27 moved every address out of block content; kept optional so
+    // an older payload still validates, and stripped before the block reaches a browser.
+    recipient_email: z.string().email().optional(),
     submit_button_text: z.string(),
     success_message: z.string(),
   }),
@@ -1782,7 +1786,11 @@ function inferNestedBlockTypeFromContent(content: Record<string, unknown>): Bloc
     return 'video_embed';
   }
 
-  if (Array.isArray(content.fields) || typeof content.recipient_email === 'string') {
+  if (
+    Array.isArray(content.fields) ||
+    typeof content.form_key === 'string' ||
+    typeof content.recipient_email === 'string'
+  ) {
     return 'form';
   }
 
@@ -3019,7 +3027,10 @@ function buildContactPageBlocks(
               temp_id: 'field-message',
             },
           ],
-          recipient_email: contactEmail,
+          // Deliberately no address here: block content is serialized into the page
+          // payload, so an address stored on the block would be published. A generated
+          // form with no form_key falls back to the site contact address, which the
+          // owner sets once in CMS → Messages.
           submit_button_text: 'Send Message',
           success_message: 'Thanks for reaching out. We will reply as soon as possible.',
         },
@@ -8112,7 +8123,7 @@ export function createCortexGlobalAgentTools(context?: ToolExecutionContext) {
     }),
     create_cms_page: tool({
       description:
-        'Create a new CMS page with metadata and optional validated page blocks. Mutating: first returns a confirmation phrase; only executes after the user replies with the exact phrase. For translations, pass translationGroupId from the source page/post/product context so the new language is linked to the same backend translation group. For contact pages, provide contactEmail or a form block with recipient_email and fields.',
+        'Create a new CMS page with metadata and optional validated page blocks. Mutating: first returns a confirmation phrase; only executes after the user replies with the exact phrase. For translations, pass translationGroupId from the source page/post/product context so the new language is linked to the same backend translation group. For contact pages, provide a form block with fields; the destination address is configured once in CMS -> Messages and is never stored on the block.',
       execute: (input) => executeCreateCmsPage(input, context),
       inputSchema: createCmsPageInputSchema,
       strict: true,

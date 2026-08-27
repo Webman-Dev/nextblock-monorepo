@@ -102,7 +102,7 @@ export async function submitInteraction(input: SubmitInteractionInput) {
                 ${input.type === "review" && input.rating ? `<p style="margin: 0 0 8px 0;"><strong>Rating:</strong> ${input.rating} / 5</p>` : ""}
                 <p style="margin: 0 0 8px 0;"><strong>Content:</strong></p>
                 <blockquote style="margin: 0; padding-left: 10px; border-left: 3px solid #6366f1; color: #555; font-style: italic;">
-                  ${input.content.trim()}
+                  ${escapeHtml(input.content.trim())}
                 </blockquote>
               </div>
               <p>Please log in to the moderation dashboard to approve or deny this interaction:</p>
@@ -236,6 +236,99 @@ export async function toggleReaction(interactionId: string, reactionType = "like
 /**
  * Updates an interaction's status (approved or denied). Admin/Moderator only.
  */
+/**
+ * Visitor text goes straight into an HTML mail body below. Without this a review
+ * containing markup renders as live HTML inside the moderator's mail client.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Publish a staff answer under a review or a post comment.
+ *
+ * This is the PUBLIC lane of the Messages inbox, and it is a different shape from a
+ * private thread on purpose: the parent is already visible on the site and already
+ * belongs to a registered account, so the reply is published content, not a private
+ * message. Putting it behind a token link would hide a public answer.
+ *
+ * A reply is stored as `type: 'comment'` with a NULL rating, carrying the PARENT's
+ * target. That is not a shortcut — it is the only shape the existing constraints admit
+ * (`check_rating_only_for_review` is an exhaustive OR over 'review' and 'comment'), and
+ * it is what keeps the reply out of `update_product_ratings`, which aggregates only
+ * `type='review' AND status='approved'`. A reply must never move a product's stars.
+ */
+export async function replyToInteraction(parentId: string, content: string) {
+  const supabase = createClient();
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return { error: "Not authenticated" };
+  }
+
+  const profile = await getProfileWithRoleServerSide(user.id);
+  if (!profile || profile.role !== "ADMIN") {
+    return { error: "Unauthorized. Admin permissions required to reply." };
+  }
+
+  const body = content.trim().slice(0, 5000);
+  if (body.length < 2) {
+    return { error: "Write a reply before sending." };
+  }
+
+  try {
+    const admin = getServiceRoleSupabaseClient();
+
+    const { data: parent, error: parentError } = await admin
+      .from("cms_interactions")
+      .select("id, product_id, post_id, parent_id, products(slug), posts(slug)")
+      .eq("id", parentId)
+      .single();
+
+    if (parentError || !parent) {
+      return { error: "That review or comment no longer exists." };
+    }
+
+    // One level only. The schema enforces this too; failing here gives a better message.
+    if (parent.parent_id) {
+      return { error: "You can only reply to a top-level review or comment." };
+    }
+
+    const { error: insertError } = await admin.from("cms_interactions").insert({
+      type: "comment",
+      status: "approved",
+      content: body,
+      rating: null,
+      user_id: user.id,
+      parent_id: parent.id,
+      product_id: parent.product_id,
+      post_id: parent.post_id,
+    });
+
+    if (insertError) {
+      console.error("Error publishing reply:", insertError.message);
+      return { error: "Could not publish that reply." };
+    }
+
+    const productSlug = (parent.products as { slug?: string } | null)?.slug;
+    const postSlug = (parent.posts as { slug?: string } | null)?.slug;
+    if (productSlug) revalidatePath(`/product/${productSlug}`);
+    if (postSlug) revalidatePath(`/article/${postSlug}`);
+    revalidatePath("/cms/messages");
+    revalidatePath("/cms/interactions");
+
+    return { success: true };
+  } catch (error) {
+    console.error("replyToInteraction failed:", error);
+    return { error: "Could not publish that reply." };
+  }
+}
+
 export async function updateInteractionStatus(interactionId: string, status: "approved" | "denied") {
   const supabase = createClient();
 

@@ -243,6 +243,18 @@ interface NestedBlockRendererProps {
   priority?: boolean;
 }
 
+/**
+ * A form nested inside a section has no `blocks` row of its own — it lives in the
+ * section's jsonb — so the same strip the top-level renderer performs has to happen
+ * here too. See BlockRenderer.stripServerOnlyContent for why.
+ */
+function stripServerOnlyContent(blockType: string, content: unknown): unknown {
+  if (blockType !== 'form' || !content || typeof content !== 'object') return content;
+  if (!('recipient_email' in (content as Record<string, unknown>))) return content;
+  const { recipient_email: _dropped, ...safe } = content as Record<string, unknown>;
+  return safe;
+}
+
 async function renderNestedBlock({
   block,
   languageId,
@@ -371,7 +383,7 @@ async function renderNestedBlock({
 
   return (
     <RendererComponent
-      content={block.content}
+      content={stripServerOnlyContent(block.block_type, block.content)}
       languageId={languageId}
       visualEditAttributes={visualEditAttributes}
       visualEditing={visualEditing}

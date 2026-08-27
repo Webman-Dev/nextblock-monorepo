@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui";
 import { submitInteraction, toggleReaction } from "../app/actions/interactions";
 import { cn, useTranslations } from "@nextblock-cms/utils";
 import { MessageSquare, ThumbsUp, Loader2, PenTool } from "lucide-react";
+import { StaffReplies, useStaffReplies } from "./StaffReplies";
 
 interface PostCommentsSectionProps {
   postId: number;
@@ -46,6 +47,9 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
       })
   );
 
+  // Staff answers for the comments currently on screen.
+  const staffReplies = useStaffReplies(comments.map((item: any) => item.id));
+
   useEffect(() => {
     // 1. Fetch user
     const supabase = createClient();
@@ -81,6 +85,9 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
         .eq("post_id", postId)
         .eq("type", "comment")
         .eq("status", "approved")
+        // Staff replies are ALSO type='comment' on the same post, so without this a
+        // reply would surface as a top-level comment detached from what it answers.
+        .is("parent_id", null)
         .order("created_at", { ascending: false })
         .range(start, end);
 
@@ -333,6 +340,8 @@ export default function PostCommentsSection({ postId }: PostCommentsSectionProps
                     {likeCount > 0 && <span className="font-semibold ml-0.5">{likeCount}</span>}
                   </button>
                 </div>
+
+                <StaffReplies replies={staffReplies[comment.id]} />
               </div>
             );
           })

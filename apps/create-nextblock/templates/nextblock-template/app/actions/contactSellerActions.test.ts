@@ -49,7 +49,14 @@ vi.mock('../../lib/botProtection/verify', () => ({
   verifyBotProtection: mocks.verifyBotProtection,
 }));
 
-vi.mock('./email', () => ({ sendEmail: mocks.sendEmail }));
+// Partial mock: the real describeSmtpError is what turns a transport failure into text
+// an admin can act on, so exercise it rather than stubbing it out. resolveFromDomain is
+// stubbed because it reaches for the live SMTP config, which this suite does not model.
+vi.mock('./email', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./email')>()),
+  sendEmail: mocks.sendEmail,
+  resolveFromDomain: async () => 'example.com',
+}));
 
 vi.mock('../../lib/commerce/seller-contact', () => ({
   resolveSellerContactEmail: mocks.resolveSellerContactEmail,
@@ -121,7 +128,7 @@ describe('submitProductInquiry', () => {
     expect(email.to).toBe('owner@example.com');
     // The visitor's address goes in Reply-To so the owner can just hit reply.
     expect(email.replyTo).toBe('ada@example.com');
-    expect(mocks.update).toHaveBeenCalledWith({ email_delivered: true });
+    expect(mocks.update).toHaveBeenCalledWith({ email_delivered: true, email_error: null });
   });
 
   it('still reports success when the mail server is unconfigured', async () => {
@@ -133,7 +140,14 @@ describe('submitProductInquiry', () => {
     // The row is the deliverable; the visitor's message really did get through.
     expect(result.success).toBe(true);
     expect(mocks.insert).toHaveBeenCalled();
-    expect(mocks.update).not.toHaveBeenCalled();
+    // The failure is recorded on the message rather than lost, so the CMS can show
+    // "not emailed" instead of implying the owner was told.
+    expect(mocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({ email_delivered: false })
+    );
+    // And it is recorded as guidance, not as the raw transport text.
+    const recorded = mocks.update.mock.calls.at(-1)?.[0]?.email_error ?? '';
+    expect(recorded).toMatch(/CMS Settings/i);
   });
 
   it('ignores any recipient supplied by the client', async () => {
@@ -243,5 +257,24 @@ describe('submitProductInquiry', () => {
     await submitProductInquiry(null, buildFormData());
 
     expect(mocks.throttleKey).toHaveBeenCalledWith('203.0.113.x');
+  });
+
+  it('translates a TLS/port mismatch into something the admin can act on', async () => {
+    // The verbatim OpenSSL error a real install hit: SMTP2GO on port 2525 with implicit
+    // TLS left switched on. It names neither TLS mode nor port, so it is stored as
+    // guidance instead.
+    mocks.sendEmail.mockRejectedValue(
+      new Error(
+        'B4730000:error:0A00010B:SSL routines:ssl3_get_record:wrong version number:ssl3_record.c:355:'
+      )
+    );
+
+    await submitProductInquiry(null, buildFormData());
+    await flushAfter();
+
+    const recorded = mocks.update.mock.calls.at(-1)?.[0]?.email_error ?? '';
+    expect(recorded).toContain('2525');
+    expect(recorded).toContain('465');
+    expect(recorded).not.toContain('ssl3_get_record');
   });
 });

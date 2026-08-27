@@ -14,7 +14,9 @@ import {
 import TwoFactorReminderBanner from "./components/TwoFactorReminderBanner"
 import SystemAlertsBanner, { type SystemAlertItem } from "./components/SystemAlertsBanner"
 import PaymentsReminderBanner from "./components/PaymentsReminderBanner"
+import ContactReminderBanner from "./components/ContactReminderBanner"
 import type { PaymentsReminder } from "../../lib/cms/payments-reminder"
+import type { ContactReminder } from "../../lib/cms/contact-reminder"
 import { Button } from "@nextblock-cms/ui"
 import { Avatar, AvatarFallback, AvatarImage } from "@nextblock-cms/ui"
 import { cn } from "@nextblock-cms/utils"
@@ -48,12 +50,14 @@ type NavItemProps = {
   isActive?: boolean
   adminOnly?: boolean
   writerOnly?: boolean
+  /** Unread/needs-attention count rendered as a pill. */
+  badgeCount?: number
   isAdmin?: boolean
   isWriter?: boolean
   onClick?: () => void
 }
 
-const NavItem = ({ href, icon: Icon, children, isActive, adminOnly, writerOnly, isAdmin, isWriter, onClick }: NavItemProps) => {
+const NavItem = ({ href, icon: Icon, children, isActive, adminOnly, writerOnly, isAdmin, isWriter, onClick, badgeCount = 0 }: NavItemProps) => {
   if (adminOnly && !isAdmin) return null
   if (writerOnly && !isWriter && !isAdmin) return null
 
@@ -71,7 +75,14 @@ const NavItem = ({ href, icon: Icon, children, isActive, adminOnly, writerOnly, 
       >
         <Icon className="h-5 w-5" />
         <span>{children}</span>
-        {isActive && <ChevronRight className="h-4 w-4 ml-auto" />}
+        {/* The badge and the chevron share ml-auto, so the count wins when there is one. */}
+        {badgeCount > 0 ? (
+          <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-700 dark:text-amber-400">
+            {badgeCount > 99 ? '99+' : badgeCount}
+          </span>
+        ) : (
+          isActive && <ChevronRight className="h-4 w-4 ml-auto" />
+        )}
       </Link>
     </li>
   )
@@ -123,6 +134,8 @@ export default function CmsClientLayout({
   showTwoFactorReminder = false,
   systemAlerts = [],
   paymentsReminder = null,
+  messagesUnread = 0,
+  contactReminder = null,
 }: {
   children: ReactNode,
   isCortexAiActive?: boolean,
@@ -130,6 +143,8 @@ export default function CmsClientLayout({
   showTwoFactorReminder?: boolean,
   systemAlerts?: SystemAlertItem[],
   paymentsReminder?: PaymentsReminder | null,
+  messagesUnread?: number,
+  contactReminder?: ContactReminder | null,
 }) {
   const isSandbox = process.env.NEXT_PUBLIC_IS_SANDBOX === 'true';
   const { user, profile, role, isLoading, isAdmin, isWriter } = useAuth();
@@ -258,7 +273,7 @@ export default function CmsClientLayout({
   else if (pathname.startsWith("/cms/products")) pageTitle = "Products";
   else if (pathname.startsWith("/cms/orders/") && pathname.endsWith("/edit")) pageTitle = "Edit Order";
   else if (pathname.startsWith("/cms/orders")) pageTitle = "Orders";
-  else if (pathname.startsWith("/cms/inquiries")) pageTitle = "Product Enquiries";
+  else if (pathname.startsWith("/cms/messages")) pageTitle = "Messages";
 
 
   return (
@@ -324,8 +339,8 @@ export default function CmsClientLayout({
               <NavItem href="/cms/custom-blocks" icon={Boxes} isActive={pathname.startsWith("/cms/custom-blocks")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                 Blocks
               </NavItem>
-              <NavItem href="/cms/interactions" icon={MessageSquare} isActive={pathname.startsWith("/cms/interactions")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
-                Interactions
+              <NavItem href="/cms/messages" icon={MessageSquareText} isActive={pathname.startsWith("/cms/messages")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile} badgeCount={messagesUnread}>
+                Messages
               </NavItem>
               <NavItem href="/cms/navigation" icon={ListTree} isActive={pathname.startsWith("/cms/navigation")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Navigation
@@ -364,9 +379,7 @@ export default function CmsClientLayout({
                   <NavItem href="/cms/orders" icon={ListOrdered} isActive={pathname.startsWith("/cms/orders")} writerOnly isAdmin={isAdmin} isWriter={isWriter} onClick={closeSidebarOnMobile}>
                     Orders
                   </NavItem>
-                  <NavItem href="/cms/inquiries" icon={MessageSquareText} isActive={pathname.startsWith("/cms/inquiries")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
-                    Enquiries
-                  </NavItem>
+
                   <NavItem href="/cms/coupons" icon={TicketPercent} isActive={pathname.startsWith("/cms/coupons")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                     Coupons
                   </NavItem>
@@ -519,6 +532,7 @@ export default function CmsClientLayout({
         <main className="flex-1 min-h-0 w-full overflow-y-auto overscroll-contain px-6 pt-6 pb-20 scroll-pb-24 md:pb-24">
             {showTwoFactorReminder && <TwoFactorReminderBanner />}
             {paymentsReminder && <PaymentsReminderBanner reminder={paymentsReminder} />}
+            {contactReminder && <ContactReminderBanner reminder={contactReminder} />}
             <SystemAlertsBanner alerts={systemAlerts} />
             {children}
         </main>

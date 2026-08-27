@@ -1,7 +1,6 @@
-'use client';
-
 import React from 'react';
 import { Cart } from '@nextblock-cms/ecommerce/components/Cart';
+import PaymentReadinessBoundary from '../../commerce/PaymentReadinessBoundary';
 import type { VisualEditAttributes } from '../../../lib/visual-editing/types';
 
 interface CartBlockRendererProps {
@@ -11,7 +10,9 @@ interface CartBlockRendererProps {
 export default function CartBlockRenderer({ visualEditAttributes }: CartBlockRendererProps) {
   return (
     <div {...visualEditAttributes}>
-      <Cart />
+      <PaymentReadinessBoundary>
+        <Cart />
+      </PaymentReadinessBoundary>
     </div>
   );
 }

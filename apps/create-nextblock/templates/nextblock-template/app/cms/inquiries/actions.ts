@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient, getServiceRoleSupabaseClient } from '@nextblock-cms/db/server';
+import { createClient } from '@nextblock-cms/db/server';
 
 import { STORE_CONTACT_SETTINGS_KEY } from '../../../lib/commerce/seller-contact';
 
@@ -61,35 +61,6 @@ export async function saveStoreContactEmail(
     };
   } catch (error) {
     console.error('saveStoreContactEmail failed:', error);
-    return { success: false, message: 'You do not have permission to change this.' };
-  }
-}
-
-/** Flip an enquiry between open and dealt-with. */
-export async function setInquiryResolved(
-  inquiryId: string,
-  isResolved: boolean
-): Promise<InquiryActionState> {
-  try {
-    await assertAdmin();
-
-    // Service role: the ADMIN update policy would also allow this, but going through
-    // the same client as the insert keeps the table's access story in one place.
-    const supabase = getServiceRoleSupabaseClient();
-    const { error } = await supabase
-      .from('product_inquiries')
-      .update({ is_resolved: isResolved })
-      .eq('id', inquiryId);
-
-    if (error) {
-      console.error('Error updating inquiry:', error.message);
-      return { success: false, message: 'Could not update that enquiry.' };
-    }
-
-    revalidatePath('/cms/inquiries');
-    return { success: true, message: isResolved ? 'Marked as handled.' : 'Reopened.' };
-  } catch (error) {
-    console.error('setInquiryResolved failed:', error);
     return { success: false, message: 'You do not have permission to change this.' };
   }
 }

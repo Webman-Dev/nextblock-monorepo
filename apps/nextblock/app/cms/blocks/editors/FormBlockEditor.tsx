@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -12,6 +12,7 @@ import { Checkbox } from '@nextblock-cms/ui';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@nextblock-cms/ui';
 import { BlockEditorProps } from '../components/BlockEditorModal';
 import { FormBlockContent, FormField, FormFieldOption } from '../../../../lib/blocks/blockRegistry';
+import { getFormEndpointForEditor, saveFormEndpoint } from '../../messages/actions';
 
 // Sub-component for a single editable form field in the editor
 const SortableFormField = ({ field, index, onUpdate, onDelete }: { field: FormField, index: number, onUpdate: (index: number, field: FormField) => void, onDelete: (index: number) => void }) => {
@@ -104,6 +105,128 @@ const SortableFormField = ({ field, index, onUpdate, onDelete }: { field: FormFi
   );
 };
 
+/**
+ * Where this form's submissions go.
+ *
+ * The address is deliberately NOT part of the block's content. Block content is handed
+ * whole to a "use client" renderer, so anything stored here would be serialized into the
+ * page payload and published — which is exactly what migration 27 cleaned up. The block
+ * carries only `form_key`; the address lives in `form_endpoints` and is read server-side
+ * at submission time.
+ */
+const FormDestination = ({
+  formKey,
+  fields,
+  onFormKeyMinted,
+}: {
+  formKey?: string;
+  fields: FormField[];
+  onFormKeyMinted: (key: string) => void;
+}) => {
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [label, setLabel] = useState('Contact form');
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  // WRITERs may edit the page and therefore this block, but only ADMINs may change
+  // where the mail goes. Showing them a blank, editable field would read as "nothing
+  // configured" and invite a silent no-op save.
+  const [canEdit, setCanEdit] = useState(true);
+
+  // A key cannot come from the module-level initialContent constant — every form block
+  // would then share one endpoint. Mint it the first time this editor opens.
+  useEffect(() => {
+    if (!formKey) onFormKeyMinted(crypto.randomUUID());
+  }, [formKey, onFormKeyMinted]);
+
+  useEffect(() => {
+    if (!formKey) return;
+    let cancelled = false;
+    void getFormEndpointForEditor(formKey).then((endpoint) => {
+      if (cancelled || !endpoint) {
+        setIsLoaded(true);
+        return;
+      }
+      setRecipientEmail(endpoint.recipientEmail);
+      setLabel(endpoint.label || 'Contact form');
+      setCanEdit(endpoint.canEdit);
+      setIsLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [formKey]);
+
+  const handleSave = async () => {
+    if (!formKey) return;
+    setIsSaving(true);
+    setStatus(null);
+    // The field manifest is saved alongside, so the notification email and the inbox
+    // render labels the browser did not supply.
+    const result = await saveFormEndpoint(formKey, label, recipientEmail, fields);
+    setStatus({ ok: result.success, text: result.message });
+    setIsSaving(false);
+  };
+
+  return (
+    <div className="space-y-3 rounded border border-dashed p-3">
+      <div>
+        <Label>Form name</Label>
+        <Input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Contact form"
+          disabled={!isLoaded || !canEdit}
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Shown as the subject in CMS &rarr; Messages.
+        </p>
+      </div>
+      <div>
+        <Label>Send submissions to</Label>
+        <Input
+          type="email"
+          value={recipientEmail}
+          onChange={(e) => setRecipientEmail(e.target.value)}
+          placeholder="Uses your site contact address"
+          disabled={!isLoaded || !canEdit}
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          <strong>Leave this blank unless this form needs its own inbox.</strong> Blank
+          means it uses your site contact address from CMS &rarr; Messages, which falls
+          back to the first admin account. Set one only to route this particular form
+          elsewhere &mdash; a careers form to HR, say.
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Stored on your server, never published on the page. Every submission is also
+          saved in CMS &rarr; Messages, so nothing is lost if email is unavailable.
+        </p>
+      </div>
+      {!canEdit && isLoaded && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          Only an administrator can change where these submissions are sent.
+        </p>
+      )}
+
+      <div className="flex items-center gap-3">
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleSave}
+          disabled={isSaving || !isLoaded || !formKey || !canEdit}
+        >
+          {isSaving ? 'Saving…' : 'Save form settings'}
+        </Button>
+        {status && (
+          <span className={`text-xs ${status.ok ? 'text-emerald-600' : 'text-destructive'}`}>
+            {status.text}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default function FormBlockEditor({ content, onChange }: BlockEditorProps<Partial<FormBlockContent>>) {
   const [fields, setFields] = useState<FormField[]>(content.fields || []);
 
@@ -151,11 +274,11 @@ export default function FormBlockEditor({ content, onChange }: BlockEditorProps<
     <div className="space-y-6 p-4 border-t mt-2">
         <h3 className="text-lg font-medium">Form Settings</h3>
         <div className="space-y-4 p-3 border rounded">
-             <div>
-                <Label>Recipient Email</Label>
-                <Input value={content.recipient_email || ''} onChange={(e) => handleMainSettingChange('recipient_email', e.target.value)} placeholder="submissions@example.com"/>
-                <p className="text-xs text-muted-foreground mt-1">The address where form submissions will be sent.</p>
-             </div>
+             <FormDestination
+                formKey={content.form_key}
+                fields={content.fields || []}
+                onFormKeyMinted={(key) => handleMainSettingChange('form_key', key)}
+             />
               <div>
                 <Label>Submit Button Text</Label>
                 <Input value={content.submit_button_text || ''} onChange={(e) => handleMainSettingChange('submit_button_text', e.target.value)} />

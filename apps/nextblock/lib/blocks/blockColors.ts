@@ -82,12 +82,55 @@ export const TEXT_COLOR_TOKEN_OPTIONS = TEXT_COLOR_TOKENS.map((token) => ({
 export const CSS_COLOR_PATTERN =
   /^(#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})|rgba?\([^)]+\)|hsla?\([^)]+\))$/i;
 
+/**
+ * CSS named colours, which the picker never emits but hand-authored and AI-authored
+ * content does.
+ *
+ * The seeded contact page sets `textColor: "white"` on its heading. That is perfectly
+ * valid CSS, but it matched neither a theme token nor the literal pattern above, so
+ * `resolveTextColor` returned `{}` and the heading quietly inherited the dark default —
+ * a white-on-dark hero rendering dark-on-dark, with nothing anywhere reporting a problem.
+ *
+ * Spelled out as a set rather than folded into the pattern as `[a-z]+`, because
+ * `isCustomCssColor` has to keep answering false for a theme token like `accent`: the
+ * two are stored in the same field and told apart only by these predicates.
+ */
+const CSS_NAMED_COLORS = new Set(
+  (
+    'aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue ' +
+    'blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk ' +
+    'crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki ' +
+    'darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen ' +
+    'darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue ' +
+    'dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite ' +
+    'gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki ' +
+    'lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan ' +
+    'lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen ' +
+    'lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen ' +
+    'magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen ' +
+    'mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream ' +
+    'mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid ' +
+    'palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum ' +
+    'powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown ' +
+    'seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen ' +
+    'steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow ' +
+    'yellowgreen transparent currentcolor'
+  ).split(' ')
+);
+
+export function isCssNamedColor(value: unknown): value is string {
+  return typeof value === 'string' && CSS_NAMED_COLORS.has(value.trim().toLowerCase());
+}
+
 export function isTextColorToken(value: unknown): value is TextColorToken {
   return typeof value === 'string' && (TEXT_COLOR_TOKENS as readonly string[]).includes(value);
 }
 
 export function isCustomCssColor(value: unknown): value is string {
-  return typeof value === 'string' && CSS_COLOR_PATTERN.test(value.trim());
+  return (
+    (typeof value === 'string' && CSS_COLOR_PATTERN.test(value.trim())) ||
+    isCssNamedColor(value)
+  );
 }
 
 export interface ResolvedTextColor {

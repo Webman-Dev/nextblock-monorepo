@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -117,6 +117,7 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          parent_id: string | null
           post_id: number | null
           product_id: string | null
           rating: number | null
@@ -130,6 +131,7 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          parent_id?: string | null
           post_id?: number | null
           product_id?: string | null
           rating?: number | null
@@ -143,6 +145,7 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          parent_id?: string | null
           post_id?: number | null
           product_id?: string | null
           rating?: number | null
@@ -153,6 +156,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "cms_interactions_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "cms_interactions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "cms_interactions_post_id_fkey"
             columns: ["post_id"]
@@ -588,6 +598,33 @@ export type Database = {
         }
         Relationships: []
       }
+      form_endpoints: {
+        Row: {
+          created_at: string
+          fields: Json
+          form_key: string
+          label: string
+          recipient_email: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          fields?: Json
+          form_key: string
+          label?: string
+          recipient_email?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          fields?: Json
+          form_key?: string
+          label?: string
+          recipient_email?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       freemius_plans: {
         Row: {
           created_at: string
@@ -856,6 +893,78 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      message_threads: {
+        Row: {
+          created_at: string
+          fields: Json
+          form_key: string | null
+          id: string
+          ip_masked: string | null
+          last_message_at: string
+          locale: string | null
+          sender_email: string | null
+          sender_name: string | null
+          source: string
+          status: string
+          subject_id: string | null
+          subject_label: string
+          token_expires_at: string | null
+          token_hash: string | null
+          token_last_used_at: string | null
+          token_revoked_at: string | null
+          unread_for_admin: boolean
+          unread_for_visitor: boolean
+          updated_at: string
+          user_agent: string | null
+        }
+        Insert: {
+          created_at?: string
+          fields?: Json
+          form_key?: string | null
+          id?: string
+          ip_masked?: string | null
+          last_message_at?: string
+          locale?: string | null
+          sender_email?: string | null
+          sender_name?: string | null
+          source: string
+          status?: string
+          subject_id?: string | null
+          subject_label?: string
+          token_expires_at?: string | null
+          token_hash?: string | null
+          token_last_used_at?: string | null
+          token_revoked_at?: string | null
+          unread_for_admin?: boolean
+          unread_for_visitor?: boolean
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Update: {
+          created_at?: string
+          fields?: Json
+          form_key?: string | null
+          id?: string
+          ip_masked?: string | null
+          last_message_at?: string
+          locale?: string | null
+          sender_email?: string | null
+          sender_name?: string | null
+          source?: string
+          status?: string
+          subject_id?: string | null
+          subject_label?: string
+          token_expires_at?: string | null
+          token_hash?: string | null
+          token_last_used_at?: string | null
+          token_revoked_at?: string | null
+          unread_for_admin?: boolean
+          unread_for_visitor?: boolean
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Relationships: []
       }
       navigation_items: {
         Row: {
@@ -2306,6 +2415,53 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      thread_messages: {
+        Row: {
+          author_id: string | null
+          author_name: string | null
+          body: string
+          created_at: string
+          direction: string
+          email_delivered: boolean
+          email_error: string | null
+          id: string
+          ip_masked: string | null
+          thread_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          author_name?: string | null
+          body: string
+          created_at?: string
+          direction: string
+          email_delivered?: boolean
+          email_error?: string | null
+          id?: string
+          ip_masked?: string | null
+          thread_id: string
+        }
+        Update: {
+          author_id?: string | null
+          author_name?: string | null
+          body?: string
+          created_at?: string
+          direction?: string
+          email_delivered?: boolean
+          email_error?: string | null
+          id?: string
+          ip_masked?: string | null
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "thread_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "message_threads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       translations: {
         Row: {

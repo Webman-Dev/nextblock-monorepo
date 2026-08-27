@@ -2,7 +2,7 @@ import { z } from '../zod-config';
 import { TestimonialBlockConfig, TestimonialBlockContent } from '../../components/blocks/TestimonialBlock';
 import { ProductGridBlockSchema, ProductGridBlockContent, FeaturedProductBlockSchema, FeaturedProductBlockContent, CartBlockSchema, CartBlockContent, CheckoutBlockSchema, CheckoutBlockContent, ProductDetailsBlockSchema, ProductDetailsBlockContent } from './ecommerce-block-schemas';
 import { availableBlockTypes, type BlockType } from './blockTypes';
-import { CSS_COLOR_PATTERN, TEXT_COLOR_TOKENS } from './blockColors';
+import { isCustomCssColor, TEXT_COLOR_TOKENS } from './blockColors';
 export { availableBlockTypes, type BlockType } from './blockTypes';
 
 /**
@@ -29,7 +29,9 @@ export type TextBlockContent = z.infer<typeof TextBlockSchema>;
 export const TextColorSchema = z
   .union([
     z.enum(TEXT_COLOR_TOKENS),
-    z.string().regex(CSS_COLOR_PATTERN, 'Must be a hex, rgb(a) or hsl(a) colour'),
+    z
+      .string()
+      .refine(isCustomCssColor, 'Must be a hex, rgb(a), hsl(a) or named CSS colour'),
   ])
   .describe(
     `A theme token (${TEXT_COLOR_TOKENS.join(', ')}) or a custom CSS colour such as "#FF8800", "rgba(255,136,0,0.8)" or "hsl(28, 100%, 50%)"`,
@@ -189,7 +191,13 @@ export const FormFieldSchema = z.object({
 export type FormField = z.infer<typeof FormFieldSchema>;
 
 export const FormBlockSchema = z.object({
-  recipient_email: z.string().email(),
+  // Opaque handle into `form_endpoints`, which holds the destination address and the
+  // field manifest server-side. Safe to serialize: it grants nothing.
+  form_key: z.string().optional(),
+  // Legacy only. Migration 27 moved every stored address into form_endpoints and
+  // deleted this key; it stays optional so an un-migrated import still validates,
+  // and the renderer strips it before the content reaches the browser.
+  recipient_email: z.string().email().optional(),
   submit_button_text: z.string(),
   success_message: z.string(),
   fields: z.array(FormFieldSchema),
@@ -468,7 +476,6 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
     label: "Form",
     icon: "NotebookPen",
     initialContent: {
-      recipient_email: "your-email@example.com",
       submit_button_text: "Submit",
       success_message: "Thank you for your submission!",
       fields: [],
@@ -486,8 +493,9 @@ export const blockRegistry: Record<BlockType, BlockDefinition> = {
         'Simple surveys',
       ],
       notes: [
-        'The actual email sending functionality depends on a separate server action.',
-        'Form submissions are not stored in the database by this block.',
+        'Submissions are stored as message threads and appear in CMS → Messages.',
+        'The destination address lives server-side in form_endpoints, keyed by form_key — it is never sent to the browser.',
+        'Email notification is best-effort: a stored submission is the record even when SMTP is unconfigured.',
       ],
     },
   },

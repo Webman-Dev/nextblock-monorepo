@@ -7,6 +7,7 @@ import { getProviderReadiness } from "@nextblock-cms/ecommerce/server";
 import BlockRenderer from "../../BlockRenderer";
 import ProductReviewsSection from "../../ProductReviewsSection";
 import ContactSellerSection from "../../ContactSellerSection";
+import PaymentReadinessBoundary from "../../commerce/PaymentReadinessBoundary";
 
 interface ProductDetailsBlockRendererProps {
   visualEditAttributes?: VisualEditAttributes;
@@ -142,6 +143,7 @@ export default async function ProductDetailsBlockRenderer({
 
   return (
     <div {...visualEditAttributes}>
+      <PaymentReadinessBoundary>
       <ProductDetailsLayout 
         visualEditingEnabled={productVisualEditingEnabled} 
         descriptionNode={descriptionNode}
@@ -149,6 +151,7 @@ export default async function ProductDetailsBlockRenderer({
         canPurchase={canPurchase}
         purchaseFallbackNode={purchaseFallbackNode}
       />
+      </PaymentReadinessBoundary>
     </div>
   );
 }

@@ -400,6 +400,26 @@ async function restoreInternal(
     .order('order', { ascending: true })
     .order('id', { ascending: true });
 
+  // Carry contact-form routing across the restore.
+  //
+  // A snapshot taken before migration 27 stores `recipient_email` and no `form_key`.
+  // Restoring it verbatim would strand the form: the renderer strips the legacy address
+  // (so nothing leaks), but with no key the submission falls back to the site-wide
+  // contact address, losing whatever per-form destination the owner had configured.
+  // Reuse the key from the live block being replaced, matched positionally.
+  const liveFormKeys = ((previousBlocks ?? []) as Array<{ block_type: string; content: unknown }>)
+    .filter((block) => block.block_type === 'form')
+    .map((block) => (block.content as Record<string, unknown> | null)?.['form_key'])
+    .filter((key): key is string => typeof key === 'string' && key.length > 0);
+
+  for (const block of blockPayload as Array<{ block_type?: string; content?: unknown }>) {
+    if (block.block_type !== 'form') continue;
+    const content = (block.content ?? {}) as Record<string, unknown>;
+    if (typeof content['form_key'] === 'string' && content['form_key']) continue;
+    const inherited = liveFormKeys.shift();
+    if (inherited) block.content = { ...content, form_key: inherited };
+  }
+
   const { error: deleteError } = await supabase
     .from('blocks')
     .delete()

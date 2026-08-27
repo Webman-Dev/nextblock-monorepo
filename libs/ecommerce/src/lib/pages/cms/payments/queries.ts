@@ -1,3 +1,5 @@
+import { cache } from 'react';
+
 import { createClient } from '@nextblock-cms/db/server';
 
 import {
@@ -109,8 +111,16 @@ function buildReadiness(
   };
 }
 
-/** Readiness for both providers in a single pair of cached reads. */
-export async function getStoreReadiness(): Promise<StoreReadiness> {
+/**
+ * Readiness for both providers.
+ *
+ * Wrapped in React `cache()` so the several consumers that can appear on one page — the
+ * product-details renderer, the buy-CTA boundary, the JSON-LD builder — share a single
+ * lookup per request. `getStoreConfigStatus()` is additionally memoised for 60s across
+ * requests inside payment-config.ts; the per-request cache is what dedupes the
+ * enabled-providers read, which uses the cookie-scoped client and is not.
+ */
+export const getStoreReadiness = cache(async (): Promise<StoreReadiness> => {
   const [enabledProviders, configStatus] = await Promise.all([
     getEnabledPaymentProviders(),
     getStoreConfigStatus(),
@@ -120,7 +130,7 @@ export async function getStoreReadiness(): Promise<StoreReadiness> {
     stripe: buildReadiness('stripe', enabledProviders, configStatus),
     freemius: buildReadiness('freemius', enabledProviders, configStatus),
   };
-}
+});
 
 /** Readiness for the one provider a given product/checkout depends on. */
 export async function getProviderReadiness(

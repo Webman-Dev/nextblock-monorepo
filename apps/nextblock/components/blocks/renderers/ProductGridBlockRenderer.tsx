@@ -1,4 +1,5 @@
 import React from 'react';
+import PaymentReadinessBoundary from '../../commerce/PaymentReadinessBoundary';
 import { ProductGridBlock } from '../../../lib/blocks/ProductGridBlock';
 import type { ProductGridBlockContent } from '../../../lib/blocks/ecommerce-block-schemas';
 import type { VisualEditAttributes } from '../../../lib/visual-editing/types';
@@ -20,12 +21,14 @@ export default function ProductGridBlockRenderer({
 }: ProductGridBlockRendererProps) {
   return (
     <div {...visualEditAttributes}>
+      <PaymentReadinessBoundary>
       <ProductGridBlock
         content={content}
         languageId={languageId}
         excludeProductId={excludeProductId}
         excludeTranslationGroupId={excludeTranslationGroupId}
       />
+      </PaymentReadinessBoundary>
     </div>
   );
 }

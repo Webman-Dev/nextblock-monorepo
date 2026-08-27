@@ -1,4 +1,5 @@
 import React from 'react';
+import PaymentReadinessBoundary from '../../commerce/PaymentReadinessBoundary';
 import { FeaturedProductBlock } from '../../../lib/blocks/FeaturedProductBlock';
 import type { FeaturedProductBlockContent } from '../../../lib/blocks/ecommerce-block-schemas';
 import type { VisualEditAttributes } from '../../../lib/visual-editing/types';
@@ -16,7 +17,9 @@ export default function FeaturedProductBlockRenderer({
 
   return (
     <div {...visualEditAttributes}>
-      <FeaturedProductBlock content={content} />
+      <PaymentReadinessBoundary>
+        <FeaturedProductBlock content={content} />
+      </PaymentReadinessBoundary>
     </div>
   );
 }

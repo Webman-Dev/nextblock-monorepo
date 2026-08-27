@@ -19,6 +19,20 @@ interface EmailFormProps {
   initialSettings: EmailSettingsView;
 }
 
+/**
+ * TLS mode implied by a port, or null when the port carries no convention.
+ *
+ * 465 is SMTPS (TLS from the first byte); 25, 587 and 2525 open in plaintext and upgrade
+ * via STARTTLS. Mixing them up is the single most common SMTP misconfiguration, and it
+ * surfaces as an OpenSSL "wrong version number" that names neither TLS mode nor port.
+ */
+function impliedSecureForPort(port: string): boolean | null {
+  const value = Number(port.trim());
+  if (value === 465) return true;
+  if (value === 25 || value === 587 || value === 2525) return false;
+  return null;
+}
+
 export default function EmailForm({ initialSettings }: EmailFormProps) {
   const [isPending, startTransition] = useTransition();
   const [isTesting, startTestTransition] = useTransition();
@@ -29,6 +43,12 @@ export default function EmailForm({ initialSettings }: EmailFormProps) {
   const [fromEmail, setFromEmail] = useState(initialSettings.fromEmail);
   const [fromName, setFromName] = useState(initialSettings.fromName);
   const [secure, setSecure] = useState(initialSettings.secure);
+
+  // Surfaces a saved-but-impossible combination (e.g. an install that entered 2525 while
+  // the toggle still held its default of ON).
+  const impliedSecure = impliedSecureForPort(port);
+  const tlsMismatch =
+    impliedSecure !== null && impliedSecure !== secure ? { expected: impliedSecure } : null;
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [testTo, setTestTo] = useState('');
@@ -98,7 +118,19 @@ export default function EmailForm({ initialSettings }: EmailFormProps) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="port">Port</Label>
-            <Input id="port" value={port} onChange={(e) => setPort(e.target.value)} placeholder="465" />
+            <Input
+              id="port"
+              value={port}
+              onChange={(e) => {
+                const next = e.target.value;
+                setPort(next);
+                // The TLS mode is a property of the port, not a preference. Follow it, so
+                // the impossible combination is never saved in the first place.
+                const implied = impliedSecureForPort(next);
+                if (implied !== null) setSecure(implied);
+              }}
+              placeholder="465"
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="fromEmail">From email</Label>
@@ -135,10 +167,20 @@ export default function EmailForm({ initialSettings }: EmailFormProps) {
           <span className="text-sm">
             <span className="font-medium">Use implicit TLS (SMTPS)</span>
             <span className="block text-xs text-muted-foreground">
-              Enable for port 465. Disable for STARTTLS on ports like 587.
+              Port 465 needs this on. Ports 25, 587 and 2525 need it off — they upgrade to
+              TLS with STARTTLS instead.
             </span>
           </span>
         </label>
+
+        {tlsMismatch && (
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+            Port {port} expects implicit TLS to be{' '}
+            <strong>{tlsMismatch.expected ? 'on' : 'off'}</strong>. As set, the connection
+            fails during the TLS handshake with a &ldquo;wrong version number&rdquo; error.
+            Saving will correct it.
+          </p>
+        )}
 
         <div className="flex items-center gap-4">
           <Button type="submit" disabled={isPending}>

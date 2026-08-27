@@ -39,10 +39,24 @@ describe('resolveTextColor', () => {
     expect(resolveTextColor(undefined)).toEqual({});
     expect(resolveTextColor(null)).toEqual({});
     expect(resolveTextColor('')).toEqual({});
-    expect(resolveTextColor('chartreuse')).toEqual({});
+    expect(resolveTextColor('notacolour')).toEqual({});
     expect(resolveTextColor('javascript:alert(1)')).toEqual({});
     expect(resolveTextColor('url(https://evil.test/x.png)')).toEqual({});
+    // A valid name with anything appended is not a name — this is the injection case,
+    // and it must stay rejected even though `red` on its own is now accepted.
     expect(resolveTextColor('red; background: url(x)')).toEqual({});
+  });
+
+  it('accepts CSS named colours, which seeded and AI-authored content actually uses', () => {
+    // The seeded contact-page heading is `textColor: "white"`. It matched neither a
+    // token nor the hex/rgb/hsl pattern, so it resolved to {} and the white-on-dark hero
+    // rendered dark-on-dark with nothing reporting a problem.
+    expect(resolveTextColor('white')).toEqual({ style: { color: 'white' } });
+    expect(resolveTextColor('Black')).toEqual({ style: { color: 'Black' } });
+    expect(resolveTextColor('  transparent ')).toEqual({ style: { color: 'transparent' } });
+
+    // Still distinguishable from a theme token, which resolves to a class instead.
+    expect(resolveTextColor('accent')).toEqual({ className: 'text-accent' });
   });
 
   it('never emits an interpolated class name', () => {
@@ -73,7 +87,11 @@ describe('guards', () => {
     expect(isTextColorToken('accent')).toBe(true);
     expect(isTextColorToken('#FFF')).toBe(false);
     expect(isCustomCssColor('#FFF')).toBe(true);
+    expect(isCustomCssColor('white')).toBe(true);
+    // A theme token is not a literal colour: the two share one field and are told apart
+    // only here, so this must keep answering false.
     expect(isCustomCssColor('accent')).toBe(false);
+    expect(isCustomCssColor('notacolour')).toBe(false);
   });
 });
 
@@ -103,7 +121,9 @@ describe('HeadingBlockSchema.textColor', () => {
   });
 
   it('rejects values that are neither a token nor a colour', () => {
-    for (const bad of ['nonsense', 'url(x)', 'red', '']) {
+    // 'red' was in this list only because named colours used to be rejected wholesale.
+    // It is a real colour and is now accepted; the genuinely invalid values stay here.
+    for (const bad of ['nonsense', 'url(x)', 'red; background: url(x)', '']) {
       expect(HeadingBlockSchema.safeParse({ ...base, textColor: bad }).success).toBe(false);
     }
   });
