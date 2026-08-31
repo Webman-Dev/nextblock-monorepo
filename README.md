@@ -246,6 +246,12 @@ Join the community and stay updated on the latest features.
 
 ---
 
+## 🙏 Acknowledgements
+
+Thanks to [Vercel](https://vercel.com) for their support of open-source software.
+
+---
+
 <p align="center">
   <sub>Built with ❤️ by the NextBlock™ Team. Licensed under AGPLv3.</sub>
 </p>
