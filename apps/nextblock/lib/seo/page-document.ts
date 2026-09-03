@@ -384,6 +384,23 @@ function collectBlock(value: unknown, draft: PageDocumentDraft, depth: number): 
   }
 }
 
+export interface BuildPageSeoDocumentOptions {
+  /**
+   * An explicit document title to treat as the page's top-level H1.
+   *
+   * Posts in NextBlock render their title in an editorial H1 wrapper on the public
+   * page (`PostClientContent.tsx`) rather than storing it as a heading block inside
+   * the content array. Supplying `documentTitle` with `documentType: 'post'` ensures
+   * the audit sees that H1 instead of falsely reporting `headings-missing-h1`.
+   */
+  documentTitle?: string | null;
+  /**
+   * The kind of document being graded. When set to 'post' and a documentTitle is present,
+   * the title is treated as the primary H1 of the document.
+   */
+  documentType?: 'page' | 'post';
+}
+
 /**
  * Builds one `SeoDocument` from a page's or post's block list.
  *
@@ -392,14 +409,48 @@ function collectBlock(value: unknown, draft: PageDocumentDraft, depth: number): 
  * signature that it is already an array of well-formed rows would only push the
  * validation somewhere that has less context to do it in.
  */
-export function buildPageSeoDocument(blocks: unknown): SeoDocument {
+export function buildPageSeoDocument(
+  blocks: unknown,
+  options?: BuildPageSeoDocumentOptions
+): SeoDocument {
+  const isPostWithTitle =
+    options?.documentType === 'post' &&
+    typeof options?.documentTitle === 'string' &&
+    options.documentTitle.trim() !== '';
+
   if (!Array.isArray(blocks) || blocks.length === 0) {
+    if (isPostWithTitle) {
+      const titleText = options!.documentTitle!.trim();
+      const titleWords = tokenizeWords(titleText);
+      return {
+        headings: [{ level: 1, order: 0, text: titleText }],
+        images: [],
+        links: [],
+        text: titleText,
+        words: titleWords,
+      };
+    }
     return emptySeoDocument();
   }
 
   const draft = createDraft();
   for (const block of blocks) {
     collectBlock(block, draft, 0);
+  }
+
+  if (isPostWithTitle) {
+    const titleText = options!.documentTitle!.trim();
+    const titleWords = tokenizeWords(titleText);
+    draft.headings.unshift({
+      level: 1,
+      order: 0,
+      text: titleText,
+    });
+    for (let i = 1; i < draft.headings.length; i++) {
+      draft.headings[i].order = i;
+    }
+    draft.textParts.unshift(titleText);
+    draft.words.unshift(...titleWords);
   }
 
   return {
