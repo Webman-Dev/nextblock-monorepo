@@ -28,7 +28,16 @@ type Media = Database["public"]["Tables"]["media"]["Row"];
 interface FeatureImageFieldProps {
   initialImageId?: string | null;
   initialImageUrl?: string | null;
-  onImageIdChange?: (imageId: string | null) => void;
+  /**
+   * Reports a selection or a removal to the parent form.
+   *
+   * The resolved URL is handed over alongside the id because this field has already
+   * computed it for its own thumbnail, and the parent otherwise has no way to learn it
+   * until the server round-trips the new `feature_image_id` back into
+   * `initialImageUrl`. `PageForm` and `PostForm` use it to keep their share-card preview
+   * honest the instant an image is picked; the id remains the only persisted half.
+   */
+  onImageIdChange?: (imageId: string | null, imageUrl: string | null) => void;
   uploadFolder: string;
 }
 
@@ -103,13 +112,13 @@ export default function FeatureImageField({
     }
 
     setSelectedFeatureImage({ id: image.id, url: imageUrl });
-    onImageIdChange?.(image.id);
+    onImageIdChange?.(image.id, imageUrl);
     setIsModalOpen(false);
   };
 
   const handleRemoveImage = () => {
     setSelectedFeatureImage({ id: null, url: null });
-    onImageIdChange?.(null);
+    onImageIdChange?.(null, null);
   };
 
   const handleImageSelectKeyDown = (event: KeyboardEvent<HTMLDivElement>, image: Media) => {

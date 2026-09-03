@@ -1,7 +1,7 @@
 // app/cms/blocks/editors/ImageBlockEditor.tsx
 "use client";
 
-import React, { useState, useTransition } from 'react';
+import React, { useRef, useState, useTransition } from 'react';
 import Image from 'next/image';
 import { Label } from "@nextblock-cms/ui";
 import { Input } from "@nextblock-cms/ui";
@@ -19,11 +19,25 @@ export type ImageBlockContent = {
     height: number | null;
     blur_data_url: string | null;
 };
-import { ImageIcon, X as XIcon, Link as LinkIcon, DownloadCloud } from 'lucide-react';
+import { ImageIcon, X as XIcon, Link as LinkIcon, DownloadCloud, Loader2, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 import MediaPickerDialog from "../../media/components/MediaPickerDialog";
 import { BlockEditorProps } from '../components/BlockEditorModal';
 import { resolveMediaUrl } from '../../../../lib/media/resolveMediaUrl';
 import { importExternalImageToMedia } from "../../media/import-external-image";
+import { useCortexAiActive } from '../../components/CortexAiActiveContext';
+import { useCortexAiPageContext } from '../../components/CortexAiPageContext';
+import { buildCortexAiRequestHeaders } from '../../../../lib/cortex-ai/sandbox-headers';
+import {
+  buildAltTextContext,
+  toAbsoluteImageUrl,
+  UNRESOLVABLE_IMAGE_URL_MESSAGE,
+} from '../../../../lib/cortex-ai/alt-text-request';
+import {
+  altTextImageIdentity,
+  resolveAltTextWriteBack,
+  STALE_ALT_TEXT_MESSAGE,
+} from '../../../../lib/seo/alt-text-write-back';
 
 const deriveAltFromFilename = (name: string) => {
   const lastDot = name.lastIndexOf('.');
@@ -37,6 +51,30 @@ export default function ImageBlockEditor({ content, onChange }: BlockEditorProps
   const [externalUrlInput, setExternalUrlInput] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, startImport] = useTransition();
+
+  // Cortex AI is a premium package. Gating the affordance on activation (rather than
+  // letting the button 403) is the difference between a feature the operator has not
+  // bought and a feature that looks broken.
+  const isCortexAiActive = useCortexAiActive();
+  const cortexAiPageContext = useCortexAiPageContext();
+  const [isGeneratingAltText, setIsGeneratingAltText] = useState(false);
+  // Kept separate from `importError` so an alt-text failure never clears — or is cleared
+  // by — an unrelated "save to library" failure sitting a few lines above it.
+  const [altTextError, setAltTextError] = useState<string | null>(null);
+
+  /**
+   * Live mirrors of the two values that describe which image this block holds.
+   *
+   * The alt-text generation below is the only async write-back in this editor, and it is
+   * the only place that must read these AFTER an await. Refs updated during render (the
+   * same pattern `RobotsCard` uses for its Ctrl+S handler) give that continuation the
+   * current values instead of the ones its closure captured when the button was clicked,
+   * which is what stops a slow vision response from overwriting a newer edit.
+   */
+  const contentRef = useRef(content);
+  contentRef.current = content;
+  const selectedMediaObjectKeyRef = useRef(selectedMediaObjectKey);
+  selectedMediaObjectKeyRef.current = selectedMediaObjectKey;
 
   const handleSelectMediaFromLibrary = (mediaItem: Media) => {
     const newAlt = mediaItem.description && mediaItem.description.trim().length > 0
@@ -121,6 +159,122 @@ export default function ImageBlockEditor({ content, onChange }: BlockEditorProps
   const displayObjectKey = content.object_key || selectedMediaObjectKey;
   const displayImageUrl = resolveMediaUrl(displayObjectKey);
   const hasImage = Boolean(displayObjectKey || content.external_url);
+
+  /**
+   * Ask Cortex AI to describe the image currently in this block.
+   *
+   * Three things about this deserve stating. First, the URL: `resolveMediaUrl()` hands back
+   * a RELATIVE `/${objectKey}` whenever `NEXT_PUBLIC_R2_BASE_URL` is unset — which is the
+   * default on the native Supabase-storage backend — and the alt-text route cannot use
+   * that, because the AI SDK downloads the image server-side and a relative path has no
+   * base there. `toAbsoluteImageUrl()` resolves it against the origin the CMS is being
+   * served from; if the result still is not http(s) (a blob: preview of an unsaved file,
+   * say) we say so inline instead of firing a request guaranteed to fail.
+   *
+   * Second, the write-back: the generated string goes through the exact same
+   * `onChange({ ...content, object_key, alt_text })` call the text input uses. Feature 2
+   * requires the value to land in the block's JSONB attributes, and the surest way to
+   * guarantee that is to make the AI path indistinguishable from typing — same shape,
+   * same key set, same downstream save. A bespoke write here would be a second code path
+   * to keep in sync forever, for no gain.
+   *
+   * Third, staleness. This handler used to close over `content` and finish with
+   * `onChange({ ...capturedContent, ... })`, on the assumption that the block it started
+   * on would still be the block it finished on. It is not: the vision call takes seconds
+   * and the editor stays live throughout, so an author who removes the image or picks a
+   * different one mid-flight would have had the deleted image restored, or a new image
+   * labelled with the previous image's description — alt text that is confidently wrong
+   * and undetectable by the screen-reader user it is written for. The image's identity is
+   * therefore captured instead of its content, and the response is discarded unless the
+   * block still holds that same image. `resolveAltTextWriteBack` owns that rule so it can
+   * be unit-tested; this component cannot be, as the workspace has no DOM test env.
+   */
+  const handleGenerateAltText = async () => {
+    if (!hasImage || isGeneratingAltText) {
+      return;
+    }
+
+    const sourceUrl = content.external_url || displayImageUrl;
+    const imageUrl = toAbsoluteImageUrl(sourceUrl);
+
+    if (!imageUrl) {
+      setAltTextError(UNRESOLVABLE_IMAGE_URL_MESSAGE);
+      return;
+    }
+
+    // Taken before the await, from the same two values the request itself is built from,
+    // so "is this still the image we asked about?" is answerable when the reply lands.
+    const capturedIdentity = altTextImageIdentity(content, selectedMediaObjectKey);
+
+    setAltTextError(null);
+    setIsGeneratingAltText(true);
+
+    try {
+      // Context materially improves alt text — "Nicolas at the 2026 harvest" beats "a man
+      // in a field" — so we pass whatever is already in hand for free: this block's own
+      // caption, and the title of the page or post being edited, which the CMS layout
+      // already registers in the Cortex AI page context. Nothing is fetched for this.
+      const context = buildAltTextContext(
+        content.caption ? `Image caption: ${content.caption}` : null,
+        cortexAiPageContext?.pageContext?.title
+          ? `Appears on the ${cortexAiPageContext.pageContext.contentType} “${cortexAiPageContext.pageContext.title}”.`
+          : null
+      );
+
+      const response = await fetch('/api/ai/seo/alt-text', {
+        // The route's body schema is a `z.strictObject` of optionals, so an absent field
+        // must be omitted rather than sent as null — a null would fail validation outright.
+        body: JSON.stringify({
+          ...(context ? { context } : {}),
+          imageUrl,
+        }),
+        headers: buildCortexAiRequestHeaders(),
+        method: 'POST',
+      });
+
+      const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+
+      if (!response.ok || !payload) {
+        const message =
+          payload && typeof payload['error'] === 'string'
+            ? (payload['error'] as string)
+            : 'Cortex AI could not describe this image.';
+        throw new Error(message);
+      }
+
+      const generated = typeof payload['altText'] === 'string' ? payload['altText'].trim() : '';
+      if (!generated) {
+        throw new Error('Cortex AI returned an empty description.');
+      }
+
+      const currentContent = contentRef.current;
+      const currentObjectKey = selectedMediaObjectKeyRef.current;
+      const writeBack = resolveAltTextWriteBack({
+        capturedIdentity,
+        currentContent,
+        currentIdentity: altTextImageIdentity(currentContent, currentObjectKey),
+        generatedAltText: generated,
+        objectKey: currentObjectKey,
+      });
+
+      if (!writeBack) {
+        // Not thrown: nothing failed. The model answered, the answer is simply about an
+        // image this block no longer shows, so it is reported inline and dropped. A toast
+        // is skipped for the same reason — this is not an error the operator caused.
+        setAltTextError(STALE_ALT_TEXT_MESSAGE);
+        return;
+      }
+
+      onChange(writeBack);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Cortex AI could not describe this image.';
+      setAltTextError(message);
+      toast.error(message);
+    } finally {
+      setIsGeneratingAltText(false);
+    }
+  };
 
   return (
     <div className="space-y-3 p-3 border-t mt-2">
@@ -217,8 +371,31 @@ export default function ImageBlockEditor({ content, onChange }: BlockEditorProps
       </div>
 
       <div>
-        <Label htmlFor={`image-alt-${content.media_id || 'new'}`}>Alt Text</Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor={`image-alt-${content.media_id || 'new'}`}>Alt Text</Label>
+          {/* Rendered only when the premium package is active, so a non-premium install
+              never shows a button that cannot work. */}
+          {isCortexAiActive && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-[11px]"
+              onClick={handleGenerateAltText}
+              disabled={!hasImage || isGeneratingAltText}
+              title={hasImage ? "Describe this image with Cortex AI" : "Select an image first"}
+            >
+              {isGeneratingAltText ? (
+                <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles aria-hidden="true" className="h-3.5 w-3.5 text-amber-500" />
+              )}
+              {isGeneratingAltText ? "Generating…" : "Generate with AI"}
+            </Button>
+          )}
+        </div>
         <Input id={`image-alt-${content.media_id || 'new'}`} value={content.alt_text || ""} onChange={handleAltTextChange} className="mt-1" disabled={!hasImage} />
+        {altTextError && <p className="text-xs text-red-500 mt-1">{altTextError}</p>}
       </div>
       <div>
         <Label htmlFor={`image-caption-${content.media_id || 'new'}`}>Caption</Label>

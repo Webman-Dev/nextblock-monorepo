@@ -21,6 +21,8 @@ import { CortexAiPageContextRegistrar } from "../../../components/CortexAiPageCo
 import DraftStatusActions from "../../../components/DraftStatusActions";
 import VisibilityControl from "../../../components/VisibilityControl";
 import { buildViewUrl } from "../../../../../lib/publishing/viewUrl";
+import { PageSeoAuditSection } from "../../../../../components/seo/PageSeoAuditSection";
+import { PageSeoProvider } from "../../../../../lib/seo/page-audit-context";
 
 type PostType = Database['public']['Tables']['posts']['Row'];
 type BlockType = Database['public']['Tables']['blocks']['Row'];
@@ -172,6 +174,25 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
           translationGroupId: postWithBlocks.translation_group_id,
         }}
       />
+      {/*
+        A server component may render a client provider around client children,
+        which is the whole reason this file does not need converting: everything
+        inside the provider that touches the context — the form, the block editor
+        and the audit section — is already a client component, and this file
+        stays an RSC that can keep awaiting Supabase above them.
+
+        The provider must enclose both `PostForm` and `BlockEditorArea` because
+        the audit is assembled from halves they each own: the form publishes the
+        meta title and description, the block editor publishes the live blocks.
+        Seeding it from the row (draft overlay included, since `postWithBlocks`
+        already carries it) means the panel grades the real article on first
+        paint instead of an empty document.
+      */}
+      <PageSeoProvider
+        initialBlocks={postWithBlocks.blocks}
+        initialMetaDescription={postWithBlocks.meta_description}
+        initialMetaTitle={postWithBlocks.meta_title}
+      >
       <div className="space-y-8 w-full mx-auto px-6">
         <div className="flex justify-between items-center flex-wrap gap-4 w-full">
           <div className="flex items-center gap-3">
@@ -235,12 +256,23 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
         <PostForm
           post={postWithBlocks as PostType & { feature_image_id?: string | null }}
           formAction={updatePostWithId}
+          // Read-only: the form never writes blocks, it only lets Cortex AI read them so it
+          // can summarize the article when drafting meta title and description.
+          contentBlocks={postWithBlocks.blocks}
           actionButtonText="Update Post Metadata"
           isEditing={true}
           availableLanguagesProp={allSiteLanguages}
           initialFeatureImageUrl={initialFeatureImageUrl}
           initialFeatureImageId={initialFeatureImageIdProp}
         />
+
+        {/*
+          Between the metadata form and the blocks because that is exactly what
+          it grades: everything above it and everything below it, together. It
+          collapses to a single summary row so the block editor keeps its place
+          on the screen.
+        */}
+        <PageSeoAuditSection />
 
         <Separator className="my-8" />
 
@@ -254,6 +286,7 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
           />
         </div>
       </div>
+      </PageSeoProvider>
     </UploadFolderProvider>
   );
 }

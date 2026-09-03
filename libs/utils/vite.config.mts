@@ -43,6 +43,18 @@ export default defineConfig({
               default: './server.es.js',
             },
             './package.json': './package.json',
+            // Declared explicitly rather than left to the './*' wildcard below,
+            // because the wildcard would resolve './seo' to './lib/seo.es.js' — a
+            // FILE — while the SEO engine is a DIRECTORY (`lib/seo/index.es.js`).
+            // The wildcard still serves the leaf modules (`./seo/redirects` ->
+            // `./lib/seo/redirects.es.js`), which is why only the barrel needs a
+            // key of its own. Paired with the 'lib/seo/index' build entry above,
+            // without which these files would not exist.
+            './seo': {
+              types: './lib/seo/index.d.ts',
+              require: './lib/seo/index.cjs.js',
+              default: './lib/seo/index.es.js',
+            },
             // preserveModules emits one file per source module under dist/lib/* (JS) with the
             // .d.ts tree mirroring it (entryRoot 'src'), so every declared deep subpath —
             // ./utils (normalizeCurrencyCode, consumed by @nextblock-cms/ecommerce) and
@@ -372,6 +384,18 @@ export declare function hasEnvVars(): Promise<boolean>;
       entry: {
         index: './src/index.ts',
         server: './src/server.ts',
+        // The SEO engine's barrel has to be a declared ENTRY, not just a module the
+        // root barrel happens to re-export. `src/lib/seo/index.ts` contains nothing
+        // but `export *` lines, so Rollup treats it as having no side effects and
+        // elides it — the root bundle imports `lib/seo/audit.es.js` and friends
+        // directly, and no `lib/seo/index.es.js` is ever written. That is invisible
+        // in this monorepo, where `@nextblock-cms/utils/seo` resolves through the
+        // tsconfig path alias straight to the TypeScript source, and it only breaks
+        // once the package is PUBLISHED: the `./*` export wildcard below maps `./seo`
+        // to `./lib/seo.es.js`, a file that does not exist, so every standalone
+        // install fails to resolve the import. Naming it here forces the chunk to be
+        // emitted so the wildcard has something to point at.
+        'lib/seo/index': './src/lib/seo/index.ts',
       },
       name: 'utils',
       fileName: (format, entryName) => `${entryName}.${format}.js`,

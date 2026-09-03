@@ -10,6 +10,7 @@ import { BlockType } from '../../../../lib/blocks/blockRegistry';
 
 type Block = Database["public"]["Tables"]["blocks"]["Row"];
 import { blockHasEditableContent, getBlockDefinition, SectionBlockContent } from '../../../../lib/blocks/blockRegistry';
+import { usePageSeo } from '../../../../lib/seo/page-audit-context';
 import { Button } from "@nextblock-cms/ui";
 import { PlusCircle } from "lucide-react";
 import {
@@ -124,6 +125,32 @@ export default function BlockEditorArea({ parentId, parentType, initialBlocks, l
     setBlocks(sortedBlocks);
     lastSavedBlocks.current = sortedBlocks;
   }, [initialBlocks]);
+
+  /**
+   * Publish the live block list to the page-level SEO audit.
+   *
+   * This component is the only client component that holds every block on the
+   * page, which makes it the only place the page-wide checks — one H1, the total
+   * word count, alt text across the whole document — can be fed from. It
+   * deliberately does no analysis of its own: the panel debounces and grades,
+   * this only hands over state.
+   *
+   * Publishing is kept out of the save path on purpose. `debouncedSave` builds a
+   * fresh `debounce` on every call, so it never actually coalesces and already
+   * fires once per keystroke; hanging document analysis off that would multiply
+   * an existing problem rather than inherit a solution. Copying a reference into
+   * a context, by contrast, costs nothing per keystroke, and the provider's own
+   * setter bails when the array is unchanged.
+   *
+   * `usePageSeo()` returns null on any surface with no page-level panel above —
+   * the product editor is the live example — so the publish is optional-chained
+   * rather than guarded by a second code path.
+   */
+  const pageSeo = usePageSeo();
+  const publishBlocksToPageSeo = pageSeo?.setBlocks;
+  useEffect(() => {
+    publishBlocksToPageSeo?.(blocks);
+  }, [blocks, publishBlocksToPageSeo]);
 
   const saveBlock = useCallback(async (blockToSave: Block) => {
     const result = await updateBlock(

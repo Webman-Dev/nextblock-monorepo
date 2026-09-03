@@ -14,6 +14,8 @@ import CopyContentFromLanguage from "../../../components/CopyContentFromLanguage
 import RevisionHistoryButton from "../../../revisions/RevisionHistoryButton";
 import { UploadFolderProvider } from '../../../media/UploadFolderContext';
 import { CortexAiPageContextRegistrar } from "../../../components/CortexAiPageContext";
+import { PageSeoAuditSection } from "../../../../../components/seo/PageSeoAuditSection";
+import { PageSeoProvider } from "../../../../../lib/seo/page-audit-context";
 import type { Database } from "@nextblock-cms/db";
 import DraftStatusActions from "../../../components/DraftStatusActions";
 
@@ -76,6 +78,20 @@ export default function EditPageClient({
           translationGroupId: page.translation_group_id,
         }}
       />
+      {/*
+        The provider has to enclose both `PageForm` and `BlockEditorArea`,
+        because the page-level SEO audit is assembled from halves they each own:
+        the form publishes the meta title and description, the block editor
+        publishes the live block array, and neither knows the other exists. It is
+        seeded from the server-rendered row so the panel has a real document to
+        grade on first paint rather than an empty one that scores zero until the
+        block editor finishes mounting.
+      */}
+      <PageSeoProvider
+        initialBlocks={page.blocks}
+        initialMetaDescription={page.meta_description}
+        initialMetaTitle={page.meta_title}
+      >
       <div className="space-y-8 w-full mx-auto px-6">
         <div className="flex justify-between items-center flex-wrap gap-4 w-full">
           <div className="flex items-center gap-3">
@@ -151,12 +167,23 @@ export default function EditPageClient({
         <PageForm
           page={page}
           formAction={updatePageAction}
+        // Read-only: the form never writes blocks, it only lets Cortex AI read them so it
+        // can summarize the page when drafting meta title and description.
+        contentBlocks={page.blocks}
         actionButtonText="Update Page Metadata"
         isEditing={true}
         availableLanguagesProp={allSiteLanguages}
         initialFeatureImageUrl={initialFeatureImageUrl}
         initialFeatureImageId={initialFeatureImageId}
       />
+
+        {/*
+          Sits between the metadata form and the blocks because that is what it
+          grades: everything above it and everything below it, together. It
+          collapses to a single summary row so the block editor keeps its place
+          on the screen.
+        */}
+        <PageSeoAuditSection />
 
         <Separator className="my-8" />
 
@@ -170,6 +197,7 @@ export default function EditPageClient({
           />
         </div>
       </div>
+      </PageSeoProvider>
     </UploadFolderProvider>
   );
 }

@@ -3,7 +3,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent, JSONContent } from '@tiptap/react';
-import type { Extensions } from '@tiptap/core';
+import type { Editor, Extensions } from '@tiptap/core';
 import { Loader2, Sparkles } from 'lucide-react';
 import { editorExtensions } from './kit';
 import { EditorBubbleMenu } from './components/menus/BubbleMenu';
@@ -17,16 +17,54 @@ import '../styles/editor.css';
 import type { OpenImagePicker } from './utils/mediaPicker';
 import { setOpenImagePicker } from './utils/mediaPicker';
 
-interface NotionEditorProps {
+export interface NotionEditorProps {
   content?: string | JSONContent;
   initialContent?: string | JSONContent;
   onChange?: (content: string) => void;
+  /**
+   * Hands the live Tiptap instance to the host application.
+   *
+   * The editor is otherwise completely sealed: `useEditor` owns the instance,
+   * nothing forwards a ref, and there is no context provider, so a sibling of
+   * this component has historically had exactly one way to reach the editor —
+   * the `window.__nextblockEditor` global assigned further down this file. That
+   * global is a genuine race as soon as two editors are mounted at once (a
+   * block editor modal opened over a page that already renders one), because
+   * the last mount silently wins and the loser's unmount can delete the
+   * winner's entry. Anything that needs *this* editor rather than *an* editor
+   * should take it from here instead; the global stays in place because other
+   * code still reads it.
+   *
+   * Called with the instance once `useEditor` has produced one, and with `null`
+   * on unmount so the host can drop its reference rather than hold a detached
+   * ProseMirror view alive. The callback is read through a ref internally, so
+   * an inline arrow function is safe to pass: a new identity on every parent
+   * render will not re-fire the effect and produce a null/instance flapping
+   * sequence.
+   */
+  onEditorReady?: (editor: Editor | null) => void;
   onUpdate?: (content: JSONContent) => void;
   placeholder?: string;
   editable?: boolean;
   showToolbar?: boolean;
   showAiPrompt?: boolean;
   showCharacterCount?: boolean;
+  /**
+   * Optional companion UI rendered beside the writing surface — the CMS uses it
+   * for the live SEO audit, which has to sit next to the prose it is grading
+   * rather than in a dialog the author has to leave the document to open.
+   *
+   * This library cannot import anything application-specific (it declares no
+   * dependencies, ships as a client bundle, and must not reach into
+   * `apps/nextblock`), so the panel is injected as a node rather than
+   * configured through a flag — the same idiom as `openImagePicker`.
+   *
+   * When omitted the component renders exactly the tree it always has: no extra
+   * wrapper element, no changed class list on the root, and therefore no layout
+   * shift for the callers that never pass it. The two-column layout only comes
+   * into existence when there is something to put in the second column.
+   */
+  sidePanel?: React.ReactNode;
   className?: string;
   onFocus?: () => void;
   onBlur?: () => void;
@@ -39,12 +77,14 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   content,
   initialContent,
   onChange,
+  onEditorReady,
   onUpdate,
   placeholder,
   editable = true,
   showToolbar = true,
   showAiPrompt = true,
   showCharacterCount = true,
+  sidePanel,
   className,
   onFocus,
   onBlur,
@@ -202,6 +242,29 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
     }
 
   }, [content, editor]);
+
+  // Publish the instance to the host through `onEditorReady`.
+  //
+  // The callback is stashed in a ref and the effect depends on `editor` alone so
+  // that a caller passing an inline arrow function — the overwhelmingly common
+  // case — does not re-run this on every parent render. If the effect depended
+  // on the callback identity, each render would first tear down (calling back
+  // with `null`) and then re-publish, which any consumer holding the editor in
+  // state would see as the editor briefly disappearing.
+  const onEditorReadyRef = useRef(onEditorReady);
+  useEffect(() => {
+    onEditorReadyRef.current = onEditorReady;
+  }, [onEditorReady]);
+
+  useEffect(() => {
+    if (!editor) return;
+
+    onEditorReadyRef.current?.(editor);
+
+    return () => {
+      onEditorReadyRef.current?.(null);
+    };
+  }, [editor]);
 
   useEffect(() => {
     if (!editor || typeof window === 'undefined') return;
@@ -401,17 +464,14 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
     void handleAiGenerate();
   };
 
-  return (
-    <div
-      ref={wrapperRef}
-      className={cn(
-        'relative w-full rounded-lg border bg-background shadow-sm',
-        // Make wrapper a flex column that can host an internal scroll area
-        'flex flex-col h-full min-h-0',
-        'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
-        className
-      )}
-    >
+  /**
+   * The writing surface itself, hoisted out of the return so it can be dropped
+   * into either the historical single-column root or the two-column root
+   * without being written twice. A fragment adds no DOM node, so the markup
+   * these children produce is identical in both branches.
+   */
+  const editorColumn = (
+    <>
       {showToolbar && <EditorToolbar editor={editor} />}
 
       {showAiPrompt && editable && (
@@ -468,6 +528,58 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
           {characters} characters / {words} words
         </div>
       )}
+    </>
+  );
+
+  // No companion panel: render precisely the tree this component has always
+  // rendered. Callers that never opt in must not pay for the feature with an
+  // extra wrapper element, a changed root class list, or a reflow.
+  if (!sidePanel) {
+    return (
+      <div
+        ref={wrapperRef}
+        className={cn(
+          'relative w-full rounded-lg border bg-background shadow-sm',
+          // Make wrapper a flex column that can host an internal scroll area
+          'flex flex-col h-full min-h-0',
+          'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
+          className
+        )}
+      >
+        {editorColumn}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={wrapperRef}
+      className={cn(
+        'relative w-full rounded-lg border bg-background shadow-sm',
+        // Stacked on small screens, side by side from `lg` up. Going straight to
+        // a row at every width would squeeze the prose into a column too narrow
+        // to write in on a tablet, and hiding the panel outright below the
+        // breakpoint would make it unreachable there — so it moves underneath
+        // the editor instead, capped in height so it never buries the text.
+        'flex flex-col h-full min-h-0 lg:flex-row',
+        'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
+        className
+      )}
+    >
+      {/* `relative` moves with the column so the character counter, which is
+          absolutely positioned against its nearest positioned ancestor, keeps
+          anchoring to the bottom-right of the prose rather than drifting over
+          the panel. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">{editorColumn}</div>
+
+      <aside
+        className={cn(
+          'flex w-full shrink-0 flex-col overflow-y-auto border-t bg-muted/20',
+          'max-h-[45vh] lg:max-h-none lg:w-80 lg:border-l lg:border-t-0 xl:w-96'
+        )}
+      >
+        {sidePanel}
+      </aside>
     </div>
   );
 };

@@ -39,6 +39,7 @@ import AlertWidget from './extensions/AlertWidget'
 import CtaWidgetNode from './extensions/CtaWidgetNode'
 import { SlashCommand } from './extensions/slash-command'
 import { DraggableNodes } from './extensions/DraggableNodes'
+import { LowContrastTextHint } from './extensions/LowContrastTextHint'
 import { StyleTagNode } from './extensions/StyleTagNode'
 import { DivNode } from './extensions/DivNode'
 import { PreserveAllAttributesExtension } from './extensions/PreserveAllAttributesExtension'
@@ -187,6 +188,14 @@ export const editorExtensions: Extensions = [
       class: 'rounded-sm px-1 py-0.5',
     },
   }),
+
+  // Sits directly after the colour extensions above because it exists to make
+  // their output survive the editing surface: a colour chosen for a dark
+  // section is invisible on the editor's own background, so failing runs get a
+  // temporary readable chip. It contributes nothing to the schema and only ever
+  // draws decorations, so the stored document is untouched.
+  LowContrastTextHint,
+
   Subscript,
   Superscript,
   TextAlign.extend({

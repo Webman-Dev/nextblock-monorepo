@@ -519,7 +519,7 @@ export async function generateMetadata(): Promise<Metadata> {
     // Sandbox is a copy of production, so keep it out of the index. Use
     // `noindex, follow` (not nofollow) so Googlebot still follows internal links,
     // recrawls every page, and drops them all — paired with an allow-crawl
-    // robots.txt (see app/robots.txt/route.ts) so the noindex is actually seen.
+    // robots.txt (see app/robots.ts) so the noindex is actually seen.
     robots: isSandbox ? { index: false, follow: true } : { index: true, follow: true },
   };
 }

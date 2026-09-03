@@ -1,6 +1,6 @@
 {
   "name": "@nextblock-cms/utils",
-  "version": "0.15.10",
+  "version": "0.16.1",
   "license": "AGPL-3.0-or-later",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -20,6 +20,10 @@
     "./script-safety": {
       "types": "./src/lib/script-safety.ts",
       "default": "./src/lib/script-safety.ts"
+    },
+    "./seo": {
+      "types": "./src/lib/seo/index.ts",
+      "default": "./src/lib/seo/index.ts"
     },
     "./utils": {
       "types": "./src/lib/utils.ts",

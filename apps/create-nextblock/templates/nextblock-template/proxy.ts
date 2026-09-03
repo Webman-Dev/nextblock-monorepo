@@ -1,8 +1,20 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@nextblock-cms/db';
+import {
+  buildRedirectIndex,
+  matchRedirect,
+  type RedirectRule,
+} from '@nextblock-cms/utils/seo';
 import { resolveSupabaseAnonKey, resolveSupabaseUrl } from './lib/setup/env-status';
+import {
+  fetchActiveRedirects,
+  isSchemaMissingError,
+  isSelfRedirect,
+  resolveRedirectTarget,
+  shouldSkipRedirectLookup,
+} from './lib/seo/redirect-store';
 import {
   LANGUAGE_DETECTION_SETTING_KEY,
   DEFAULT_LANGUAGE_DETECTION_SETTINGS,
@@ -86,24 +98,13 @@ function isSetupAllowlisted(pathname: string): boolean {
 // modules persist across requests in a worker, so this avoids a per-request DB hit.
 let provisionedAdminCache: { value: boolean; expires: number } | null = null;
 
-/**
- * A Supabase/PostgREST error that means the table itself is absent — i.e. the schema
- * was never applied. This is NOT a transient hiccup: it's the signature of a fresh,
- * unprovisioned deploy (env injected, migrations not yet run), so the caller treats it
- * as "no admin" and funnels traffic to /setup instead of failing open.
- * 42P01 = undefined_table (Postgres); PGRST205 = PostgREST "table not in schema cache".
- */
-function isSchemaMissingError(error: { code?: string; message?: string } | null): boolean {
-  if (!error) return false;
-  const code = error.code ?? '';
-  if (code === '42P01' || code === 'PGRST205') return true;
-  const message = (error.message ?? '').toLowerCase();
-  return (
-    message.includes('does not exist') ||
-    message.includes('schema cache') ||
-    message.includes('could not find the table')
-  );
-}
+// `isSchemaMissingError` used to be defined right here, as a private copy. It now
+// lives in ./lib/seo/redirect-store and is imported above, because the redirect
+// lookup needs exactly the same test — "did this error mean the table is absent,
+// or merely that the database is having a bad minute?" — and a predicate that
+// decides whether a whole site funnels its traffic to /setup must have one
+// definition. The reasoning behind the specific codes it looks for (42P01,
+// PGRST205, and the message sniffing underneath) is documented there.
 
 /**
  * Returns true once the system has a first admin (site_settings.is_admin_created).
@@ -231,6 +232,116 @@ function getLocaleRuntimeConfig(
   return localeConfigInflight;
 }
 
+// ---------------------------------------------------------------------------
+// Managed redirects
+// ---------------------------------------------------------------------------
+//
+// Operator-authored 301/302 rules live in public.cms_redirects and are resolved
+// here rather than in next.config.js, because a redirect is content: an editor who
+// renames a slug needs the old URL to keep working immediately, without a redeploy.
+// The trade is that every request now potentially needs a database answer, so the
+// caching below is not an optimisation — it is the thing that makes the feature
+// affordable at all.
+//
+// The cache mirrors localeConfigCache/localeConfigInflight deliberately, right down
+// to the shape of the value and the `.finally()` that clears the in-flight handle.
+// Proxy modules persist across requests inside a worker, so a module-level entry is
+// shared by every request that worker serves; the in-flight promise is what stops a
+// burst of concurrent misses (a cold worker taking a page's document plus its
+// subresources) from turning into a burst of identical queries.
+//
+// Two TTLs, because the two outcomes mean different things. A successful read —
+// including a successful read of an EMPTY table, which is what almost every site
+// will have — is cached for 60s: rules change at human speed and a minute of
+// staleness after an operator saves one is acceptable. A failure is cached for only
+// 10s, because the most likely cause is an install that has pulled this code but
+// not yet run `npm run db:migrate`, and after that migration lands redirects should
+// start working within seconds rather than after a full minute of a poisoned cache.
+const REDIRECT_CACHE_TTL_MS = 60_000;
+const REDIRECT_NEGATIVE_CACHE_TTL_MS = 10_000;
+
+// `null` here means "we could not read the table", which is not the same as an
+// empty Map ("we read it and there are no rules"). Only the empty Map earns the
+// long TTL.
+let redirectIndexCache: { value: Map<string, RedirectRule> | null; expires: number } | null = null;
+let redirectIndexInflight: Promise<Map<string, RedirectRule> | null> | null = null;
+
+// The cookie-bound client built inside `proxy()` cannot be used for this lookup: it
+// is constructed further down, after the redirect check has already had to decide.
+// So this is a plain anon client, mirroring libs/db/src/lib/supabase/ssg-client.ts —
+// no cookies, no session persistence, no token refresh, because reading a public
+// table needs none of that and every one of those features would add work to a path
+// that runs in front of the whole site. It is memoised for the life of the worker
+// alongside the credentials it was built from, so a cache hit constructs nothing at
+// all and a credential change (a redeploy with new env) still rebuilds it.
+let redirectLookupClient: { client: SupabaseClient; key: string; url: string } | null = null;
+
+function getRedirectLookupClient(supabaseUrl: string, supabaseAnonKey: string): SupabaseClient {
+  if (
+    redirectLookupClient &&
+    redirectLookupClient.url === supabaseUrl &&
+    redirectLookupClient.key === supabaseAnonKey
+  ) {
+    return redirectLookupClient.client;
+  }
+
+  const client = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  redirectLookupClient = { client, key: supabaseAnonKey, url: supabaseUrl };
+  return client;
+}
+
+async function loadRedirectIndex(
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+): Promise<Map<string, RedirectRule> | null> {
+  const now = Date.now();
+  try {
+    const rules = await fetchActiveRedirects(getRedirectLookupClient(supabaseUrl, supabaseAnonKey));
+
+    // fetchActiveRedirects never throws and returns null only for "could not read".
+    // That includes the table not existing yet, which is why the negative TTL is
+    // short: this is the state a site sits in between deploying the code and
+    // running the migration.
+    if (rules === null) {
+      redirectIndexCache = { value: null, expires: now + REDIRECT_NEGATIVE_CACHE_TTL_MS };
+      return null;
+    }
+
+    const index = buildRedirectIndex(rules);
+    redirectIndexCache = { value: index, expires: now + REDIRECT_CACHE_TTL_MS };
+    return index;
+  } catch {
+    redirectIndexCache = { value: null, expires: now + REDIRECT_NEGATIVE_CACHE_TTL_MS };
+    return null;
+  }
+}
+
+/**
+ * Returns the redirect lookup index, or null when the table could not be read.
+ *
+ * Never rejects: `loadRedirectIndex` swallows everything, so a caller may await this
+ * without a try/catch and still be sure a database outage cannot escape into the
+ * request pipeline. The caller wraps it anyway, on the principle that a throw
+ * anywhere inside the proxy does not break a redirect — it returns a 500 for every
+ * page, asset and API route on the site simultaneously.
+ */
+function getRedirectIndex(
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+): Promise<Map<string, RedirectRule> | null> {
+  if (redirectIndexCache && redirectIndexCache.expires > Date.now()) {
+    return Promise.resolve(redirectIndexCache.value);
+  }
+  if (!redirectIndexInflight) {
+    redirectIndexInflight = loadRedirectIndex(supabaseUrl, supabaseAnonKey).finally(() => {
+      redirectIndexInflight = null;
+    });
+  }
+  return redirectIndexInflight;
+}
+
 function getHttpOrigin(value: string | undefined): string | null {
   if (!value) {
     return null;
@@ -292,11 +403,30 @@ function applySecurityHeaders(
   return response;
 }
 
+/**
+ * Every redirect this proxy issues goes through here, so that none of them can
+ * accidentally ship without the seven security headers and the CSP. A bare
+ * `NextResponse.redirect()` returns a response with none of them.
+ *
+ * The default status is 307, which is what `NextResponse.redirect()` produces on its
+ * own — so adding this parameter changed the behaviour of exactly zero existing call
+ * sites. 307 is also the right default for the gates below it: they are all
+ * "you cannot be here *right now*" decisions (unprovisioned, signed out, wrong role),
+ * and a browser that cached a permanent redirect for those would keep bouncing the
+ * user long after they had signed in.
+ *
+ * Managed content redirects are the exception, and the reason the parameter exists:
+ * a 301 is the whole point of "this page moved", because it is the code search
+ * engines act on. Only {301, 302, 303, 307, 308} are permitted — Next throws
+ * RangeError E529 for anything else — which is also why `RedirectStatusCode` is
+ * narrowed to 301 | 302 upstream rather than being an open `number`.
+ */
 function createRedirectResponse(
   url: URL,
   contentSecurityPolicy?: string | null,
+  status = 307,
 ): NextResponse {
-  return applySecurityHeaders(NextResponse.redirect(url), contentSecurityPolicy);
+  return applySecurityHeaders(NextResponse.redirect(url, status), contentSecurityPolicy);
 }
 
 function createContentSecurityPolicy(nonceValue: string, supabaseUrl: string | undefined): string {
@@ -484,6 +614,96 @@ export async function proxy(request: NextRequest) {
       );
     }
     return createRedirectResponse(new URL('/setup', request.url), contentSecurityPolicy);
+  }
+
+  // Managed redirects, resolved before anything else touches Supabase.
+  //
+  // The position of this block is the point. It sits after the unconfigured gate
+  // (there is no database to ask before that) and before `supabase.auth.getSession()`,
+  // so a visitor following a dead link is answered with a 301 without the proxy
+  // having spent a session round-trip and a user lookup on a request whose response
+  // body is empty. It also sits before the CMS role checks, which is harmless
+  // because `shouldSkipRedirectLookup` refuses to consider /cms at all.
+  //
+  // The whole block is wrapped in try/catch and fails open. There is no such thing
+  // as a redirect important enough to justify a throw here: the proxy runs in front
+  // of every route in the app, so an exception escaping this block would return a
+  // 500 for the entire site rather than for one stale URL.
+  if (!shouldSkipRedirectLookup(pathname)) {
+    try {
+      const redirectIndex = await getRedirectIndex(
+        supabaseUrl as string,
+        supabaseAnonKey as string,
+      );
+      const rule = redirectIndex ? matchRedirect(redirectIndex, pathname) : null;
+
+      if (rule) {
+        // A destination is either a site-relative path or an absolute https URL —
+        // the database CHECK constraint allows nothing else. Resolving the relative
+        // form against `request.url` preserves the incoming scheme and host, so a
+        // rule works identically on localhost, on a preview deployment and in
+        // production without the operator ever writing an origin. The resolution
+        // (including whether the visitor's query string travels with them, and what
+        // to do about a destination the URL parser cannot make sense of) lives in
+        // `resolveRedirectTarget` because it is ordinary logic that deserves ordinary
+        // tests, and this function body cannot be given any.
+        const target = resolveRedirectTarget(rule.destinationPath, {
+          search: request.nextUrl.search,
+          url: request.url,
+        });
+
+        // `null` means the stored destination does not parse as a URL at all, which
+        // is a broken rule rather than a broken request: skip it and let the page
+        // render, the same outcome the catch below produces.
+        if (target) {
+          // Runtime loop guard. `validateRedirectRule` already rejects cycles when a
+          // rule is saved and the table forbids source = destination, but neither
+          // catches a pair that differs only by normalisation (`/about` -> `/about/`),
+          // and neither can see a rule that was inserted straight into the database.
+          // A same-path redirect is an infinite loop in the visitor's browser, so it
+          // is checked here, against the resolved URL, every single time. Only paths
+          // on this origin can loop; an off-site destination is somebody else's
+          // problem by definition.
+          //
+          // Both sides of this comparison are pathnames, which is why carrying the
+          // query onto `target` cannot change its answer: `URL.pathname` never
+          // contains a query string. Comparing anything wider here — the href, or a
+          // path with its search appended — would let a rule that only adds
+          // parameters slip past the guard and loop.
+          const isSameOrigin = target.origin === request.nextUrl.origin;
+          if (!isSameOrigin || !isSelfRedirect(pathname, target.pathname)) {
+            const redirectResponse = createRedirectResponse(
+              target,
+              contentSecurityPolicy,
+              rule.statusCode,
+            );
+
+            // The proxy sets no Cache-Control on any of its other redirects, which is
+            // fine for the auth gates (they must be re-evaluated per request) but wrong
+            // here, so this one is explicit. A 301 is permanent by definition and every
+            // hop it saves is a request that never reaches the origin, so an hour of
+            // shared caching is free value. A 302 gets `no-cache` because a temporary
+            // redirect that a browser has cached is an operational trap: the operator
+            // deletes the rule, the site behaves correctly for everyone new, and the
+            // people who already hit it keep being redirected with no way to tell them
+            // apart or fix it.
+            //
+            // Caching a Location that now varies with the incoming query is safe
+            // because caches key on the full request URL: `/old?utm=a` and `/old?utm=b`
+            // are separate entries, so neither can be served the other's destination.
+            redirectResponse.headers.set(
+              'Cache-Control',
+              rule.statusCode === 301 ? 'public, max-age=3600' : 'no-cache',
+            );
+
+            return redirectResponse;
+          }
+        }
+      }
+    } catch (error) {
+      // Fail open: log it and let the request render normally.
+      console.error(`Proxy: redirect lookup failed for ${pathname}; serving the page.`, error);
+    }
   }
 
   let response = NextResponse.next({

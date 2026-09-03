@@ -26,6 +26,7 @@ export { TrailingNode } from './lib/extensions/TrailingNode';
 export { default as AlertWidget } from './lib/extensions/AlertWidget';
 export { default as CtaWidgetNode } from './lib/extensions/CtaWidgetNode';
 export { DraggableNodes } from './lib/extensions/DraggableNodes';
+export { LowContrastTextHint, lowContrastTextHintKey } from './lib/extensions/LowContrastTextHint';
 
 // Advanced Extensions
 export { AdvancedPlaceholder } from './lib/extensions/AdvancedPlaceholder';
@@ -44,5 +45,7 @@ export { NotionEditorEnhancedTest } from './lib/components/test/NotionEditorEnha
 export type { CommandItemProps } from './lib/extensions/slash-command';
 export type { CommandListRef } from './lib/components/menus/SlashCommandList';
 export type { EditorHistoryState, EditorHistoryActions } from './lib/hooks/useEditorHistory';
+export type { NotionEditorProps } from './lib/NotionEditor';
+export type { LowContrastTextHintOptions } from './lib/extensions/LowContrastTextHint';
 
 // Note: CSS imports should be handled by the consuming application

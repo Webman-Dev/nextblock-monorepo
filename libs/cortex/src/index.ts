@@ -8,6 +8,8 @@ export * from './lib/ai-global-agent-tools';
 export * from './lib/ai-key-crypto';
 export * from './lib/ai-model-catalog';
 export * from './lib/ai-model-registry';
+export * from './lib/ai-seo-metadata';
+export * from './lib/ai-vision';
 export * from './lib/cortex-widget-registry';
 export * from './lib/cortex-widget-schema';
 export * from './lib/mcp-server';

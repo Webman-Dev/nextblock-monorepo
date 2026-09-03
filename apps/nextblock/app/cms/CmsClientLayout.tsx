@@ -9,7 +9,7 @@ import {
   LayoutDashboard, FileText, PenTool, Users, Settings, ChevronRight, LogOut, Menu, ListTree, Image as ImageIconLucide, X, Languages as LanguagesIconLucide, MessageSquare,
   Copyright as CopyrightIcon, ShoppingBag, ListOrdered, CreditCard, Package, Coins, MessageSquareText,
   ExternalLink, Paintbrush, Brain, TicketPercent, ShieldAlert, Folder, DatabaseBackup, Boxes, Tag,
-  ShieldCheck, Code2, Cookie, LineChart, Mail, UserPlus, SlidersHorizontal,
+  ShieldCheck, Code2, Cookie, LineChart, Mail, UserPlus, SlidersHorizontal, Search,
 } from "lucide-react"
 import TwoFactorReminderBanner from "./components/TwoFactorReminderBanner"
 import SystemAlertsBanner, { type SystemAlertItem } from "./components/SystemAlertsBanner"
@@ -249,6 +249,9 @@ export default function CmsClientLayout({
   else if (pathname.startsWith("/cms/settings/copyright")) pageTitle = "Copyright Settings";
   else if (pathname.startsWith("/cms/settings/global-css")) pageTitle = "Themes & CSS";
   else if (pathname.startsWith("/cms/settings/site-scripts")) pageTitle = "Site Scripts";
+  // Must stay ABOVE the generic "/cms/settings" arm below: this chain is
+  // first-match-wins, so anything placed after that fallback is dead code.
+  else if (pathname.startsWith("/cms/settings/seo")) pageTitle = "SEO & Redirects";
   else if (pathname.startsWith("/cms/settings/extra-translations")) pageTitle = "Extra Translations";
   else if (pathname.startsWith("/cms/settings/backup-restore")) pageTitle = "Backup And Restore";
   else if (pathname.startsWith("/cms/settings/currencies")) pageTitle = "Currency Settings";
@@ -454,6 +457,9 @@ export default function CmsClientLayout({
                     </NavItem>
                     <NavItem href="/cms/settings/google-analytics" icon={LineChart} isActive={pathname.startsWith("/cms/settings/google-analytics")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Google Analytics
+                    </NavItem>
+                    <NavItem href="/cms/settings/seo" icon={Search} isActive={pathname.startsWith("/cms/settings/seo")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
+                      SEO &amp; Redirects
                     </NavItem>
                     <NavItem href="/cms/settings/extra-translations" icon={MessageSquare} isActive={pathname.startsWith("/cms/settings/extra-translations")} adminOnly isAdmin={isAdmin} onClick={closeSidebarOnMobile}>
                       Extra Translations
