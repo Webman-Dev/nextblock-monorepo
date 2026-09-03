@@ -380,5 +380,39 @@ describe('buildPageSeoDocument feeding the page-level audit', () => {
     expect(doc.headings).toEqual([{ level: 1, order: 0, text: 'Initial Draft Post' }]);
     expect(doc.text).toBe('Initial Draft Post');
   });
+
+  it('prepends product title as H1 when documentType is product', () => {
+    const blocks = [
+      {
+        block_type: 'section',
+        content: {
+          column_blocks: [
+            [
+              {
+                block_type: 'heading',
+                content: { level: 2, text_content: 'Features' },
+              },
+            ],
+          ],
+        },
+      },
+    ];
+
+    const withProduct = buildPageSeoDocument(blocks, {
+      documentTitle: 'NextBlock Commerce Pro',
+      documentType: 'product',
+    });
+
+    expect(withProduct.headings).toEqual([
+      { level: 1, order: 0, text: 'NextBlock Commerce Pro' },
+      { level: 2, order: 1, text: 'Features' },
+    ]);
+    expect(withProduct.words).toContain('commerce');
+    expect(withProduct.words).toContain('pro');
+
+    const audit = auditSeo({ document: withProduct });
+    expect(audit.issues.map((i) => i.id)).not.toContain('headings-missing-h1');
+  });
 });
+
 

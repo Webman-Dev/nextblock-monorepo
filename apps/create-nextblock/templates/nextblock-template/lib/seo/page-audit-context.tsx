@@ -54,8 +54,8 @@ export interface PageSeoSnapshot {
   blocks: unknown[];
   /** Document title for articles / posts where the template renders an H1. */
   documentTitle: string | null;
-  /** Whether this is a standalone 'page' or an editorial 'post'. */
-  documentType: 'page' | 'post';
+  /** Whether this is a standalone 'page', an editorial 'post', or a store 'product'. */
+  documentType: 'page' | 'post' | 'product';
   metaDescription: string | null;
   metaTitle: string | null;
 }
@@ -75,7 +75,7 @@ const PageSeoContext = createContext<PageSeoContextValue | null>(null);
 export interface PageSeoProviderProps {
   children: ReactNode;
   documentTitle?: string | null;
-  documentType?: 'page' | 'post';
+  documentType?: 'page' | 'post' | 'product';
   initialBlocks?: unknown[];
   initialMetaDescription?: string | null;
   initialMetaTitle?: string | null;
